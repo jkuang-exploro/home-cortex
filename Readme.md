@@ -31,9 +31,9 @@ This allows the robot's onboard compute to stay lean and focused exclusively on 
 
 - **Kitchen wedge only** — focused on 18–25 everyday objects (eggs, frying pan, plates, bowls, knife, trash can, etc.)
 - Primary task family:
-  - Find and retrieve X (find me the kitchen knife)
+  - Find and retrieve X (ie, find me the kitchen knife)
   - Update state of X (ie, trash can is full)
-  - Update location or state of X (Move bowls into the shelf)
+  - Update location of X (ie, Move bowls into the shelf)
 - Simulated environment only (Gazebo / Isaac Sim)
 - No hardware, no Matter protocol, no UI beyond terminal + minimal Streamlit labeler
 - Black-box LLM usage only (Ollama + any 7B–13B model) — **zero model-layer work**
