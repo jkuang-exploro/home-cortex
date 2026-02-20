@@ -10,12 +10,12 @@ Humanoid robots in 2026 can dance on stages and fold laundry in controlled demos
 
 Every home is its own chaotic universe, with tons of data that's both highly unstructured and local, that any humanoid robot (or human!) has to collect on-premise and process near realtime. No companies (even Tesla or Google) could pre-program it for you.
 
-Give an example: In order to make a omelet in your kitchen, a humanoid robot must instantly know details that are unique to your home, **today**:
+Give an example: In order to make a omelet in your kitchen, a humanoid robot must instantly know details that are unique to **your home, right this moment**:
 
 Where the eggs, salt, and butter are stored right now
-Which frying pan is best suited for the task (and where it lives)
+Which frying pan and spatula are best suited for this task (and where they live)
 Where the clean plates and bowls are kept
-Which bin is for egg shells
+Which trash can is for egg shells
 … plus hundreds of other hyper-local, ever-changing facts and relationships
 
 These aren't superficial trivia—they're essential for safe, efficient household help. Humanoids generate massive real-time sensor data (vision streams alone often exceed 10 Mbps), and turning that into reliable understanding requires computationally intensive machine learning for perception, mapping, and persistent memory.
