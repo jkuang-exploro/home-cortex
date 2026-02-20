@@ -20,7 +20,7 @@ Which bin is for egg shells
 
 These aren't superficial trivia—they're essential for safe, efficient household help. Humanoids generate massive real-time sensor data (vision streams alone often exceed 10 Mbps), and turning that into reliable understanding requires computationally intensive machine learning for perception, mapping, and persistent memory.
 But physics imposes hard limits: every additional watt of onboard compute adds weight, drains battery faster, and compromises balance and runtime. Offloading to the cloud sacrifices privacy (your home's intimate data leaves the premises) and introduces unacceptable latency for real-time decisions.
-The result? A dedicated, local, always-on cognition layer becomes essential—not a luxury—to bridge the gap between impressive demos and everyday usefulness in real homes.
+The result? A stationary, local, always-on cognition layer becomes essential—not a luxury—to bridge the gap between impressive demos and everyday usefulness in real homes.
 
 **home-cortex** is the missing piece:  
 A stationary, local server that acts as the **cortex** — persistent home-specific memory, semantic understanding, long-horizon reasoning, and high-level planning.  
