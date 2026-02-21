@@ -12,11 +12,11 @@ Every home is its own chaotic universe, with tons of data that's both highly uns
 
 Give an example: In order to make a omelet in your kitchen, a humanoid robot must instantly know details that are unique to **your home, right this moment**:
 
-Where the eggs, salt, and butter are stored right now
-Which frying pan and spatula are best suited for this task (and where they live)
-Where the clean plates and bowls are kept
-Which trash can is for egg shells
-… plus hundreds of other hyper-local, ever-changing facts and relationships
+- Where the eggs, salt, and butter are stored right now?
+- Which frying pan and spatula are best suited for this task (and where they live)?
+- Where the clean plates and bowls are kept?
+- Which trash can is for egg shells?
+- … plus hundreds of other hyper-local, ever-changing facts and relationships
 
 These aren't superficial trivia—they're essential for safe, efficient household help. Humanoids generate massive real-time sensor data (vision streams alone often exceed 10 Mbps), and turning that into reliable understanding requires computationally intensive machine learning for perception, mapping, and persistent memory.
 But physics imposes hard limits: every additional watt of onboard compute adds weight, drains battery faster, and compromises balance and runtime. Offloading to the cloud, not only sacrifices privacy (your home's intimate data leaves the premises), but also introduces unacceptable latency for real-time decisions. In a home setting, responsiveness is non-negotiable: waiting 30–60 seconds for the robot to "figure out" where a bowl or knife is, feels broken and useless.
