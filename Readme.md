@@ -19,7 +19,7 @@ Give an example: In order to make a omelet in your kitchen, a humanoid robot mus
 - … plus hundreds of other hyper-local, ever-changing facts and relationships
 
 These aren't superficial trivia—In the world of robots, these are the essential details necessary for safe and efficient household assistance to become a reality. Humanoids generate massive real-time sensor data (vision streams alone often exceed 10 Mbps), and turning that into reliable understanding requires computationally intensive machine learning for perception, mapping, and persistent memory.
-But physics imposes hard limits: every additional watt of onboard compute adds weight, drains battery faster, and compromises balance and runtime. Offloading to the cloud, not only sacrifices privacy (your home's intimate data leaves the premises), but also introduces unacceptable latency for real-time decisions. In a home setting, responsiveness is non-negotiable: waiting 30–60 seconds for the robot to "figure out" where a bowl or knife is, feels broken and useless.
+But physics imposes hard limits: every additional watt of onboard compute adds weight, drains battery faster, and compromises balance and runtime. Offloading to the cloud, not only sacrifices privacy (your home's intimate data leaves the premises), but also introduces unacceptable latency for real-time decisions. In a home setting, responsiveness is non-negotiable: It feels broken and useless to have to wait for 30–60 seconds for the robot to "figure out" where a butter knife is.
 
 The result? A stationary, local, always-on cognition layer becomes essential—not a luxury—to bridge the gap between impressive demos and everyday usefulness in real homes.
 
