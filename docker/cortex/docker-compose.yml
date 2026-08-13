@@ -1,24 +1,10 @@
-name: home-cortex
-
 services:
   ollama:
     image: ollama/ollama:0.32.5
     restart: unless-stopped
+    gpus: all
     volumes:
       - ollama-data:/root/.ollama
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:v0.9.5
@@ -31,32 +17,19 @@ services:
     volumes:
       - open-webui-data:/app/backend/data
     depends_on:
-      ollama:
-        condition: service_healthy
+      - ollama
 
   surrealdb:
     image: surrealdb/surrealdb:v3.0.5
     restart: unless-stopped
-    command:
-      - start
-      - --log
-      - info
-      - rocksdb:/data/home-cortex.db
+    command: start --log info rocksdb:/data/home-cortex.db
     environment:
       SURREAL_USER: ${SURREAL_USER:-root}
       SURREAL_PASS: ${SURREAL_PASS:?Set SURREAL_PASS in docker/cortex/.env}
-    # Localhost-only access for CLI/import jobs run directly on the server.
-    # Other containers use http://surrealdb:8000 instead.
     ports:
       - "127.0.0.1:${SURREAL_PORT:-8000}:8000"
     volumes:
       - surrealdb-data:/data
-    healthcheck:
-      test: ["CMD", "/surreal", "is-ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
 
 volumes:
   ollama-data:

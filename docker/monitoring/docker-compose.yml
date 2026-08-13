@@ -1,5 +1,3 @@
-name: home-monitoring
-
 services:
   beszel:
     image: henrygd/beszel:0.18.7
@@ -11,13 +9,6 @@ services:
     volumes:
       - beszel-data:/beszel_data
       - beszel-socket:/beszel_socket
-    healthcheck:
-      test: ["CMD", "/beszel", "health", "--url", "http://localhost:8090"]
-      interval: 120s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
   beszel-agent:
     image: henrygd/beszel-agent:0.18.7
     restart: unless-stopped
@@ -31,15 +22,6 @@ services:
       - beszel-agent-data:/var/lib/beszel-agent
       - beszel-socket:/beszel_socket
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    healthcheck:
-      test: ["CMD", "/agent", "health"]
-      interval: 120s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    depends_on:
-      beszel:
-        condition: service_healthy
 
 volumes:
   beszel-data:
