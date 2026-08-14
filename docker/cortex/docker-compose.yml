@@ -21,14 +21,14 @@ services:
   surrealdb:
     image: surrealdb/surrealdb:v3.0.5
     restart: unless-stopped
-    command: start rocksdb:/data/home-cortex.db
+    command: start rocksdb:/home/nonroot/home-cortex.db
     environment:
       SURREAL_USER: ${SURREAL_USER}
       SURREAL_PASS: ${SURREAL_PASS}
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - surrealdb-data:/data
+      - surrealdb-data:/home/nonroot
 
 volumes:
   ollama-data:
