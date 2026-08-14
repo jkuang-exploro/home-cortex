@@ -10,10 +10,9 @@ services:
     image: ghcr.io/open-webui/open-webui:v0.9.5
     restart: unless-stopped
     ports:
-      - "${OPEN_WEBUI_PORT:-3000}:8080"
+      - "3000:8080"
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
-      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?Set WEBUI_SECRET_KEY in docker/cortex/.env}
     volumes:
       - open-webui-data:/app/backend/data
     depends_on:
@@ -22,12 +21,12 @@ services:
   surrealdb:
     image: surrealdb/surrealdb:v3.0.5
     restart: unless-stopped
-    command: start --log info rocksdb:/data/home-cortex.db
+    command: start rocksdb:/data/home-cortex.db
     environment:
-      SURREAL_USER: ${SURREAL_USER:-root}
-      SURREAL_PASS: ${SURREAL_PASS:?Set SURREAL_PASS in docker/cortex/.env}
+      SURREAL_USER: ${SURREAL_USER}
+      SURREAL_PASS: ${SURREAL_PASS}
     ports:
-      - "127.0.0.1:${SURREAL_PORT:-8000}:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - surrealdb-data:/data
 
