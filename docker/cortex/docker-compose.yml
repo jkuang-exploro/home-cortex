@@ -30,6 +30,27 @@ services:
     volumes:
       - surrealdb-data:/home/nonroot
 
+  cortex-api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      SURREAL_URL: ws://surrealdb:8000
+      SURREAL_USER: ${SURREAL_USER}
+      SURREAL_PASS: ${SURREAL_PASS}
+      SURREAL_NAMESPACE: home_cortex
+      SURREAL_DATABASE: home_cortex
+      OLLAMA_URL: http://ollama:11434
+      DATA_DIR: /app/data
+    volumes:
+      - ../../data:/app/data:ro
+    depends_on:
+      - surrealdb
+      - ollama
+
 volumes:
   ollama-data:
   open-webui-data:
