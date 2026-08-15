@@ -1,17 +1,15 @@
 # Home Cortex API
 
-This package provides a minimal FastAPI service between Open WebUI, SurrealDB,
-and Ollama.
+This package provides a FastAPI RAG service over SurrealDB. Ollama stays a
+separate LAN endpoint; the model calls this API when it needs home facts.
 
 ## Endpoints
 
-- `GET /health` checks SurrealDB and Ollama.
+- `GET /health` checks SurrealDB.
 - `POST /admin/ingest` imports `/app/data/nodes/*.json` and
   `/app/data/edges/*.json`. Re-running it updates nodes and replaces matching
   relation pairs.
 - `POST /v1/retrieve` returns the graph context used for a question.
-- `GET /v1/models` and `POST /v1/chat/completions` form the OpenAI-compatible
-  interface used by Open WebUI.
 
 ## First run
 
