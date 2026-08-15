@@ -1,8 +1,10 @@
 services:
   ollama:
-    image: ollama/ollama:0.32.5
+    image: ollama/ollama:0.32.13
     restart: unless-stopped
     gpus: all
+    ports:
+      - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
 
