@@ -9,6 +9,7 @@ description = "Local graph-grounded RAG API for home-cortex"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.116,<1",
+    "ollama>=0.6,<1",
     "pydantic-settings>=2.10,<3",
     "surrealdb>=2,<3",
     "uvicorn[standard]>=0.35,<1",
@@ -28,4 +29,3 @@ packages = ["src/home_cortex"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-

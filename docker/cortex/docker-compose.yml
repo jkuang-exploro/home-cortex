@@ -45,11 +45,14 @@ services:
       SURREAL_PASS: ${SURREAL_PASS}
       SURREAL_NAMESPACE: home_cortex
       SURREAL_DATABASE: home_cortex
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: qwen3:8b
       DATA_DIR: /app/data
     volumes:
       - ../../data:/app/data:ro
     depends_on:
       - surrealdb
+      - ollama
 
 volumes:
   ollama-data:

@@ -8,6 +8,7 @@ from . import __version__
 from .config import get_settings
 from .db import Database
 from .ingestion import ingest_directory
+from .ollama import OllamaService
 from .retrieval import RetrievalService
 
 
@@ -15,8 +16,10 @@ from .retrieval import RetrievalService
 async def lifespan(app: FastAPI):
     settings = get_settings()
     database = Database(settings)
+    ollama = OllamaService(settings.ollama_url, settings.ollama_model)
     await database.connect()
     app.state.database = database
+    app.state.ollama = ollama
     app.state.retrieval = RetrievalService(
         database,
         settings.retrieval_limit,
@@ -25,6 +28,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await ollama.close()
         await database.close()
 
 
