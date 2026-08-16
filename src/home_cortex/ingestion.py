@@ -19,7 +19,7 @@ class IngestionResult:
     node_files: int = 0
     edge_files: int = 0
     nodes_upserted: int = 0
-    edges_replaced: int = 0
+    edges_upserted: int = 0
 
 
 def _records_from_file(path: Path) -> list[dict[str, Any]]:
@@ -41,6 +41,30 @@ def parse_record_id(value: str, *, source: Path) -> RecordID:
     return RecordID(match.group("table"), match.group("id"))
 
 
+def _edge_record_id(
+    relation: str,
+    record: dict[str, Any],
+    source: RecordID,
+    target: RecordID,
+    path: Path,
+) -> RecordID:
+    raw_id = record.get("id")
+    if raw_id is not None:
+        if not isinstance(raw_id, str):
+            raise ValueError(f"Edge in {path} has a non-string 'id'")
+        edge_id = parse_record_id(raw_id, source=path)
+        if edge_id.table_name != relation:
+            raise ValueError(
+                f"Edge ID {raw_id!r} in {path} must use the {relation!r} table"
+            )
+        return edge_id
+
+    identifier = (
+        f"{source.table_name}_{source.id}__{target.table_name}_{target.id}"
+    )
+    return RecordID(relation, identifier)
+
+
 async def ingest_directory(database: Database, data_dir: Path) -> IngestionResult:
     nodes_dir = data_dir / "nodes"
     edges_dir = data_dir / "edges"
@@ -52,7 +76,7 @@ async def ingest_directory(database: Database, data_dir: Path) -> IngestionResul
     node_files = sorted(nodes_dir.glob("*.json"))
     edge_files = sorted(edges_dir.glob("*.json"))
     nodes_upserted = 0
-    edges_replaced = 0
+    edges_upserted = 0
 
     # Load nodes first so every relation endpoint exists before edges are created.
     for path in node_files:
@@ -70,6 +94,7 @@ async def ingest_directory(database: Database, data_dir: Path) -> IngestionResul
         if TABLE_PATTERN.fullmatch(relation) is None:
             raise ValueError(f"Invalid relation table name derived from {path.name}")
 
+        implicit_pairs: set[tuple[str, str]] = set()
         for record in _records_from_file(path):
             raw_from = record.get("from")
             raw_to = record.get("to")
@@ -78,29 +103,38 @@ async def ingest_directory(database: Database, data_dir: Path) -> IngestionResul
 
             source = parse_record_id(raw_from, source=path)
             target = parse_record_id(raw_to, source=path)
+            if "id" not in record:
+                pair = (str(source), str(target))
+                if pair in implicit_pairs:
+                    raise ValueError(
+                        f"Multiple {relation} edges in {path} connect {source} to "
+                        "the same target; give each edge a unique 'id'"
+                    )
+                implicit_pairs.add(pair)
+
+            edge = _edge_record_id(relation, record, source, target, path)
             content = {
                 key: value
                 for key, value in record.items()
                 if key not in {"id", "from", "to", "in", "out"}
             }
 
-            # Replacing an existing source/target pair makes repeated ingestion safe.
-            statement = f"""
-                BEGIN TRANSACTION;
-                DELETE {relation} WHERE in = $source AND out = $target;
-                RELATE $source->{relation}->$target CONTENT $content;
-                COMMIT TRANSACTION;
-            """
+            # A stable edge record ID makes repeated ingestion an upsert.
+            statement = "RELATE $source->$edge->$target CONTENT $content;"
             await database.query(
                 statement,
-                {"source": source, "target": target, "content": content},
+                {
+                    "source": source,
+                    "edge": edge,
+                    "target": target,
+                    "content": content,
+                },
             )
-            edges_replaced += 1
+            edges_upserted += 1
 
     return IngestionResult(
         node_files=len(node_files),
         edge_files=len(edge_files),
         nodes_upserted=nodes_upserted,
-        edges_replaced=edges_replaced,
+        edges_upserted=edges_upserted,
     )
-

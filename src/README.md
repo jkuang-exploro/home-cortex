@@ -7,8 +7,8 @@ separate LAN endpoint; the model calls this API when it needs home facts.
 
 - `GET /health` checks SurrealDB.
 - `POST /admin/ingest` imports `/app/data/nodes/*.json` and
-  `/app/data/edges/*.json`. Re-running it updates nodes and replaces matching
-  relation pairs.
+  `/app/data/edges/*.json`. Re-running it updates nodes and relationships by
+  stable record ID without creating duplicates.
 - `POST /v1/retrieve` returns the graph context used for a question.
 
 ## First run
@@ -21,9 +21,8 @@ curl http://localhost:8001/health
 curl -X POST http://localhost:8001/admin/ingest
 curl -X POST http://localhost:8001/v1/retrieve \
   -H 'Content-Type: application/json' \
-  -d '{"query":"Who resides at Fort Cerritos?"}'
+  -d '{"query":"Fort Cerritos"}'
 ```
 
 Open the interactive API documentation at
 `http://192.168.68.59:8001/docs`.
-
