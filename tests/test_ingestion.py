@@ -1,11 +1,14 @@
 import json
 from pathlib import Path
+from shutil import copytree
 from typing import Any
 
 import pytest
 from surrealdb import AsyncSurreal
 
 from home_cortex.ingestion import ingest_directory
+
+STATIC_TEST_DATA = Path(__file__).parent / "static_test_data"
 
 
 class MemoryDatabase:
@@ -30,85 +33,60 @@ class MemoryDatabase:
         return await self.client.query(statement, variables or {})
 
 
-def _write_data(data_dir: Path, edges: list[dict[str, Any]]) -> None:
-    nodes_dir = data_dir / "nodes"
-    edges_dir = data_dir / "edges"
-    nodes_dir.mkdir()
-    edges_dir.mkdir()
-    (nodes_dir / "person.json").write_text(
-        json.dumps({"id": "person:alice", "name": "Alice"}),
-        encoding="utf-8",
-    )
-    (nodes_dir / "home.json").write_text(
-        json.dumps({"id": "home:main", "name": "Main Home"}),
-        encoding="utf-8",
-    )
-    (edges_dir / "resides_in.json").write_text(
-        json.dumps(edges),
-        encoding="utf-8",
-    )
-
-
 @pytest.mark.asyncio
-async def test_repeated_ingestion_does_not_duplicate_relationships(
-    tmp_path: Path,
-) -> None:
-    _write_data(
-        tmp_path,
-        [
-            {
-                "from": "person:alice",
-                "to": "home:main",
-                "residence_type": "primary",
-            }
-        ],
-    )
+async def test_repeated_ingestion_does_not_duplicate_relationships() -> None:
     database = MemoryDatabase()
     await database.connect()
     try:
-        first = await ingest_directory(database, tmp_path)  # type: ignore[arg-type]
-        second = await ingest_directory(database, tmp_path)  # type: ignore[arg-type]
+        first = await ingest_directory(  # type: ignore[arg-type]
+            database,
+            STATIC_TEST_DATA,
+        )
+        second = await ingest_directory(  # type: ignore[arg-type]
+            database,
+            STATIC_TEST_DATA,
+        )
         edges = await database.query("SELECT * FROM resides_in;")
     finally:
         await database.close()
 
-    assert first.nodes_upserted == second.nodes_upserted == 2
-    assert first.edges_upserted == second.edges_upserted == 1
-    assert len(edges) == 1
-    assert str(edges[0]["id"]) == "resides_in:person_alice__home_main"
+    assert first.nodes_upserted == second.nodes_upserted == 3
+    assert first.edges_upserted == second.edges_upserted == 2
+    assert sorted(str(edge["id"]) for edge in edges) == [
+        "resides_in:blair_primary",
+        "resides_in:person_alex_example__home_test_home",
+    ]
 
 
 @pytest.mark.asyncio
-async def test_explicit_relationship_id_is_stable(tmp_path: Path) -> None:
-    _write_data(
-        tmp_path,
-        [
-            {
-                "id": "resides_in:alice_primary",
-                "from": "person:alice",
-                "to": "home:main",
-            }
-        ],
-    )
+async def test_explicit_relationship_id_is_stable() -> None:
     database = MemoryDatabase()
     await database.connect()
     try:
-        await ingest_directory(database, tmp_path)  # type: ignore[arg-type]
+        await ingest_directory(  # type: ignore[arg-type]
+            database,
+            STATIC_TEST_DATA,
+        )
         edges = await database.query("SELECT * FROM resides_in;")
     finally:
         await database.close()
 
-    assert [str(edge["id"]) for edge in edges] == ["resides_in:alice_primary"]
+    assert "resides_in:blair_primary" in [str(edge["id"]) for edge in edges]
 
 
 @pytest.mark.asyncio
 async def test_duplicate_implicit_relationships_require_ids(tmp_path: Path) -> None:
-    edge = {"from": "person:alice", "to": "home:main"}
-    _write_data(tmp_path, [edge, {**edge, "residence_type": "historical"}])
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    edge = {"from": "person:alex_example", "to": "home:test_home"}
+    (data_dir / "edges" / "resides_in.json").write_text(
+        json.dumps([edge, {**edge, "residence_type": "historical"}]),
+        encoding="utf-8",
+    )
     database = MemoryDatabase()
     await database.connect()
     try:
         with pytest.raises(ValueError, match="unique 'id'"):
-            await ingest_directory(database, tmp_path)  # type: ignore[arg-type]
+            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
     finally:
         await database.close()

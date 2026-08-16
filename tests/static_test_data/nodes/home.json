@@ -1,0 +1,9 @@
+{
+  "id": "home:test_home",
+  "type": "home",
+  "name": "Test House",
+  "address": {
+    "city": "Testville",
+    "state": "CA"
+  }
+}

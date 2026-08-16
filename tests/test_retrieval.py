@@ -4,7 +4,10 @@ from typing import Any
 import pytest
 from surrealdb import AsyncSurreal, RecordID
 
+from home_cortex.ingestion import ingest_directory
 from home_cortex.retrieval import RetrievalService, to_json_value
+
+STATIC_TEST_DATA = Path(__file__).parent / "static_test_data"
 
 
 class FakeDatabase:
@@ -39,6 +42,9 @@ class MemoryDatabase:
         variables: dict[str, Any] | None = None,
     ) -> Any:
         return await self.client.query(statement, variables or {})
+
+    async def upsert(self, record: Any, data: dict[str, Any]) -> Any:
+        return await self.client.upsert(record, data)
 
 
 @pytest.mark.asyncio
@@ -140,16 +146,14 @@ async def test_get_relationships_rejects_unapproved_inputs() -> None:
     assert database.queries == []
 
 
-def test_table_names_come_from_json_file_names(tmp_path: Path) -> None:
-    (tmp_path / "nodes").mkdir()
-    (tmp_path / "edges").mkdir()
-    (tmp_path / "nodes" / "object.json").touch()
-    (tmp_path / "edges" / "located_in.json").touch()
+def test_table_names_come_from_static_test_data() -> None:
+    service = RetrievalService(  # type: ignore[arg-type]
+        FakeDatabase({}),
+        data_dir=STATIC_TEST_DATA,
+    )
 
-    service = RetrievalService(FakeDatabase({}), data_dir=tmp_path)  # type: ignore[arg-type]
-
-    assert service.node_tables == ("object",)
-    assert service.edge_tables == ("located_in",)
+    assert service.node_tables == ("home", "person")
+    assert service.edge_tables == ("resides_in",)
 
 
 def test_record_id_is_serialized() -> None:
@@ -161,24 +165,28 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
     database = MemoryDatabase()
     await database.connect()
     try:
-        await database.query(
-            """
-            CREATE person:alice CONTENT { name: 'Alice' };
-            CREATE home:main CONTENT { name: 'Main Home' };
-            RELATE person:alice->resides_in->home:main;
-            """
+        await ingest_directory(  # type: ignore[arg-type]
+            database,
+            STATIC_TEST_DATA,
         )
-        service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
+        service = RetrievalService(  # type: ignore[arg-type]
+            database,
+            limit=10,
+            data_dir=STATIC_TEST_DATA,
+        )
 
-        entities = await service.search_entities("main home", entity_type="home")
+        entities = await service.search_entities("test house", entity_type="home")
         relationships = await service.get_relationships(
-            "home:main",
+            "home:test_home",
             relation="resides_in",
         )
     finally:
         await database.close()
 
-    assert [entity["id"] for entity in entities] == ["home:main"]
-    assert relationships[0]["in"] == "person:alice"
-    assert relationships[0]["out"] == "home:main"
-    assert relationships[0]["direction"] == "incoming"
+    assert [entity["id"] for entity in entities] == ["home:test_home"]
+    assert sorted(edge["in"] for edge in relationships) == [
+        "person:alex_example",
+        "person:blair_example",
+    ]
+    assert all(edge["out"] == "home:test_home" for edge in relationships)
+    assert all(edge["direction"] == "incoming" for edge in relationships)

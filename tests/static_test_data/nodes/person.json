@@ -1,0 +1,12 @@
+[
+  {
+    "id": "person:alex_example",
+    "first_name": "Alex",
+    "last_name": "Example"
+  },
+  {
+    "id": "person:blair_example",
+    "first_name": "Blair",
+    "last_name": "Example"
+  }
+]
