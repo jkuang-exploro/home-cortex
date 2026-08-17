@@ -1,8 +1,9 @@
+import asyncio
 import json
 import logging
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Awaitable
+from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict
 from typing import Any, Literal
 from uuid import uuid4
@@ -25,6 +26,7 @@ from .tools import ToolDispatcher
 VIRTUAL_MODEL = "home-cortex"
 MODEL_CREATED = int(time.time())
 REQUEST_ID_HEADER = "X-Request-ID"
+DISCONNECT_POLL_INTERVAL_SECONDS = 0.1
 
 logger = logging.getLogger("uvicorn.error.home_cortex.api")
 
@@ -41,6 +43,10 @@ class APIError(HTTPException):
         super().__init__(status_code=status_code, detail=message)
         self.code = code
         self.details = details
+
+
+class ClientDisconnectedError(RuntimeError):
+    """Raised after client disconnect cancellation has completed."""
 
 
 class ChatMessage(BaseModel):
@@ -270,10 +276,21 @@ async def chat_completions(
             "model_not_found",
             f"Model {body.model!r} was not found",
         )
+    agent_call = request.app.state.agent.answer_messages(
+        [message.model_dump() for message in body.messages],
+        request_id=_request_id(request),
+    )
     try:
-        result = await request.app.state.agent.answer_messages(
-            [message.model_dump() for message in body.messages],
-            request_id=_request_id(request),
+        if body.stream:
+            result = await _await_with_disconnect(request, agent_call)
+        else:
+            result = await agent_call
+    except ClientDisconnectedError:
+        return _error_response(
+            request,
+            499,
+            "client_disconnected",
+            "The client disconnected before the response was ready",
         )
     except AgentLimitError as error:
         raise APIError(502, error.stop_reason, str(error)) from error
@@ -282,7 +299,12 @@ async def chat_completions(
     created = int(time.time())
     if body.stream:
         return StreamingResponse(
-            _stream_chat_completion(completion_id, created, result.answer),
+            _stream_chat_completion(
+                completion_id,
+                created,
+                result.answer,
+                request,
+            ),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -312,6 +334,7 @@ async def _stream_chat_completion(
     completion_id: str,
     created: int,
     answer: str,
+    request: Request | None = None,
 ) -> AsyncIterator[str]:
     chunks = [
         {
@@ -354,9 +377,54 @@ async def _stream_chat_completion(
             ],
         },
     ]
-    for chunk in chunks:
-        yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-    yield "data: [DONE]\n\n"
+    try:
+        for chunk in chunks:
+            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+    except asyncio.CancelledError:
+        if request is not None:
+            _log_client_disconnect(request, phase="sse_cancelled")
+        raise
+
+
+async def _await_with_disconnect(
+    request: Request,
+    agent_call: Awaitable[Any],
+    *,
+    poll_interval: float = DISCONNECT_POLL_INTERVAL_SECONDS,
+) -> Any:
+    """Cancel buffered agent work when its HTTP client goes away."""
+    agent_task = asyncio.create_task(agent_call)
+    try:
+        while not agent_task.done():
+            if await request.is_disconnected():
+                await _cancel_task(agent_task)
+                _log_client_disconnect(request, phase="agent")
+                raise ClientDisconnectedError
+            await asyncio.wait({agent_task}, timeout=poll_interval)
+        return await agent_task
+    except asyncio.CancelledError:
+        await _cancel_task(agent_task)
+        _log_client_disconnect(request, phase="request_cancelled")
+        raise
+    except Exception:
+        await _cancel_task(agent_task)
+        raise
+
+
+async def _cancel_task(task: asyncio.Task[Any]) -> None:
+    if not task.done():
+        task.cancel()
+    with suppress(asyncio.CancelledError, Exception):
+        await task
+
+
+def _log_client_disconnect(request: Request, *, phase: str) -> None:
+    logger.info(
+        "stream_cancelled request_id=%s phase=%s",
+        _request_id(request),
+        phase,
+    )
 
 
 def _request_id(request: Request) -> str:

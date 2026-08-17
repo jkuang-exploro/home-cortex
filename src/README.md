@@ -17,6 +17,12 @@ grounded answer.
   by the agent loop. It supports ordinary JSON responses and buffered SSE
   responses for clients such as Open WebUI.
 
+Buffered SSE requests are monitored while the agent runs. If the client
+disconnects, Cortex cancels the active agent/Ollama task and records a
+privacy-safe `stream_cancelled` log. Starlette cancellation is also propagated
+during SSE emission. The final answer is still sent as buffered chunks; true
+token-by-token Ollama streaming is intentionally deferred.
+
 ## First run
 
 From `docker/cortex` on the server:

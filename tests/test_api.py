@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -8,7 +9,13 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from home_cortex.api import VIRTUAL_MODEL, app
+from home_cortex.api import (
+    VIRTUAL_MODEL,
+    ClientDisconnectedError,
+    _await_with_disconnect,
+    _stream_chat_completion,
+    app,
+)
 
 
 class FakeAgent:
@@ -235,6 +242,78 @@ def test_unexpected_error_is_json_and_does_not_log_private_message(
     assert "exception_type=RuntimeError" in caplog.text
     assert private_value not in caplog.text
     _assert_request_id(response)
+
+
+@pytest.mark.asyncio
+async def test_disconnect_cancels_buffered_agent_work(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def slow_agent() -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    class DisconnectingRequest:
+        def __init__(self) -> None:
+            self.state = SimpleNamespace(request_id="request-disconnect")
+            self.checks = iter((False, True))
+
+        async def is_disconnected(self) -> bool:
+            return next(self.checks, True)
+
+    request = DisconnectingRequest()
+    with caplog.at_level(
+        logging.INFO,
+        logger="uvicorn.error.home_cortex.api",
+    ):
+        with pytest.raises(ClientDisconnectedError):
+            await _await_with_disconnect(  # type: ignore[arg-type]
+                request,
+                slow_agent(),
+                poll_interval=0.001,
+            )
+
+    assert started.is_set()
+    assert cancelled.is_set()
+    assert (
+        "stream_cancelled request_id=request-disconnect phase=agent"
+        in caplog.text
+    )
+
+
+@pytest.mark.asyncio
+async def test_sse_generator_logs_task_cancellation(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    request = SimpleNamespace(
+        state=SimpleNamespace(request_id="request-sse-cancel")
+    )
+    stream = _stream_chat_completion(
+        "chatcmpl-test",
+        123,
+        "Buffered answer",
+        request,  # type: ignore[arg-type]
+    )
+
+    first_event = await anext(stream)
+    with caplog.at_level(
+        logging.INFO,
+        logger="uvicorn.error.home_cortex.api",
+    ):
+        with pytest.raises(asyncio.CancelledError):
+            await stream.athrow(asyncio.CancelledError())
+
+    assert '"role": "assistant"' in first_event
+    assert (
+        "stream_cancelled request_id=request-sse-cancel phase=sse_cancelled"
+        in caplog.text
+    )
 
 
 def _assert_request_id(response: Any) -> None:
