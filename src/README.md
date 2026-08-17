@@ -13,8 +13,9 @@ grounded answer.
 - `POST /v1/retrieve` returns the graph context used for a question.
 - `POST /v1/chat` runs a bounded Ollama tool-calling loop over the graph.
 - `GET /v1/models` advertises the `home-cortex` virtual model.
-- `POST /v1/chat/completions` provides a non-streaming OpenAI-compatible chat
-  endpoint backed by the agent loop.
+- `POST /v1/chat/completions` provides an OpenAI-compatible chat endpoint backed
+  by the agent loop. It supports ordinary JSON responses and buffered SSE
+  responses for clients such as Open WebUI.
 
 ## First run
 

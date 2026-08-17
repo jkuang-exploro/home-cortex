@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
@@ -82,6 +83,40 @@ def test_chat_completions_invokes_agent_and_returns_openai_shape(
     assert agent.calls == [messages]
 
 
+def test_chat_completions_returns_openai_sse_stream(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+    messages = [{"role": "user", "content": "Who resides at Fort Cerritos?"}]
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "home-cortex",
+            "stream": True,
+            "messages": messages,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    events = [
+        line.removeprefix("data: ")
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert events[-1] == "[DONE]"
+    chunks = [json.loads(event) for event in events[:-1]]
+    assert {chunk["id"] for chunk in chunks} == {chunks[0]["id"]}
+    assert all(chunk["object"] == "chat.completion.chunk" for chunk in chunks)
+    assert chunks[0]["choices"][0]["delta"] == {"role": "assistant"}
+    assert chunks[1]["choices"][0]["delta"] == {
+        "content": "Jian and Pu reside at Fort Cerritos."
+    }
+    assert chunks[2]["choices"][0]["finish_reason"] == "stop"
+    assert agent.calls == [messages]
+
+
 @pytest.mark.parametrize(
     ("request_body", "status_code"),
     [
@@ -92,14 +127,6 @@ def test_chat_completions_invokes_agent_and_returns_openai_shape(
                 "messages": [{"role": "user", "content": "Hello"}],
             },
             404,
-        ),
-        (
-            {
-                "model": "home-cortex",
-                "stream": True,
-                "messages": [{"role": "user", "content": "Hello"}],
-            },
-            400,
         ),
         (
             {

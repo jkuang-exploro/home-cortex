@@ -1,4 +1,6 @@
+import json
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from typing import Any, Literal
@@ -6,6 +8,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.responses import StreamingResponse
 
 from . import __version__
 from .agent import AgentLimitError, AgentService
@@ -136,18 +139,12 @@ async def models() -> dict[str, Any]:
 async def chat_completions(
     body: ChatCompletionRequest,
     request: Request,
-) -> dict[str, Any]:
+):
     if body.model != VIRTUAL_MODEL:
         raise HTTPException(
             status_code=404,
             detail=f"Model {body.model!r} was not found",
         )
-    if body.stream:
-        raise HTTPException(
-            status_code=400,
-            detail="Streaming is not supported yet; set 'stream' to false",
-        )
-
     try:
         result = await request.app.state.agent.answer_messages(
             [message.model_dump() for message in body.messages]
@@ -155,10 +152,22 @@ async def chat_completions(
     except AgentLimitError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
+    completion_id = f"chatcmpl-{uuid4().hex}"
+    created = int(time.time())
+    if body.stream:
+        return StreamingResponse(
+            _stream_chat_completion(completion_id, created, result.answer),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     return {
-        "id": f"chatcmpl-{uuid4().hex}",
+        "id": completion_id,
         "object": "chat.completion",
-        "created": int(time.time()),
+        "created": created,
         "model": VIRTUAL_MODEL,
         "choices": [
             {
@@ -171,3 +180,54 @@ async def chat_completions(
             }
         ],
     }
+
+
+async def _stream_chat_completion(
+    completion_id: str,
+    created: int,
+    answer: str,
+) -> AsyncIterator[str]:
+    chunks = [
+        {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": VIRTUAL_MODEL,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"role": "assistant"},
+                    "finish_reason": None,
+                }
+            ],
+        },
+        {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": VIRTUAL_MODEL,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"content": answer},
+                    "finish_reason": None,
+                }
+            ],
+        },
+        {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": VIRTUAL_MODEL,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {},
+                    "finish_reason": "stop",
+                }
+            ],
+        },
+    ]
+    for chunk in chunks:
+        yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+    yield "data: [DONE]\n\n"

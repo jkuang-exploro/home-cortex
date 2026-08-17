@@ -65,3 +65,14 @@ curl -sS -X POST http://localhost:8001/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"home-cortex","stream":false,"messages":[{"role":"user","content":"Who resides at Fort Cerritos?"}]}' | jq
 ```
+
+Open WebUI normally requests streaming responses. Verify its request shape with:
+
+```sh
+curl -N -sS -X POST http://localhost:8001/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"home-cortex","stream":true,"messages":[{"role":"user","content":"Who resides at Fort Cerritos?"}]}'
+```
+
+Cortex keeps the Ollama tool loop non-streaming and returns the completed answer
+as an OpenAI-compatible SSE stream ending in `data: [DONE]`.
