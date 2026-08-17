@@ -5,6 +5,8 @@ services:
     gpus: all
     volumes:
       - ollama-data:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: 24h
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:v0.9.5
