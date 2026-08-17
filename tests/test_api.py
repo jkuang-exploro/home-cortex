@@ -20,16 +20,19 @@ class FakeAgent:
     def __init__(self) -> None:
         self.calls: list[list[dict[str, Any]]] = []
         self.request_ids: list[str] = []
+        self.user_entity_ids: list[str | None] = []
 
     async def answer(
         self,
         question: str,
         *,
         request_id: str = "-",
+        user_entity_id: str | None = None,
     ) -> SimpleNamespace:
         return await self.answer_messages(
             [{"role": "user", "content": question}],
             request_id=request_id,
+            user_entity_id=user_entity_id,
         )
 
     async def answer_messages(
@@ -37,9 +40,11 @@ class FakeAgent:
         messages: list[dict[str, Any]],
         *,
         request_id: str = "-",
+        user_entity_id: str | None = None,
     ) -> SimpleNamespace:
         self.calls.append(messages)
         self.request_ids.append(request_id)
+        self.user_entity_ids.append(user_entity_id)
         return SimpleNamespace(
             answer="Jian and Pu reside at Fort Cerritos.",
             steps=3,
@@ -52,9 +57,11 @@ class FakeAgent:
         messages: list[dict[str, Any]],
         *,
         request_id: str = "-",
+        user_entity_id: str | None = None,
     ):
         self.calls.append(messages)
         self.request_ids.append(request_id)
+        self.user_entity_ids.append(user_entity_id)
         yield "Jian and Pu "
         yield "reside at Fort Cerritos."
 
@@ -63,9 +70,14 @@ class FakeAgent:
 def api_client() -> Iterator[tuple[TestClient, FakeAgent]]:
     previous_agent = getattr(app.state, "agent", None)
     previous_agents = getattr(app.state, "agents", None)
+    previous_settings = getattr(app.state, "settings", None)
     agent = FakeAgent()
     app.state.agent = agent
     app.state.agents = {"steward": agent}
+    app.state.settings = SimpleNamespace(
+        cortex_api_key=None,
+        cortex_identity_map={},
+    )
     client = TestClient(app, raise_server_exceptions=True)
     try:
         yield client, agent
@@ -79,6 +91,10 @@ def api_client() -> Iterator[tuple[TestClient, FakeAgent]]:
             del app.state.agents
         else:
             app.state.agents = previous_agents
+        if previous_settings is None:
+            del app.state.settings
+        else:
+            app.state.settings = previous_settings
 
 
 def test_models_advertises_steward_display_name(
@@ -94,7 +110,7 @@ def test_models_advertises_steward_display_name(
     assert [model["id"] for model in body["data"]] == [VIRTUAL_MODEL]
     assert body["data"][0]["object"] == "model"
     assert body["data"][0]["owned_by"] == "home-cortex"
-    assert VIRTUAL_MODEL == "The Butler"
+    assert VIRTUAL_MODEL == "老管家"
     _assert_request_id(response)
 
 
@@ -136,6 +152,80 @@ def test_chat_completions_invokes_agent_and_returns_openai_shape(
     _assert_request_id(response)
 
 
+def test_chat_completions_passes_mapped_openwebui_identity(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+    app.state.settings = SimpleNamespace(
+        cortex_api_key="test-cortex-key",
+        cortex_identity_map={
+            "id:webui-user-123": "person:jian_kuang",
+        },
+    )
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={
+            "Authorization": "Bearer test-cortex-key",
+            "X-OpenWebUI-User-Id": "webui-user-123",
+        },
+        json={
+            "model": VIRTUAL_MODEL,
+            "stream": False,
+            "messages": [{"role": "user", "content": "Where do I live?"}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert agent.user_entity_ids == ["person:jian_kuang"]
+
+
+@pytest.mark.parametrize(
+    ("headers", "status_code", "error_code"),
+    [
+        (
+            {"X-OpenWebUI-User-Id": "webui-user-123"},
+            401,
+            "authentication_required",
+        ),
+        (
+            {
+                "Authorization": "Bearer test-cortex-key",
+                "X-OpenWebUI-User-Id": "unmapped-user",
+            },
+            403,
+            "identity_not_mapped",
+        ),
+    ],
+)
+def test_chat_completions_rejects_untrusted_or_unmapped_identity(
+    api_client: tuple[TestClient, FakeAgent],
+    headers: dict[str, str],
+    status_code: int,
+    error_code: str,
+) -> None:
+    client, agent = api_client
+    app.state.settings = SimpleNamespace(
+        cortex_api_key="test-cortex-key",
+        cortex_identity_map={
+            "id:webui-user-123": "person:jian_kuang",
+        },
+    )
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers=headers,
+        json={
+            "model": VIRTUAL_MODEL,
+            "messages": [{"role": "user", "content": "Where do I live?"}],
+        },
+    )
+
+    assert response.status_code == status_code
+    assert response.json()["error"]["code"] == error_code
+    assert agent.calls == []
+
+
 def test_chat_completions_returns_openai_sse_stream(
     api_client: tuple[TestClient, FakeAgent],
 ) -> None:
@@ -162,7 +252,7 @@ def test_chat_completions_returns_openai_sse_stream(
     chunks = [json.loads(event) for event in events[:-1]]
     assert {chunk["id"] for chunk in chunks} == {chunks[0]["id"]}
     assert all(chunk["object"] == "chat.completion.chunk" for chunk in chunks)
-    assert all(chunk["model"] == "The Butler" for chunk in chunks)
+    assert all(chunk["model"] == "老管家" for chunk in chunks)
     assert chunks[0]["choices"][0]["delta"] == {"role": "assistant"}
     assert chunks[1]["choices"][0]["delta"] == {"content": "Jian and Pu "}
     assert chunks[2]["choices"][0]["delta"] == {
@@ -187,7 +277,7 @@ def test_named_steward_chat_route(
     assert response.status_code == 200
     assert response.json()["agent"] == {
         "id": "steward",
-        "display_name": "The Butler",
+        "display_name": "老管家",
     }
     assert response.json()["answer"] == "Jian and Pu reside at Fort Cerritos."
     assert len(agent.calls) == 1
@@ -284,6 +374,7 @@ def test_unexpected_error_is_json_and_does_not_log_private_message(
             messages: list[dict[str, Any]],
             *,
             request_id: str = "-",
+            user_entity_id: str | None = None,
         ) -> None:
             raise RuntimeError(private_value)
 

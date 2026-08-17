@@ -15,7 +15,7 @@ def test_steward_agent_loads_successfully() -> None:
 def test_steward_has_localized_identity_and_home_scope() -> None:
     steward = get_agent("steward")
 
-    assert steward.display_name == "The Butler"
+    assert steward.display_name == "老管家"
     assert steward.settings["home_entity_id"] == "location:fort_cerritos"
     assert steward.settings["localized_identity"] == {
         "en": "the butler",

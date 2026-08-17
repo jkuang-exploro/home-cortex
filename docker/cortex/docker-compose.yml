@@ -16,8 +16,9 @@ services:
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
       ENABLE_OPENAI_API: "true"
+      ENABLE_FORWARD_USER_INFO_HEADERS: "true"
       OPENAI_API_BASE_URLS: http://cortex-api:8000/v1
-      OPENAI_API_KEYS: unused
+      OPENAI_API_KEYS: ${CORTEX_API_KEY:-unused}
     volumes:
       - open-webui-data:/app/backend/data
     depends_on:
@@ -50,6 +51,8 @@ services:
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL}
       DATA_DIR: /app/data
+      CORTEX_API_KEY: ${CORTEX_API_KEY:-}
+      CORTEX_IDENTITY_MAP: '${CORTEX_IDENTITY_MAP:-{}}'
     volumes:
       - ../../data:/app/data:ro
     depends_on:

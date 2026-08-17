@@ -28,8 +28,23 @@ variables:
 
 ```yaml
 ENABLE_OPENAI_API: "true"
+ENABLE_FORWARD_USER_INFO_HEADERS: "true"
 OPENAI_API_BASE_URLS: http://cortex-api:8000/v1
-OPENAI_API_KEYS: unused
+OPENAI_API_KEYS: ${CORTEX_API_KEY}
+```
+
+Set a shared API key and map the email used by your Open WebUI account in
+`docker/cortex/.env`:
+
+```dotenv
+CORTEX_API_KEY=replace-with-a-long-random-secret
+CORTEX_IDENTITY_MAP={"email:your-login@example.com":"person:jian_kuang"}
+```
+
+You can instead use the immutable Open WebUI user ID as the map key:
+
+```dotenv
+CORTEX_IDENTITY_MAP={"id:open-webui-user-uuid":"person:jian_kuang"}
 ```
 
 Open WebUI persists connection settings. If the existing volume already has an
@@ -38,7 +53,7 @@ OpenAI-compatible connection with:
 
 ```text
 Base URL: http://cortex-api:8000/v1
-API key: unused
+API key: the value of CORTEX_API_KEY
 ```
 
 Recreate Open WebUI without deleting its data volume:
@@ -47,31 +62,35 @@ Recreate Open WebUI without deleting its data volume:
 docker compose up -d --force-recreate --no-deps open-webui
 ```
 
-Select `The Butler` in the model picker. Selecting `qwen3:8b` or another raw
+Select `老管家` in the model picker. Selecting `qwen3:8b` or another raw
 Ollama model bypasses Cortex, SurrealDB retrieval, and the agent tools.
 
 Verify the Cortex model endpoint from the Compose network:
 
 ```sh
 docker compose exec open-webui python -c \
-  'import requests; print(requests.get("http://cortex-api:8000/v1/models").json())'
+  'import os, requests; print(requests.get("http://cortex-api:8000/v1/models", headers={"Authorization": "Bearer " + os.environ["OPENAI_API_KEYS"]}).json())'
 ```
 
-Then ask `Who resides at Fort Cerritos?` using `The Butler` and compare the
+Then ask `Where do I live?` using `老管家` and compare the
 answer with:
 
 ```sh
 curl -sS -X POST http://localhost:8001/v1/chat/completions \
+  -H 'Authorization: Bearer replace-with-a-long-random-secret' \
+  -H 'X-OpenWebUI-User-Email: your-login@example.com' \
   -H 'Content-Type: application/json' \
-  -d '{"model":"The Butler","stream":false,"messages":[{"role":"user","content":"Who resides at Fort Cerritos?"}]}' | jq
+  -d '{"model":"老管家","stream":false,"messages":[{"role":"user","content":"Where do I live?"}]}' | jq
 ```
 
 Open WebUI normally requests streaming responses. Verify its request shape with:
 
 ```sh
 curl -N -sS -X POST http://localhost:8001/v1/chat/completions \
+  -H 'Authorization: Bearer replace-with-a-long-random-secret' \
+  -H 'X-OpenWebUI-User-Email: your-login@example.com' \
   -H 'Content-Type: application/json' \
-  -d '{"model":"The Butler","stream":true,"messages":[{"role":"user","content":"Who resides at Fort Cerritos?"}]}'
+  -d '{"model":"老管家","stream":true,"messages":[{"role":"user","content":"Where do I live?"}]}'
 ```
 
 Cortex keeps tool-selection responses internal and forwards each final-answer

@@ -13,7 +13,7 @@ grounded answer.
 - `POST /v1/retrieve` returns the graph context used for a question.
 - `POST /v1/chat` runs the default steward agent for backward compatibility.
 - `POST /agent/steward/chat` invokes the named household steward directly.
-- `GET /v1/models` advertises `The Butler` to OpenAI-compatible clients.
+- `GET /v1/models` advertises `老管家` to OpenAI-compatible clients.
 - `POST /v1/chat/completions` provides an OpenAI-compatible chat endpoint backed
   by the agent loop. It supports ordinary JSON responses and token-streamed SSE
   responses for clients such as Open WebUI.
@@ -28,9 +28,21 @@ a privacy-safe `stream_cancelled` log.
 
 From `docker/cortex` on the server:
 
-Copy `.env.example` to `.env`, then set `SURREAL_PASS` and `OLLAMA_MODEL` in
-that file. `OLLAMA_MODEL` is the single deployment setting used by the Cortex
-API when selecting an Ollama model.
+Copy `.env.example` to `.env`, then set `SURREAL_PASS`, `OLLAMA_MODEL`,
+`CORTEX_API_KEY`, and `CORTEX_IDENTITY_MAP` in that file. `OLLAMA_MODEL` is the
+single deployment setting used by the Cortex API when selecting an Ollama
+model. Map the email used to sign in to Open WebUI to Jian's graph record:
+
+```dotenv
+CORTEX_API_KEY=replace-with-a-long-random-secret
+CORTEX_IDENTITY_MAP={"email:your-login@example.com":"person:jian_kuang"}
+```
+
+An Open WebUI user ID is a stronger mapping key when it is known:
+
+```dotenv
+CORTEX_IDENTITY_MAP={"id:open-webui-user-uuid":"person:jian_kuang"}
+```
 
 ```sh
 docker compose up -d --build
@@ -43,8 +55,10 @@ curl -X POST http://localhost:8001/v1/chat \
   -H 'Content-Type: application/json' \
   -d '{"message":"Who lives at Fort Cerritos?"}'
 curl -X POST http://localhost:8001/v1/chat/completions \
+  -H 'Authorization: Bearer replace-with-a-long-random-secret' \
+  -H 'X-OpenWebUI-User-Email: your-login@example.com' \
   -H 'Content-Type: application/json' \
-  -d '{"model":"The Butler","stream":false,"messages":[{"role":"user","content":"Who resides at Fort Cerritos?"}]}'
+  -d '{"model":"老管家","stream":false,"messages":[{"role":"user","content":"Where do I live?"}]}'
 ```
 
 Open the interactive API documentation at
@@ -58,12 +72,19 @@ The Compose stack configures two model paths:
 - The OpenAI-compatible Cortex API at `http://cortex-api:8000/v1` for grounded
   graph answers.
 
-Select `The Butler` in Open WebUI to use the steward and its SurrealDB tools.
+Select `老管家` in Open WebUI to use the steward and its SurrealDB tools.
 The agent refers to itself as `the butler` in English and `老管家` in Chinese.
 Selecting a raw Ollama model bypasses Cortex. Open WebUI persists its
 connection settings, so an existing deployment may require adding the Cortex
 connection once in the administrator connection settings with API key
-`unused`.
+matching `CORTEX_API_KEY`.
+
+Compose enables Open WebUI's authenticated user-info forwarding. Cortex maps
+the forwarded user ID or email to a stable `person:` record and supplies that
+record to the agent as trusted context. User-written messages cannot change
+this mapping. If identity mappings are configured, an unknown Open WebUI user
+receives an `identity_not_mapped` error instead of being treated as somebody
+else.
 
 ## Named agents
 

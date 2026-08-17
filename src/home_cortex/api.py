@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import secrets
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
@@ -23,9 +24,10 @@ from .agents import (
     get_agent_by_display_name,
     list_agents,
 )
-from .config import get_settings
+from .config import Settings, get_settings
 from .db import Database
 from .ingestion import ingest_directory
+from .identity import resolve_user_entity_id
 from .ollama import OllamaService
 from .retrieval import RetrievalService
 from .tools import ToolDispatcher
@@ -70,6 +72,7 @@ class ChatCompletionRequest(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    app.state.settings = settings
     database = Database(settings)
     await database.connect()
     app.state.database = database
@@ -276,6 +279,7 @@ async def _agent_chat(
         result = await _agent_runtime(request, definition).answer(
             question,
             request_id=_request_id(request),
+            user_entity_id=_request_user_entity_id(request),
         )
     except AgentLimitError as error:
         raise APIError(502, error.stop_reason, str(error)) from error
@@ -292,7 +296,8 @@ async def _agent_chat(
 
 
 @app.get("/v1/models")
-async def models() -> dict[str, Any]:
+async def models(request: Request) -> dict[str, Any]:
+    _authenticate_cortex_request(request)
     return {
         "object": "list",
         "data": [
@@ -312,6 +317,7 @@ async def chat_completions(
     body: ChatCompletionRequest,
     request: Request,
 ):
+    user_entity_id = _request_user_entity_id(request)
     try:
         definition = get_agent_by_display_name(body.model)
     except UnknownAgentError:
@@ -327,6 +333,7 @@ async def chat_completions(
         answer_stream = agent.stream_answer_messages(
             [message.model_dump() for message in body.messages],
             request_id=_request_id(request),
+            user_entity_id=user_entity_id,
         )
         return StreamingResponse(
             _stream_chat_completion(
@@ -347,6 +354,7 @@ async def chat_completions(
         result = await agent.answer_messages(
             [message.model_dump() for message in body.messages],
             request_id=_request_id(request),
+            user_entity_id=user_entity_id,
         )
     except AgentLimitError as error:
         raise APIError(502, error.stop_reason, str(error)) from error
@@ -491,6 +499,45 @@ def _log_client_disconnect(request: Request, *, phase: str) -> None:
 
 def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", "unknown")
+
+
+def _request_settings(request: Request) -> Settings:
+    return getattr(request.app.state, "settings", None) or get_settings()
+
+
+def _authenticate_cortex_request(request: Request) -> None:
+    expected_key = _request_settings(request).cortex_api_key
+    if expected_key is None:
+        return
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, supplied_key = authorization.partition(" ")
+    if scheme.casefold() != "bearer" or not secrets.compare_digest(
+        supplied_key,
+        expected_key,
+    ):
+        raise APIError(
+            401,
+            "authentication_required",
+            "A valid Cortex API key is required",
+        )
+
+
+def _request_user_entity_id(request: Request) -> str | None:
+    settings = _request_settings(request)
+    _authenticate_cortex_request(request)
+    if not settings.cortex_identity_map:
+        return None
+    entity_id = resolve_user_entity_id(
+        request.headers,
+        settings.cortex_identity_map,
+    )
+    if entity_id is None:
+        raise APIError(
+            403,
+            "identity_not_mapped",
+            "The authenticated Open WebUI user is not mapped to a home-graph person",
+        )
+    return entity_id
 
 
 def _agent_definition(agent_id: str) -> AgentDefinition:
