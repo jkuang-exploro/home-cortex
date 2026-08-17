@@ -12,8 +12,19 @@ def test_steward_agent_loads_successfully() -> None:
     assert "continue using tools" in steward.prompt
 
 
-def test_steward_display_name_is_chinese() -> None:
-    assert get_agent("steward").display_name == "老管家"
+def test_steward_has_localized_identity_and_home_scope() -> None:
+    steward = get_agent("steward")
+
+    assert steward.display_name == "The Butler"
+    assert steward.settings["home_entity_id"] == "location:fort_cerritos"
+    assert steward.settings["localized_identity"] == {
+        "en": "the butler",
+        "zh": "老管家",
+    }
+    assert 'In English, refer to yourself as "the butler"' in steward.prompt
+    assert 'In Chinese, refer to yourself as "老管家"' in steward.prompt
+    assert "Fort Cerritos" in steward.prompt
+    assert "喜瑞匡家" in steward.prompt
 
 
 def test_unknown_agent_id_fails_cleanly() -> None:

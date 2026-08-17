@@ -94,7 +94,7 @@ def test_models_advertises_steward_display_name(
     assert [model["id"] for model in body["data"]] == [VIRTUAL_MODEL]
     assert body["data"][0]["object"] == "model"
     assert body["data"][0]["owned_by"] == "home-cortex"
-    assert VIRTUAL_MODEL == "老管家"
+    assert VIRTUAL_MODEL == "The Butler"
     _assert_request_id(response)
 
 
@@ -162,7 +162,7 @@ def test_chat_completions_returns_openai_sse_stream(
     chunks = [json.loads(event) for event in events[:-1]]
     assert {chunk["id"] for chunk in chunks} == {chunks[0]["id"]}
     assert all(chunk["object"] == "chat.completion.chunk" for chunk in chunks)
-    assert all(chunk["model"] == "老管家" for chunk in chunks)
+    assert all(chunk["model"] == "The Butler" for chunk in chunks)
     assert chunks[0]["choices"][0]["delta"] == {"role": "assistant"}
     assert chunks[1]["choices"][0]["delta"] == {"content": "Jian and Pu "}
     assert chunks[2]["choices"][0]["delta"] == {
@@ -187,7 +187,7 @@ def test_named_steward_chat_route(
     assert response.status_code == 200
     assert response.json()["agent"] == {
         "id": "steward",
-        "display_name": "老管家",
+        "display_name": "The Butler",
     }
     assert response.json()["answer"] == "Jian and Pu reside at Fort Cerritos."
     assert len(agent.calls) == 1

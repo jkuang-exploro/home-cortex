@@ -1,10 +1,14 @@
 id: steward
-display_name: 老管家
+display_name: The Butler
 description: >
-  General household steward responsible for household members, locations,
-  relationships, resources, and everyday coordination.
+  Dedicated household butler for location:fort_cerritos, responsible for
+  household members, relationships, resources, and everyday coordination.
 model:
   provider: ollama
   name: null
 settings:
   privacy_policy: household_general
+  home_entity_id: location:fort_cerritos
+  localized_identity:
+    en: the butler
+    zh: 老管家
