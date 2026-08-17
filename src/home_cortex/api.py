@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Awaitable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict
 from typing import Any, Literal
@@ -15,7 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import JSONResponse, StreamingResponse
 
 from . import __version__
-from .agent import AgentLimitError, AgentService
+from .agent import AgentLimitError, AgentService, AgentStreamingError
 from .config import get_settings
 from .db import Database
 from .ingestion import ingest_directory
@@ -26,7 +26,6 @@ from .tools import ToolDispatcher
 VIRTUAL_MODEL = "home-cortex"
 MODEL_CREATED = int(time.time())
 REQUEST_ID_HEADER = "X-Request-ID"
-DISCONNECT_POLL_INTERVAL_SECONDS = 0.1
 
 logger = logging.getLogger("uvicorn.error.home_cortex.api")
 
@@ -43,10 +42,6 @@ class APIError(HTTPException):
         super().__init__(status_code=status_code, detail=message)
         self.code = code
         self.details = details
-
-
-class ClientDisconnectedError(RuntimeError):
-    """Raised after client disconnect cancellation has completed."""
 
 
 class ChatMessage(BaseModel):
@@ -276,33 +271,18 @@ async def chat_completions(
             "model_not_found",
             f"Model {body.model!r} was not found",
         )
-    agent_call = request.app.state.agent.answer_messages(
-        [message.model_dump() for message in body.messages],
-        request_id=_request_id(request),
-    )
-    try:
-        if body.stream:
-            result = await _await_with_disconnect(request, agent_call)
-        else:
-            result = await agent_call
-    except ClientDisconnectedError:
-        return _error_response(
-            request,
-            499,
-            "client_disconnected",
-            "The client disconnected before the response was ready",
-        )
-    except AgentLimitError as error:
-        raise APIError(502, error.stop_reason, str(error)) from error
-
     completion_id = f"chatcmpl-{uuid4().hex}"
     created = int(time.time())
     if body.stream:
+        answer_stream = request.app.state.agent.stream_answer_messages(
+            [message.model_dump() for message in body.messages],
+            request_id=_request_id(request),
+        )
         return StreamingResponse(
             _stream_chat_completion(
                 completion_id,
                 created,
-                result.answer,
+                answer_stream,
                 request,
             ),
             media_type="text/event-stream",
@@ -311,6 +291,14 @@ async def chat_completions(
                 "X-Accel-Buffering": "no",
             },
         )
+
+    try:
+        result = await request.app.state.agent.answer_messages(
+            [message.model_dump() for message in body.messages],
+            request_id=_request_id(request),
+        )
+    except AgentLimitError as error:
+        raise APIError(502, error.stop_reason, str(error)) from error
 
     return {
         "id": completion_id,
@@ -333,90 +321,107 @@ async def chat_completions(
 async def _stream_chat_completion(
     completion_id: str,
     created: int,
-    answer: str,
+    answer_stream: AsyncIterator[str],
     request: Request | None = None,
 ) -> AsyncIterator[str]:
-    chunks = [
-        {
-            "id": completion_id,
-            "object": "chat.completion.chunk",
-            "created": created,
-            "model": VIRTUAL_MODEL,
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {"role": "assistant"},
-                    "finish_reason": None,
-                }
-            ],
-        },
-        {
-            "id": completion_id,
-            "object": "chat.completion.chunk",
-            "created": created,
-            "model": VIRTUAL_MODEL,
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {"content": answer},
-                    "finish_reason": None,
-                }
-            ],
-        },
-        {
-            "id": completion_id,
-            "object": "chat.completion.chunk",
-            "created": created,
-            "model": VIRTUAL_MODEL,
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {},
-                    "finish_reason": "stop",
-                }
-            ],
-        },
-    ]
     try:
-        for chunk in chunks:
-            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+        yield _sse_data(
+            _chat_completion_chunk(
+                completion_id,
+                created,
+                delta={"role": "assistant"},
+            )
+        )
+        async for content in answer_stream:
+            if content:
+                yield _sse_data(
+                    _chat_completion_chunk(
+                        completion_id,
+                        created,
+                        delta={"content": content},
+                    )
+                )
+        yield _sse_data(
+            _chat_completion_chunk(
+                completion_id,
+                created,
+                delta={},
+                finish_reason="stop",
+            )
+        )
         yield "data: [DONE]\n\n"
     except asyncio.CancelledError:
         if request is not None:
-            _log_client_disconnect(request, phase="sse_cancelled")
+            _log_client_disconnect(request, phase="ollama_stream")
         raise
+    except (AgentLimitError, AgentStreamingError) as error:
+        yield _sse_error(
+            error.stop_reason,
+            str(error),
+            request,
+        )
+        yield "data: [DONE]\n\n"
+    except Exception as error:
+        logger.error(
+            "stream_error request_id=%s exception_type=%s",
+            _request_id(request) if request is not None else "unknown",
+            type(error).__name__,
+        )
+        yield _sse_error(
+            "internal_server_error",
+            "An unexpected server error occurred",
+            request,
+        )
+        yield "data: [DONE]\n\n"
+    finally:
+        close = getattr(answer_stream, "aclose", None)
+        if close is not None:
+            with suppress(asyncio.CancelledError, Exception):
+                await close()
 
 
-async def _await_with_disconnect(
-    request: Request,
-    agent_call: Awaitable[Any],
+def _chat_completion_chunk(
+    completion_id: str,
+    created: int,
     *,
-    poll_interval: float = DISCONNECT_POLL_INTERVAL_SECONDS,
-) -> Any:
-    """Cancel buffered agent work when its HTTP client goes away."""
-    agent_task = asyncio.create_task(agent_call)
-    try:
-        while not agent_task.done():
-            if await request.is_disconnected():
-                await _cancel_task(agent_task)
-                _log_client_disconnect(request, phase="agent")
-                raise ClientDisconnectedError
-            await asyncio.wait({agent_task}, timeout=poll_interval)
-        return await agent_task
-    except asyncio.CancelledError:
-        await _cancel_task(agent_task)
-        _log_client_disconnect(request, phase="request_cancelled")
-        raise
-    except Exception:
-        await _cancel_task(agent_task)
-        raise
+    delta: dict[str, str],
+    finish_reason: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": completion_id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": VIRTUAL_MODEL,
+        "choices": [
+            {
+                "index": 0,
+                "delta": delta,
+                "finish_reason": finish_reason,
+            }
+        ],
+    }
 
 
-async def _cancel_task(task: asyncio.Task[Any]) -> None:
-    if not task.done():
-        task.cancel()
-    with suppress(asyncio.CancelledError, Exception):
-        await task
+def _sse_data(value: dict[str, Any]) -> str:
+    return f"data: {json.dumps(value, ensure_ascii=False)}\n\n"
+
+
+def _sse_error(
+    code: str,
+    message: str,
+    request: Request | None,
+) -> str:
+    return _sse_data(
+        {
+            "error": {
+                "code": code,
+                "message": message,
+                "request_id": (
+                    _request_id(request) if request is not None else "unknown"
+                ),
+            }
+        }
+    )
 
 
 def _log_client_disconnect(request: Request, *, phase: str) -> None:

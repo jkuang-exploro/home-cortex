@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Literal
@@ -62,6 +62,12 @@ class AgentLimitError(RuntimeError):
     stop_reason: StopReason = "step_limit"
 
 
+class AgentStreamingError(RuntimeError):
+    """Raised when a streamed model response cannot be handled safely."""
+
+    stop_reason: StopReason = "tool_error"
+
+
 @dataclass(frozen=True)
 class AgentResult:
     answer: str
@@ -72,7 +78,7 @@ class AgentResult:
 
 
 class AgentService:
-    """Run a bounded, non-streaming Ollama tool-calling loop."""
+    """Run a bounded Ollama tool-calling loop."""
 
     def __init__(
         self,
@@ -142,6 +148,104 @@ class AgentService:
             request_id=request_id,
         )
 
+    async def stream_answer_messages(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        *,
+        request_id: str = "-",
+    ) -> AsyncIterator[str]:
+        """Yield final-answer tokens while keeping tool steps internal."""
+        if not messages:
+            raise ValueError("At least one message is required")
+        async for token in self.stream(
+            [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                *(dict(message) for message in messages),
+            ],
+            request_id=request_id,
+        ):
+            yield token
+
+    async def stream(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        *,
+        request_id: str = "-",
+    ) -> AsyncIterator[str]:
+        """Run the tool loop and stream chunks from the final Ollama answer."""
+        conversation = [dict(message) for message in messages]
+        if not conversation:
+            raise ValueError("At least one message is required")
+
+        total_tool_calls = 0
+        failure_reason: StopReason | None = None
+        for step in range(1, self.max_steps + 1):
+            content_parts: list[str] = []
+            tool_calls: list[Any] = []
+            emitted_content = False
+
+            async for response in self.ollama.stream_chat_with_tools(conversation):
+                chunk_tool_calls = list(response.message.tool_calls or [])
+                if chunk_tool_calls and emitted_content:
+                    logger.info(
+                        "agent_stop request_id=%s reason=tool_error steps=%d "
+                        "tool_calls=%d",
+                        _safe_log_token(request_id),
+                        step,
+                        total_tool_calls,
+                    )
+                    raise AgentStreamingError(
+                        "Ollama emitted tool calls after final-answer content"
+                    )
+                tool_calls.extend(chunk_tool_calls)
+
+                content = response.message.content or ""
+                if content:
+                    content_parts.append(content)
+                    if not tool_calls:
+                        emitted_content = True
+                        yield content
+
+            assistant_message: dict[str, Any] = {
+                "role": "assistant",
+                "content": "".join(content_parts),
+            }
+            if tool_calls:
+                assistant_message["tool_calls"] = [
+                    tool_call.model_dump(exclude_none=True)
+                    for tool_call in tool_calls
+                ]
+            conversation.append(assistant_message)
+            logger.info(
+                "agent_step request_id=%s step=%d tool_calls=%d",
+                _safe_log_token(request_id),
+                step,
+                len(tool_calls),
+            )
+
+            if not tool_calls:
+                stop_reason = failure_reason or "answer"
+                logger.info(
+                    "agent_stop request_id=%s reason=%s steps=%d tool_calls=%d",
+                    _safe_log_token(request_id),
+                    stop_reason,
+                    step,
+                    total_tool_calls,
+                )
+                return
+
+            self._check_tool_call_limits(tool_calls, step, total_tool_calls, request_id)
+            failure_reason = await self._append_tool_results(
+                conversation,
+                tool_calls,
+                step=step,
+                request_id=request_id,
+                failure_reason=failure_reason,
+            )
+            total_tool_calls += len(tool_calls)
+
+        self._raise_step_limit(request_id, total_tool_calls)
+
     async def run(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -183,77 +287,99 @@ class AgentService:
                     messages=tuple(conversation),
                 )
 
-            if len(tool_calls) > self.max_tool_calls_per_step:
-                logger.info(
-                    "agent_stop request_id=%s reason=step_limit steps=%d "
-                    "tool_calls=%d",
-                    _safe_log_token(request_id),
-                    step,
-                    total_tool_calls,
-                )
-                raise AgentLimitError(
-                    "Ollama requested "
-                    f"{len(tool_calls)} tools in one step; the limit is "
-                    f"{self.max_tool_calls_per_step}"
-                )
-            if step == self.max_steps:
-                logger.info(
-                    "agent_stop request_id=%s reason=step_limit steps=%d "
-                    "tool_calls=%d",
-                    _safe_log_token(request_id),
-                    step,
-                    total_tool_calls,
-                )
-                raise AgentLimitError(
-                    f"Agent did not produce a final answer within {self.max_steps} steps"
-                )
+            self._check_tool_call_limits(tool_calls, step, total_tool_calls, request_id)
+            failure_reason = await self._append_tool_results(
+                conversation,
+                tool_calls,
+                step=step,
+                request_id=request_id,
+                failure_reason=failure_reason,
+            )
+            total_tool_calls += len(tool_calls)
 
-            for tool_call in tool_calls:
-                tool_name = tool_call.function.name
-                arguments = self._bounded_arguments(
-                    tool_name,
-                    tool_call.function.arguments,
-                )
-                started = perf_counter()
-                tool_result = await self._dispatch(tool_name, arguments)
-                duration_ms = (perf_counter() - started) * 1_000
-                success = tool_result.get("ok") is True
-                result_records = tool_result.get("result")
-                record_count = (
-                    len(result_records) if isinstance(result_records, list) else 0
-                )
-                error = tool_result.get("error")
-                error_code = (
-                    error.get("code") if isinstance(error, Mapping) else "none"
-                )
-                if not success:
-                    if error_code == "tool_timeout":
-                        failure_reason = "timeout"
-                    elif failure_reason != "timeout":
-                        failure_reason = "tool_error"
-                logger.info(
-                    "tool_execution request_id=%s step=%d tool=%s success=%s "
-                    "record_count=%d duration_ms=%.2f error_code=%s",
-                    _safe_log_token(request_id),
-                    step,
-                    _safe_log_token(tool_name),
-                    str(success).lower(),
-                    record_count,
-                    duration_ms,
-                    _safe_log_token(str(error_code)),
-                )
-                conversation.append(
-                    {
-                        "role": "tool",
-                        "tool_name": tool_name,
-                        "content": self._serialize_tool_result(
-                            tool_name,
-                            tool_result,
-                        ),
-                    }
-                )
-                total_tool_calls += 1
+        self._raise_step_limit(request_id, total_tool_calls)
 
+    def _check_tool_call_limits(
+        self,
+        tool_calls: Sequence[Any],
+        step: int,
+        total_tool_calls: int,
+        request_id: str,
+    ) -> None:
+        if len(tool_calls) > self.max_tool_calls_per_step:
+            logger.info(
+                "agent_stop request_id=%s reason=step_limit steps=%d tool_calls=%d",
+                _safe_log_token(request_id),
+                step,
+                total_tool_calls,
+            )
+            raise AgentLimitError(
+                "Ollama requested "
+                f"{len(tool_calls)} tools in one step; the limit is "
+                f"{self.max_tool_calls_per_step}"
+            )
+        if step == self.max_steps:
+            logger.info(
+                "agent_stop request_id=%s reason=step_limit steps=%d tool_calls=%d",
+                _safe_log_token(request_id),
+                step,
+                total_tool_calls,
+            )
+            raise AgentLimitError(
+                f"Agent did not produce a final answer within {self.max_steps} steps"
+            )
+
+    async def _append_tool_results(
+        self,
+        conversation: list[dict[str, Any]],
+        tool_calls: Sequence[Any],
+        *,
+        step: int,
+        request_id: str,
+        failure_reason: StopReason | None,
+    ) -> StopReason | None:
+        for tool_call in tool_calls:
+            tool_name = tool_call.function.name
+            arguments = self._bounded_arguments(
+                tool_name,
+                tool_call.function.arguments,
+            )
+            started = perf_counter()
+            tool_result = await self._dispatch(tool_name, arguments)
+            duration_ms = (perf_counter() - started) * 1_000
+            success = tool_result.get("ok") is True
+            result_records = tool_result.get("result")
+            record_count = (
+                len(result_records) if isinstance(result_records, list) else 0
+            )
+            error = tool_result.get("error")
+            error_code = error.get("code") if isinstance(error, Mapping) else "none"
+            if not success:
+                if error_code == "tool_timeout":
+                    failure_reason = "timeout"
+                elif failure_reason != "timeout":
+                    failure_reason = "tool_error"
+            logger.info(
+                "tool_execution request_id=%s step=%d tool=%s success=%s "
+                "record_count=%d duration_ms=%.2f error_code=%s",
+                _safe_log_token(request_id),
+                step,
+                _safe_log_token(tool_name),
+                str(success).lower(),
+                record_count,
+                duration_ms,
+                _safe_log_token(str(error_code)),
+            )
+            conversation.append(
+                {
+                    "role": "tool",
+                    "tool_name": tool_name,
+                    "content": self._serialize_tool_result(tool_name, tool_result),
+                }
+            )
+        return failure_reason
+
+    def _raise_step_limit(self, request_id: str, total_tool_calls: int) -> None:
         logger.info(
             "agent_stop request_id=%s reason=step_limit steps=%d tool_calls=%d",
             _safe_log_token(request_id),

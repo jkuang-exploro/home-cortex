@@ -14,14 +14,14 @@ grounded answer.
 - `POST /v1/chat` runs a bounded Ollama tool-calling loop over the graph.
 - `GET /v1/models` advertises the `home-cortex` virtual model.
 - `POST /v1/chat/completions` provides an OpenAI-compatible chat endpoint backed
-  by the agent loop. It supports ordinary JSON responses and buffered SSE
+  by the agent loop. It supports ordinary JSON responses and token-streamed SSE
   responses for clients such as Open WebUI.
 
-Buffered SSE requests are monitored while the agent runs. If the client
-disconnects, Cortex cancels the active agent/Ollama task and records a
-privacy-safe `stream_cancelled` log. Starlette cancellation is also propagated
-during SSE emission. The final answer is still sent as buffered chunks; true
-token-by-token Ollama streaming is intentionally deferred.
+For `stream: true`, Cortex consumes Ollama's async response stream on every
+agent step. Tool-selection responses stay internal; chunks from the final
+answer are forwarded immediately as OpenAI-compatible SSE events. If the client
+disconnects, cancellation closes the active agent and Ollama streams and records
+a privacy-safe `stream_cancelled` log.
 
 ## First run
 

@@ -74,5 +74,6 @@ curl -N -sS -X POST http://localhost:8001/v1/chat/completions \
   -d '{"model":"home-cortex","stream":true,"messages":[{"role":"user","content":"Who resides at Fort Cerritos?"}]}'
 ```
 
-Cortex keeps the Ollama tool loop non-streaming and returns the completed answer
-as an OpenAI-compatible SSE stream ending in `data: [DONE]`.
+Cortex keeps tool-selection responses internal and forwards each final-answer
+chunk from Ollama as an OpenAI-compatible SSE event. The stream ends with a
+chunk whose `finish_reason` is `stop`, followed by `data: [DONE]`.

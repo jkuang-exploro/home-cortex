@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
@@ -10,6 +11,7 @@ from home_cortex.agent import (
     MAX_AGENT_STEPS,
     AgentLimitError,
     AgentService,
+    AgentStreamingError,
 )
 
 
@@ -24,6 +26,21 @@ class FakeOllamaService:
     ) -> ChatResponse:
         self.calls.append([dict(message) for message in messages])
         return self.responses.pop(0)
+
+
+class FakeStreamingOllamaService:
+    def __init__(self, response_streams: list[list[ChatResponse]]) -> None:
+        self.response_streams = response_streams
+        self.calls: list[list[dict[str, Any]]] = []
+
+    async def stream_chat_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> AsyncIterator[ChatResponse]:
+        self.calls.append([dict(message) for message in messages])
+        for response in self.response_streams.pop(0):
+            await asyncio.sleep(0)
+            yield response
 
 
 class FakeDispatcher:
@@ -171,6 +188,83 @@ async def test_completes_search_then_relationship_lookup() -> None:
         "first_name": "Alex",
         "last_name": "Example",
     }
+
+
+@pytest.mark.asyncio
+async def test_streams_each_final_answer_chunk() -> None:
+    ollama = FakeStreamingOllamaService(
+        [[_chat_response("Alex "), _chat_response("lives here.")]]
+    )
+    dispatcher = FakeDispatcher()
+    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+
+    chunks = [
+        chunk
+        async for chunk in agent.stream_answer_messages(
+            [{"role": "user", "content": "Where does Alex live?"}],
+            request_id="request-stream",
+        )
+    ]
+
+    assert chunks == ["Alex ", "lives here."]
+    assert dispatcher.calls == []
+    assert ollama.calls[0][0]["role"] == "system"
+
+
+@pytest.mark.asyncio
+async def test_streaming_tool_steps_stay_internal_before_final_tokens() -> None:
+    ollama = FakeStreamingOllamaService(
+        [
+            [
+                _chat_response(
+                    "I should search first.",
+                    tool_calls=[
+                        _tool_call(arguments={"text": "Fort Cerritos"})
+                    ],
+                )
+            ],
+            [_chat_response("Alex "), _chat_response("resides there.")],
+        ]
+    )
+    dispatcher = FakeDispatcher()
+    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+
+    chunks = [
+        chunk
+        async for chunk in agent.stream_answer_messages(
+            [{"role": "user", "content": "Who resides there?"}]
+        )
+    ]
+
+    assert chunks == ["Alex ", "resides there."]
+    assert dispatcher.calls == [
+        ("search_entities", {"text": "Fort Cerritos", "limit": 25})
+    ]
+    assert ollama.calls[1][-2]["content"] == "I should search first."
+    assert ollama.calls[1][-1]["role"] == "tool"
+
+
+@pytest.mark.asyncio
+async def test_stream_rejects_tool_call_after_visible_content() -> None:
+    ollama = FakeStreamingOllamaService(
+        [
+            [
+                _chat_response("Let me look that up."),
+                _chat_response(tool_calls=[_tool_call()]),
+            ]
+        ]
+    )
+    dispatcher = FakeDispatcher()
+    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+
+    stream = agent.stream_answer_messages(
+        [{"role": "user", "content": "Find Test"}]
+    )
+    assert await anext(stream) == "Let me look that up."
+    with pytest.raises(AgentStreamingError, match="after final-answer content"):
+        await anext(stream)
+
+    assert dispatcher.calls == []
 
 
 @pytest.mark.asyncio

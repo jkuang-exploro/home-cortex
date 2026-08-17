@@ -11,8 +11,6 @@ from fastapi.testclient import TestClient
 
 from home_cortex.api import (
     VIRTUAL_MODEL,
-    ClientDisconnectedError,
-    _await_with_disconnect,
     _stream_chat_completion,
     app,
 )
@@ -32,6 +30,17 @@ class FakeAgent:
         self.calls.append(messages)
         self.request_ids.append(request_id)
         return SimpleNamespace(answer="Jian and Pu reside at Fort Cerritos.")
+
+    async def stream_answer_messages(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        request_id: str = "-",
+    ):
+        self.calls.append(messages)
+        self.request_ids.append(request_id)
+        yield "Jian and Pu "
+        yield "reside at Fort Cerritos."
 
 
 @pytest.fixture
@@ -126,10 +135,11 @@ def test_chat_completions_returns_openai_sse_stream(
     assert {chunk["id"] for chunk in chunks} == {chunks[0]["id"]}
     assert all(chunk["object"] == "chat.completion.chunk" for chunk in chunks)
     assert chunks[0]["choices"][0]["delta"] == {"role": "assistant"}
-    assert chunks[1]["choices"][0]["delta"] == {
-        "content": "Jian and Pu reside at Fort Cerritos."
+    assert chunks[1]["choices"][0]["delta"] == {"content": "Jian and Pu "}
+    assert chunks[2]["choices"][0]["delta"] == {
+        "content": "reside at Fort Cerritos."
     }
-    assert chunks[2]["choices"][0]["finish_reason"] == "stop"
+    assert chunks[3]["choices"][0]["finish_reason"] == "stop"
     assert agent.calls == [messages]
     assert agent.request_ids == [response.headers["X-Request-ID"]]
     _assert_request_id(response)
@@ -245,59 +255,31 @@ def test_unexpected_error_is_json_and_does_not_log_private_message(
 
 
 @pytest.mark.asyncio
-async def test_disconnect_cancels_buffered_agent_work(
+async def test_sse_generator_cancels_active_answer_stream(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     started = asyncio.Event()
     cancelled = asyncio.Event()
+    closed = asyncio.Event()
 
-    async def slow_agent() -> None:
+    async def slow_answer():
         started.set()
         try:
             await asyncio.Event().wait()
+            yield "never reached"
         except asyncio.CancelledError:
             cancelled.set()
             raise
+        finally:
+            closed.set()
 
-    class DisconnectingRequest:
-        def __init__(self) -> None:
-            self.state = SimpleNamespace(request_id="request-disconnect")
-            self.checks = iter((False, True))
-
-        async def is_disconnected(self) -> bool:
-            return next(self.checks, True)
-
-    request = DisconnectingRequest()
-    with caplog.at_level(
-        logging.INFO,
-        logger="uvicorn.error.home_cortex.api",
-    ):
-        with pytest.raises(ClientDisconnectedError):
-            await _await_with_disconnect(  # type: ignore[arg-type]
-                request,
-                slow_agent(),
-                poll_interval=0.001,
-            )
-
-    assert started.is_set()
-    assert cancelled.is_set()
-    assert (
-        "stream_cancelled request_id=request-disconnect phase=agent"
-        in caplog.text
-    )
-
-
-@pytest.mark.asyncio
-async def test_sse_generator_logs_task_cancellation(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
     request = SimpleNamespace(
         state=SimpleNamespace(request_id="request-sse-cancel")
     )
     stream = _stream_chat_completion(
         "chatcmpl-test",
         123,
-        "Buffered answer",
+        slow_answer(),
         request,  # type: ignore[arg-type]
     )
 
@@ -306,12 +288,17 @@ async def test_sse_generator_logs_task_cancellation(
         logging.INFO,
         logger="uvicorn.error.home_cortex.api",
     ):
+        pending_event = asyncio.create_task(anext(stream))
+        await started.wait()
+        pending_event.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await stream.athrow(asyncio.CancelledError())
+            await pending_event
 
     assert '"role": "assistant"' in first_event
+    assert cancelled.is_set()
+    assert closed.is_set()
     assert (
-        "stream_cancelled request_id=request-sse-cancel phase=sse_cancelled"
+        "stream_cancelled request_id=request-sse-cancel phase=ollama_stream"
         in caplog.text
     )
 

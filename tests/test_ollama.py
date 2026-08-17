@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
@@ -8,16 +9,34 @@ from home_cortex.tools import TOOLS
 
 
 class FakeOllamaClient:
-    def __init__(self, responses: list[ChatResponse]) -> None:
+    def __init__(self, responses: list[Any]) -> None:
         self.responses = responses
         self.calls: list[dict[str, Any]] = []
         self.closed = False
 
-    async def chat(self, **request: Any) -> ChatResponse:
+    async def chat(self, **request: Any) -> Any:
         self.calls.append(request)
         return self.responses.pop(0)
 
     async def close(self) -> None:
+        self.closed = True
+
+
+class FakeResponseStream:
+    def __init__(self, chunks: list[ChatResponse]) -> None:
+        self._chunks = iter(chunks)
+        self.closed = False
+
+    def __aiter__(self) -> AsyncIterator[ChatResponse]:
+        return self
+
+    async def __anext__(self) -> ChatResponse:
+        try:
+            return next(self._chunks)
+        except StopIteration:
+            raise StopAsyncIteration from None
+
+    async def aclose(self) -> None:
         self.closed = True
 
 
@@ -97,6 +116,40 @@ async def test_tool_call_response() -> None:
     }
     assert client.calls[0]["tools"] == TOOLS
     assert client.calls[0]["stream"] is False
+
+
+@pytest.mark.asyncio
+async def test_streaming_tool_chat_yields_chunks_and_closes_stream() -> None:
+    response_stream = FakeResponseStream(
+        [
+            _chat_response({"role": "assistant", "content": "Hello "}),
+            _chat_response({"role": "assistant", "content": "there"}),
+        ]
+    )
+    client = FakeOllamaClient([response_stream])
+    service = OllamaService(
+        "http://ollama:11434",
+        "qwen3:8b",
+        client=client,  # type: ignore[arg-type]
+    )
+
+    chunks = [
+        chunk.message.content
+        async for chunk in service.stream_chat_with_tools(
+            [{"role": "user", "content": "Say hello"}]
+        )
+    ]
+
+    assert chunks == ["Hello ", "there"]
+    assert response_stream.closed is True
+    assert client.calls == [
+        {
+            "model": "qwen3:8b",
+            "messages": [{"role": "user", "content": "Say hello"}],
+            "tools": TOOLS,
+            "stream": True,
+        }
+    ]
 
 
 @pytest.mark.asyncio
