@@ -89,6 +89,7 @@ async def test_returns_first_normal_answer_without_dispatching_tools() -> None:
     assert result.steps == 1
     assert result.tool_calls == 0
     assert dispatcher.calls == []
+    assert ollama.calls[0][0]["role"] == "system"
     assert ollama.calls[0][-1] == {"role": "user", "content": "What is known?"}
 
 

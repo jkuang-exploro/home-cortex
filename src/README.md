@@ -12,6 +12,9 @@ grounded answer.
   stable record ID without creating duplicates.
 - `POST /v1/retrieve` returns the graph context used for a question.
 - `POST /v1/chat` runs a bounded Ollama tool-calling loop over the graph.
+- `GET /v1/models` advertises the `home-cortex` virtual model.
+- `POST /v1/chat/completions` provides a non-streaming OpenAI-compatible chat
+  endpoint backed by the agent loop.
 
 ## First run
 
@@ -31,6 +34,9 @@ curl -X POST http://localhost:8001/v1/retrieve \
 curl -X POST http://localhost:8001/v1/chat \
   -H 'Content-Type: application/json' \
   -d '{"message":"Who lives at Fort Cerritos?"}'
+curl -X POST http://localhost:8001/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"home-cortex","stream":false,"messages":[{"role":"user","content":"Who resides at Fort Cerritos?"}]}'
 ```
 
 Open the interactive API documentation at

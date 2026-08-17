@@ -1,8 +1,11 @@
+import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Literal
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
 
 from . import __version__
 from .agent import AgentLimitError, AgentService
@@ -12,6 +15,24 @@ from .ingestion import ingest_directory
 from .ollama import OllamaService
 from .retrieval import RetrievalService
 from .tools import ToolDispatcher
+
+VIRTUAL_MODEL = "home-cortex"
+MODEL_CREATED = int(time.time())
+
+
+class ChatMessage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    role: Literal["system", "user", "assistant"]
+    content: str = Field(min_length=1)
+
+
+class ChatCompletionRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    model: str
+    messages: list[ChatMessage] = Field(min_length=1)
+    stream: bool = False
 
 
 @asynccontextmanager
@@ -93,4 +114,60 @@ async def chat(body: dict[str, Any], request: Request) -> dict[str, Any]:
         "answer": result.answer,
         "steps": result.steps,
         "tool_calls": result.tool_calls,
+    }
+
+
+@app.get("/v1/models")
+async def models() -> dict[str, Any]:
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": VIRTUAL_MODEL,
+                "object": "model",
+                "created": MODEL_CREATED,
+                "owned_by": "home-cortex",
+            }
+        ],
+    }
+
+
+@app.post("/v1/chat/completions")
+async def chat_completions(
+    body: ChatCompletionRequest,
+    request: Request,
+) -> dict[str, Any]:
+    if body.model != VIRTUAL_MODEL:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Model {body.model!r} was not found",
+        )
+    if body.stream:
+        raise HTTPException(
+            status_code=400,
+            detail="Streaming is not supported yet; set 'stream' to false",
+        )
+
+    try:
+        result = await request.app.state.agent.answer_messages(
+            [message.model_dump() for message in body.messages]
+        )
+    except AgentLimitError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+    return {
+        "id": f"chatcmpl-{uuid4().hex}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": VIRTUAL_MODEL,
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": result.answer,
+                },
+                "finish_reason": "stop",
+            }
+        ],
     }

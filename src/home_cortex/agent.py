@@ -89,10 +89,21 @@ class AgentService:
         question = question.strip()
         if not question:
             raise ValueError("Question cannot be empty")
+        return await self.answer_messages(
+            [{"role": "user", "content": question}]
+        )
+
+    async def answer_messages(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+    ) -> AgentResult:
+        """Answer a conversation while always applying the Cortex system prompt."""
+        if not messages:
+            raise ValueError("At least one message is required")
         return await self.run(
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": question},
+                *(dict(message) for message in messages),
             ]
         )
 
