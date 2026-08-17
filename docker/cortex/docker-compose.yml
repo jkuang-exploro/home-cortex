@@ -3,8 +3,6 @@ services:
     image: ollama/ollama:0.32.13
     restart: unless-stopped
     gpus: all
-    ports:
-      - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
 
@@ -27,8 +25,6 @@ services:
     environment:
       SURREAL_USER: ${SURREAL_USER}
       SURREAL_PASS: ${SURREAL_PASS}
-    ports:
-      - "127.0.0.1:8000:8000"
     volumes:
       - surrealdb-data:/home/nonroot
 
