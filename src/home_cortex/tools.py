@@ -37,7 +37,8 @@ TOOLS: list[dict[str, Any]] = [
             "name": "search_entities",
             "description": (
                 "Search known home-graph entities by record ID or text fields. "
-                "Use this before requesting an entity's relationships."
+                "Pass only the distinctive entity name or ID, not the user's "
+                "full question. Use this before requesting relationships."
             ),
             "parameters": {
                 "type": "object",
@@ -46,7 +47,10 @@ TOOLS: list[dict[str, Any]] = [
                     "text": {
                         "type": "string",
                         "minLength": 1,
-                        "description": "Case-insensitive entity text or record ID to find.",
+                        "description": (
+                            "Case-insensitive entity name, short text, or record ID to "
+                            "find; for example, 'Fort Cerritos'."
+                        ),
                     },
                     "entity_type": {
                         "type": "string",
@@ -69,7 +73,9 @@ TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "get_relationships",
             "description": (
-                "Get incoming and outgoing relationships for one known entity."
+                "Get incoming and outgoing relationships for one known entity. "
+                "Each relationship includes the complete linked record in "
+                "related_entity."
             ),
             "parameters": {
                 "type": "object",
@@ -215,4 +221,3 @@ class ToolDispatcher:
                 **extra,
             },
         }
-

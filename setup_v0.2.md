@@ -10,4 +10,8 @@ uvicorn home_cortex.api:app \
   --reload
 
 Deployment
-S
+
+update cortex-api
+-- docker compose build --no-cache cortex-api
+-- docker compose up -d --force-recreate --no-deps cortex-api
+-- curl -sS -X POST http://localhost:8001/admin/ingest | jq

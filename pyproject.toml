@@ -21,6 +21,7 @@ dependencies = [
 dev = [
     "pytest>=8,<9",
     "pytest-asyncio>=1,<2",
+    "httpx2>=0.24",
 ]
 
 [tool.hatch.build.targets.wheel]

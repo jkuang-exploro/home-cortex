@@ -46,6 +46,11 @@ class FakeRetrievalService:
                 "id": "resides_in:alex_home",
                 "in": "person:alex_example",
                 "out": "home:test_home",
+                "related_entity": {
+                    "id": "person:alex_example",
+                    "first_name": "Alex",
+                    "last_name": "Example",
+                },
             }
         ]
 
@@ -97,6 +102,7 @@ async def test_dispatches_relationship_lookup() -> None:
     )
 
     assert response["ok"] is True
+    assert response["result"][0]["related_entity"]["first_name"] == "Alex"
     assert retrieval.calls[0] == (
         "get_relationships",
         {

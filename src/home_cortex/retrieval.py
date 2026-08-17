@@ -97,7 +97,10 @@ class RetrievalService:
             relations = self.edge_tables
 
         statement = """
-            SELECT * FROM type::table($relation)
+            SELECT *,
+                in.* AS source_entity,
+                out.* AS target_entity
+            FROM type::table($relation)
             WHERE in = $entity OR out = $entity
             ORDER BY id
             LIMIT $limit;
@@ -114,7 +117,15 @@ class RetrievalService:
             )
             for edge in _query_records(result):
                 edge["relation"] = relation_name
-                edge["direction"] = _relationship_direction(edge, entity_id)
+                direction = _relationship_direction(edge, entity_id)
+                source_entity = edge.pop("source_entity", None)
+                target_entity = edge.pop("target_entity", None)
+                edge["direction"] = direction
+                related_entity = (
+                    source_entity if direction == "incoming" else target_entity
+                )
+                if isinstance(related_entity, dict):
+                    edge["related_entity"] = related_entity
                 relationships.append(edge)
 
         relationships.sort(
@@ -131,12 +142,27 @@ class RetrievalService:
             record_id = str(entity.get("id", ""))
             table = record_id.partition(":")[0]
             if table in nodes:
-                nodes[table].append(entity)
+                _append_unique_record(nodes[table], entity)
             if record_id:
-                for edge in await self.get_relationships(record_id):
+                for relationship in await self.get_relationships(record_id):
+                    edge = dict(relationship)
+                    related_entity = edge.pop("related_entity", None)
+                    if isinstance(related_entity, dict):
+                        related_id = str(related_entity.get("id", ""))
+                        related_table = related_id.partition(":")[0]
+                        if related_table in nodes:
+                            _append_unique_record(
+                                nodes[related_table],
+                                related_entity,
+                            )
                     relation = str(edge.get("relation", ""))
                     if relation in edges and edge not in edges[relation]:
                         edges[relation].append(edge)
+
+        for records in nodes.values():
+            records.sort(key=lambda record: str(record.get("id", "")))
+        for records in edges.values():
+            records.sort(key=lambda record: str(record.get("id", "")))
 
         graph = {"nodes": nodes, "edges": edges}
         text = json.dumps(graph, ensure_ascii=False, indent=2, sort_keys=True)
@@ -211,3 +237,15 @@ def _relationship_direction(edge: dict[str, Any], entity_id: str) -> str:
     if is_source:
         return "outgoing"
     return "incoming"
+
+
+def _append_unique_record(
+    records: list[dict[str, Any]],
+    record: dict[str, Any],
+) -> None:
+    record_id = str(record.get("id", ""))
+    is_new = all(
+        str(existing.get("id", "")) != record_id for existing in records
+    )
+    if record_id and is_new:
+        records.append(record)

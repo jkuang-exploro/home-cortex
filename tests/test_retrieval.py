@@ -111,6 +111,14 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
                     "id": RecordID("resides_in", "person_a__home_main"),
                     "in": RecordID("person", "a"),
                     "out": RecordID("home", "main"),
+                    "source_entity": {
+                        "id": RecordID("person", "a"),
+                        "first_name": "Alex",
+                    },
+                    "target_entity": {
+                        "id": RecordID("home", "main"),
+                        "name": "Main Home",
+                    },
                 }
             ]
         }
@@ -129,8 +137,19 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
     assert incoming[0]["direction"] == "incoming"
     assert outgoing[0]["direction"] == "outgoing"
     assert incoming[0]["relation"] == "resides_in"
+    assert incoming[0]["related_entity"] == {
+        "id": "person:a",
+        "first_name": "Alex",
+    }
+    assert outgoing[0]["related_entity"] == {
+        "id": "home:main",
+        "name": "Main Home",
+    }
+    assert "source_entity" not in incoming[0]
+    assert "target_entity" not in incoming[0]
     assert database.queries[0][1]["entity"] == RecordID("home", "main")
     assert "in = $entity OR out = $entity" in database.queries[0][0]
+    assert "in.* AS source_entity" in database.queries[0][0]
 
 
 @pytest.mark.asyncio
@@ -180,6 +199,7 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
             "home:test_home",
             relation="resides_in",
         )
+        context = await service.retrieve("test house")
     finally:
         await database.close()
 
@@ -190,3 +210,13 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
     ]
     assert all(edge["out"] == "home:test_home" for edge in relationships)
     assert all(edge["direction"] == "incoming" for edge in relationships)
+    assert sorted(
+        edge["related_entity"]["first_name"] for edge in relationships
+    ) == ["Alex", "Blair"]
+    assert sorted(person["first_name"] for person in context.nodes["person"]) == [
+        "Alex",
+        "Blair",
+    ]
+    assert all(
+        "related_entity" not in edge for edge in context.edges["resides_in"]
+    )

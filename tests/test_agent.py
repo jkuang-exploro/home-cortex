@@ -90,7 +90,79 @@ async def test_returns_first_normal_answer_without_dispatching_tools() -> None:
     assert result.tool_calls == 0
     assert dispatcher.calls == []
     assert ollama.calls[0][0]["role"] == "system"
+    assert "never the full question" in ollama.calls[0][0]["content"]
+    assert "call get_relationships" in ollama.calls[0][0]["content"]
     assert ollama.calls[0][-1] == {"role": "user", "content": "What is known?"}
+
+
+@pytest.mark.asyncio
+async def test_completes_search_then_relationship_lookup() -> None:
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "search_entities",
+                        {"text": "Fort Cerritos", "entity_type": "home"},
+                    )
+                ]
+            ),
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_relationships",
+                        {
+                            "entity_id": "home:cerritos",
+                            "relation": "resides_in",
+                        },
+                    )
+                ]
+            ),
+            _chat_response("Alex Example resides at Fort Cerritos."),
+        ]
+    )
+
+    class RelationshipDispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(self, tool_name: str, arguments: Any) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if tool_name == "search_entities":
+                result = [{"id": "home:cerritos", "name": "Fort Cerritos"}]
+            else:
+                result = [
+                    {
+                        "id": "resides_in:alex_home",
+                        "in": "person:alex_example",
+                        "out": "home:cerritos",
+                        "related_entity": {
+                            "id": "person:alex_example",
+                            "first_name": "Alex",
+                            "last_name": "Example",
+                        },
+                    }
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = RelationshipDispatcher()
+    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+
+    result = await agent.answer("Who resides at Fort Cerritos?")
+
+    assert result.answer == "Alex Example resides at Fort Cerritos."
+    assert result.steps == 3
+    assert result.tool_calls == 2
+    assert [name for name, _ in dispatcher.calls] == [
+        "search_entities",
+        "get_relationships",
+    ]
+    relationship_result = json.loads(ollama.calls[2][-1]["content"])
+    assert relationship_result["result"][0]["related_entity"] == {
+        "id": "person:alex_example",
+        "first_name": "Alex",
+        "last_name": "Example",
+    }
 
 
 @pytest.mark.asyncio
