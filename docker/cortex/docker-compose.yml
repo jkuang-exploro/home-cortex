@@ -13,10 +13,14 @@ services:
       - "3000:8080"
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
+      ENABLE_OPENAI_API: "true"
+      OPENAI_API_BASE_URLS: http://cortex-api:8000/v1
+      OPENAI_API_KEYS: unused
     volumes:
       - open-webui-data:/app/backend/data
     depends_on:
       - ollama
+      - cortex-api
 
   surrealdb:
     image: surrealdb/surrealdb:v3.0.5

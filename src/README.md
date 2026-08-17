@@ -41,3 +41,17 @@ curl -X POST http://localhost:8001/v1/chat/completions \
 
 Open the interactive API documentation at
 `http://192.168.68.59:8001/docs`.
+
+## Open WebUI
+
+The Compose stack configures two model paths:
+
+- Direct Ollama at `http://ollama:11434` for model debugging.
+- The OpenAI-compatible Cortex API at `http://cortex-api:8000/v1` for grounded
+  graph answers.
+
+Select `home-cortex` in Open WebUI to use the Cortex agent and its SurrealDB
+tools. Selecting a raw Ollama model bypasses Cortex. Open WebUI persists its
+connection settings, so an existing deployment may require adding the Cortex
+connection once in the administrator connection settings with API key
+`unused`.

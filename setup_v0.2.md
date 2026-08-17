@@ -15,3 +15,53 @@ update cortex-api
 -- docker compose build --no-cache cortex-api
 -- docker compose up -d --force-recreate --no-deps cortex-api
 -- curl -sS -X POST http://localhost:8001/admin/ingest | jq
+
+Connect Open WebUI to Cortex
+
+The Compose configuration keeps the direct Ollama connection for debugging and
+adds Cortex as an OpenAI-compatible connection. Open WebUI reaches Cortex over
+the internal Compose network at `http://cortex-api:8000/v1`; port `8001` is the
+host-side mapping and must not be used between containers.
+
+For a new Open WebUI data volume, the connection is seeded by these environment
+variables:
+
+```yaml
+ENABLE_OPENAI_API: "true"
+OPENAI_API_BASE_URLS: http://cortex-api:8000/v1
+OPENAI_API_KEYS: unused
+```
+
+Open WebUI persists connection settings. If the existing volume already has an
+OpenAI configuration, sign in as an administrator and add or update an
+OpenAI-compatible connection with:
+
+```text
+Base URL: http://cortex-api:8000/v1
+API key: unused
+```
+
+Recreate Open WebUI without deleting its data volume:
+
+```sh
+docker compose up -d --force-recreate --no-deps open-webui
+```
+
+Select `home-cortex` in the model picker. Selecting `qwen3:8b` or another raw
+Ollama model bypasses Cortex, SurrealDB retrieval, and the agent tools.
+
+Verify the Cortex model endpoint from the Compose network:
+
+```sh
+docker compose exec open-webui python -c \
+  'import requests; print(requests.get("http://cortex-api:8000/v1/models").json())'
+```
+
+Then ask `Who resides at Fort Cerritos?` using `home-cortex` and compare the
+answer with:
+
+```sh
+curl -sS -X POST http://localhost:8001/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"home-cortex","stream":false,"messages":[{"role":"user","content":"Who resides at Fort Cerritos?"}]}' | jq
+```
