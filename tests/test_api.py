@@ -21,6 +21,17 @@ class FakeAgent:
         self.calls: list[list[dict[str, Any]]] = []
         self.request_ids: list[str] = []
 
+    async def answer(
+        self,
+        question: str,
+        *,
+        request_id: str = "-",
+    ) -> SimpleNamespace:
+        return await self.answer_messages(
+            [{"role": "user", "content": question}],
+            request_id=request_id,
+        )
+
     async def answer_messages(
         self,
         messages: list[dict[str, Any]],
@@ -29,7 +40,12 @@ class FakeAgent:
     ) -> SimpleNamespace:
         self.calls.append(messages)
         self.request_ids.append(request_id)
-        return SimpleNamespace(answer="Jian and Pu reside at Fort Cerritos.")
+        return SimpleNamespace(
+            answer="Jian and Pu reside at Fort Cerritos.",
+            steps=3,
+            tool_calls=2,
+            stop_reason="answer",
+        )
 
     async def stream_answer_messages(
         self,
@@ -45,16 +61,27 @@ class FakeAgent:
 
 @pytest.fixture
 def api_client() -> Iterator[tuple[TestClient, FakeAgent]]:
+    previous_agent = getattr(app.state, "agent", None)
+    previous_agents = getattr(app.state, "agents", None)
     agent = FakeAgent()
     app.state.agent = agent
+    app.state.agents = {"steward": agent}
     client = TestClient(app, raise_server_exceptions=True)
     try:
         yield client, agent
     finally:
         client.close()
+        if previous_agent is None:
+            del app.state.agent
+        else:
+            app.state.agent = previous_agent
+        if previous_agents is None:
+            del app.state.agents
+        else:
+            app.state.agents = previous_agents
 
 
-def test_models_advertises_only_home_cortex(
+def test_models_advertises_steward_display_name(
     api_client: tuple[TestClient, FakeAgent],
 ) -> None:
     client, _ = api_client
@@ -67,6 +94,7 @@ def test_models_advertises_only_home_cortex(
     assert [model["id"] for model in body["data"]] == [VIRTUAL_MODEL]
     assert body["data"][0]["object"] == "model"
     assert body["data"][0]["owned_by"] == "home-cortex"
+    assert VIRTUAL_MODEL == "老管家"
     _assert_request_id(response)
 
 
@@ -82,7 +110,7 @@ def test_chat_completions_invokes_agent_and_returns_openai_shape(
     response = client.post(
         "/v1/chat/completions",
         json={
-            "model": "home-cortex",
+            "model": VIRTUAL_MODEL,
             "stream": False,
             "messages": messages,
         },
@@ -92,7 +120,7 @@ def test_chat_completions_invokes_agent_and_returns_openai_shape(
     body = response.json()
     assert body["id"].startswith("chatcmpl-")
     assert body["object"] == "chat.completion"
-    assert body["model"] == "home-cortex"
+    assert body["model"] == VIRTUAL_MODEL
     assert body["choices"] == [
         {
             "index": 0,
@@ -117,7 +145,7 @@ def test_chat_completions_returns_openai_sse_stream(
     response = client.post(
         "/v1/chat/completions",
         json={
-            "model": "home-cortex",
+            "model": VIRTUAL_MODEL,
             "stream": True,
             "messages": messages,
         },
@@ -134,6 +162,7 @@ def test_chat_completions_returns_openai_sse_stream(
     chunks = [json.loads(event) for event in events[:-1]]
     assert {chunk["id"] for chunk in chunks} == {chunks[0]["id"]}
     assert all(chunk["object"] == "chat.completion.chunk" for chunk in chunks)
+    assert all(chunk["model"] == "老管家" for chunk in chunks)
     assert chunks[0]["choices"][0]["delta"] == {"role": "assistant"}
     assert chunks[1]["choices"][0]["delta"] == {"content": "Jian and Pu "}
     assert chunks[2]["choices"][0]["delta"] == {
@@ -143,6 +172,43 @@ def test_chat_completions_returns_openai_sse_stream(
     assert agent.calls == [messages]
     assert agent.request_ids == [response.headers["X-Request-ID"]]
     _assert_request_id(response)
+
+
+def test_named_steward_chat_route(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+
+    response = client.post(
+        "/agent/steward/chat",
+        json={"message": "Who resides at Fort Cerritos?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["agent"] == {
+        "id": "steward",
+        "display_name": "老管家",
+    }
+    assert response.json()["answer"] == "Jian and Pu reside at Fort Cerritos."
+    assert len(agent.calls) == 1
+
+
+def test_named_agent_route_rejects_unknown_agent(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+
+    response = client.post(
+        "/agent/accountant/chat",
+        json={"message": "Show this month's spending"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "agent_not_found"
+    assert response.json()["error"]["request_id"] == response.headers[
+        "X-Request-ID"
+    ]
+    assert agent.calls == []
 
 
 @pytest.mark.parametrize(
@@ -159,7 +225,7 @@ def test_chat_completions_returns_openai_sse_stream(
         ),
         (
             {
-                "model": "home-cortex",
+                "model": VIRTUAL_MODEL,
                 "stream": False,
                 "messages": [],
             },
@@ -222,14 +288,17 @@ def test_unexpected_error_is_json_and_does_not_log_private_message(
             raise RuntimeError(private_value)
 
     previous_agent = getattr(app.state, "agent", None)
-    app.state.agent = ExplodingAgent()
+    previous_agents = getattr(app.state, "agents", None)
+    exploding_agent = ExplodingAgent()
+    app.state.agent = exploding_agent
+    app.state.agents = {"steward": exploding_agent}
     client = TestClient(app, raise_server_exceptions=False)
     try:
         with caplog.at_level(logging.INFO):
             response = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "home-cortex",
+                    "model": VIRTUAL_MODEL,
                     "stream": False,
                     "messages": [{"role": "user", "content": private_value}],
                 },
@@ -240,6 +309,10 @@ def test_unexpected_error_is_json_and_does_not_log_private_message(
             del app.state.agent
         else:
             app.state.agent = previous_agent
+        if previous_agents is None:
+            del app.state.agents
+        else:
+            app.state.agents = previous_agents
 
     assert response.status_code == 500
     assert response.json() == {

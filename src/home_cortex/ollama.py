@@ -3,8 +3,6 @@ from typing import Any, cast
 
 from ollama import AsyncClient, ChatResponse
 
-from .tools import TOOLS
-
 
 class OllamaService:
     """Make individual Ollama chat calls for the Cortex agent."""
@@ -35,12 +33,13 @@ class OllamaService:
     async def chat_with_tools(
         self,
         messages: Sequence[Mapping[str, Any]],
+        tools: Sequence[Mapping[str, Any]],
     ) -> ChatResponse:
         """Send one request that lets the model choose a read-only Cortex tool."""
         return await self.client.chat(
             model=self.model,
             messages=messages,
-            tools=TOOLS,
+            tools=tools,
             stream=False,
             think=False,
         )
@@ -48,12 +47,13 @@ class OllamaService:
     async def stream_chat_with_tools(
         self,
         messages: Sequence[Mapping[str, Any]],
+        tools: Sequence[Mapping[str, Any]],
     ) -> AsyncIterator[ChatResponse]:
         """Stream one response while allowing read-only Cortex tool calls."""
         response = await self.client.chat(
             model=self.model,
             messages=messages,
-            tools=TOOLS,
+            tools=tools,
             stream=True,
             think=False,
         )

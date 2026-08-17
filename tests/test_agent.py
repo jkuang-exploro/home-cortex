@@ -13,18 +13,40 @@ from home_cortex.agent import (
     AgentService,
     AgentStreamingError,
 )
+from home_cortex.agents import get_agent
+
+STEWARD = get_agent("steward")
+
+
+def _agent(
+    ollama: Any,
+    dispatcher: Any,
+    **settings: Any,
+) -> AgentService:
+    return AgentService(
+        ollama,
+        dispatcher,
+        system_prompt=STEWARD.prompt,
+        tools=STEWARD.tool_definitions,
+        **settings,
+    )
 
 
 class FakeOllamaService:
     def __init__(self, responses: list[ChatResponse]) -> None:
         self.responses = responses
         self.calls: list[list[dict[str, Any]]] = []
+        self.tool_names: list[tuple[str, ...]] = []
 
     async def chat_with_tools(
         self,
         messages: list[dict[str, Any]],
+        tools: Any,
     ) -> ChatResponse:
         self.calls.append([dict(message) for message in messages])
+        self.tool_names.append(
+            tuple(tool["function"]["name"] for tool in tools)
+        )
         return self.responses.pop(0)
 
 
@@ -36,6 +58,7 @@ class FakeStreamingOllamaService:
     async def stream_chat_with_tools(
         self,
         messages: list[dict[str, Any]],
+        tools: Any,
     ) -> AsyncIterator[ChatResponse]:
         self.calls.append([dict(message) for message in messages])
         for response in self.response_streams.pop(0):
@@ -99,7 +122,7 @@ def _tool_call(
 async def test_returns_first_normal_answer_without_dispatching_tools() -> None:
     ollama = FakeOllamaService([_chat_response("The answer is ready.")])
     dispatcher = FakeDispatcher()
-    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+    agent = _agent(ollama, dispatcher)
 
     result = await agent.answer("What is known?")
 
@@ -108,6 +131,7 @@ async def test_returns_first_normal_answer_without_dispatching_tools() -> None:
     assert result.tool_calls == 0
     assert result.stop_reason == "answer"
     assert dispatcher.calls == []
+    assert ollama.tool_names == [STEWARD.allowed_tools]
     assert ollama.calls[0][0]["role"] == "system"
     assert "never the full question" in ollama.calls[0][0]["content"]
     assert "call get_relationships" in ollama.calls[0][0]["content"]
@@ -173,7 +197,7 @@ async def test_completes_search_then_relationship_lookup() -> None:
             return {"ok": True, "tool": tool_name, "result": result}
 
     dispatcher = RelationshipDispatcher()
-    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+    agent = _agent(ollama, dispatcher)
 
     result = await agent.answer("Who resides at Fort Cerritos?")
 
@@ -199,7 +223,7 @@ async def test_streams_each_final_answer_chunk() -> None:
         [[_chat_response("Alex "), _chat_response("lives here.")]]
     )
     dispatcher = FakeDispatcher()
-    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+    agent = _agent(ollama, dispatcher)
 
     chunks = [
         chunk
@@ -230,7 +254,7 @@ async def test_streaming_tool_steps_stay_internal_before_final_tokens() -> None:
         ]
     )
     dispatcher = FakeDispatcher()
-    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+    agent = _agent(ollama, dispatcher)
 
     chunks = [
         chunk
@@ -258,7 +282,7 @@ async def test_stream_rejects_tool_call_after_visible_content() -> None:
         ]
     )
     dispatcher = FakeDispatcher()
-    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+    agent = _agent(ollama, dispatcher)
 
     stream = agent.stream_answer_messages(
         [{"role": "user", "content": "Find Test"}]
@@ -279,7 +303,7 @@ async def test_dispatches_tool_result_and_calls_ollama_again() -> None:
         ]
     )
     dispatcher = FakeDispatcher()
-    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+    agent = _agent(ollama, dispatcher)
 
     result = await agent.answer("Where does Alex live?")
 
@@ -310,7 +334,7 @@ async def test_clamps_requested_limit_and_returned_record_count() -> None:
             _chat_response("Done"),
         ]
     )
-    agent = AgentService(
+    agent = _agent(
         ollama,
         dispatcher,  # type: ignore[arg-type]
         max_tool_records=3,
@@ -334,7 +358,7 @@ async def test_rejects_too_many_tool_calls_in_one_step() -> None:
     ollama = FakeOllamaService(
         [_chat_response(tool_calls=[_tool_call() for _ in range(3)])]
     )
-    agent = AgentService(
+    agent = _agent(
         ollama,
         dispatcher,  # type: ignore[arg-type]
         max_tool_calls_per_step=2,
@@ -354,7 +378,7 @@ async def test_stops_after_hard_agent_step_limit(
     ollama = FakeOllamaService(
         [_chat_response(tool_calls=[_tool_call()]) for _ in range(MAX_AGENT_STEPS)]
     )
-    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+    agent = _agent(ollama, dispatcher)
 
     with caplog.at_level(
         logging.INFO,
@@ -380,7 +404,7 @@ async def test_tool_timeout_becomes_a_bounded_tool_error(
             _chat_response("I could not retrieve the data in time."),
         ]
     )
-    agent = AgentService(
+    agent = _agent(
         ollama,
         dispatcher,  # type: ignore[arg-type]
         tool_timeout_seconds=0.001,
@@ -421,7 +445,7 @@ async def test_tool_error_is_recorded_as_stop_reason(
             _chat_response("The lookup failed."),
         ]
     )
-    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+    agent = _agent(ollama, dispatcher)
 
     with caplog.at_level(
         logging.INFO,
@@ -464,7 +488,7 @@ async def test_logs_agent_and_tool_metadata_without_private_values(
             _chat_response("Found one record."),
         ]
     )
-    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+    agent = _agent(ollama, dispatcher)
 
     with caplog.at_level(
         logging.INFO,
@@ -499,7 +523,7 @@ async def test_oversized_tool_record_is_truncated_before_sending_to_ollama() -> 
             _chat_response("The result was too large."),
         ]
     )
-    agent = AgentService(
+    agent = _agent(
         ollama,
         dispatcher,  # type: ignore[arg-type]
         max_tool_result_bytes=256,
@@ -524,7 +548,7 @@ def test_cannot_configure_limits_above_hard_caps() -> None:
     dispatcher = FakeDispatcher()
 
     with pytest.raises(ValueError, match="max_steps"):
-        AgentService(
+        _agent(
             ollama,
             dispatcher,  # type: ignore[arg-type]
             max_steps=MAX_AGENT_STEPS + 1,

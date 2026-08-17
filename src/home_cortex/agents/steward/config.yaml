@@ -1,0 +1,10 @@
+id: steward
+display_name: 老管家
+description: >
+  General household steward responsible for household members, locations,
+  relationships, resources, and everyday coordination.
+model:
+  provider: ollama
+  name: null
+settings:
+  privacy_policy: household_general

@@ -106,7 +106,8 @@ async def test_tool_call_response() -> None:
     )
 
     response = await service.chat_with_tools(
-        [{"role": "user", "content": "Find Test House"}]
+        [{"role": "user", "content": "Find Test House"}],
+        TOOLS,
     )
 
     call = response.message.tool_calls[0]
@@ -138,7 +139,8 @@ async def test_streaming_tool_chat_yields_chunks_and_closes_stream() -> None:
     chunks = [
         chunk.message.content
         async for chunk in service.stream_chat_with_tools(
-            [{"role": "user", "content": "Say hello"}]
+            [{"role": "user", "content": "Say hello"}],
+            TOOLS,
         )
     ]
 

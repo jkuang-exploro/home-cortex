@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -110,22 +110,44 @@ TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+
+def get_tool_definitions(tool_names: Sequence[str]) -> list[dict[str, Any]]:
+    """Return definitions for an agent's allowlisted tools, in policy order."""
+    catalog = {tool["function"]["name"]: tool for tool in TOOLS}
+    unknown = sorted(set(tool_names) - catalog.keys())
+    if unknown:
+        raise ValueError(f"Unknown tool names: {', '.join(unknown)}")
+    return [catalog[name] for name in tool_names]
+
+
 Handler = Callable[[ToolArguments], Awaitable[list[dict[str, Any]]]]
 
 
 class ToolDispatcher:
     """Validate and execute the small allowlist of model-facing tools."""
 
-    def __init__(self, retrieval: RetrievalService) -> None:
+    def __init__(
+        self,
+        retrieval: RetrievalService,
+        allowed_tools: Sequence[str] | None = None,
+    ) -> None:
         self.retrieval = retrieval
-        self._argument_models: dict[str, type[ToolArguments]] = {
+        argument_models: dict[str, type[ToolArguments]] = {
             "search_entities": SearchEntitiesArguments,
             "get_relationships": GetRelationshipsArguments,
         }
-        self._handlers: dict[str, Handler] = {
+        handlers: dict[str, Handler] = {
             "search_entities": self._search_entities,
             "get_relationships": self._get_relationships,
         }
+        selected = (
+            tuple(allowed_tools) if allowed_tools is not None else tuple(handlers)
+        )
+        unknown = sorted(set(selected) - handlers.keys())
+        if unknown:
+            raise ValueError(f"Unknown tool names: {', '.join(unknown)}")
+        self._argument_models = {name: argument_models[name] for name in selected}
+        self._handlers = {name: handlers[name] for name in selected}
 
     async def dispatch(
         self,

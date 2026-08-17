@@ -133,6 +133,25 @@ async def test_rejects_unknown_tool_without_calling_retrieval() -> None:
 
 
 @pytest.mark.asyncio
+async def test_dispatcher_rejects_tools_outside_agent_policy() -> None:
+    retrieval = FakeRetrievalService()
+    dispatcher = ToolDispatcher(  # type: ignore[arg-type]
+        retrieval,
+        allowed_tools=("search_entities",),
+    )
+
+    response = await dispatcher.dispatch(
+        "get_relationships",
+        {"entity_id": "location:test_house"},
+    )
+
+    assert response["ok"] is False
+    assert response["error"]["code"] == "unknown_tool"
+    assert response["error"]["available_tools"] == ["search_entities"]
+    assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "arguments",
     [

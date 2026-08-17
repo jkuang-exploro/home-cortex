@@ -16,6 +16,13 @@ from starlette.responses import JSONResponse, StreamingResponse
 
 from . import __version__
 from .agent import AgentLimitError, AgentService, AgentStreamingError
+from .agents import (
+    AgentDefinition,
+    UnknownAgentError,
+    get_agent,
+    get_agent_by_display_name,
+    list_agents,
+)
 from .config import get_settings
 from .db import Database
 from .ingestion import ingest_directory
@@ -23,7 +30,8 @@ from .ollama import OllamaService
 from .retrieval import RetrievalService
 from .tools import ToolDispatcher
 
-VIRTUAL_MODEL = "home-cortex"
+DEFAULT_AGENT_ID = "steward"
+VIRTUAL_MODEL = get_agent(DEFAULT_AGENT_ID).display_name
 MODEL_CREATED = int(time.time())
 REQUEST_ID_HEADER = "X-Request-ID"
 
@@ -63,21 +71,37 @@ class ChatCompletionRequest(BaseModel):
 async def lifespan(app: FastAPI):
     settings = get_settings()
     database = Database(settings)
-    ollama = OllamaService(settings.ollama_url, settings.ollama_model)
     await database.connect()
     app.state.database = database
-    app.state.ollama = ollama
     retrieval = RetrievalService(
         database,
         settings.retrieval_limit,
         settings.data_dir,
     )
     app.state.retrieval = retrieval
-    app.state.agent = AgentService(ollama, ToolDispatcher(retrieval))
+    runtimes: dict[str, AgentService] = {}
+    ollama_services: list[OllamaService] = []
+    for definition in list_agents():
+        if definition.model.provider != "ollama":
+            raise RuntimeError(
+                f"Unsupported model provider {definition.model.provider!r}"
+            )
+        model_name = definition.model.name or settings.ollama_model
+        ollama = OllamaService(settings.ollama_url, model_name)
+        ollama_services.append(ollama)
+        runtimes[definition.id] = AgentService(
+            ollama,
+            ToolDispatcher(retrieval, definition.allowed_tools),
+            system_prompt=definition.prompt,
+            tools=definition.tool_definitions,
+        )
+    app.state.agents = runtimes
+    app.state.agent = runtimes[DEFAULT_AGENT_ID]
     try:
         yield
     finally:
-        await ollama.close()
+        for ollama in ollama_services:
+            await ollama.close()
         await database.close()
 
 
@@ -227,17 +251,39 @@ async def retrieve(body: dict[str, Any], request: Request) -> dict[str, Any]:
 
 @app.post("/v1/chat")
 async def chat(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    return await _agent_chat(DEFAULT_AGENT_ID, body, request)
+
+
+@app.post("/agent/{agent_id}/chat")
+async def agent_chat(
+    agent_id: str,
+    body: dict[str, Any],
+    request: Request,
+) -> dict[str, Any]:
+    return await _agent_chat(agent_id, body, request)
+
+
+async def _agent_chat(
+    agent_id: str,
+    body: dict[str, Any],
+    request: Request,
+) -> dict[str, Any]:
+    definition = _agent_definition(agent_id)
     question = body.get("message") or body.get("question")
     if not isinstance(question, str) or not question.strip():
         raise APIError(422, "invalid_request", "Provide a non-empty 'message'")
     try:
-        result = await request.app.state.agent.answer(
+        result = await _agent_runtime(request, definition).answer(
             question,
             request_id=_request_id(request),
         )
     except AgentLimitError as error:
         raise APIError(502, error.stop_reason, str(error)) from error
     return {
+        "agent": {
+            "id": definition.id,
+            "display_name": definition.display_name,
+        },
         "answer": result.answer,
         "steps": result.steps,
         "tool_calls": result.tool_calls,
@@ -251,11 +297,12 @@ async def models() -> dict[str, Any]:
         "object": "list",
         "data": [
             {
-                "id": VIRTUAL_MODEL,
+                "id": definition.display_name,
                 "object": "model",
                 "created": MODEL_CREATED,
                 "owned_by": "home-cortex",
             }
+            for definition in list_agents()
         ],
     }
 
@@ -265,16 +312,19 @@ async def chat_completions(
     body: ChatCompletionRequest,
     request: Request,
 ):
-    if body.model != VIRTUAL_MODEL:
+    try:
+        definition = get_agent_by_display_name(body.model)
+    except UnknownAgentError:
         raise APIError(
             404,
             "model_not_found",
             f"Model {body.model!r} was not found",
         )
+    agent = _agent_runtime(request, definition)
     completion_id = f"chatcmpl-{uuid4().hex}"
     created = int(time.time())
     if body.stream:
-        answer_stream = request.app.state.agent.stream_answer_messages(
+        answer_stream = agent.stream_answer_messages(
             [message.model_dump() for message in body.messages],
             request_id=_request_id(request),
         )
@@ -284,6 +334,7 @@ async def chat_completions(
                 created,
                 answer_stream,
                 request,
+                model=definition.display_name,
             ),
             media_type="text/event-stream",
             headers={
@@ -293,7 +344,7 @@ async def chat_completions(
         )
 
     try:
-        result = await request.app.state.agent.answer_messages(
+        result = await agent.answer_messages(
             [message.model_dump() for message in body.messages],
             request_id=_request_id(request),
         )
@@ -304,7 +355,7 @@ async def chat_completions(
         "id": completion_id,
         "object": "chat.completion",
         "created": created,
-        "model": VIRTUAL_MODEL,
+        "model": definition.display_name,
         "choices": [
             {
                 "index": 0,
@@ -323,6 +374,8 @@ async def _stream_chat_completion(
     created: int,
     answer_stream: AsyncIterator[str],
     request: Request | None = None,
+    *,
+    model: str = VIRTUAL_MODEL,
 ) -> AsyncIterator[str]:
     try:
         yield _sse_data(
@@ -330,6 +383,7 @@ async def _stream_chat_completion(
                 completion_id,
                 created,
                 delta={"role": "assistant"},
+                model=model,
             )
         )
         async for content in answer_stream:
@@ -339,6 +393,7 @@ async def _stream_chat_completion(
                         completion_id,
                         created,
                         delta={"content": content},
+                        model=model,
                     )
                 )
         yield _sse_data(
@@ -347,6 +402,7 @@ async def _stream_chat_completion(
                 created,
                 delta={},
                 finish_reason="stop",
+                model=model,
             )
         )
         yield "data: [DONE]\n\n"
@@ -386,12 +442,13 @@ def _chat_completion_chunk(
     *,
     delta: dict[str, str],
     finish_reason: str | None = None,
+    model: str = VIRTUAL_MODEL,
 ) -> dict[str, Any]:
     return {
         "id": completion_id,
         "object": "chat.completion.chunk",
         "created": created,
-        "model": VIRTUAL_MODEL,
+        "model": model,
         "choices": [
             {
                 "index": 0,
@@ -434,6 +491,31 @@ def _log_client_disconnect(request: Request, *, phase: str) -> None:
 
 def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", "unknown")
+
+
+def _agent_definition(agent_id: str) -> AgentDefinition:
+    try:
+        return get_agent(agent_id)
+    except UnknownAgentError as error:
+        raise APIError(
+            404,
+            "agent_not_found",
+            f"Agent {agent_id!r} was not found",
+        ) from error
+
+
+def _agent_runtime(
+    request: Request,
+    definition: AgentDefinition,
+) -> AgentService:
+    runtimes = getattr(request.app.state, "agents", None)
+    if isinstance(runtimes, dict) and definition.id in runtimes:
+        return runtimes[definition.id]
+    if definition.id == DEFAULT_AGENT_ID:
+        runtime = getattr(request.app.state, "agent", None)
+        if runtime is not None:
+            return runtime
+    raise RuntimeError(f"Agent runtime {definition.id!r} is not initialized")
 
 
 def _error_response(

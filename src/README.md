@@ -11,8 +11,9 @@ grounded answer.
   `/app/data/edges/*.json`. Re-running it updates nodes and relationships by
   stable record ID without creating duplicates.
 - `POST /v1/retrieve` returns the graph context used for a question.
-- `POST /v1/chat` runs a bounded Ollama tool-calling loop over the graph.
-- `GET /v1/models` advertises the `home-cortex` virtual model.
+- `POST /v1/chat` runs the default steward agent for backward compatibility.
+- `POST /agent/steward/chat` invokes the named household steward directly.
+- `GET /v1/models` advertises `老管家` to OpenAI-compatible clients.
 - `POST /v1/chat/completions` provides an OpenAI-compatible chat endpoint backed
   by the agent loop. It supports ordinary JSON responses and token-streamed SSE
   responses for clients such as Open WebUI.
@@ -43,7 +44,7 @@ curl -X POST http://localhost:8001/v1/chat \
   -d '{"message":"Who lives at Fort Cerritos?"}'
 curl -X POST http://localhost:8001/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -d '{"model":"home-cortex","stream":false,"messages":[{"role":"user","content":"Who resides at Fort Cerritos?"}]}'
+  -d '{"model":"老管家","stream":false,"messages":[{"role":"user","content":"Who resides at Fort Cerritos?"}]}'
 ```
 
 Open the interactive API documentation at
@@ -57,11 +58,24 @@ The Compose stack configures two model paths:
 - The OpenAI-compatible Cortex API at `http://cortex-api:8000/v1` for grounded
   graph answers.
 
-Select `home-cortex` in Open WebUI to use the Cortex agent and its SurrealDB
-tools. Selecting a raw Ollama model bypasses Cortex. Open WebUI persists its
+Select `老管家` in Open WebUI to use the steward and its SurrealDB tools.
+Selecting a raw Ollama model bypasses Cortex. Open WebUI persists its
 connection settings, so an existing deployment may require adding the Cortex
 connection once in the administrator connection settings with API key
 `unused`.
+
+## Named agents
+
+Home Cortex is the shared platform; named agents are role-specific interfaces
+on top of it. The `steward` definition lives under
+`home_cortex/agents/steward` and owns its display name, prompt, model preference,
+settings, and tool allowlist. The generic loop remains in `agent.py`.
+
+The steward's model is `OLLAMA_MODEL` when its `config.yaml` model name is null.
+A future specialized agent can select a different model and tools without
+changing the shared runtime. For example, a future `accountant` directory can
+define `账房` and finance-only tools; those tools will not be granted to
+`steward` automatically.
 
 ## Observability
 

@@ -7,7 +7,7 @@ from time import perf_counter
 from typing import Any, Literal
 
 from .ollama import OllamaService
-from .tools import TOOLS, ToolDispatcher
+from .tools import ToolDispatcher
 
 MAX_AGENT_STEPS = 4
 MAX_TOOL_CALLS_PER_STEP = 4
@@ -17,51 +17,6 @@ TOOL_EXECUTION_TIMEOUT_SECONDS = 5.0
 
 logger = logging.getLogger("uvicorn.error.home_cortex.agent")
 StopReason = Literal["answer", "step_limit", "tool_error", "timeout"]
-
-SYSTEM_PROMPT = """You are the Home Cortex assistant.
-Use the provided read-only tools when home-graph facts are needed.
-Base factual claims about the home on tool results, and say when no matching
-fact is available. Never invent entity IDs or relationships.
-
-Answer in the language explicitly requested by the user. Otherwise, answer in
-the language of the latest user message. An entity's name field is an ordered
-list of multilingual aliases for the same entity, not a list of different
-entities. When possible, use the stored name alias matching the answer language.
-Use name, rather than assembling a display name from first_name and last_name.
-Never invent or translate a name when no matching stored alias is available.
-
-When invoking a tool, always use the native tool-calling mechanism. Never print
-or describe a tool call as JSON in message content. Use the argument names from
-the provided tool definition exactly; get_relationships uses entity_id.
-
-Answer only what the user requested. Do not include sensitive personal fields,
-such as dates of birth or full addresses, unless the user explicitly requests
-them. Preserve dates and other factual values exactly rather than replacing
-them with approximate summaries.
-
-For relationship questions, follow the complete lookup process before answering:
-1. Extract the distinctive entity name or ID from the question.
-2. Call search_entities with only that name or ID, never the full question.
-3. For each relevant match, call get_relationships with its record ID.
-4. Read the linked record from each relationship's related_entity field.
-Do not claim relationship information is unavailable after only searching for
-the entity. For example, "Who resides at Fort Cerritos?" requires searching for
-"Fort Cerritos" and then getting its resides_in relationships.
-"""
-
-_TOOLS_WITH_LIMIT = frozenset(
-    tool["function"]["name"]
-    for tool in TOOLS
-    if "limit" in tool["function"]["parameters"].get("properties", {})
-)
-_TOOL_LIMIT_MAXIMUMS = {
-    tool["function"]["name"]: tool["function"]["parameters"]["properties"][
-        "limit"
-    ].get("maximum")
-    for tool in TOOLS
-    if tool["function"]["name"] in _TOOLS_WITH_LIMIT
-}
-
 
 class AgentLimitError(RuntimeError):
     """Raised when the model exceeds a hard agent-loop safety limit."""
@@ -92,6 +47,8 @@ class AgentService:
         ollama: OllamaService,
         dispatcher: ToolDispatcher,
         *,
+        system_prompt: str,
+        tools: Sequence[Mapping[str, Any]],
         max_steps: int = MAX_AGENT_STEPS,
         max_tool_calls_per_step: int = MAX_TOOL_CALLS_PER_STEP,
         max_tool_records: int = MAX_TOOL_RECORDS,
@@ -100,6 +57,24 @@ class AgentService:
     ) -> None:
         self.ollama = ollama
         self.dispatcher = dispatcher
+        self.system_prompt = system_prompt.strip()
+        if not self.system_prompt:
+            raise ValueError("system_prompt cannot be empty")
+        self.tools = tuple(dict(tool) for tool in tools)
+        if not self.tools:
+            raise ValueError("At least one tool definition is required")
+        self._tools_with_limit = frozenset(
+            tool["function"]["name"]
+            for tool in self.tools
+            if "limit" in tool["function"]["parameters"].get("properties", {})
+        )
+        self._tool_limit_maximums = {
+            tool["function"]["name"]: tool["function"]["parameters"][
+                "properties"
+            ]["limit"].get("maximum")
+            for tool in self.tools
+            if tool["function"]["name"] in self._tools_with_limit
+        }
         self.max_steps = _bounded_limit("max_steps", max_steps, MAX_AGENT_STEPS)
         self.max_tool_calls_per_step = _bounded_limit(
             "max_tool_calls_per_step",
@@ -149,7 +124,7 @@ class AgentService:
             raise ValueError("At least one message is required")
         return await self.run(
             [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": self.system_prompt},
                 *(dict(message) for message in messages),
             ],
             request_id=request_id,
@@ -166,7 +141,7 @@ class AgentService:
             raise ValueError("At least one message is required")
         async for token in self.stream(
             [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": self.system_prompt},
                 *(dict(message) for message in messages),
             ],
             request_id=request_id,
@@ -191,7 +166,10 @@ class AgentService:
             tool_calls: list[Any] = []
             emitted_content = False
 
-            async for response in self.ollama.stream_chat_with_tools(conversation):
+            async for response in self.ollama.stream_chat_with_tools(
+                conversation,
+                self.tools,
+            ):
                 chunk_tool_calls = list(response.message.tool_calls or [])
                 if chunk_tool_calls and emitted_content:
                     logger.info(
@@ -266,7 +244,7 @@ class AgentService:
         total_tool_calls = 0
         failure_reason: StopReason | None = None
         for step in range(1, self.max_steps + 1):
-            response = await self.ollama.chat_with_tools(conversation)
+            response = await self.ollama.chat_with_tools(conversation, self.tools)
             assistant_message = response.message.model_dump(exclude_none=True)
             conversation.append(assistant_message)
             tool_calls = list(response.message.tool_calls or [])
@@ -417,7 +395,10 @@ class AgentService:
             }
 
     def _bounded_arguments(self, tool_name: str, arguments: Any) -> Any:
-        if not isinstance(arguments, Mapping) or tool_name not in _TOOLS_WITH_LIMIT:
+        if (
+            not isinstance(arguments, Mapping)
+            or tool_name not in self._tools_with_limit
+        ):
             return arguments
 
         bounded = dict(arguments)
@@ -427,7 +408,7 @@ class AgentService:
         elif (
             isinstance(requested_limit, int)
             and not isinstance(requested_limit, bool)
-            and requested_limit <= _TOOL_LIMIT_MAXIMUMS[tool_name]
+            and requested_limit <= self._tool_limit_maximums[tool_name]
         ):
             bounded["limit"] = min(requested_limit, self.max_tool_records)
         return bounded
