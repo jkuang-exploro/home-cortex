@@ -54,7 +54,7 @@ async def test_repeated_ingestion_does_not_duplicate_relationships() -> None:
     assert first.edges_upserted == second.edges_upserted == 2
     assert sorted(str(edge["id"]) for edge in edges) == [
         "resides_in:blair_primary",
-        "resides_in:person_alex_example__home_test_home",
+        "resides_in:person_alex_example__location_test_house",
     ]
 
 
@@ -78,7 +78,10 @@ async def test_explicit_relationship_id_is_stable() -> None:
 async def test_duplicate_implicit_relationships_require_ids(tmp_path: Path) -> None:
     data_dir = tmp_path / "static_test_data"
     copytree(STATIC_TEST_DATA, data_dir)
-    edge = {"from": "person:alex_example", "to": "home:test_home"}
+    edge = {
+        "from": "person:alex_example",
+        "to": "location:test_house",
+    }
     (data_dir / "edges" / "resides_in.json").write_text(
         json.dumps([edge, {**edge, "residence_type": "historical"}]),
         encoding="utf-8",

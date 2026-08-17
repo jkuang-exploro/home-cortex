@@ -33,7 +33,10 @@ class RetrievalService:
     ) -> None:
         self.database = database
         self.limit = limit
-        self.node_tables = self._table_names(data_dir, "nodes") or ("home", "person")
+        self.node_tables = self._table_names(data_dir, "nodes") or (
+            "location",
+            "person",
+        )
         self.edge_tables = self._table_names(data_dir, "edges") or ("resides_in",)
 
     async def search_entities(

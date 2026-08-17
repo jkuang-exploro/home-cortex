@@ -25,7 +25,7 @@ class FakeRetrievalService:
         )
         if self.error:
             raise self.error
-        return [{"id": "home:test_home", "name": "Test House"}]
+        return [{"id": "location:test_house", "name": "Test House"}]
 
     async def get_relationships(
         self,
@@ -43,9 +43,9 @@ class FakeRetrievalService:
             raise self.error
         return [
             {
-                "id": "resides_in:alex_home",
+                "id": "resides_in:alex_location",
                 "in": "person:alex_example",
-                "out": "home:test_home",
+                "out": "location:test_house",
                 "related_entity": {
                     "id": "person:alex_example",
                     "first_name": "Alex",
@@ -67,6 +67,7 @@ def test_tool_definitions_are_json_serializable_and_read_only() -> None:
     assert names == {"search_entities", "get_relationships"}
     assert "surrealql" not in serialized.lower()
     assert "execute" not in names
+    assert "person or location" in serialized
     assert all(
         tool["function"]["parameters"]["additionalProperties"] is False
         for tool in TOOLS
@@ -79,15 +80,15 @@ async def test_dispatches_entity_search_with_validated_arguments() -> None:
 
     response = await dispatcher.dispatch(
         "search_entities",
-        {"text": "  Test House  ", "entity_type": "home", "limit": 5},
+        {"text": "  Test House  ", "entity_type": "location", "limit": 5},
     )
 
     assert response["ok"] is True
-    assert response["result"][0]["id"] == "home:test_home"
+    assert response["result"][0]["id"] == "location:test_house"
     assert retrieval.calls == [
         (
             "search_entities",
-            {"text": "Test House", "entity_type": "home", "limit": 5},
+            {"text": "Test House", "entity_type": "location", "limit": 5},
         )
     ]
 
@@ -98,7 +99,7 @@ async def test_dispatches_relationship_lookup() -> None:
 
     response = await dispatcher.dispatch(
         "get_relationships",
-        {"entity_id": "home:test_home", "relation": "resides_in"},
+        {"entity_id": "location:test_house", "relation": "resides_in"},
     )
 
     assert response["ok"] is True
@@ -106,7 +107,7 @@ async def test_dispatches_relationship_lookup() -> None:
     assert retrieval.calls[0] == (
         "get_relationships",
         {
-            "entity_id": "home:test_home",
+            "entity_id": "location:test_house",
             "relation": "resides_in",
             "limit": None,
         },
@@ -156,7 +157,7 @@ async def test_rejects_invalid_search_arguments(arguments: Any) -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "entity_id",
-    ["home", "home:", "bad-table:one", "home:test:extra"],
+    ["location", "location:", "bad-table:one", "location:test:extra"],
 )
 async def test_rejects_invalid_record_ids(entity_id: str) -> None:
     dispatcher, retrieval = _dispatcher()

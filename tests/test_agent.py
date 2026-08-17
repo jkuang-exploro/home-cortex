@@ -35,7 +35,7 @@ class FakeDispatcher:
         self.result = result or {
             "ok": True,
             "tool": "search_entities",
-            "result": [{"id": "home:test_home", "name": "Test House"}],
+            "result": [{"id": "location:test_house", "name": "Test House"}],
         }
         self.delay = delay
         self.calls: list[tuple[str, Any]] = []
@@ -92,6 +92,9 @@ async def test_returns_first_normal_answer_without_dispatching_tools() -> None:
     assert ollama.calls[0][0]["role"] == "system"
     assert "never the full question" in ollama.calls[0][0]["content"]
     assert "call get_relationships" in ollama.calls[0][0]["content"]
+    assert "native tool-calling mechanism" in ollama.calls[0][0]["content"]
+    assert "get_relationships uses entity_id" in ollama.calls[0][0]["content"]
+    assert "dates of birth or full addresses" in ollama.calls[0][0]["content"]
     assert ollama.calls[0][-1] == {"role": "user", "content": "What is known?"}
 
 
@@ -103,7 +106,7 @@ async def test_completes_search_then_relationship_lookup() -> None:
                 tool_calls=[
                     _tool_call(
                         "search_entities",
-                        {"text": "Fort Cerritos", "entity_type": "home"},
+                        {"text": "Fort Cerritos", "entity_type": "location"},
                     )
                 ]
             ),
@@ -112,7 +115,7 @@ async def test_completes_search_then_relationship_lookup() -> None:
                     _tool_call(
                         "get_relationships",
                         {
-                            "entity_id": "home:cerritos",
+                            "entity_id": "location:fort_cerritos",
                             "relation": "resides_in",
                         },
                     )
@@ -129,13 +132,15 @@ async def test_completes_search_then_relationship_lookup() -> None:
         async def dispatch(self, tool_name: str, arguments: Any) -> dict[str, Any]:
             self.calls.append((tool_name, arguments))
             if tool_name == "search_entities":
-                result = [{"id": "home:cerritos", "name": "Fort Cerritos"}]
+                result = [
+                    {"id": "location:fort_cerritos", "name": "Fort Cerritos"}
+                ]
             else:
                 result = [
                     {
-                        "id": "resides_in:alex_home",
+                        "id": "resides_in:alex_location",
                         "in": "person:alex_example",
-                        "out": "home:cerritos",
+                        "out": "location:fort_cerritos",
                         "related_entity": {
                             "id": "person:alex_example",
                             "first_name": "Alex",
@@ -284,7 +289,7 @@ async def test_oversized_tool_record_is_truncated_before_sending_to_ollama() -> 
         {
             "ok": True,
             "tool": "search_entities",
-            "result": [{"id": "home:test", "description": "x" * 2_000}],
+            "result": [{"id": "location:test", "description": "x" * 2_000}],
         }
     )
     ollama = FakeOllamaService(

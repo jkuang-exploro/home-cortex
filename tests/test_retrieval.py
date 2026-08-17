@@ -51,7 +51,12 @@ class MemoryDatabase:
 async def test_search_entities_queries_known_tables_and_sorts_globally() -> None:
     database = FakeDatabase(
         {
-            "home": [{"id": RecordID("home", "cerritos"), "name": "Fort Cerritos"}],
+            "location": [
+                {
+                    "id": RecordID("location", "fort_cerritos"),
+                    "name": "Fort Cerritos",
+                }
+            ],
             "person": [{"id": RecordID("person", "jian"), "first_name": "Jian"}],
         }
     )
@@ -59,9 +64,12 @@ async def test_search_entities_queries_known_tables_and_sorts_globally() -> None
 
     result = await service.search_entities("  CERRITOS  ")
 
-    assert [record["id"] for record in result] == ["home:cerritos", "person:jian"]
+    assert [record["id"] for record in result] == [
+        "location:fort_cerritos",
+        "person:jian",
+    ]
     assert [variables["table"] for _, variables in database.queries] == [
-        "home",
+        "location",
         "person",
     ]
     assert all(variables["text"] == "cerritos" for _, variables in database.queries)
@@ -108,15 +116,15 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
         {
             "resides_in": [
                 {
-                    "id": RecordID("resides_in", "person_a__home_main"),
+                    "id": RecordID("resides_in", "person_a__location_main"),
                     "in": RecordID("person", "a"),
-                    "out": RecordID("home", "main"),
+                    "out": RecordID("location", "main"),
                     "source_entity": {
                         "id": RecordID("person", "a"),
                         "first_name": "Alex",
                     },
                     "target_entity": {
-                        "id": RecordID("home", "main"),
+                        "id": RecordID("location", "main"),
                         "name": "Main Home",
                     },
                 }
@@ -126,7 +134,7 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
     service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
 
     incoming = await service.get_relationships(
-        "home:main",
+        "location:main",
         relation="resides_in",
     )
     outgoing = await service.get_relationships(
@@ -142,12 +150,12 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
         "first_name": "Alex",
     }
     assert outgoing[0]["related_entity"] == {
-        "id": "home:main",
+        "id": "location:main",
         "name": "Main Home",
     }
     assert "source_entity" not in incoming[0]
     assert "target_entity" not in incoming[0]
-    assert database.queries[0][1]["entity"] == RecordID("home", "main")
+    assert database.queries[0][1]["entity"] == RecordID("location", "main")
     assert "in = $entity OR out = $entity" in database.queries[0][0]
     assert "in.* AS source_entity" in database.queries[0][0]
 
@@ -171,7 +179,7 @@ def test_table_names_come_from_static_test_data() -> None:
         data_dir=STATIC_TEST_DATA,
     )
 
-    assert service.node_tables == ("home", "person")
+    assert service.node_tables == ("location", "person")
     assert service.edge_tables == ("resides_in",)
 
 
@@ -194,21 +202,24 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
             data_dir=STATIC_TEST_DATA,
         )
 
-        entities = await service.search_entities("test house", entity_type="home")
+        entities = await service.search_entities(
+            "test house",
+            entity_type="location",
+        )
         relationships = await service.get_relationships(
-            "home:test_home",
+            "location:test_house",
             relation="resides_in",
         )
         context = await service.retrieve("test house")
     finally:
         await database.close()
 
-    assert [entity["id"] for entity in entities] == ["home:test_home"]
+    assert [entity["id"] for entity in entities] == ["location:test_house"]
     assert sorted(edge["in"] for edge in relationships) == [
         "person:alex_example",
         "person:blair_example",
     ]
-    assert all(edge["out"] == "home:test_home" for edge in relationships)
+    assert all(edge["out"] == "location:test_house" for edge in relationships)
     assert all(edge["direction"] == "incoming" for edge in relationships)
     assert sorted(
         edge["related_entity"]["first_name"] for edge in relationships

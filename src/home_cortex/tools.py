@@ -55,7 +55,9 @@ TOOLS: list[dict[str, Any]] = [
                     "entity_type": {
                         "type": "string",
                         "pattern": TABLE_NAME_PATTERN,
-                        "description": "Optional node table, such as person or home.",
+                        "description": (
+                            "Optional node table, such as person or location."
+                        ),
                     },
                     "limit": {
                         "type": "integer",

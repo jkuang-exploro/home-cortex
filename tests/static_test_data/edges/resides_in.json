@@ -1,13 +1,13 @@
 [
   {
     "from": "person:alex_example",
-    "to": "home:test_home",
+    "to": "location:test_house",
     "residence_type": "primary"
   },
   {
     "id": "resides_in:blair_primary",
     "from": "person:blair_example",
-    "to": "home:test_home",
+    "to": "location:test_house",
     "residence_type": "primary"
   }
 ]
