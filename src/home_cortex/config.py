@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     surreal_namespace: str = "home_cortex"
     surreal_database: str = "home_cortex"
     ollama_url: str = "http://ollama:11434"
-    ollama_model: str = "qwen3:8b"
+    ollama_model: str
     data_dir: Path = Path("/app/data")
     retrieval_limit: int = Field(default=100, ge=1, le=1000)
 

@@ -5,11 +5,13 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 
 from . import __version__
+from .agent import AgentLimitError, AgentService
 from .config import get_settings
 from .db import Database
 from .ingestion import ingest_directory
 from .ollama import OllamaService
 from .retrieval import RetrievalService
+from .tools import ToolDispatcher
 
 
 @asynccontextmanager
@@ -20,11 +22,13 @@ async def lifespan(app: FastAPI):
     await database.connect()
     app.state.database = database
     app.state.ollama = ollama
-    app.state.retrieval = RetrievalService(
+    retrieval = RetrievalService(
         database,
         settings.retrieval_limit,
         settings.data_dir,
     )
+    app.state.retrieval = retrieval
+    app.state.agent = AgentService(ollama, ToolDispatcher(retrieval))
     try:
         yield
     finally:
@@ -73,4 +77,20 @@ async def retrieve(body: dict[str, Any], request: Request) -> dict[str, Any]:
         "nodes": result.nodes,
         "edges": result.edges,
         "context": result.text,
+    }
+
+
+@app.post("/v1/chat")
+async def chat(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    question = body.get("message") or body.get("question")
+    if not isinstance(question, str) or not question.strip():
+        raise HTTPException(status_code=422, detail="Provide a non-empty 'message'")
+    try:
+        result = await request.app.state.agent.answer(question)
+    except AgentLimitError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return {
+        "answer": result.answer,
+        "steps": result.steps,
+        "tool_calls": result.tool_calls,
     }
