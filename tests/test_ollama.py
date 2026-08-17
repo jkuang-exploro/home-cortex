@@ -71,6 +71,7 @@ async def test_ordinary_chat_call() -> None:
             "model": "qwen3:8b",
             "messages": [{"role": "user", "content": "Say hello"}],
             "stream": False,
+            "think": False,
         }
     ]
 
@@ -116,6 +117,7 @@ async def test_tool_call_response() -> None:
     }
     assert client.calls[0]["tools"] == TOOLS
     assert client.calls[0]["stream"] is False
+    assert client.calls[0]["think"] is False
 
 
 @pytest.mark.asyncio
@@ -148,6 +150,7 @@ async def test_streaming_tool_chat_yields_chunks_and_closes_stream() -> None:
             "messages": [{"role": "user", "content": "Say hello"}],
             "tools": TOOLS,
             "stream": True,
+            "think": False,
         }
     ]
 

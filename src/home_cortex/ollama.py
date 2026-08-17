@@ -29,6 +29,7 @@ class OllamaService:
             model=self.model,
             messages=messages,
             stream=False,
+            think=False,
         )
 
     async def chat_with_tools(
@@ -41,6 +42,7 @@ class OllamaService:
             messages=messages,
             tools=TOOLS,
             stream=False,
+            think=False,
         )
 
     async def stream_chat_with_tools(
@@ -53,6 +55,7 @@ class OllamaService:
             messages=messages,
             tools=TOOLS,
             stream=True,
+            think=False,
         )
         stream = cast(AsyncIterator[ChatResponse], response)
         try:
