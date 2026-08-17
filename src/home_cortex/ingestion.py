@@ -32,6 +32,23 @@ def _records_from_file(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+def _validate_node_name(record: dict[str, Any], path: Path) -> None:
+    """Require multilingual names to use a non-empty list of unique strings."""
+    if "name" not in record:
+        return
+    names = record["name"]
+    if (
+        not isinstance(names, list)
+        or not names
+        or any(not isinstance(name, str) or not name.strip() for name in names)
+    ):
+        raise ValueError(
+            f"Node in {path} must use 'name' as a non-empty list of strings"
+        )
+    if len(names) != len(set(names)):
+        raise ValueError(f"Node in {path} contains duplicate values in 'name'")
+
+
 def parse_record_id(value: str, *, source: Path) -> RecordID:
     match = RECORD_PATTERN.fullmatch(value)
     if match is None:
@@ -81,6 +98,7 @@ async def ingest_directory(database: Database, data_dir: Path) -> IngestionResul
     # Load nodes first so every relation endpoint exists before edges are created.
     for path in node_files:
         for record in _records_from_file(path):
+            _validate_node_name(record, path)
             raw_id = record.get("id")
             if not isinstance(raw_id, str):
                 raise ValueError(f"Node in {path} is missing a string 'id'")

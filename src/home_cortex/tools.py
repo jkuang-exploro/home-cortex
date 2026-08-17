@@ -36,7 +36,8 @@ TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "search_entities",
             "description": (
-                "Search known home-graph entities by record ID or text fields. "
+                "Search known home-graph entities by record ID, multilingual "
+                "name aliases, or other text fields. "
                 "Pass only the distinctive entity name or ID, not the user's "
                 "full question. Use this before requesting relationships."
             ),
@@ -48,8 +49,9 @@ TOOLS: list[dict[str, Any]] = [
                         "type": "string",
                         "minLength": 1,
                         "description": (
-                            "Case-insensitive entity name, short text, or record ID to "
-                            "find; for example, 'Fort Cerritos'."
+                            "Case-insensitive entity name in any stored language, "
+                            "short text, or record ID to find; for example, "
+                            "'Fort Cerritos'."
                         ),
                     },
                     "entity_type": {

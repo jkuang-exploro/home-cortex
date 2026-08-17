@@ -1,11 +1,13 @@
 [
   {
     "id": "person:alex_example",
+    "name": ["Alex Example", "艾力克斯"],
     "first_name": "Alex",
     "last_name": "Example"
   },
   {
     "id": "person:blair_example",
+    "name": ["Blair Example", "布莱尔"],
     "first_name": "Blair",
     "last_name": "Example"
   }

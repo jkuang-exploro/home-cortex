@@ -1,7 +1,7 @@
 {
   "id": "location:test_house",
   "location_type": "home",
-  "name": "Test House",
+  "name": ["Test House", "测试之家"],
   "address": {
     "city": "Testville",
     "state": "CA"

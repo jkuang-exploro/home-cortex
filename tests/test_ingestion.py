@@ -93,3 +93,21 @@ async def test_duplicate_implicit_relationships_require_ids(tmp_path: Path) -> N
             await ingest_directory(database, data_dir)  # type: ignore[arg-type]
     finally:
         await database.close()
+
+
+@pytest.mark.asyncio
+async def test_node_name_must_be_a_non_empty_string_list(tmp_path: Path) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    location_path = data_dir / "nodes" / "location.json"
+    location = json.loads(location_path.read_text(encoding="utf-8"))
+    location["name"] = "Test House"
+    location_path.write_text(json.dumps(location), encoding="utf-8")
+
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        with pytest.raises(ValueError, match="non-empty list of strings"):
+            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+    finally:
+        await database.close()

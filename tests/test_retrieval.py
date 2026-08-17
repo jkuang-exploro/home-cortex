@@ -54,7 +54,7 @@ async def test_search_entities_queries_known_tables_and_sorts_globally() -> None
             "location": [
                 {
                     "id": RecordID("location", "fort_cerritos"),
-                    "name": "Fort Cerritos",
+                    "name": ["Fort Cerritos", "喜瑞都堡"],
                 }
             ],
             "person": [{"id": RecordID("person", "jian"), "first_name": "Jian"}],
@@ -125,7 +125,7 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
                     },
                     "target_entity": {
                         "id": RecordID("location", "main"),
-                        "name": "Main Home",
+                        "name": ["Main Home"],
                     },
                 }
             ]
@@ -151,7 +151,7 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
     }
     assert outgoing[0]["related_entity"] == {
         "id": "location:main",
-        "name": "Main Home",
+        "name": ["Main Home"],
     }
     assert "source_entity" not in incoming[0]
     assert "target_entity" not in incoming[0]
@@ -206,6 +206,14 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
             "test house",
             entity_type="location",
         )
+        chinese_entities = await service.search_entities(
+            "测试之家",
+            entity_type="location",
+        )
+        chinese_people = await service.search_entities(
+            "艾力克斯",
+            entity_type="person",
+        )
         relationships = await service.get_relationships(
             "location:test_house",
             relation="resides_in",
@@ -215,6 +223,13 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
         await database.close()
 
     assert [entity["id"] for entity in entities] == ["location:test_house"]
+    assert [entity["id"] for entity in chinese_entities] == [
+        "location:test_house"
+    ]
+    assert [entity["id"] for entity in chinese_people] == [
+        "person:alex_example"
+    ]
+    assert chinese_people[0]["name"] == ["Alex Example", "艾力克斯"]
     assert sorted(edge["in"] for edge in relationships) == [
         "person:alex_example",
         "person:blair_example",
