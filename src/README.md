@@ -56,3 +56,28 @@ tools. Selecting a raw Ollama model bypasses Cortex. Open WebUI persists its
 connection settings, so an existing deployment may require adding the Cortex
 connection once in the administrator connection settings with API key
 `unused`.
+
+## Observability
+
+Every HTTP response includes a server-generated `X-Request-ID`. Error responses
+use the same JSON envelope for validation errors, API errors, and unexpected
+failures:
+
+```json
+{
+  "error": {
+    "code": "internal_server_error",
+    "message": "An unexpected server error occurred",
+    "request_id": "96f149cf430442d48fb6010899cde986"
+  }
+}
+```
+
+The agent logs each model step, tool name, success status, record count,
+execution time, and final stop reason. Stop reasons are `answer`, `step_limit`,
+`tool_error`, or `timeout`. Logs intentionally omit prompts, tool arguments,
+tool results, and private record fields. View them with:
+
+```sh
+docker compose logs -f cortex-api
+```

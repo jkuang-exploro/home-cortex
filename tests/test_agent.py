@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from typing import Any
 
 import pytest
@@ -88,6 +89,7 @@ async def test_returns_first_normal_answer_without_dispatching_tools() -> None:
     assert result.answer == "The answer is ready."
     assert result.steps == 1
     assert result.tool_calls == 0
+    assert result.stop_reason == "answer"
     assert dispatcher.calls == []
     assert ollama.calls[0][0]["role"] == "system"
     assert "never the full question" in ollama.calls[0][0]["content"]
@@ -158,6 +160,7 @@ async def test_completes_search_then_relationship_lookup() -> None:
     assert result.answer == "Alex Example resides at Fort Cerritos."
     assert result.steps == 3
     assert result.tool_calls == 2
+    assert result.stop_reason == "answer"
     assert [name for name, _ in dispatcher.calls] == [
         "search_entities",
         "get_relationships",
@@ -247,22 +250,32 @@ async def test_rejects_too_many_tool_calls_in_one_step() -> None:
 
 
 @pytest.mark.asyncio
-async def test_stops_after_hard_agent_step_limit() -> None:
+async def test_stops_after_hard_agent_step_limit(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     dispatcher = FakeDispatcher()
     ollama = FakeOllamaService(
         [_chat_response(tool_calls=[_tool_call()]) for _ in range(MAX_AGENT_STEPS)]
     )
     agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
 
-    with pytest.raises(AgentLimitError, match="within 4 steps"):
-        await agent.answer("Never-ending lookup")
+    with caplog.at_level(
+        logging.INFO,
+        logger="uvicorn.error.home_cortex.agent",
+    ):
+        with pytest.raises(AgentLimitError, match="within 4 steps") as error:
+            await agent.answer("Never-ending lookup", request_id="request-limit")
 
+    assert error.value.stop_reason == "step_limit"
     assert len(ollama.calls) == MAX_AGENT_STEPS
     assert len(dispatcher.calls) == MAX_AGENT_STEPS - 1
+    assert "agent_stop request_id=request-limit reason=step_limit" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_tool_timeout_becomes_a_bounded_tool_error() -> None:
+async def test_tool_timeout_becomes_a_bounded_tool_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     dispatcher = FakeDispatcher(delay=0.05)
     ollama = FakeOllamaService(
         [
@@ -276,11 +289,102 @@ async def test_tool_timeout_becomes_a_bounded_tool_error() -> None:
         tool_timeout_seconds=0.001,
     )
 
-    result = await agent.answer("Find the home")
+    with caplog.at_level(
+        logging.INFO,
+        logger="uvicorn.error.home_cortex.agent",
+    ):
+        result = await agent.answer("Find the home", request_id="request-timeout")
 
     assert result.steps == 2
+    assert result.stop_reason == "timeout"
     tool_result = json.loads(ollama.calls[1][-1]["content"])
     assert tool_result["error"]["code"] == "tool_timeout"
+    assert "success=false" in caplog.text
+    assert "error_code=tool_timeout" in caplog.text
+    assert "agent_stop request_id=request-timeout reason=timeout" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_tool_error_is_recorded_as_stop_reason(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    dispatcher = FakeDispatcher(
+        {
+            "ok": False,
+            "tool": "search_entities",
+            "error": {
+                "code": "invalid_arguments",
+                "message": "Tool arguments failed validation",
+            },
+        }
+    )
+    ollama = FakeOllamaService(
+        [
+            _chat_response(tool_calls=[_tool_call()]),
+            _chat_response("The lookup failed."),
+        ]
+    )
+    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+
+    with caplog.at_level(
+        logging.INFO,
+        logger="uvicorn.error.home_cortex.agent",
+    ):
+        result = await agent.answer(
+            "Find a location",
+            request_id="request-tool-error",
+        )
+
+    assert result.stop_reason == "tool_error"
+    assert "success=false" in caplog.text
+    assert "error_code=invalid_arguments" in caplog.text
+    assert (
+        "agent_stop request_id=request-tool-error reason=tool_error" in caplog.text
+    )
+
+
+@pytest.mark.asyncio
+async def test_logs_agent_and_tool_metadata_without_private_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    private_question = "Who has DOB 1988-11-11 at 123 Private Street?"
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "search_entities",
+            "result": [
+                {
+                    "id": "person:private",
+                    "dob": "1988-11-11",
+                    "address": "123 Private Street",
+                }
+            ],
+        }
+    )
+    ollama = FakeOllamaService(
+        [
+            _chat_response(tool_calls=[_tool_call()]),
+            _chat_response("Found one record."),
+        ]
+    )
+    agent = AgentService(ollama, dispatcher)  # type: ignore[arg-type]
+
+    with caplog.at_level(
+        logging.INFO,
+        logger="uvicorn.error.home_cortex.agent",
+    ):
+        result = await agent.answer(private_question, request_id="request-123")
+
+    assert result.stop_reason == "answer"
+    assert caplog.text.count("agent_step request_id=request-123") == 2
+    assert "tool=search_entities" in caplog.text
+    assert "success=true" in caplog.text
+    assert "record_count=1" in caplog.text
+    assert "duration_ms=" in caplog.text
+    assert "agent_stop request_id=request-123 reason=answer" in caplog.text
+    assert private_question not in caplog.text
+    assert "1988-11-11" not in caplog.text
+    assert "123 Private Street" not in caplog.text
 
 
 @pytest.mark.asyncio

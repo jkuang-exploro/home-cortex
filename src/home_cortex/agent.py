@@ -1,8 +1,10 @@
 import asyncio
 import json
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from time import perf_counter
+from typing import Any, Literal
 
 from .ollama import OllamaService
 from .tools import TOOLS, ToolDispatcher
@@ -12,6 +14,9 @@ MAX_TOOL_CALLS_PER_STEP = 4
 MAX_TOOL_RECORDS = 25
 MAX_TOOL_RESULT_BYTES = 16_384
 TOOL_EXECUTION_TIMEOUT_SECONDS = 5.0
+
+logger = logging.getLogger("uvicorn.error.home_cortex.agent")
+StopReason = Literal["answer", "step_limit", "tool_error", "timeout"]
 
 SYSTEM_PROMPT = """You are the Home Cortex assistant.
 Use the provided read-only tools when home-graph facts are needed.
@@ -54,12 +59,15 @@ _TOOL_LIMIT_MAXIMUMS = {
 class AgentLimitError(RuntimeError):
     """Raised when the model exceeds a hard agent-loop safety limit."""
 
+    stop_reason: StopReason = "step_limit"
+
 
 @dataclass(frozen=True)
 class AgentResult:
     answer: str
     steps: int
     tool_calls: int
+    stop_reason: StopReason
     messages: tuple[dict[str, Any], ...]
 
 
@@ -103,17 +111,25 @@ class AgentService:
             )
         self.tool_timeout_seconds = tool_timeout_seconds
 
-    async def answer(self, question: str) -> AgentResult:
+    async def answer(
+        self,
+        question: str,
+        *,
+        request_id: str = "-",
+    ) -> AgentResult:
         question = question.strip()
         if not question:
             raise ValueError("Question cannot be empty")
         return await self.answer_messages(
-            [{"role": "user", "content": question}]
+            [{"role": "user", "content": question}],
+            request_id=request_id,
         )
 
     async def answer_messages(
         self,
         messages: Sequence[Mapping[str, Any]],
+        *,
+        request_id: str = "-",
     ) -> AgentResult:
         """Answer a conversation while always applying the Cortex system prompt."""
         if not messages:
@@ -122,39 +138,72 @@ class AgentService:
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 *(dict(message) for message in messages),
-            ]
+            ],
+            request_id=request_id,
         )
 
     async def run(
         self,
         messages: Sequence[Mapping[str, Any]],
+        *,
+        request_id: str = "-",
     ) -> AgentResult:
         conversation = [dict(message) for message in messages]
         if not conversation:
             raise ValueError("At least one message is required")
 
         total_tool_calls = 0
+        failure_reason: StopReason | None = None
         for step in range(1, self.max_steps + 1):
             response = await self.ollama.chat_with_tools(conversation)
             assistant_message = response.message.model_dump(exclude_none=True)
             conversation.append(assistant_message)
             tool_calls = list(response.message.tool_calls or [])
+            logger.info(
+                "agent_step request_id=%s step=%d tool_calls=%d",
+                _safe_log_token(request_id),
+                step,
+                len(tool_calls),
+            )
 
             if not tool_calls:
+                stop_reason = failure_reason or "answer"
+                logger.info(
+                    "agent_stop request_id=%s reason=%s steps=%d tool_calls=%d",
+                    _safe_log_token(request_id),
+                    stop_reason,
+                    step,
+                    total_tool_calls,
+                )
                 return AgentResult(
                     answer=response.message.content or "",
                     steps=step,
                     tool_calls=total_tool_calls,
+                    stop_reason=stop_reason,
                     messages=tuple(conversation),
                 )
 
             if len(tool_calls) > self.max_tool_calls_per_step:
+                logger.info(
+                    "agent_stop request_id=%s reason=step_limit steps=%d "
+                    "tool_calls=%d",
+                    _safe_log_token(request_id),
+                    step,
+                    total_tool_calls,
+                )
                 raise AgentLimitError(
                     "Ollama requested "
                     f"{len(tool_calls)} tools in one step; the limit is "
                     f"{self.max_tool_calls_per_step}"
                 )
             if step == self.max_steps:
+                logger.info(
+                    "agent_stop request_id=%s reason=step_limit steps=%d "
+                    "tool_calls=%d",
+                    _safe_log_token(request_id),
+                    step,
+                    total_tool_calls,
+                )
                 raise AgentLimitError(
                     f"Agent did not produce a final answer within {self.max_steps} steps"
                 )
@@ -165,7 +214,34 @@ class AgentService:
                     tool_name,
                     tool_call.function.arguments,
                 )
+                started = perf_counter()
                 tool_result = await self._dispatch(tool_name, arguments)
+                duration_ms = (perf_counter() - started) * 1_000
+                success = tool_result.get("ok") is True
+                result_records = tool_result.get("result")
+                record_count = (
+                    len(result_records) if isinstance(result_records, list) else 0
+                )
+                error = tool_result.get("error")
+                error_code = (
+                    error.get("code") if isinstance(error, Mapping) else "none"
+                )
+                if not success:
+                    if error_code == "tool_timeout":
+                        failure_reason = "timeout"
+                    elif failure_reason != "timeout":
+                        failure_reason = "tool_error"
+                logger.info(
+                    "tool_execution request_id=%s step=%d tool=%s success=%s "
+                    "record_count=%d duration_ms=%.2f error_code=%s",
+                    _safe_log_token(request_id),
+                    step,
+                    _safe_log_token(tool_name),
+                    str(success).lower(),
+                    record_count,
+                    duration_ms,
+                    _safe_log_token(str(error_code)),
+                )
                 conversation.append(
                     {
                         "role": "tool",
@@ -178,6 +254,12 @@ class AgentService:
                 )
                 total_tool_calls += 1
 
+        logger.info(
+            "agent_stop request_id=%s reason=step_limit steps=%d tool_calls=%d",
+            _safe_log_token(request_id),
+            self.max_steps,
+            total_tool_calls,
+        )
         raise AgentLimitError(
             f"Agent did not produce a final answer within {self.max_steps} steps"
         )
@@ -296,3 +378,14 @@ def _json(value: Any) -> str:
 
 def _byte_length(value: str) -> int:
     return len(value.encode("utf-8"))
+
+
+def _safe_log_token(value: str, maximum_length: int = 128) -> str:
+    """Keep model- or client-supplied identifiers on one safe log line."""
+    sanitized = "".join(
+        character
+        if character.isascii() and (character.isalnum() or character in "._-")
+        else "_"
+        for character in value
+    )
+    return sanitized[:maximum_length] or "-"

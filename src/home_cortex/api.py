@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -7,8 +8,10 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.responses import StreamingResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import JSONResponse, StreamingResponse
 
 from . import __version__
 from .agent import AgentLimitError, AgentService
@@ -21,6 +24,23 @@ from .tools import ToolDispatcher
 
 VIRTUAL_MODEL = "home-cortex"
 MODEL_CREATED = int(time.time())
+REQUEST_ID_HEADER = "X-Request-ID"
+
+logger = logging.getLogger("uvicorn.error.home_cortex.api")
+
+
+class APIError(HTTPException):
+    def __init__(
+        self,
+        status_code: int,
+        code: str,
+        message: str,
+        *,
+        details: Any | None = None,
+    ) -> None:
+        super().__init__(status_code=status_code, detail=message)
+        self.code = code
+        self.details = details
 
 
 class ChatMessage(BaseModel):
@@ -68,6 +88,96 @@ app = FastAPI(
 )
 
 
+@app.middleware("http")
+async def request_observability(request: Request, call_next):
+    request_id = uuid4().hex
+    request.state.request_id = request_id
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (time.perf_counter() - started) * 1_000
+        logger.info(
+            "request_complete request_id=%s method=%s path=%s status=500 "
+            "duration_ms=%.2f",
+            request_id,
+            request.method,
+            request.url.path,
+            duration_ms,
+        )
+        raise
+    duration_ms = (time.perf_counter() - started) * 1_000
+    response.headers[REQUEST_ID_HEADER] = request_id
+    logger.info(
+        "request_complete request_id=%s method=%s path=%s status=%d "
+        "duration_ms=%.2f",
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+    return response
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(
+    request: Request,
+    error: StarletteHTTPException,
+) -> JSONResponse:
+    code = getattr(error, "code", f"http_{error.status_code}")
+    details = getattr(error, "details", None)
+    message = error.detail if isinstance(error.detail, str) else "Request failed"
+    return _error_response(
+        request,
+        error.status_code,
+        code,
+        message,
+        details,
+        headers=error.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(
+    request: Request,
+    error: RequestValidationError,
+) -> JSONResponse:
+    details = [
+        {
+            "field": ".".join(str(part) for part in item["loc"]),
+            "message": item["msg"],
+            "type": item["type"],
+        }
+        for item in error.errors()
+    ]
+    return _error_response(
+        request,
+        422,
+        "request_validation_error",
+        "Request validation failed",
+        details,
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_error_handler(
+    request: Request,
+    error: Exception,
+) -> JSONResponse:
+    logger.error(
+        "unhandled_error request_id=%s exception_type=%s",
+        _request_id(request),
+        type(error).__name__,
+    )
+    return _error_response(
+        request,
+        500,
+        "internal_server_error",
+        "An unexpected server error occurred",
+    )
+
+
 @app.get("/health")
 async def health(request: Request) -> dict[str, Any]:
     try:
@@ -77,7 +187,17 @@ async def health(request: Request) -> dict[str, Any]:
             "surrealdb": surreal_version,
         }
     except Exception as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        logger.warning(
+            "health_check_failed request_id=%s dependency=surrealdb "
+            "exception_type=%s",
+            _request_id(request),
+            type(error).__name__,
+        )
+        raise APIError(
+            503,
+            "database_unavailable",
+            "SurrealDB health check failed",
+        ) from error
 
 
 @app.post("/admin/ingest")
@@ -87,14 +207,14 @@ async def ingest(request: Request) -> dict[str, Any]:
         result = await ingest_directory(request.app.state.database, settings.data_dir)
         return {"status": "ok", **asdict(result)}
     except (FileNotFoundError, ValueError) as error:
-        raise HTTPException(status_code=400, detail=str(error))
+        raise APIError(400, "ingestion_failed", str(error)) from error
 
 
 @app.post("/v1/retrieve")
 async def retrieve(body: dict[str, Any], request: Request) -> dict[str, Any]:
     question = body.get("query") or body.get("question")
     if not isinstance(question, str) or not question.strip():
-        raise HTTPException(status_code=422, detail="Provide a non-empty 'query'")
+        raise APIError(422, "invalid_request", "Provide a non-empty 'query'")
     result = await request.app.state.retrieval.retrieve(question.strip())
     return {
         "query": result.question,
@@ -108,15 +228,19 @@ async def retrieve(body: dict[str, Any], request: Request) -> dict[str, Any]:
 async def chat(body: dict[str, Any], request: Request) -> dict[str, Any]:
     question = body.get("message") or body.get("question")
     if not isinstance(question, str) or not question.strip():
-        raise HTTPException(status_code=422, detail="Provide a non-empty 'message'")
+        raise APIError(422, "invalid_request", "Provide a non-empty 'message'")
     try:
-        result = await request.app.state.agent.answer(question)
+        result = await request.app.state.agent.answer(
+            question,
+            request_id=_request_id(request),
+        )
     except AgentLimitError as error:
-        raise HTTPException(status_code=502, detail=str(error)) from error
+        raise APIError(502, error.stop_reason, str(error)) from error
     return {
         "answer": result.answer,
         "steps": result.steps,
         "tool_calls": result.tool_calls,
+        "stop_reason": result.stop_reason,
     }
 
 
@@ -141,16 +265,18 @@ async def chat_completions(
     request: Request,
 ):
     if body.model != VIRTUAL_MODEL:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Model {body.model!r} was not found",
+        raise APIError(
+            404,
+            "model_not_found",
+            f"Model {body.model!r} was not found",
         )
     try:
         result = await request.app.state.agent.answer_messages(
-            [message.model_dump() for message in body.messages]
+            [message.model_dump() for message in body.messages],
+            request_id=_request_id(request),
         )
     except AgentLimitError as error:
-        raise HTTPException(status_code=502, detail=str(error)) from error
+        raise APIError(502, error.stop_reason, str(error)) from error
 
     completion_id = f"chatcmpl-{uuid4().hex}"
     created = int(time.time())
@@ -231,3 +357,33 @@ async def _stream_chat_completion(
     for chunk in chunks:
         yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
     yield "data: [DONE]\n\n"
+
+
+def _request_id(request: Request) -> str:
+    return getattr(request.state, "request_id", "unknown")
+
+
+def _error_response(
+    request: Request,
+    status_code: int,
+    code: str,
+    message: str,
+    details: Any | None = None,
+    *,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    request_id = _request_id(request)
+    error: dict[str, Any] = {
+        "code": code,
+        "message": message,
+        "request_id": request_id,
+    }
+    if details is not None:
+        error["details"] = details
+    response_headers = dict(headers or {})
+    response_headers[REQUEST_ID_HEADER] = request_id
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": error},
+        headers=response_headers,
+    )
