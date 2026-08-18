@@ -2,12 +2,14 @@
   {
     "from": "person:alex_example",
     "to": "location:test_house",
-    "residence_type": "primary"
+    "residence_type": "primary",
+    "household_role": "owner"
   },
   {
     "id": "resides_in:blair_primary",
     "from": "person:blair_example",
     "to": "location:test_house",
-    "residence_type": "primary"
+    "residence_type": "primary",
+    "household_role": "adult_dependent"
   }
 ]

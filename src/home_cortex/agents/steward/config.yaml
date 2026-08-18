@@ -12,3 +12,32 @@ settings:
   localized_identity:
     en: the butler
     zh: 老管家
+  reception:
+    default_language: en
+    greetings:
+      en:
+        owner: >-
+          {address_as}, welcome home. The butler is here. How may I assist you
+          today?
+        minor_dependent: >-
+          {address_as}, welcome home. How was your day? Let me know if you need
+          anything.
+        adult_dependent: >-
+          {address_as}, welcome home. Is there anything I can prepare for you?
+        guest: >-
+          {address_as}, welcome to {household_name}. Please let me know if you
+          need anything.
+        unknown: Hello. How may I help you?
+        generic: Hello. How may I help you?
+      zh:
+        owner: "{address_as}，您回来了。老管家在此，今日有什么需要吩咐？"
+        minor_dependent: "{address_as}，您回来了。今天过得怎么样？有什么需要可以告诉我。"
+        adult_dependent: "{address_as}，您回来了。有什么需要我为您准备的吗？"
+        guest: "{address_as}，您好，欢迎来到{household_name}。有什么需要请告诉我。"
+        unknown: "您好，有什么可以帮您？"
+        generic: "您好，有什么可以帮您？"
+    person_overrides:
+      zh:
+        owner:
+          person:jian_kuang: "{address_as}，您回来了。老管家在此，今日有什么需要吩咐？"
+          person:pu_ba: "{address_as}，您回来了。今日有什么需要老管家处理？"

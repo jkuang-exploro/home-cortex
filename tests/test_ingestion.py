@@ -136,6 +136,30 @@ async def test_person_address_as_is_optional_and_preserved() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "intrinsic_status",
+    [{"is_guest": True}, {"person_type": "guest"}],
+)
+async def test_guest_status_must_be_stored_on_a_relationship(
+    tmp_path: Path,
+    intrinsic_status: dict[str, Any],
+) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    person_path = data_dir / "nodes" / "person.json"
+    people = json.loads(person_path.read_text(encoding="utf-8"))
+    people[0].update(intrinsic_status)
+    person_path.write_text(json.dumps(people), encoding="utf-8")
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        with pytest.raises(ValueError, match="household relationship"):
+            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+    finally:
+        await database.close()
+
+
+@pytest.mark.asyncio
 async def test_localized_name_object_is_accepted(tmp_path: Path) -> None:
     data_dir = tmp_path / "static_test_data"
     copytree(STATIC_TEST_DATA, data_dir)

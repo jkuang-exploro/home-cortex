@@ -21,6 +21,9 @@ def test_steward_has_localized_identity_and_home_scope() -> None:
         "en": "the butler",
         "zh": "老管家",
     }
+    assert steward.settings["reception"]["greetings"]["zh"]["guest"].startswith(
+        "{address_as}，您好"
+    )
     assert 'In English, refer to yourself as "the butler"' in steward.prompt
     assert 'In Chinese, refer to yourself as "老管家"' in steward.prompt
     assert "Fort Cerritos" in steward.prompt

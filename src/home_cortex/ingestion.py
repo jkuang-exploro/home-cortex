@@ -71,6 +71,20 @@ def _validate_address_as(
         )
 
 
+def _validate_person_relationship_status(
+    record: dict[str, Any],
+    path: Path,
+    table: str,
+) -> None:
+    if table != "person":
+        return
+    if "is_guest" in record or record.get("person_type") == "guest":
+        raise ValueError(
+            f"Guest status in {path} must be stored on a household relationship, "
+            "not on a Person node"
+        )
+
+
 def _is_localized_text(value: Any) -> bool:
     return (
         isinstance(value, dict)
@@ -140,6 +154,11 @@ async def ingest_directory(database: Database, data_dir: Path) -> IngestionResul
                 raise ValueError(f"Node in {path} is missing a string 'id'")
             record_id = parse_record_id(raw_id, source=path)
             _validate_address_as(record, path, record_id.table_name)
+            _validate_person_relationship_status(
+                record,
+                path,
+                record_id.table_name,
+            )
             content = {key: value for key, value in record.items() if key != "id"}
             await database.upsert(record_id, content)
             nodes_upserted += 1
@@ -155,6 +174,14 @@ async def ingest_directory(database: Database, data_dir: Path) -> IngestionResul
             raw_to = record.get("to")
             if not isinstance(raw_from, str) or not isinstance(raw_to, str):
                 raise ValueError(f"Edge in {path} requires string 'from' and 'to'")
+            household_role = record.get("household_role")
+            if household_role is not None and (
+                not isinstance(household_role, str)
+                or not household_role.strip()
+            ):
+                raise ValueError(
+                    f"Edge in {path} has an invalid 'household_role'"
+                )
 
             source = parse_record_id(raw_from, source=path)
             target = parse_record_id(raw_to, source=path)

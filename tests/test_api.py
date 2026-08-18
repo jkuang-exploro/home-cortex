@@ -10,10 +10,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from home_cortex.api import (
+    ConversationStore,
     VIRTUAL_MODEL,
     _stream_chat_completion,
     app,
 )
+from home_cortex.greetings import GreetingService
 
 
 class FakeAgent:
@@ -84,6 +86,7 @@ class FakeIdentityRetrieval:
             }
         ]
         self.calls: list[tuple[str, str | None, int | None]] = []
+        self.relationship_calls: list[str] = []
 
     async def search_entities(
         self,
@@ -92,7 +95,34 @@ class FakeIdentityRetrieval:
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
         self.calls.append((text, entity_type, limit))
+        if entity_type == "location":
+            return [
+                {
+                    "id": "location:fort_cerritos",
+                    "name": ["Fort Cerritos", "喜瑞匡家"],
+                }
+            ]
         return self.records
+
+    async def get_relationships(
+        self,
+        entity_id: str,
+        relation: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        self.relationship_calls.append(entity_id)
+        return [
+            {
+                "id": "resides_in:jian",
+                "in": entity_id,
+                "out": "location:fort_cerritos",
+                "household_role": "owner",
+                "related_entity": {
+                    "id": "location:fort_cerritos",
+                    "name": ["Fort Cerritos", "喜瑞匡家"],
+                },
+            }
+        ]
 
 
 @pytest.fixture
@@ -101,6 +131,8 @@ def api_client() -> Iterator[tuple[TestClient, FakeAgent]]:
     previous_agents = getattr(app.state, "agents", None)
     previous_settings = getattr(app.state, "settings", None)
     previous_retrieval = getattr(app.state, "retrieval", None)
+    previous_greetings = getattr(app.state, "greetings", None)
+    previous_conversations = getattr(app.state, "conversations", None)
     agent = FakeAgent()
     app.state.agent = agent
     app.state.agents = {"steward": agent}
@@ -108,7 +140,10 @@ def api_client() -> Iterator[tuple[TestClient, FakeAgent]]:
         cortex_api_key=None,
         cortex_identity_map={},
     )
-    app.state.retrieval = FakeIdentityRetrieval()
+    retrieval = FakeIdentityRetrieval()
+    app.state.retrieval = retrieval
+    app.state.greetings = GreetingService(retrieval)
+    app.state.conversations = ConversationStore()
     client = TestClient(app, raise_server_exceptions=True)
     try:
         yield client, agent
@@ -130,6 +165,70 @@ def api_client() -> Iterator[tuple[TestClient, FakeAgent]]:
             del app.state.retrieval
         else:
             app.state.retrieval = previous_retrieval
+        if previous_greetings is None:
+            del app.state.greetings
+        else:
+            app.state.greetings = previous_greetings
+        if previous_conversations is None:
+            del app.state.conversations
+        else:
+            app.state.conversations = previous_conversations
+
+
+def test_new_steward_conversation_returns_owner_greeting_once(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+    app.state.settings = SimpleNamespace(
+        cortex_api_key="test-cortex-key",
+        cortex_identity_map={"id:webui-user-123": "person:jian_kuang"},
+    )
+    headers = {
+        "Authorization": "Bearer test-cortex-key",
+        "X-OpenWebUI-User-Id": "webui-user-123",
+    }
+
+    created = client.post(
+        "/agent/steward/conversations",
+        headers=headers,
+        json={"language": "zh-CN"},
+    )
+
+    assert created.status_code == 201
+    body = created.json()
+    assert body["object"] == "agent.conversation"
+    assert body["agent"] == {"id": "steward", "display_name": "老管家"}
+    assert body["language"] == "zh"
+    assert body["greeting"] == "先生，您回来了。老管家在此，今日有什么需要吩咐？"
+    assert "person:" not in body["greeting"]
+    assert agent.calls == []
+    assert app.state.retrieval.relationship_calls == ["person:jian_kuang"]
+
+    refreshed = client.get(
+        f"/agent/steward/conversations/{body['id']}",
+        headers=headers,
+    )
+
+    assert refreshed.status_code == 200
+    assert refreshed.json() == body
+    assert app.state.retrieval.relationship_calls == ["person:jian_kuang"]
+    assert agent.calls == []
+
+
+def test_new_conversation_without_identity_uses_neutral_greeting(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+
+    response = client.post(
+        "/agent/steward/conversations",
+        json={"language": "zh"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["greeting"] == "您好，有什么可以帮您？"
+    assert app.state.retrieval.relationship_calls == []
+    assert agent.calls == []
 
 
 def test_models_advertises_steward_display_name(
@@ -177,12 +276,16 @@ def test_chat_completions_invokes_agent_and_returns_openai_shape(
             "index": 0,
             "message": {
                 "role": "assistant",
-                "content": "Jian and Pu reside at Fort Cerritos.",
+                "content": (
+                    "Hello. How may I help you?\n\n"
+                    "Jian and Pu reside at Fort Cerritos."
+                ),
             },
             "finish_reason": "stop",
         }
     ]
-    assert agent.calls == [messages]
+    assert agent.calls[0][-len(messages) :] == messages
+    assert "already rendered" in agent.calls[0][0]["content"]
     assert agent.request_ids == [response.headers["X-Request-ID"]]
     _assert_request_id(response)
 
@@ -220,6 +323,61 @@ def test_chat_completions_passes_mapped_openwebui_identity(
             "address_as": {"en": "Mr. Kuang", "zh": "先生"},
         }
     ]
+    assert response.json()["choices"][0]["message"]["content"].startswith(
+        "Mr. Kuang, welcome home. The butler is here."
+    )
+
+
+def test_existing_openai_conversation_does_not_repeat_greeting(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, _ = api_client
+    messages = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Earlier greeting"},
+        {"role": "user", "content": "Who lives here?"},
+    ]
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": VIRTUAL_MODEL, "stream": False, "messages": messages},
+    )
+
+    assert response.status_code == 200
+    assert (
+        response.json()["choices"][0]["message"]["content"]
+        == "Jian and Pu reside at Fort Cerritos."
+    )
+    assert app.state.retrieval.relationship_calls == []
+
+
+def test_standalone_first_turn_greeting_does_not_call_ollama(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+    app.state.settings = SimpleNamespace(
+        cortex_api_key="test-cortex-key",
+        cortex_identity_map={"id:webui-user-123": "person:jian_kuang"},
+    )
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={
+            "Authorization": "Bearer test-cortex-key",
+            "X-OpenWebUI-User-Id": "webui-user-123",
+        },
+        json={
+            "model": VIRTUAL_MODEL,
+            "stream": False,
+            "messages": [{"role": "user", "content": "您好！"}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == (
+        "先生，您回来了。老管家在此，今日有什么需要吩咐？"
+    )
+    assert agent.calls == []
 
 
 @pytest.mark.parametrize(
@@ -325,12 +483,16 @@ def test_chat_completions_returns_openai_sse_stream(
     assert all(chunk["object"] == "chat.completion.chunk" for chunk in chunks)
     assert all(chunk["model"] == "老管家" for chunk in chunks)
     assert chunks[0]["choices"][0]["delta"] == {"role": "assistant"}
-    assert chunks[1]["choices"][0]["delta"] == {"content": "Jian and Pu "}
-    assert chunks[2]["choices"][0]["delta"] == {
+    assert chunks[1]["choices"][0]["delta"] == {
+        "content": "Hello. How may I help you?\n\n"
+    }
+    assert chunks[2]["choices"][0]["delta"] == {"content": "Jian and Pu "}
+    assert chunks[3]["choices"][0]["delta"] == {
         "content": "reside at Fort Cerritos."
     }
-    assert chunks[3]["choices"][0]["finish_reason"] == "stop"
-    assert agent.calls == [messages]
+    assert chunks[4]["choices"][0]["finish_reason"] == "stop"
+    assert agent.calls[0][-len(messages) :] == messages
+    assert "already rendered" in agent.calls[0][0]["content"]
     assert agent.request_ids == [response.headers["X-Request-ID"]]
     _assert_request_id(response)
 

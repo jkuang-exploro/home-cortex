@@ -52,6 +52,44 @@ model and supplies its stored `name` and optional `address_as` as trusted
 identity context. The mapped Person must therefore already exist in SurrealDB;
 run `/admin/ingest` after changing person data.
 
+Add a contextual `household_role` to the Person's edge to the home. Do not add
+`is_guest` or `person_type: guest` to the Person itself. For example:
+
+```json
+{
+  "from": "person:jian_kuang",
+  "to": "location:fort_cerritos",
+  "residence_type": "primary",
+  "household_role": "owner"
+}
+```
+
+After editing an edge role, re-ingest it:
+
+```sh
+curl -sS -X POST http://localhost:8001/admin/ingest | jq
+```
+
+Verify the steward's deterministic Chinese greeting:
+
+```sh
+curl -sS -X POST http://localhost:8001/agent/steward/conversations \
+  -H 'Authorization: Bearer replace-with-a-long-random-secret' \
+  -H 'X-OpenWebUI-User-Email: your-login@example.com' \
+  -H 'Content-Type: application/json' \
+  -d '{"language":"zh"}' | jq
+```
+
+An owner mapped to Jian should receive:
+
+```text
+先生，您回来了。老管家在此，今日有什么需要吩咐？
+```
+
+The OpenAI-compatible endpoint also detects a first turn as one user message
+with no previous assistant message. Its first answer includes the deterministic
+greeting; later requests carrying chat history do not repeat it.
+
 Open WebUI persists connection settings. If the existing volume already has an
 OpenAI configuration, sign in as an administrator and add or update an
 OpenAI-compatible connection with:

@@ -13,10 +13,53 @@ grounded answer.
 - `POST /v1/retrieve` returns the graph context used for a question.
 - `POST /v1/chat` runs the default steward agent for backward compatibility.
 - `POST /agent/steward/chat` invokes the named household steward directly.
+- `POST /agent/steward/conversations` initializes a conversation and returns
+  one deterministic, relationship-aware greeting.
+- `GET /agent/steward/conversations/{id}` reloads that initialization record
+  without generating another greeting.
 - `GET /v1/models` advertises `老管家` to OpenAI-compatible clients.
 - `POST /v1/chat/completions` provides an OpenAI-compatible chat endpoint backed
   by the agent loop. It supports ordinary JSON responses and token-streamed SSE
-  responses for clients such as Open WebUI.
+responses for clients such as Open WebUI.
+
+## Relationship-aware greetings
+
+The steward selects greetings without an LLM call. Cortex combines the mapped
+Person, localized `address_as`, the Person's `household_role` edge property,
+the configured home, the agent's reception templates, and the requested
+language. Supported V1 categories are `owner`, `minor_dependent`,
+`adult_dependent`, `guest`, and `unknown`.
+
+Add the role to a household relationship, not the Person node:
+
+```json
+{
+  "from": "person:jian_kuang",
+  "to": "location:fort_cerritos",
+  "residence_type": "primary",
+  "household_role": "owner"
+}
+```
+
+Unknown, missing, unrecognized, or conflicting relationship roles use a
+neutral greeting and never default to owner. Agent-specific templates and
+optional person overrides live in the agent's `config.yaml`; switching Ollama
+models does not change the greeting policy.
+
+Create a Chinese steward conversation explicitly with:
+
+```sh
+curl -sS -X POST http://localhost:8001/agent/steward/conversations \
+  -H 'Authorization: Bearer replace-with-a-long-random-secret' \
+  -H 'X-OpenWebUI-User-Email: your-login@example.com' \
+  -H 'Content-Type: application/json' \
+  -d '{"language":"zh"}' | jq
+```
+
+For OpenAI-compatible clients, Cortex treats a request containing one user
+message and no prior assistant message as the start of a conversation. It
+deterministically prefixes the first answer with the resolved greeting.
+Subsequent requests containing conversation history do not repeat it.
 
 For `stream: true`, Cortex consumes Ollama's async response stream on every
 agent step. Tool-selection responses stay internal; chunks from the final

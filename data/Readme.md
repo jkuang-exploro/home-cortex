@@ -33,5 +33,22 @@ person. `address_as` is a presentation preference, not another name or alias:
 Never infer `address_as` from age, gender, or relationships. Store it only when
 the household has explicitly chosen the preference.
 
+Household status is contextual and belongs on the edge connecting a Person to
+a household. For a resident, add `household_role` to `resides_in`:
+
+```json
+{
+  "from": "person:example",
+  "to": "location:example_home",
+  "residence_type": "primary",
+  "household_role": "owner"
+}
+```
+
+The V1 reception roles are `owner`, `minor_dependent`, `adult_dependent`, and
+`guest`. A guest should use a suitable relationship edge rather than
+`is_guest` or `person_type: guest` on the Person node. Missing, conflicting, or
+unrecognized roles resolve to the neutral `unknown` reception policy.
+
 Do not use separate records for translations of the same person's or
 location's name. Record IDs remain language-neutral and stable.

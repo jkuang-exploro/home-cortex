@@ -3,6 +3,7 @@ import json
 import logging
 import secrets
 import time
+from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict
@@ -26,6 +27,8 @@ from .agents import (
 )
 from .config import Settings, get_settings
 from .db import Database
+from .display import conversation_language
+from .greetings import GreetingService
 from .ingestion import ingest_directory
 from .identity import resolve_user_entity_id
 from .ollama import OllamaService
@@ -69,6 +72,49 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
 
 
+class ConversationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    language: str = Field(
+        default="en",
+        min_length=2,
+        max_length=35,
+        pattern=r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
+    )
+
+
+class ConversationStore:
+    """Keep bounded conversation initialization state for this API process."""
+
+    def __init__(self, maximum: int = 1_000) -> None:
+        self.maximum = maximum
+        self._items: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+    def create(
+        self,
+        *,
+        agent_id: str,
+        person_id: str | None,
+        language: str,
+        greeting: str,
+    ) -> dict[str, Any]:
+        conversation = {
+            "id": uuid4().hex,
+            "agent_id": agent_id,
+            "person_id": person_id,
+            "language": language,
+            "greeting": greeting,
+        }
+        self._items[conversation["id"]] = conversation
+        while len(self._items) > self.maximum:
+            self._items.popitem(last=False)
+        return dict(conversation)
+
+    def get(self, conversation_id: str) -> dict[str, Any] | None:
+        conversation = self._items.get(conversation_id)
+        return dict(conversation) if conversation is not None else None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -82,6 +128,8 @@ async def lifespan(app: FastAPI):
         settings.data_dir,
     )
     app.state.retrieval = retrieval
+    app.state.greetings = GreetingService(retrieval)
+    app.state.conversations = ConversationStore()
     runtimes: dict[str, AgentService] = {}
     ollama_services: list[OllamaService] = []
     for definition in list_agents():
@@ -266,6 +314,48 @@ async def agent_chat(
     return await _agent_chat(agent_id, body, request)
 
 
+@app.post("/agent/{agent_id}/conversations", status_code=201)
+async def create_agent_conversation(
+    agent_id: str,
+    body: ConversationCreateRequest,
+    request: Request,
+) -> dict[str, Any]:
+    definition = _agent_definition(agent_id)
+    user_entity = await _request_user_entity(request)
+    greeting = await _greeting_service(request).resolve(
+        definition,
+        user_entity,
+        body.language,
+    )
+    person_id = user_entity.get("id") if user_entity is not None else None
+    conversation = _conversation_store(request).create(
+        agent_id=definition.id,
+        person_id=person_id if isinstance(person_id, str) else None,
+        language=greeting.language,
+        greeting=greeting.text,
+    )
+    return _conversation_response(conversation, definition)
+
+
+@app.get("/agent/{agent_id}/conversations/{conversation_id}")
+async def get_agent_conversation(
+    agent_id: str,
+    conversation_id: str,
+    request: Request,
+) -> dict[str, Any]:
+    definition = _agent_definition(agent_id)
+    user_entity = await _request_user_entity(request)
+    person_id = user_entity.get("id") if user_entity is not None else None
+    conversation = _conversation_store(request).get(conversation_id)
+    if (
+        conversation is None
+        or conversation["agent_id"] != definition.id
+        or conversation["person_id"] != person_id
+    ):
+        raise APIError(404, "conversation_not_found", "Conversation was not found")
+    return _conversation_response(conversation, definition)
+
+
 async def _agent_chat(
     agent_id: str,
     body: dict[str, Any],
@@ -330,12 +420,57 @@ async def chat_completions(
     agent = _agent_runtime(request, definition)
     completion_id = f"chatcmpl-{uuid4().hex}"
     created = int(time.time())
+    messages = [message.model_dump() for message in body.messages]
+    greeting = None
+    if _is_new_conversation(messages):
+        greeting = await _greeting_service(request).resolve(
+            definition,
+            user_entity,
+            conversation_language(messages),
+        )
+    if greeting is not None and _is_standalone_greeting(messages):
+        if body.stream:
+            return StreamingResponse(
+                _stream_chat_completion(
+                    completion_id,
+                    created,
+                    _single_answer(greeting.text),
+                    request,
+                    model=definition.display_name,
+                ),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+        return _chat_completion_response(
+            completion_id,
+            created,
+            definition.display_name,
+            greeting.text,
+        )
+    agent_messages = messages
+    if greeting is not None:
+        agent_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Cortex has already rendered the deterministic reception "
+                    "greeting. Answer the user's request directly without adding "
+                    "another greeting, welcome, or salutation."
+                ),
+            },
+            *messages,
+        ]
     if body.stream:
         answer_stream = agent.stream_answer_messages(
-            [message.model_dump() for message in body.messages],
+            agent_messages,
             request_id=_request_id(request),
             user_entity=user_entity,
         )
+        if greeting is not None:
+            answer_stream = _prepend_answer(greeting.text, answer_stream)
         return StreamingResponse(
             _stream_chat_completion(
                 completion_id,
@@ -353,29 +488,88 @@ async def chat_completions(
 
     try:
         result = await agent.answer_messages(
-            [message.model_dump() for message in body.messages],
+            agent_messages,
             request_id=_request_id(request),
             user_entity=user_entity,
         )
     except AgentLimitError as error:
         raise APIError(502, error.stop_reason, str(error)) from error
 
+    return _chat_completion_response(
+        completion_id,
+        created,
+        definition.display_name,
+        _greeted_answer(
+            greeting.text if greeting is not None else None,
+            result.answer,
+        ),
+    )
+
+
+def _chat_completion_response(
+    completion_id: str,
+    created: int,
+    model: str,
+    content: str,
+) -> dict[str, Any]:
     return {
         "id": completion_id,
         "object": "chat.completion",
         "created": created,
-        "model": definition.display_name,
+        "model": model,
         "choices": [
             {
                 "index": 0,
                 "message": {
                     "role": "assistant",
-                    "content": result.answer,
+                    "content": content,
                 },
                 "finish_reason": "stop",
             }
         ],
     }
+
+
+def _is_new_conversation(messages: list[dict[str, Any]]) -> bool:
+    user_messages = sum(message.get("role") == "user" for message in messages)
+    has_assistant = any(message.get("role") == "assistant" for message in messages)
+    return user_messages == 1 and not has_assistant
+
+
+def _is_standalone_greeting(messages: list[dict[str, Any]]) -> bool:
+    user_content = next(
+        (
+            str(message.get("content", "")).strip().casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    normalized = user_content.rstrip("!！.。?？,， ")
+    return normalized in {"hello", "hi", "hey", "你好", "您好", "嗨"}
+
+
+def _greeted_answer(greeting: str | None, answer: str) -> str:
+    return f"{greeting}\n\n{answer}" if greeting else answer
+
+
+async def _prepend_answer(
+    greeting: str,
+    answer_stream: AsyncIterator[str],
+) -> AsyncIterator[str]:
+    try:
+        yield f"{greeting}\n\n"
+        async for content in answer_stream:
+            yield content
+    finally:
+        close = getattr(answer_stream, "aclose", None)
+        if close is not None:
+            with suppress(asyncio.CancelledError, Exception):
+                await close()
+
+
+async def _single_answer(content: str) -> AsyncIterator[str]:
+    yield content
 
 
 async def _stream_chat_completion(
@@ -601,6 +795,36 @@ def _agent_runtime(
         if runtime is not None:
             return runtime
     raise RuntimeError(f"Agent runtime {definition.id!r} is not initialized")
+
+
+def _greeting_service(request: Request) -> GreetingService:
+    service = getattr(request.app.state, "greetings", None)
+    if isinstance(service, GreetingService):
+        return service
+    raise RuntimeError("Greeting service is not initialized")
+
+
+def _conversation_store(request: Request) -> ConversationStore:
+    store = getattr(request.app.state, "conversations", None)
+    if isinstance(store, ConversationStore):
+        return store
+    raise RuntimeError("Conversation store is not initialized")
+
+
+def _conversation_response(
+    conversation: dict[str, Any],
+    definition: AgentDefinition,
+) -> dict[str, Any]:
+    return {
+        "id": conversation["id"],
+        "object": "agent.conversation",
+        "agent": {
+            "id": definition.id,
+            "display_name": definition.display_name,
+        },
+        "language": conversation["language"],
+        "greeting": conversation["greeting"],
+    }
 
 
 def _error_response(
