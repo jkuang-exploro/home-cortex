@@ -1,0 +1,260 @@
+diff --git a/backend/open_webui/main.py b/backend/open_webui/main.py
+index d47c88f..fac5da2 100644
+--- a/backend/open_webui/main.py
++++ b/backend/open_webui/main.py
+@@ -106,6 +106,7 @@ from open_webui.routers import (
+     terminals,
+     automations,
+     calendar,
++    cortex,
+ )
+ 
+ from open_webui.routers.retrieval import (
+@@ -1435,6 +1436,7 @@ app.include_router(users.router, prefix='/api/v1/users', tags=['users'])
+ 
+ app.include_router(channels.router, prefix='/api/v1/channels', tags=['channels'])
+ app.include_router(chats.router, prefix='/api/v1/chats', tags=['chats'])
++app.include_router(cortex.router, prefix='/api/v1/cortex', tags=['cortex'])
+ app.include_router(notes.router, prefix='/api/v1/notes', tags=['notes'])
+ 
+ 
+diff --git a/backend/open_webui/routers/cortex.py b/backend/open_webui/routers/cortex.py
+new file mode 100644
+index 0000000..96d0e98
+--- /dev/null
++++ b/backend/open_webui/routers/cortex.py
+@@ -0,0 +1,81 @@
++import asyncio
++import logging
++import os
++
++import aiohttp
++from fastapi import APIRouter, Depends, HTTPException, status
++from pydantic import BaseModel, Field
++
++from open_webui.utils.auth import get_verified_user
++
++log = logging.getLogger(__name__)
++router = APIRouter()
++
++CORTEX_INTERNAL_URL = os.environ.get(
++    'CORTEX_INTERNAL_URL',
++    'http://cortex-api:8000',
++).rstrip('/')
++CORTEX_API_KEY = os.environ.get('CORTEX_API_KEY', '')
++CORTEX_GREETING_AGENT = os.environ.get('CORTEX_GREETING_AGENT', 'steward')
++
++
++class ConversationForm(BaseModel):
++    language: str = Field(
++        default='en',
++        min_length=2,
++        max_length=35,
++        pattern=r'^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$',
++    )
++
++
++@router.post('/conversations/{agent_id}')
++async def create_cortex_conversation(
++    agent_id: str,
++    form_data: ConversationForm,
++    user=Depends(get_verified_user),
++):
++    if agent_id != CORTEX_GREETING_AGENT:
++        raise HTTPException(
++            status_code=status.HTTP_404_NOT_FOUND,
++            detail='Cortex greeting agent was not found',
++        )
++    if not CORTEX_API_KEY:
++        raise HTTPException(
++            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
++            detail='Cortex greeting bridge is not configured',
++        )
++
++    headers = {
++        'Authorization': f'Bearer {CORTEX_API_KEY}',
++        'Content-Type': 'application/json',
++        'X-OpenWebUI-User-Id': str(user.id),
++    }
++    if user.email:
++        headers['X-OpenWebUI-User-Email'] = user.email
++
++    try:
++        timeout = aiohttp.ClientTimeout(total=10)
++        async with aiohttp.ClientSession(timeout=timeout) as session:
++            async with session.post(
++                f'{CORTEX_INTERNAL_URL}/agent/{agent_id}/conversations',
++                headers=headers,
++                json={'language': form_data.language},
++            ) as response:
++                payload = await response.json(content_type=None)
++                if response.status >= 400:
++                    error = payload.get('error', {}) if isinstance(payload, dict) else {}
++                    message = error.get('message', 'Cortex greeting request failed')
++                    log.warning(
++                        'Cortex greeting request failed with status %s',
++                        response.status,
++                    )
++                    raise HTTPException(status_code=response.status, detail=message)
++                return payload
++    except HTTPException:
++        raise
++    except (asyncio.TimeoutError, aiohttp.ClientError):
++        log.warning('Cortex greeting service is unavailable', exc_info=True)
++        raise HTTPException(
++            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
++            detail='Cortex greeting service is unavailable',
++        )
+diff --git a/src/lib/apis/cortex/index.ts b/src/lib/apis/cortex/index.ts
+new file mode 100644
+index 0000000..59cbf8c
+--- /dev/null
++++ b/src/lib/apis/cortex/index.ts
+@@ -0,0 +1,33 @@
++import { WEBUI_API_BASE_URL } from '$lib/constants';
++
++export const createCortexConversation = async (
++	token: string,
++	agentId: string,
++	language: string
++) => {
++	let error = null;
++
++	const response = await fetch(
++		`${WEBUI_API_BASE_URL}/cortex/conversations/${encodeURIComponent(agentId)}`,
++		{
++			method: 'POST',
++			headers: {
++				Accept: 'application/json',
++				'Content-Type': 'application/json',
++				authorization: `Bearer ${token}`
++			},
++			body: JSON.stringify({ language })
++		}
++	)
++		.then(async (res) => {
++			if (!res.ok) throw await res.json();
++			return res.json();
++		})
++		.catch((err) => {
++			error = err?.detail ?? 'Unable to initialize the Cortex greeting';
++			return null;
++		});
++
++	if (error) throw new Error(error);
++	return response;
++};
+diff --git a/src/lib/components/chat/Chat.svelte b/src/lib/components/chat/Chat.svelte
+index 751c49b..005dbf0 100644
+--- a/src/lib/components/chat/Chat.svelte
++++ b/src/lib/components/chat/Chat.svelte
+@@ -95,6 +95,7 @@
+ 	import { createOpenAITextStream } from '$lib/apis/streaming';
+ 	import { getFunctions } from '$lib/apis/functions';
+ 	import { updateFolderById } from '$lib/apis/folders';
++	import { createCortexConversation } from '$lib/apis/cortex';
+ 
+ 	import Banner from '../common/Banner.svelte';
+ 	import MessageInput from '$lib/components/chat/MessageInput.svelte';
+@@ -140,6 +141,10 @@
+ 	let eventCallback = null;
+ 
+ 	let selectedModels = [''];
++	const CORTEX_GREETING_MODEL = '老管家';
++	const CORTEX_GREETING_AGENT = 'steward';
++	let greetingInitialization = false;
++	let greetingInitializedForModel: string | null = null;
+ 	let atSelectedModel: Model | undefined;
+ 	let selectedModelIds = [];
+ 	$: if (atSelectedModel !== undefined) {
+@@ -294,9 +299,12 @@
+ 		onSelectedModelIdsChange();
+ 	}
+ 
+-	const onSelectedModelIdsChange = () => {
+-		resetInput();
++	const onSelectedModelIdsChange = async () => {
++		await resetInput();
+ 		oldSelectedModelIds = structuredClone(selectedModelIds);
++		if (!history.currentId) {
++			await initializeAgentGreeting();
++		}
+ 	};
+ 
+ 	const resetInput = async () => {
+@@ -1105,6 +1113,59 @@
+ 	// Web functions
+ 	//////////////////////////
+ 
++	const initializeAgentGreeting = async () => {
++		if (
++			greetingInitialization ||
++			history.currentId ||
++			selectedModelIds.length !== 1 ||
++			selectedModelIds[0] !== CORTEX_GREETING_MODEL ||
++			greetingInitializedForModel === CORTEX_GREETING_MODEL
++		) {
++			return;
++		}
++
++		const model = $models.find((item) => item.id === CORTEX_GREETING_MODEL);
++		if (!model) return;
++
++		greetingInitialization = true;
++		try {
++			const conversation = await createCortexConversation(
++				localStorage.token,
++				CORTEX_GREETING_AGENT,
++				$i18n.language ?? 'en'
++			);
++			if (!conversation?.greeting || history.currentId) return;
++
++			const messageId = uuidv4();
++			history.messages[messageId] = {
++				id: messageId,
++				parentId: null,
++				childrenIds: [],
++				role: 'assistant',
++				content: conversation.greeting,
++				done: true,
++				model: model.id,
++				modelName: model.name ?? model.id,
++				modelIdx: 0,
++				timestamp: Math.floor(Date.now() / 1000),
++				cortexConversationId: conversation.id
++			};
++			history.currentId = messageId;
++			history = history;
++			greetingInitializedForModel = CORTEX_GREETING_MODEL;
++			await tick();
++
++			if (!$temporaryChatEnabled) {
++				await initChatHandler(history);
++			}
++		} catch (error) {
++			console.error('Failed to initialize Cortex greeting', error);
++			toast.error($i18n.t('Unable to initialize the Cortex greeting'));
++		} finally {
++			greetingInitialization = false;
++		}
++	};
++
+ 	const initNewChat = async () => {
+ 		console.log('initNewChat');
+ 		if ($user?.role !== 'admin' && $user?.permissions?.chat?.temporary_enforced) {
+@@ -1228,6 +1289,7 @@
+ 			messages: {},
+ 			currentId: null
+ 		};
++		greetingInitializedForModel = null;
+ 
+ 		chatFiles = [];
+ 		params = {};
+@@ -1336,6 +1398,7 @@
+ 		selectedModels = selectedModels.map((modelId) =>
+ 			$models.map((m) => m.id).includes(modelId) ? modelId : ''
+ 		);
++		await initializeAgentGreeting();
+ 
+ 		const chatInput = document.getElementById('chat-input');
+ 		setTimeout(() => chatInput?.focus(), 0);

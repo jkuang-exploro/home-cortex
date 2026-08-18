@@ -9,7 +9,10 @@ services:
       OLLAMA_KEEP_ALIVE: 24h
 
   open-webui:
-    image: ghcr.io/open-webui/open-webui:v0.9.5
+    build:
+      context: ../..
+      dockerfile: docker/cortex/open-webui/Dockerfile
+    image: home-cortex/open-webui:v0.9.5-greeting
     restart: unless-stopped
     ports:
       - "3000:8080"
@@ -19,6 +22,9 @@ services:
       ENABLE_FORWARD_USER_INFO_HEADERS: "true"
       OPENAI_API_BASE_URLS: http://cortex-api:8000/v1
       OPENAI_API_KEYS: ${CORTEX_API_KEY:-unused}
+      CORTEX_INTERNAL_URL: http://cortex-api:8000
+      CORTEX_API_KEY: ${CORTEX_API_KEY:-}
+      CORTEX_GREETING_AGENT: steward
     volumes:
       - open-webui-data:/app/backend/data
     depends_on:

@@ -102,11 +102,32 @@ API key: the value of CORTEX_API_KEY
 Recreate Open WebUI without deleting its data volume:
 
 ```sh
+docker compose build open-webui
 docker compose up -d --force-recreate --no-deps open-webui
 ```
 
 Select `老管家` in the model picker. Selecting `qwen3:8b` or another raw
 Ollama model bypasses Cortex, SurrealDB retrieval, and the agent tools.
+
+The Compose file builds a small customization on top of the pinned Open WebUI
+v0.9.5 image. On a blank new chat, selecting `老管家` calls Cortex's steward
+conversation endpoint and inserts the returned greeting as the first assistant
+message. No user prompt is required. The greeting is saved in normal Open WebUI
+chat history and is included in the first later request, so Cortex does not
+greet twice.
+
+The browser authenticates only to Open WebUI. A same-origin Open WebUI backend
+route forwards the verified user's immutable ID and email to Cortex and adds
+`CORTEX_API_KEY` on the server. The Cortex API key is never sent to browser
+JavaScript.
+
+After changing the Open WebUI customization, rebuild it explicitly:
+
+```sh
+docker compose build --no-cache open-webui
+docker compose up -d --force-recreate --no-deps open-webui
+docker compose logs --tail=100 open-webui
+```
 
 Verify the Cortex model endpoint from the Compose network:
 
