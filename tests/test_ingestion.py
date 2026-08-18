@@ -111,3 +111,88 @@ async def test_node_name_must_be_a_non_empty_string_list(tmp_path: Path) -> None
             await ingest_directory(database, data_dir)  # type: ignore[arg-type]
     finally:
         await database.close()
+
+
+@pytest.mark.asyncio
+async def test_person_address_as_is_optional_and_preserved() -> None:
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        await ingest_directory(database, STATIC_TEST_DATA)  # type: ignore[arg-type]
+        people = await database.query("SELECT * FROM person ORDER BY id;")
+    finally:
+        await database.close()
+
+    alex = next(
+        person
+        for person in people
+        if str(person["id"]) == "person:alex_example"
+    )
+    blair = next(
+        person for person in people if str(person["id"]) == "person:blair_example"
+    )
+    assert alex["address_as"] == {"en": "Mr. Example", "zh": "先生"}
+    assert "address_as" not in blair
+
+
+@pytest.mark.asyncio
+async def test_localized_name_object_is_accepted(tmp_path: Path) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    location_path = data_dir / "nodes" / "location.json"
+    location = json.loads(location_path.read_text(encoding="utf-8"))
+    location["name"] = {"en": "Test House", "zh": "测试之家"}
+    location_path.write_text(json.dumps(location), encoding="utf-8")
+
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+        locations = await database.query("SELECT * FROM location;")
+    finally:
+        await database.close()
+
+    assert locations[0]["name"] == {"en": "Test House", "zh": "测试之家"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "address_as",
+    ["Sir", {}, {"zh": ""}, {"": "先生"}],
+)
+async def test_person_address_as_must_be_a_localized_object(
+    tmp_path: Path,
+    address_as: object,
+) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    person_path = data_dir / "nodes" / "person.json"
+    people = json.loads(person_path.read_text(encoding="utf-8"))
+    people[0]["address_as"] = address_as
+    person_path.write_text(json.dumps(people), encoding="utf-8")
+
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        with pytest.raises(ValueError, match="non-empty localized object"):
+            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+    finally:
+        await database.close()
+
+
+@pytest.mark.asyncio
+async def test_non_person_nodes_cannot_define_address_as(tmp_path: Path) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    location_path = data_dir / "nodes" / "location.json"
+    location = json.loads(location_path.read_text(encoding="utf-8"))
+    location["address_as"] = {"en": "Home"}
+    location_path.write_text(json.dumps(location), encoding="utf-8")
+
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        with pytest.raises(ValueError, match="Only Person nodes"):
+            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+    finally:
+        await database.close()

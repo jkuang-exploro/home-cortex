@@ -109,6 +109,23 @@ ordered alias lists. Explicit requests for internal IDs and debugging details
 leave IDs visible. This presentation step does not alter graph records, edges,
 or tool-call arguments and is reusable by future agents.
 
+Person records may optionally define a localized `address_as` object. It is a
+presentation preference—not a name alias or relationship—and is stored
+explicitly rather than inferred from age, gender, or household role:
+
+```json
+{
+  "id": "person:jian_kuang",
+  "name": {"en": "Jian Kuang", "zh": "匡健"},
+  "address_as": {"en": "Mr. Kuang", "zh": "先生"}
+}
+```
+
+The shared resolver exposes explicit `address`, `name`, and `id` modes. Normal
+person-ID rendering prefers `address_as`, falls back to `name`, and uses the ID
+only when no human-facing value exists. Existing records without `address_as`
+remain valid.
+
 ## Observability
 
 Every HTTP response includes a server-generated `X-Request-ID`. Error responses

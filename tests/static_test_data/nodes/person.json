@@ -2,6 +2,7 @@
   {
     "id": "person:alex_example",
     "name": ["Alex Example", "艾力克斯"],
+    "address_as": {"en": "Mr. Example", "zh": "先生"},
     "first_name": "Alex",
     "last_name": "Example"
   },

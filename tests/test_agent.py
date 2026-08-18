@@ -221,6 +221,64 @@ async def test_final_answer_uses_language_appropriate_display_name(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "person", "raw_answer", "expected_answer"),
+    [
+        (
+            "璞回来了吗？",
+            {
+                "id": "person:pu_ba",
+                "name": {"zh": "巴璞", "en": "Pu Ba"},
+                "address_as": {"zh": "太太", "en": "Mrs. Kuang"},
+            },
+            "person:pu_ba 已经回来了。",
+            "太太 已经回来了。",
+        ),
+        (
+            "Am I home?",
+            {
+                "id": "person:jian_kuang",
+                "name": {"zh": "匡健", "en": "Jian Kuang"},
+                "address_as": {"zh": "先生", "en": "Mr. Kuang"},
+            },
+            "person:jian_kuang, you are home.",
+            "Mr. Kuang, you are home.",
+        ),
+    ],
+)
+async def test_final_answer_prefers_configured_form_of_address(
+    question: str,
+    person: dict[str, Any],
+    raw_answer: str,
+    expected_answer: str,
+) -> None:
+    record_id = person["id"]
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call("search_entities", {"text": record_id})
+                ]
+            ),
+            _chat_response(raw_answer),
+        ]
+    )
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "search_entities",
+            "result": [person],
+        }
+    )
+
+    result = await _agent(ollama, dispatcher).answer(question)
+
+    assert result.answer == expected_answer
+    assert "person:" not in result.answer
+    assert dispatcher.calls[0][1]["text"] == record_id
+
+
+@pytest.mark.asyncio
 async def test_explicit_internal_id_request_preserves_id_in_final_answer() -> None:
     ollama = FakeOllamaService(
         [

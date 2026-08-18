@@ -33,20 +33,56 @@ def _records_from_file(path: Path) -> list[dict[str, Any]]:
 
 
 def _validate_node_name(record: dict[str, Any], path: Path) -> None:
-    """Require multilingual names to use a non-empty list of unique strings."""
+    """Accept legacy alias lists and explicit localized-name objects."""
     if "name" not in record:
         return
     names = record["name"]
-    if (
-        not isinstance(names, list)
-        or not names
-        or any(not isinstance(name, str) or not name.strip() for name in names)
-    ):
+    if isinstance(names, list):
+        if not names or any(
+            not isinstance(name, str) or not name.strip() for name in names
+        ):
+            raise ValueError(
+                f"Node in {path} must use 'name' as a non-empty list of strings "
+                "or localized object"
+            )
+        if len(names) != len(set(names)):
+            raise ValueError(f"Node in {path} contains duplicate values in 'name'")
+        return
+    if not _is_localized_text(names):
         raise ValueError(
-            f"Node in {path} must use 'name' as a non-empty list of strings"
+            f"Node in {path} must use 'name' as a non-empty list of strings "
+            "or localized object"
         )
-    if len(names) != len(set(names)):
-        raise ValueError(f"Node in {path} contains duplicate values in 'name'")
+
+
+def _validate_address_as(
+    record: dict[str, Any],
+    path: Path,
+    table: str,
+) -> None:
+    if "address_as" not in record:
+        return
+    if table != "person":
+        raise ValueError(f"Only Person nodes may define 'address_as' in {path}")
+    if not _is_localized_text(record["address_as"]):
+        raise ValueError(
+            f"Person in {path} must use 'address_as' as a non-empty localized "
+            "object of strings"
+        )
+
+
+def _is_localized_text(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and bool(value)
+        and all(
+            isinstance(language, str)
+            and bool(language.strip())
+            and isinstance(text, str)
+            and bool(text.strip())
+            for language, text in value.items()
+        )
+    )
 
 
 def parse_record_id(value: str, *, source: Path) -> RecordID:
@@ -103,6 +139,7 @@ async def ingest_directory(database: Database, data_dir: Path) -> IngestionResul
             if not isinstance(raw_id, str):
                 raise ValueError(f"Node in {path} is missing a string 'id'")
             record_id = parse_record_id(raw_id, source=path)
+            _validate_address_as(record, path, record_id.table_name)
             content = {key: value for key, value in record.items() if key != "id"}
             await database.upsert(record_id, content)
             nodes_upserted += 1
