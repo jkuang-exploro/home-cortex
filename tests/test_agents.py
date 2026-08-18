@@ -14,6 +14,10 @@ def test_steward_agent_loads_successfully() -> None:
     assert "resides_in.start" in steward.prompt
     assert "never a wedding or anniversary date" in steward.prompt
     assert "结婚纪念日" in steward.prompt
+    assert "Call get_entity with that Person ID" in steward.prompt
+    assert "record's `dob`" in steward.prompt
+    assert "household roster" in steward.prompt
+    assert "location:fort_cerritos" in steward.prompt
 
 
 def test_steward_has_localized_identity_and_home_scope() -> None:
@@ -46,6 +50,7 @@ def test_steward_receives_only_its_configured_tools() -> None:
     )
 
     assert steward.allowed_tools == (
+        "get_entity",
         "search_entities",
         "get_relationships",
     )

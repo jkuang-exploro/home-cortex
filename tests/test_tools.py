@@ -27,6 +27,18 @@ class FakeRetrievalService:
             raise self.error
         return [{"id": "location:test_house", "name": "Test House"}]
 
+    async def get_entity(self, record_id: str) -> dict[str, Any] | None:
+        self.calls.append(("get_entity", {"entity_id": record_id}))
+        if self.error:
+            raise self.error
+        if record_id == "person:alex_example":
+            return {
+                "id": "person:alex_example",
+                "name": ["Alex Example"],
+                "dob": "1980-01-02",
+            }
+        return None
+
     async def get_relationships(
         self,
         entity_id: str,
@@ -64,11 +76,13 @@ def test_tool_definitions_are_json_serializable_and_read_only() -> None:
     serialized = json.dumps(TOOLS)
     names = {tool["function"]["name"] for tool in TOOLS}
 
-    assert names == {"search_entities", "get_relationships"}
+    assert names == {"get_entity", "search_entities", "get_relationships"}
+    assert "Person record stores date of birth in dob" in serialized
     assert "surrealql" not in serialized.lower()
     assert "execute" not in names
     assert "person or location" in serialized
     assert "spouse_of.start is the marriage date" in serialized
+    assert "residents: every person living at that home" in serialized
     assert all(
         tool["function"]["parameters"]["additionalProperties"] is False
         for tool in TOOLS
@@ -91,6 +105,37 @@ async def test_dispatches_entity_search_with_validated_arguments() -> None:
             "search_entities",
             {"text": "Test House", "entity_type": "location", "limit": 5},
         )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_dispatches_exact_entity_lookup() -> None:
+    dispatcher, retrieval = _dispatcher()
+
+    found = await dispatcher.dispatch(
+        "get_entity",
+        {"entity_id": "person:alex_example"},
+    )
+    missing = await dispatcher.dispatch(
+        "get_entity",
+        {"entity_id": "person:missing"},
+    )
+
+    assert found == {
+        "ok": True,
+        "tool": "get_entity",
+        "result": [
+            {
+                "id": "person:alex_example",
+                "name": ["Alex Example"],
+                "dob": "1980-01-02",
+            }
+        ],
+    }
+    assert missing == {"ok": True, "tool": "get_entity", "result": []}
+    assert retrieval.calls == [
+        ("get_entity", {"entity_id": "person:alex_example"}),
+        ("get_entity", {"entity_id": "person:missing"}),
     ]
 
 
@@ -127,7 +172,11 @@ async def test_rejects_unknown_tool_without_calling_retrieval() -> None:
         "error": {
             "code": "unknown_tool",
             "message": "Tool 'execute_surrealql' is not available",
-            "available_tools": ["get_relationships", "search_entities"],
+            "available_tools": [
+                "get_entity",
+                "get_relationships",
+                "search_entities",
+            ],
         },
     }
     assert retrieval.calls == []

@@ -33,6 +33,9 @@ person. `address_as` is a presentation preference, not another name or alias:
 Never infer `address_as` from age, gender, or relationships. Store it only when
 the household has explicitly chosen the preference.
 
+Person records may store `dob` as an ISO date. That field is the date of
+birth. Do not invent a birthday when `dob` is absent.
+
 Household status is contextual and belongs on the edge connecting a Person to
 a household. For a resident, add `household_role` to `resides_in`:
 

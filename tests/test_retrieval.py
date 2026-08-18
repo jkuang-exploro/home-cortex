@@ -273,6 +273,10 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
             "location:test_house",
             relation="resides_in",
         )
+        alex_home = await service.get_relationships(
+            "person:alex_example",
+            relation="resides_in",
+        )
         marriage = await service.get_relationships(
             "person:alex_example",
             relation="spouse_of",
@@ -295,7 +299,13 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
     ]
     assert all(edge["out"] == "location:test_house" for edge in relationships)
     assert all(edge["direction"] == "incoming" for edge in relationships)
+    assert "residents" not in relationships[0]
+    assert [person["id"] for person in alex_home[0]["residents"]] == [
+        "person:alex_example",
+        "person:blair_example",
+    ]
     assert [edge["out"] for edge in marriage] == ["person:blair_example"]
+    assert "residents" not in marriage[0]
     assert marriage[0]["relation"] == "spouse_of"
     assert marriage[0]["start"] == "2011-03-15"
     assert marriage[0].get("end") in {None}

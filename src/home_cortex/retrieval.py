@@ -106,6 +106,8 @@ class RetrievalService:
         entity_id: str,
         relation: str | None = None,
         limit: int | None = None,
+        *,
+        include_residents: bool = True,
     ) -> list[dict[str, Any]]:
         entity = _parse_record_id(entity_id)
         result_limit = self._validated_limit(limit)
@@ -160,7 +162,43 @@ class RetrievalService:
         relationships.sort(
             key=lambda edge: (str(edge.get("relation", "")), str(edge.get("id", "")))
         )
-        return relationships[:result_limit]
+        relationships = relationships[:result_limit]
+        if include_residents and entity.table_name == "person":
+            await self._attach_residence_rosters(relationships, result_limit)
+        return relationships
+
+    async def _attach_residence_rosters(
+        self,
+        relationships: list[dict[str, Any]],
+        result_limit: int,
+    ) -> None:
+        """A person's resides_in edge names a home, not the household roster."""
+        if "resides_in" not in self.edge_tables:
+            return
+        residents_by_home: dict[str, list[dict[str, Any]]] = {}
+        for edge in relationships:
+            if edge.get("relation") != "resides_in":
+                continue
+            home_id = edge.get("out")
+            if not isinstance(home_id, str) or not home_id.startswith("location:"):
+                continue
+            if home_id not in residents_by_home:
+                household = await self.get_relationships(
+                    home_id,
+                    relation="resides_in",
+                    limit=result_limit,
+                    include_residents=False,
+                )
+                residents: list[dict[str, Any]] = []
+                for resident_edge in household:
+                    person = resident_edge.get("related_entity")
+                    if isinstance(person, dict) and str(
+                        person.get("id", "")
+                    ).startswith("person:"):
+                        _append_unique_record(residents, person)
+                residents.sort(key=lambda record: str(record.get("id", "")))
+                residents_by_home[home_id] = residents
+            edge["residents"] = residents_by_home[home_id]
 
     async def retrieve(self, question: str) -> RetrievedContext:
         entities = await self.search_entities(question)
@@ -184,6 +222,16 @@ class RetrievalService:
                             _append_unique_record(
                                 nodes[related_table],
                                 related_entity,
+                            )
+                    for resident in edge.get("residents") or []:
+                        if not isinstance(resident, dict):
+                            continue
+                        resident_id = str(resident.get("id", ""))
+                        resident_table = resident_id.partition(":")[0]
+                        if resident_table in nodes:
+                            _append_unique_record(
+                                nodes[resident_table],
+                                resident,
                             )
                     relation = str(edge.get("relation", ""))
                     if relation in edges and edge not in edges[relation]:

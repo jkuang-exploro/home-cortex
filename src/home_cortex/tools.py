@@ -24,6 +24,10 @@ class SearchEntitiesArguments(ToolArguments):
     limit: int | None = Field(default=None, ge=1, le=100)
 
 
+class GetEntityArguments(ToolArguments):
+    entity_id: str = Field(pattern=RECORD_ID_PATTERN)
+
+
 class GetRelationshipsArguments(ToolArguments):
     entity_id: str = Field(pattern=RECORD_ID_PATTERN)
     relation: str | None = Field(default=None, pattern=TABLE_NAME_PATTERN)
@@ -75,15 +79,41 @@ TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "get_entity",
+            "description": (
+                "Retrieve exactly one entity by canonical record ID, such as "
+                "person:jian_kuang. Use this when the ID is already known "
+                "(authenticated speaker, related_entity.id, or a prior "
+                "search). Do not use search_entities for a known ID. A "
+                "Person record stores date of birth in dob."
+            ),
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "pattern": RECORD_ID_PATTERN,
+                        "description": "Entity record ID in table:record_id format.",
+                    },
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_relationships",
             "description": (
                 "Get incoming and outgoing relationships for one known entity. "
                 "Pass relation to restrict to one table, such as spouse_of, "
                 "resides_in, or parent_of. Each result includes relation, "
-                "optional start/end, and related_entity. Interpret start using "
-                "relation: spouse_of.start is the marriage date, "
-                "resides_in.start is when residence began, parent_of.start is "
-                "when that parent relationship began."
+                "optional start/end, and related_entity. A person's resides_in "
+                "result also includes residents: every person living at that "
+                "home. Interpret start using relation: spouse_of.start is the "
+                "marriage date, resides_in.start is when residence began, "
+                "parent_of.start is when that parent relationship began."
             ),
             "parameters": {
                 "type": "object",
@@ -139,10 +169,12 @@ class ToolDispatcher:
         self.retrieval = retrieval
         argument_models: dict[str, type[ToolArguments]] = {
             "search_entities": SearchEntitiesArguments,
+            "get_entity": GetEntityArguments,
             "get_relationships": GetRelationshipsArguments,
         }
         handlers: dict[str, Handler] = {
             "search_entities": self._search_entities,
+            "get_entity": self._get_entity,
             "get_relationships": self._get_relationships,
         }
         selected = (
@@ -224,6 +256,14 @@ class ToolDispatcher:
             entity_type=arguments.entity_type,
             limit=arguments.limit,
         )
+
+    async def _get_entity(
+        self,
+        arguments: ToolArguments,
+    ) -> list[dict[str, Any]]:
+        assert isinstance(arguments, GetEntityArguments)
+        record = await self.retrieval.get_entity(arguments.entity_id)
+        return [] if record is None else [record]
 
     async def _get_relationships(
         self,
