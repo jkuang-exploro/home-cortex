@@ -78,8 +78,9 @@ TOOLS: list[dict[str, Any]] = [
             "name": "get_relationships",
             "description": (
                 "Get incoming and outgoing relationships for one known entity. "
-                "Each relationship includes the complete linked record in "
-                "related_entity."
+                "Each relationship preserves stable IDs and includes complete "
+                "records in entity and related_entity for reasoning and "
+                "localized display-name selection."
             ),
             "parameters": {
                 "type": "object",

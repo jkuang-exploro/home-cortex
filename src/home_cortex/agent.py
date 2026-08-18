@@ -6,6 +6,12 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Literal
 
+from .display import (
+    DisplayNameResolver,
+    DisplayTextStream,
+    conversation_language,
+    internal_ids_requested,
+)
 from .ollama import OllamaService
 from .tools import ToolDispatcher
 
@@ -125,6 +131,8 @@ class AgentService:
         """Answer a conversation while always applying the Cortex system prompt."""
         if not messages:
             raise ValueError("At least one message is required")
+        language = conversation_language(messages)
+        expose_internal_ids = internal_ids_requested(messages)
         return await self.run(
             [
                 {"role": "system", "content": self.system_prompt},
@@ -132,6 +140,8 @@ class AgentService:
                 *(dict(message) for message in messages),
             ],
             request_id=request_id,
+            presentation_language=language,
+            expose_internal_ids=expose_internal_ids,
         )
 
     async def stream_answer_messages(
@@ -144,6 +154,8 @@ class AgentService:
         """Yield final-answer tokens while keeping tool steps internal."""
         if not messages:
             raise ValueError("At least one message is required")
+        language = conversation_language(messages)
+        expose_internal_ids = internal_ids_requested(messages)
         async for token in self.stream(
             [
                 {"role": "system", "content": self.system_prompt},
@@ -151,6 +163,8 @@ class AgentService:
                 *(dict(message) for message in messages),
             ],
             request_id=request_id,
+            presentation_language=language,
+            expose_internal_ids=expose_internal_ids,
         ):
             yield token
 
@@ -159,6 +173,8 @@ class AgentService:
         messages: Sequence[Mapping[str, Any]],
         *,
         request_id: str = "-",
+        presentation_language: str = "en",
+        expose_internal_ids: bool = False,
     ) -> AsyncIterator[str]:
         """Run the tool loop and stream chunks from the final Ollama answer."""
         conversation = [dict(message) for message in messages]
@@ -168,6 +184,11 @@ class AgentService:
         total_tool_calls = 0
         failure_reason: StopReason | None = None
         for step in range(1, self.max_steps + 1):
+            display_stream = DisplayTextStream(
+                DisplayNameResolver.from_messages(conversation),
+                presentation_language,
+                expose_internal_ids=expose_internal_ids,
+            )
             content_parts: list[str] = []
             tool_calls: list[Any] = []
             emitted_content = False
@@ -195,7 +216,9 @@ class AgentService:
                     content_parts.append(content)
                     if not tool_calls:
                         emitted_content = True
-                        yield content
+                        rendered = display_stream.feed(content)
+                        if rendered:
+                            yield rendered
 
             assistant_message: dict[str, Any] = {
                 "role": "assistant",
@@ -215,6 +238,9 @@ class AgentService:
             )
 
             if not tool_calls:
+                rendered = display_stream.finish()
+                if rendered:
+                    yield rendered
                 stop_reason = failure_reason or "answer"
                 logger.info(
                     "agent_stop request_id=%s reason=%s steps=%d tool_calls=%d",
@@ -242,6 +268,8 @@ class AgentService:
         messages: Sequence[Mapping[str, Any]],
         *,
         request_id: str = "-",
+        presentation_language: str = "en",
+        expose_internal_ids: bool = False,
     ) -> AgentResult:
         conversation = [dict(message) for message in messages]
         if not conversation:
@@ -262,6 +290,12 @@ class AgentService:
             )
 
             if not tool_calls:
+                resolver = DisplayNameResolver.from_messages(conversation)
+                answer = resolver.render(
+                    response.message.content or "",
+                    presentation_language,
+                    expose_internal_ids=expose_internal_ids,
+                )
                 stop_reason = failure_reason or "answer"
                 logger.info(
                     "agent_stop request_id=%s reason=%s steps=%d tool_calls=%d",
@@ -271,7 +305,7 @@ class AgentService:
                     total_tool_calls,
                 )
                 return AgentResult(
-                    answer=response.message.content or "",
+                    answer=answer,
                     steps=step,
                     tool_calls=total_tool_calls,
                     stop_reason=stop_reason,

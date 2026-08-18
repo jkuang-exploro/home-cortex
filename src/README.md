@@ -99,6 +99,16 @@ changing the shared runtime. For example, a future `accountant` directory can
 define `账房` and finance-only tools; those tools will not be granted to
 `steward` automatically.
 
+## Human-facing entity names
+
+Tool calls and graph traversal retain stable IDs such as
+`location:fort_cerritos`. Before a final answer reaches the user, the shared
+display-name resolver replaces known IDs with stored names appropriate to the
+conversation language. It supports both localized name objects and the current
+ordered alias lists. Explicit requests for internal IDs and debugging details
+leave IDs visible. This presentation step does not alter graph records, edges,
+or tool-call arguments and is reusable by future agents.
+
 ## Observability
 
 Every HTTP response includes a server-generated `X-Request-ID`. Error responses

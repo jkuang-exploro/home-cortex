@@ -124,6 +124,11 @@ class RetrievalService:
                 source_entity = edge.pop("source_entity", None)
                 target_entity = edge.pop("target_entity", None)
                 edge["direction"] = direction
+                subject_entity = (
+                    source_entity if direction == "outgoing" else target_entity
+                )
+                if isinstance(subject_entity, dict):
+                    edge["entity"] = subject_entity
                 related_entity = (
                     source_entity if direction == "incoming" else target_entity
                 )
@@ -149,6 +154,7 @@ class RetrievalService:
             if record_id:
                 for relationship in await self.get_relationships(record_id):
                     edge = dict(relationship)
+                    edge.pop("entity", None)
                     related_entity = edge.pop("related_entity", None)
                     if isinstance(related_entity, dict):
                         related_id = str(related_entity.get("id", ""))

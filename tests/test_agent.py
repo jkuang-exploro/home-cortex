@@ -167,6 +167,138 @@ async def test_adds_trusted_user_identity_before_conversation() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "raw_answer", "expected_answer"),
+    [
+        (
+            "这是我的家吗？",
+            "是的，这是您的家，即 location:fort_cerritos。",
+            "是的，这是您的家，即 喜瑞匡家。",
+        ),
+        (
+            "Is this my home?",
+            "Yes, this is location:fort_cerritos.",
+            "Yes, this is Fort Cerritos.",
+        ),
+    ],
+)
+async def test_final_answer_uses_language_appropriate_display_name(
+    question: str,
+    raw_answer: str,
+    expected_answer: str,
+) -> None:
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "search_entities",
+                        {"text": "location:fort_cerritos"},
+                    )
+                ]
+            ),
+            _chat_response(raw_answer),
+        ]
+    )
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "search_entities",
+            "result": [
+                {
+                    "id": "location:fort_cerritos",
+                    "name": ["Fort Cerritos", "喜瑞匡家"],
+                }
+            ],
+        }
+    )
+
+    result = await _agent(ollama, dispatcher).answer(question)
+
+    assert result.answer == expected_answer
+    assert "location:fort_cerritos" not in result.answer
+    assert dispatcher.calls[0][1]["text"] == "location:fort_cerritos"
+
+
+@pytest.mark.asyncio
+async def test_explicit_internal_id_request_preserves_id_in_final_answer() -> None:
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "search_entities",
+                        {"text": "Fort Cerritos"},
+                    )
+                ]
+            ),
+            _chat_response("Its internal ID is location:fort_cerritos."),
+        ]
+    )
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "search_entities",
+            "result": [
+                {
+                    "id": "location:fort_cerritos",
+                    "name": ["Fort Cerritos", "喜瑞匡家"],
+                }
+            ],
+        }
+    )
+
+    result = await _agent(ollama, dispatcher).answer(
+        "What is Fort Cerritos's internal ID?"
+    )
+
+    assert result.answer == "Its internal ID is location:fort_cerritos."
+
+
+@pytest.mark.asyncio
+async def test_streaming_final_answer_localizes_split_internal_id() -> None:
+    ollama = FakeStreamingOllamaService(
+        [
+            [
+                _chat_response(
+                    tool_calls=[
+                        _tool_call(
+                            "search_entities",
+                            {"text": "Fort Cerritos"},
+                        )
+                    ]
+                )
+            ],
+            [
+                _chat_response("Your home is location:"),
+                _chat_response("fort_cerritos."),
+            ],
+        ]
+    )
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "search_entities",
+            "result": [
+                {
+                    "id": "location:fort_cerritos",
+                    "name": ["Fort Cerritos", "喜瑞匡家"],
+                }
+            ],
+        }
+    )
+
+    chunks = [
+        chunk
+        async for chunk in _agent(ollama, dispatcher).stream_answer_messages(
+            [{"role": "user", "content": "Where is my home?"}]
+        )
+    ]
+
+    assert "".join(chunks) == "Your home is Fort Cerritos."
+
+
+@pytest.mark.asyncio
 async def test_completes_search_then_relationship_lookup() -> None:
     ollama = FakeOllamaService(
         [

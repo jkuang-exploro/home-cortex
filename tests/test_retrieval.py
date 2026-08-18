@@ -149,9 +149,17 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
         "id": "person:a",
         "first_name": "Alex",
     }
+    assert incoming[0]["entity"] == {
+        "id": "location:main",
+        "name": ["Main Home"],
+    }
     assert outgoing[0]["related_entity"] == {
         "id": "location:main",
         "name": ["Main Home"],
+    }
+    assert outgoing[0]["entity"] == {
+        "id": "person:a",
+        "first_name": "Alex",
     }
     assert "source_entity" not in incoming[0]
     assert "target_entity" not in incoming[0]
