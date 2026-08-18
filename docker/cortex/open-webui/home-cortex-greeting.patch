@@ -20,10 +20,10 @@ index d47c88f..fac5da2 100644
  
 diff --git a/backend/open_webui/routers/cortex.py b/backend/open_webui/routers/cortex.py
 new file mode 100644
-index 0000000..96d0e98
+index 0000000..f4bca8c
 --- /dev/null
 +++ b/backend/open_webui/routers/cortex.py
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,84 @@
 +import asyncio
 +import logging
 +import os
@@ -43,6 +43,7 @@ index 0000000..96d0e98
 +).rstrip('/')
 +CORTEX_API_KEY = os.environ.get('CORTEX_API_KEY', '')
 +CORTEX_GREETING_AGENT = os.environ.get('CORTEX_GREETING_AGENT', 'steward')
++CORTEX_GREETING_LANGUAGE = os.environ.get('CORTEX_GREETING_LANGUAGE', '').strip()
 +
 +
 +class ConversationForm(BaseModel):
@@ -85,7 +86,9 @@ index 0000000..96d0e98
 +            async with session.post(
 +                f'{CORTEX_INTERNAL_URL}/agent/{agent_id}/conversations',
 +                headers=headers,
-+                json={'language': form_data.language},
++                json={
++                    'language': CORTEX_GREETING_LANGUAGE or form_data.language,
++                },
 +            ) as response:
 +                payload = await response.json(content_type=None)
 +                if response.status >= 400:

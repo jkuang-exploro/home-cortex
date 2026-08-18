@@ -130,6 +130,10 @@ sends anything. The browser calls an authenticated Open WebUI proxy; only that
 server-side proxy receives `CORTEX_API_KEY` and forwards the verified Open
 WebUI user ID and email to Cortex.
 
+The proactive greeting language is controlled by
+`CORTEX_GREETING_LANGUAGE`; Compose sets it to `zh`. This affects only the
+initial greeting, not the language used for later answers.
+
 Compose enables Open WebUI's authenticated user-info forwarding. Cortex maps
 the forwarded user ID or email to a stable `person:` record, resolves it before
 the first model call, and supplies only its `id`, `name`, and `address_as` as

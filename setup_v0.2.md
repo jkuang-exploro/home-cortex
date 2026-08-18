@@ -121,6 +121,10 @@ route forwards the verified user's immutable ID and email to Cortex and adds
 `CORTEX_API_KEY` on the server. The Cortex API key is never sent to browser
 JavaScript.
 
+Compose sets `CORTEX_GREETING_LANGUAGE: zh`, so the proactive initial greeting
+is always Chinese even when Open WebUI itself is displayed in English. Later
+answers continue to follow the language of the user's request.
+
 After changing the Open WebUI customization, rebuild it explicitly:
 
 ```sh

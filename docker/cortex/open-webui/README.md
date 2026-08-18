@@ -16,6 +16,9 @@ The browser sends its existing Open WebUI session token to the proxy. The
 proxy, not the browser, adds `CORTEX_API_KEY` and forwards the verified Open
 WebUI user ID and email to Cortex.
 
+`CORTEX_GREETING_LANGUAGE` controls the proactive greeting independently from
+the browser language. The Home Cortex Compose stack sets it to `zh`.
+
 Build and deploy from `docker/cortex`:
 
 ```sh
