@@ -10,6 +10,10 @@ def test_steward_agent_loads_successfully() -> None:
     assert steward.model.provider == "ollama"
     assert "source of truth" in steward.prompt
     assert "continue using tools" in steward.prompt
+    assert 'relation="spouse_of"' in steward.prompt
+    assert "resides_in.start" in steward.prompt
+    assert "never a wedding or anniversary date" in steward.prompt
+    assert "结婚纪念日" in steward.prompt
 
 
 def test_steward_has_localized_identity_and_home_scope() -> None:

@@ -235,7 +235,7 @@ def test_table_names_come_from_static_test_data() -> None:
     )
 
     assert service.node_tables == ("location", "person")
-    assert service.edge_tables == ("resides_in",)
+    assert service.edge_tables == ("resides_in", "spouse_of")
 
 
 def test_record_id_is_serialized() -> None:
@@ -273,6 +273,10 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
             "location:test_house",
             relation="resides_in",
         )
+        marriage = await service.get_relationships(
+            "person:alex_example",
+            relation="spouse_of",
+        )
         context = await service.retrieve("test house")
     finally:
         await database.close()
@@ -291,6 +295,10 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
     ]
     assert all(edge["out"] == "location:test_house" for edge in relationships)
     assert all(edge["direction"] == "incoming" for edge in relationships)
+    assert [edge["out"] for edge in marriage] == ["person:blair_example"]
+    assert marriage[0]["relation"] == "spouse_of"
+    assert marriage[0]["start"] == "2011-03-15"
+    assert marriage[0].get("end") in {None}
     assert sorted(
         edge["related_entity"]["first_name"] for edge in relationships
     ) == ["Alex", "Blair"]

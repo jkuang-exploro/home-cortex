@@ -51,7 +51,7 @@ async def test_repeated_ingestion_does_not_duplicate_relationships() -> None:
         await database.close()
 
     assert first.nodes_upserted == second.nodes_upserted == 3
-    assert first.edges_upserted == second.edges_upserted == 2
+    assert first.edges_upserted == second.edges_upserted == 3
     assert sorted(str(edge["id"]) for edge in edges) == [
         "resides_in:blair_primary",
         "resides_in:person_alex_example__location_test_house",

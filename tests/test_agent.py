@@ -138,6 +138,8 @@ async def test_returns_first_normal_answer_without_dispatching_tools() -> None:
     assert "native tool-calling mechanism" in ollama.calls[0][0]["content"]
     assert "get_relationships uses entity_id" in ollama.calls[0][0]["content"]
     assert "dates of birth or full addresses" in ollama.calls[0][0]["content"]
+    assert 'relation="spouse_of"' in ollama.calls[0][0]["content"]
+    assert "never a wedding or anniversary date" in ollama.calls[0][0]["content"]
     assert "language of the latest user message" in ollama.calls[0][0]["content"]
     assert "multilingual aliases" in ollama.calls[0][0]["content"]
     assert "Never invent or translate a name" in ollama.calls[0][0]["content"]

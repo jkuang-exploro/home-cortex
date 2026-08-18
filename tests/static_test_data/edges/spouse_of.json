@@ -1,0 +1,8 @@
+[
+  {
+    "from": "person:alex_example",
+    "to": "person:blair_example",
+    "start": "2011-03-15",
+    "end": null
+  }
+]

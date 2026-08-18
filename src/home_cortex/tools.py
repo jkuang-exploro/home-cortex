@@ -78,9 +78,12 @@ TOOLS: list[dict[str, Any]] = [
             "name": "get_relationships",
             "description": (
                 "Get incoming and outgoing relationships for one known entity. "
-                "Each relationship preserves stable IDs and includes complete "
-                "records in entity and related_entity for reasoning and "
-                "localized display-name selection."
+                "Pass relation to restrict to one table, such as spouse_of, "
+                "resides_in, or parent_of. Each result includes relation, "
+                "optional start/end, and related_entity. Interpret start using "
+                "relation: spouse_of.start is the marriage date, "
+                "resides_in.start is when residence began, parent_of.start is "
+                "when that parent relationship began."
             ),
             "parameters": {
                 "type": "object",
@@ -95,7 +98,8 @@ TOOLS: list[dict[str, Any]] = [
                         "type": "string",
                         "pattern": TABLE_NAME_PATTERN,
                         "description": (
-                            "Optional relationship table, such as resides_in."
+                            "Optional relationship table, such as spouse_of, "
+                            "resides_in, or parent_of."
                         ),
                     },
                     "limit": {

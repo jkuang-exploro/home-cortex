@@ -50,5 +50,15 @@ The V1 reception roles are `owner`, `minor_dependent`, `adult_dependent`, and
 `is_guest` or `person_type: guest` on the Person node. Missing, conflicting, or
 unrecognized roles resolve to the neutral `unknown` reception policy.
 
+Relationship files under `edges/` are named for the relation table. Optional
+`start` and `end` are the interval for that relation only:
+
+- `spouse_of.start` is the marriage date (结婚纪念日).
+- `resides_in.start` is when the person began living at that location.
+- `parent_of.start` is when that parent relationship began.
+
+`end: null` means the relationship is current. Do not reuse a `start` date
+from one relation as a fact about another.
+
 Do not use separate records for translations of the same person's or
 location's name. Record IDs remain language-neutral and stable.

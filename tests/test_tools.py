@@ -68,6 +68,7 @@ def test_tool_definitions_are_json_serializable_and_read_only() -> None:
     assert "surrealql" not in serialized.lower()
     assert "execute" not in names
     assert "person or location" in serialized
+    assert "spouse_of.start is the marriage date" in serialized
     assert all(
         tool["function"]["parameters"]["additionalProperties"] is False
         for tool in TOOLS
