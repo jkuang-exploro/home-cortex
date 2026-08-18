@@ -19,12 +19,7 @@ RECEPTION_CATEGORIES = frozenset(
 
 
 class RelationshipRetrieval(Protocol):
-    async def search_entities(
-        self,
-        text: str,
-        entity_type: str | None = None,
-        limit: int | None = None,
-    ) -> list[dict[str, Any]]: ...
+    async def get_entity(self, record_id: str) -> dict[str, Any] | None: ...
 
     async def get_relationships(
         self,
@@ -154,19 +149,12 @@ class GreetingService:
                 f"Agent {definition.id!r} requires settings.home_entity_id"
             )
 
-        household_records = await self.retrieval.search_entities(
-            household_id,
-            entity_type="location",
-            limit=1,
-        )
-        household = next(
-            (
-                record
-                for record in household_records
-                if record.get("id") == household_id
-            ),
-            None,
-        )
+        try:
+            household = await self.retrieval.get_entity(household_id)
+        except ValueError:
+            household = None
+        if household is not None and household.get("id") != household_id:
+            household = None
         person_id = _record_id(person)
         relationships = (
             await self.retrieval.get_relationships(person_id)

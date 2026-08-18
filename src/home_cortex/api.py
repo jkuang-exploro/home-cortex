@@ -278,6 +278,7 @@ async def health(request: Request) -> dict[str, Any]:
 
 @app.post("/admin/ingest")
 async def ingest(request: Request) -> dict[str, Any]:
+    _authenticate_request(request)
     settings = get_settings()
     try:
         result = await ingest_directory(request.app.state.database, settings.data_dir)
@@ -288,6 +289,7 @@ async def ingest(request: Request) -> dict[str, Any]:
 
 @app.post("/v1/retrieve")
 async def retrieve(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    _authenticate_request(request)
     question = body.get("query") or body.get("question")
     if not isinstance(question, str) or not question.strip():
         raise APIError(422, "invalid_request", "Provide a non-empty 'query'")
@@ -321,7 +323,7 @@ async def create_agent_conversation(
     request: Request,
 ) -> dict[str, Any]:
     definition = _agent_definition(agent_id)
-    user_entity = await _request_user_entity(request)
+    user_entity = await _resolve_identity(request)
     greeting = await _greeting_service(request).resolve(
         definition,
         user_entity,
@@ -344,15 +346,13 @@ async def get_agent_conversation(
     request: Request,
 ) -> dict[str, Any]:
     definition = _agent_definition(agent_id)
-    user_entity = await _request_user_entity(request)
+    user_entity = await _resolve_identity(request)
     person_id = user_entity.get("id") if user_entity is not None else None
-    conversation = _conversation_store(request).get(conversation_id)
-    if (
-        conversation is None
-        or conversation["agent_id"] != definition.id
-        or conversation["person_id"] != person_id
-    ):
-        raise APIError(404, "conversation_not_found", "Conversation was not found")
+    conversation = _authorize_conversation_access(
+        _conversation_store(request).get(conversation_id),
+        agent_id=definition.id,
+        person_id=person_id if isinstance(person_id, str) else None,
+    )
     return _conversation_response(conversation, definition)
 
 
@@ -365,7 +365,7 @@ async def _agent_chat(
     question = body.get("message") or body.get("question")
     if not isinstance(question, str) or not question.strip():
         raise APIError(422, "invalid_request", "Provide a non-empty 'message'")
-    user_entity = await _request_user_entity(request)
+    user_entity = await _resolve_identity(request)
     try:
         result = await _agent_runtime(request, definition).answer(
             question,
@@ -388,7 +388,7 @@ async def _agent_chat(
 
 @app.get("/v1/models")
 async def models(request: Request) -> dict[str, Any]:
-    _authenticate_cortex_request(request)
+    _authenticate_request(request)
     return {
         "object": "list",
         "data": [
@@ -408,7 +408,7 @@ async def chat_completions(
     body: ChatCompletionRequest,
     request: Request,
 ):
-    user_entity = await _request_user_entity(request)
+    user_entity = await _resolve_identity(request)
     try:
         definition = get_agent_by_display_name(body.model)
     except UnknownAgentError:
@@ -700,7 +700,12 @@ def _request_settings(request: Request) -> Settings:
     return getattr(request.app.state, "settings", None) or get_settings()
 
 
-def _authenticate_cortex_request(request: Request) -> None:
+def _authenticate_request(request: Request) -> None:
+    """Verify the shared household API key when one is configured.
+
+    V1 uses a single household key. It proves the caller is a trusted
+    client (typically the Open WebUI proxy), not which person they are.
+    """
     expected_key = _request_settings(request).cortex_api_key
     if expected_key is None:
         return
@@ -717,9 +722,15 @@ def _authenticate_cortex_request(request: Request) -> None:
         )
 
 
-def _request_user_entity_id(request: Request) -> str | None:
+def _mapped_person_id(request: Request) -> str | None:
+    """Map trusted Open WebUI headers through CORTEX_IDENTITY_MAP.
+
+    A client-supplied person record ID is not consulted. Anyone holding
+    the household API key can present any mapped Open WebUI user header;
+    per-person credentials are out of scope for V1.
+    """
     settings = _request_settings(request)
-    _authenticate_cortex_request(request)
+    _authenticate_request(request)
     if not settings.cortex_identity_map:
         return None
     entity_id = resolve_user_entity_id(
@@ -735,20 +746,16 @@ def _request_user_entity_id(request: Request) -> str | None:
     return entity_id
 
 
-async def _request_user_entity(request: Request) -> dict[str, Any] | None:
-    entity_id = _request_user_entity_id(request)
+async def _resolve_identity(request: Request) -> dict[str, Any] | None:
+    """Load the mapped Person by exact record ID. Missing records fail closed."""
+    entity_id = _mapped_person_id(request)
     if entity_id is None:
         return None
-    records = await request.app.state.retrieval.search_entities(
-        entity_id,
-        entity_type="person",
-        limit=1,
-    )
-    entity = next(
-        (record for record in records if record.get("id") == entity_id),
-        None,
-    )
-    if entity is None:
+    try:
+        entity = await request.app.state.retrieval.get_entity(entity_id)
+    except ValueError:
+        entity = None
+    if entity is None or entity.get("id") != entity_id:
         logger.info(
             "identity_resolution request_id=%s success=false reason=record_not_found",
             _request_id(request),
@@ -770,6 +777,22 @@ async def _request_user_entity(request: Request) -> dict[str, Any] | None:
         for key in ("id", "name", "address_as")
         if key in entity
     }
+
+
+def _authorize_conversation_access(
+    conversation: dict[str, Any] | None,
+    *,
+    agent_id: str,
+    person_id: str | None,
+) -> dict[str, Any]:
+    """Owner-only conversation access. Cross-user and missing both 404."""
+    if (
+        conversation is None
+        or conversation["agent_id"] != agent_id
+        or conversation["person_id"] != person_id
+    ):
+        raise APIError(404, "conversation_not_found", "Conversation was not found")
+    return conversation
 
 
 def _agent_definition(agent_id: str) -> AgentDefinition:

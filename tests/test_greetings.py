@@ -237,14 +237,11 @@ class FakeRetrieval:
         self.role = role
         self.calls: list[tuple[str, str]] = []
 
-    async def search_entities(
-        self,
-        text: str,
-        entity_type: str | None = None,
-        limit: int | None = None,
-    ) -> list[dict[str, Any]]:
-        self.calls.append(("search", text))
-        return [HOUSEHOLD]
+    async def get_entity(self, record_id: str) -> dict[str, Any] | None:
+        self.calls.append(("entity", record_id))
+        if record_id == HOUSEHOLD["id"]:
+            return HOUSEHOLD
+        return None
 
     async def get_relationships(
         self,
@@ -273,7 +270,7 @@ async def test_greeting_service_uses_graph_state_without_an_llm_call() -> None:
 
     assert greeting.reception_category == "owner"
     assert retrieval.calls == [
-        ("search", "location:fort_cerritos"),
+        ("entity", "location:fort_cerritos"),
         ("relationships", "person:jian_kuang"),
     ]
 

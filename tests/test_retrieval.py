@@ -21,6 +21,9 @@ class FakeDatabase:
         variables: dict[str, Any],
     ) -> list[dict[str, Any]]:
         self.queries.append((statement, variables))
+        record_id = variables.get("id")
+        if record_id is not None:
+            return self.results.get(str(record_id), [])
         table = variables.get("table") or variables.get("relation")
         return self.results.get(str(table), [])
 
@@ -106,6 +109,50 @@ async def test_search_entities_rejects_unknown_type_empty_text_and_bad_limit() -
         await service.search_entities("test", entity_type="secret_table")
     with pytest.raises(ValueError, match="between 1 and 10"):
         await service.search_entities("test", limit=11)
+
+    assert database.queries == []
+
+
+@pytest.mark.asyncio
+async def test_get_entity_selects_the_canonical_record() -> None:
+    database = FakeDatabase(
+        {
+            "person:jian_kuang": [
+                {
+                    "id": RecordID("person", "jian_kuang"),
+                    "name": ["Jian Kuang"],
+                }
+            ]
+        }
+    )
+    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
+
+    result = await service.get_entity("person:jian_kuang")
+
+    assert result == {"id": "person:jian_kuang", "name": ["Jian Kuang"]}
+    assert len(database.queries) == 1
+    assert "SELECT * FROM $id" in database.queries[0][0]
+    assert database.queries[0][1]["id"] == RecordID("person", "jian_kuang")
+
+
+@pytest.mark.asyncio
+async def test_get_entity_returns_none_for_a_missing_record() -> None:
+    database = FakeDatabase({})
+    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
+
+    assert await service.get_entity("person:missing") is None
+    assert database.queries[0][1]["id"] == RecordID("person", "missing")
+
+
+@pytest.mark.asyncio
+async def test_get_entity_rejects_unknown_type_and_malformed_id() -> None:
+    database = FakeDatabase({})
+    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="table:record_id"):
+        await service.get_entity("not-a-record")
+    with pytest.raises(ValueError, match="Unknown entity type"):
+        await service.get_entity("secret:jian_kuang")
 
     assert database.queries == []
 
@@ -254,3 +301,45 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
     assert all(
         "related_entity" not in edge for edge in context.edges["resides_in"]
     )
+
+
+@pytest.mark.asyncio
+async def test_get_entity_ignores_colliding_searchable_records() -> None:
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        await database.upsert(
+            RecordID("person", "about_jian_kuang"),
+            {
+                "name": ["About Jian"],
+                "notes": "preferences for person:jian_kuang",
+            },
+        )
+        await database.upsert(
+            RecordID("person", "jian_kuang_preferences"),
+            {
+                "name": ["Jian preferences"],
+                "notes": "another mention of person:jian_kuang",
+            },
+        )
+        await database.upsert(
+            RecordID("person", "jian_kuang"),
+            {"name": ["Jian Kuang"], "address_as": {"en": "Mr. Kuang"}},
+        )
+        service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
+
+        colliding = await service.search_entities(
+            "person:jian_kuang",
+            entity_type="person",
+            limit=1,
+        )
+        exact = await service.get_entity("person:jian_kuang")
+        missing = await service.get_entity("person:does_not_exist")
+    finally:
+        await database.close()
+
+    assert [record["id"] for record in colliding] == ["person:about_jian_kuang"]
+    assert exact is not None
+    assert exact["id"] == "person:jian_kuang"
+    assert exact["name"] == ["Jian Kuang"]
+    assert missing is None

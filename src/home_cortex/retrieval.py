@@ -80,6 +80,27 @@ class RetrievalService:
         matches.sort(key=lambda record: str(record.get("id", "")))
         return matches[:result_limit]
 
+    async def get_entity(self, record_id: str) -> dict[str, Any] | None:
+        """Return the record for a canonical ID, or None if it does not exist.
+
+        This is a point-get, not a search. Callers that already know a
+        record ID must not go through search_entities.
+        """
+        entity = _parse_record_id(record_id)
+        if entity.table_name not in self.node_tables:
+            raise ValueError(
+                f"Unknown entity type {entity.table_name!r}; expected one of "
+                f"{', '.join(self.node_tables)}"
+            )
+        result = await self.database.query(
+            "SELECT * FROM $id;",
+            {"id": entity},
+        )
+        for record in _query_records(result):
+            if record.get("id") == record_id:
+                return record
+        return None
+
     async def get_relationships(
         self,
         entity_id: str,

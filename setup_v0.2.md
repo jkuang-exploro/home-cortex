@@ -14,7 +14,8 @@ Deployment
 update cortex-api
 -- docker compose build --no-cache cortex-api
 -- docker compose up -d --force-recreate --no-deps cortex-api
--- curl -sS -X POST http://localhost:8001/admin/ingest | jq
+-- curl -sS -X POST http://localhost:8001/admin/ingest \
+  -H 'Authorization: Bearer replace-with-a-long-random-secret' | jq
 
 Connect Open WebUI to Cortex
 
@@ -67,7 +68,8 @@ Add a contextual `household_role` to the Person's edge to the home. Do not add
 After editing an edge role, re-ingest it:
 
 ```sh
-curl -sS -X POST http://localhost:8001/admin/ingest | jq
+curl -sS -X POST http://localhost:8001/admin/ingest \
+  -H 'Authorization: Bearer replace-with-a-long-random-secret' | jq
 ```
 
 Verify the steward's deterministic Chinese greeting:

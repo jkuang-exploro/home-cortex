@@ -1,3 +1,11 @@
+"""Map trusted Open WebUI metadata to a home-graph Person ID.
+
+V1 authenticates the household client with a shared API key. That key does
+not bind a person. Person identity comes only from X-OpenWebUI-User-Id or
+X-OpenWebUI-User-Email through CORTEX_IDENTITY_MAP. A client-supplied
+person record ID is never treated as identity.
+"""
+
 from collections.abc import Mapping
 
 OPENWEBUI_USER_ID_HEADER = "X-OpenWebUI-User-Id"

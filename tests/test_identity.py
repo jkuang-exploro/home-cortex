@@ -35,3 +35,17 @@ def test_unknown_openwebui_user_is_not_resolved() -> None:
         )
         is None
     )
+
+
+def test_client_supplied_person_id_headers_are_ignored() -> None:
+    assert (
+        resolve_user_entity_id(
+            {
+                "X-Identity": "person:jian_kuang",
+                "X-Person-Id": "person:jian_kuang",
+                "X-OpenWebUI-User-Id": "person:jian_kuang",
+            },
+            {"id:user-123": "person:jian_kuang"},
+        )
+        is None
+    )

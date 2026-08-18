@@ -6,11 +6,14 @@ grounded answer.
 
 ## Endpoints
 
-- `GET /health` checks SurrealDB.
+- `GET /health` checks SurrealDB and does not require a Cortex API key.
 - `POST /admin/ingest` imports `/app/data/nodes/*.json` and
   `/app/data/edges/*.json`. Re-running it updates nodes and relationships by
-  stable record ID without creating duplicates.
-- `POST /v1/retrieve` returns the graph context used for a question.
+  stable record ID without creating duplicates. When `CORTEX_API_KEY` is set,
+  this route requires that key.
+- `POST /v1/retrieve` returns the graph context used for a question. When
+  `CORTEX_API_KEY` is set, this route requires that key. Retrieval is
+  household-scoped; per-person graph authorization is not implemented yet.
 - `POST /v1/chat` runs the default steward agent for backward compatibility.
 - `POST /agent/steward/chat` invokes the named household steward directly.
 - `POST /agent/steward/conversations` initializes a conversation and returns
@@ -21,6 +24,28 @@ grounded answer.
 - `POST /v1/chat/completions` provides an OpenAI-compatible chat endpoint backed
   by the agent loop. It supports ordinary JSON responses and token-streamed SSE
 responses for clients such as Open WebUI.
+
+## Authentication and identity
+
+`GET /health` is public. When `CORTEX_API_KEY` is set, every other route
+requires `Authorization: Bearer <key>`.
+
+V1 uses one household API key. The key authenticates the client (typically
+the Open WebUI server-side proxy); it does not identify a person. Person
+identity comes only from `X-OpenWebUI-User-Id` / `X-OpenWebUI-User-Email`
+through `CORTEX_IDENTITY_MAP`. Cortex never treats a client-supplied
+`person:` record ID as identity.
+
+Mapped Person records and the configured home are loaded by exact record ID.
+Fuzzy entity search is not used for identity or authorization. A mapped ID
+that does not exist fails closed as `identity_record_not_found`.
+
+Conversation records are owner-only. A caller who knows another person's
+conversation ID receives the same `conversation_not_found` response as for
+an unknown ID.
+
+Anyone holding the household API key can present any mapped Open WebUI user
+header. Per-person credentials are out of scope for V1.
 
 ## Relationship-aware greetings
 
@@ -90,11 +115,15 @@ CORTEX_IDENTITY_MAP={"id:open-webui-user-uuid":"person:jian_kuang"}
 ```sh
 docker compose up -d --build
 curl http://localhost:8001/health
-curl -X POST http://localhost:8001/admin/ingest
+curl -X POST http://localhost:8001/admin/ingest \
+  -H 'Authorization: Bearer replace-with-a-long-random-secret'
 curl -X POST http://localhost:8001/v1/retrieve \
+  -H 'Authorization: Bearer replace-with-a-long-random-secret' \
   -H 'Content-Type: application/json' \
   -d '{"query":"Fort Cerritos"}'
 curl -X POST http://localhost:8001/v1/chat \
+  -H 'Authorization: Bearer replace-with-a-long-random-secret' \
+  -H 'X-OpenWebUI-User-Email: your-login@example.com' \
   -H 'Content-Type: application/json' \
   -d '{"message":"Who lives at Fort Cerritos?"}'
 curl -X POST http://localhost:8001/v1/chat/completions \
