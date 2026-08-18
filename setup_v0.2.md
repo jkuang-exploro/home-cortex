@@ -47,6 +47,11 @@ You can instead use the immutable Open WebUI user ID as the map key:
 CORTEX_IDENTITY_MAP={"id:open-webui-user-uuid":"person:jian_kuang"}
 ```
 
+For each chat request, Cortex resolves the mapped Person before calling the
+model and supplies its stored `name` and optional `address_as` as trusted
+identity context. The mapped Person must therefore already exist in SurrealDB;
+run `/admin/ingest` after changing person data.
+
 Open WebUI persists connection settings. If the existing volume already has an
 OpenAI configuration, sign in as an administrator and add or update an
 OpenAI-compatible connection with:

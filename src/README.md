@@ -80,11 +80,12 @@ connection once in the administrator connection settings with API key
 matching `CORTEX_API_KEY`.
 
 Compose enables Open WebUI's authenticated user-info forwarding. Cortex maps
-the forwarded user ID or email to a stable `person:` record and supplies that
-record to the agent as trusted context. User-written messages cannot change
-this mapping. If identity mappings are configured, an unknown Open WebUI user
-receives an `identity_not_mapped` error instead of being treated as somebody
-else.
+the forwarded user ID or email to a stable `person:` record, resolves it before
+the first model call, and supplies only its `id`, `name`, and `address_as` as
+trusted context. Other private fields still require an intentional tool lookup.
+User-written messages cannot change this mapping. If identity mappings are
+configured, an unknown Open WebUI user receives an `identity_not_mapped` error
+instead of being treated as somebody else.
 
 ## Named agents
 

@@ -35,8 +35,9 @@ class DisplayNameResolver:
     def from_messages(
         cls,
         messages: Sequence[Mapping[str, Any]],
+        values: Sequence[Any] = (),
     ) -> "DisplayNameResolver":
-        resolver = cls()
+        resolver = cls(values)
         for message in messages:
             if message.get("role") != "tool":
                 continue

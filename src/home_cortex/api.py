@@ -275,11 +275,12 @@ async def _agent_chat(
     question = body.get("message") or body.get("question")
     if not isinstance(question, str) or not question.strip():
         raise APIError(422, "invalid_request", "Provide a non-empty 'message'")
+    user_entity = await _request_user_entity(request)
     try:
         result = await _agent_runtime(request, definition).answer(
             question,
             request_id=_request_id(request),
-            user_entity_id=_request_user_entity_id(request),
+            user_entity=user_entity,
         )
     except AgentLimitError as error:
         raise APIError(502, error.stop_reason, str(error)) from error
@@ -317,7 +318,7 @@ async def chat_completions(
     body: ChatCompletionRequest,
     request: Request,
 ):
-    user_entity_id = _request_user_entity_id(request)
+    user_entity = await _request_user_entity(request)
     try:
         definition = get_agent_by_display_name(body.model)
     except UnknownAgentError:
@@ -333,7 +334,7 @@ async def chat_completions(
         answer_stream = agent.stream_answer_messages(
             [message.model_dump() for message in body.messages],
             request_id=_request_id(request),
-            user_entity_id=user_entity_id,
+            user_entity=user_entity,
         )
         return StreamingResponse(
             _stream_chat_completion(
@@ -354,7 +355,7 @@ async def chat_completions(
         result = await agent.answer_messages(
             [message.model_dump() for message in body.messages],
             request_id=_request_id(request),
-            user_entity_id=user_entity_id,
+            user_entity=user_entity,
         )
     except AgentLimitError as error:
         raise APIError(502, error.stop_reason, str(error)) from error
@@ -538,6 +539,43 @@ def _request_user_entity_id(request: Request) -> str | None:
             "The authenticated Open WebUI user is not mapped to a home-graph person",
         )
     return entity_id
+
+
+async def _request_user_entity(request: Request) -> dict[str, Any] | None:
+    entity_id = _request_user_entity_id(request)
+    if entity_id is None:
+        return None
+    records = await request.app.state.retrieval.search_entities(
+        entity_id,
+        entity_type="person",
+        limit=1,
+    )
+    entity = next(
+        (record for record in records if record.get("id") == entity_id),
+        None,
+    )
+    if entity is None:
+        logger.info(
+            "identity_resolution request_id=%s success=false reason=record_not_found",
+            _request_id(request),
+        )
+        raise APIError(
+            403,
+            "identity_record_not_found",
+            "The mapped home-graph person record was not found",
+        )
+    logger.info(
+        "identity_resolution request_id=%s success=true has_name=%s "
+        "has_address_as=%s",
+        _request_id(request),
+        str("name" in entity).lower(),
+        str("address_as" in entity).lower(),
+    )
+    return {
+        key: entity[key]
+        for key in ("id", "name", "address_as")
+        if key in entity
+    }
 
 
 def _agent_definition(agent_id: str) -> AgentDefinition:

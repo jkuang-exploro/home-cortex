@@ -167,6 +167,31 @@ async def test_adds_trusted_user_identity_before_conversation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_trusted_identity_has_name_and_address_but_no_private_fields() -> None:
+    ollama = FakeOllamaService([_chat_response("您是匡健，先生。")])
+    agent = _agent(ollama, FakeDispatcher())
+
+    result = await agent.answer(
+        "我是谁？",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"en": "Mr. Kuang", "zh": "先生"},
+            "dob": "1988-11-11",
+            "address": "private address",
+        },
+    )
+
+    identity_content = ollama.calls[0][1]["content"]
+    assert "Jian Kuang" in identity_content
+    assert "匡健" in identity_content
+    assert "先生" in identity_content
+    assert "1988-11-11" not in identity_content
+    assert "private address" not in identity_content
+    assert result.answer == "您是匡健，先生。"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("question", "raw_answer", "expected_answer"),
     [
@@ -276,6 +301,100 @@ async def test_final_answer_prefers_configured_form_of_address(
     assert result.answer == expected_answer
     assert "person:" not in result.answer
     assert dispatcher.calls[0][1]["text"] == record_id
+
+
+@pytest.mark.asyncio
+async def test_first_person_household_question_traverses_identity_home() -> None:
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_relationships",
+                        {
+                            "entity_id": "person:jian_kuang",
+                            "relation": "resides_in",
+                        },
+                    )
+                ]
+            ),
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_relationships",
+                        {
+                            "entity_id": "location:fort_cerritos",
+                            "relation": "resides_in",
+                        },
+                    )
+                ]
+            ),
+            _chat_response(
+                "目前 person:jian_kuang 和 person:pu_ba 都在喜瑞匡家。"
+            ),
+        ]
+    )
+
+    class HouseholdDispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if arguments["entity_id"] == "person:jian_kuang":
+                records = [
+                    {
+                        "id": "resides_in:jian_home",
+                        "in": "person:jian_kuang",
+                        "out": "location:fort_cerritos",
+                        "related_entity": {
+                            "id": "location:fort_cerritos",
+                            "name": ["Fort Cerritos", "喜瑞匡家"],
+                        },
+                    }
+                ]
+            else:
+                records = [
+                    {
+                        "id": "resides_in:jian_home",
+                        "related_entity": {
+                            "id": "person:jian_kuang",
+                            "name": ["Jian Kuang", "匡健"],
+                            "address_as": {"zh": "先生"},
+                        },
+                    },
+                    {
+                        "id": "resides_in:pu_home",
+                        "related_entity": {
+                            "id": "person:pu_ba",
+                            "name": ["Pu Ba", "巴璞"],
+                            "address_as": {"zh": "太太"},
+                        },
+                    },
+                ]
+            return {"ok": True, "tool": tool_name, "result": records}
+
+    dispatcher = HouseholdDispatcher()
+    agent = _agent(ollama, dispatcher)
+
+    result = await agent.answer(
+        "我家里有谁？",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == "目前 先生 和 太太 都在喜瑞匡家。"
+    assert [arguments["entity_id"] for _, arguments in dispatcher.calls] == [
+        "person:jian_kuang",
+        "location:fort_cerritos",
+    ]
 
 
 @pytest.mark.asyncio

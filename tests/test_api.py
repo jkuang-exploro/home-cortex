@@ -21,6 +21,7 @@ class FakeAgent:
         self.calls: list[list[dict[str, Any]]] = []
         self.request_ids: list[str] = []
         self.user_entity_ids: list[str | None] = []
+        self.user_entities: list[dict[str, Any] | None] = []
 
     async def answer(
         self,
@@ -28,11 +29,13 @@ class FakeAgent:
         *,
         request_id: str = "-",
         user_entity_id: str | None = None,
+        user_entity: dict[str, Any] | None = None,
     ) -> SimpleNamespace:
         return await self.answer_messages(
             [{"role": "user", "content": question}],
             request_id=request_id,
             user_entity_id=user_entity_id,
+            user_entity=user_entity,
         )
 
     async def answer_messages(
@@ -41,10 +44,12 @@ class FakeAgent:
         *,
         request_id: str = "-",
         user_entity_id: str | None = None,
+        user_entity: dict[str, Any] | None = None,
     ) -> SimpleNamespace:
         self.calls.append(messages)
         self.request_ids.append(request_id)
         self.user_entity_ids.append(user_entity_id)
+        self.user_entities.append(user_entity)
         return SimpleNamespace(
             answer="Jian and Pu reside at Fort Cerritos.",
             steps=3,
@@ -58,12 +63,36 @@ class FakeAgent:
         *,
         request_id: str = "-",
         user_entity_id: str | None = None,
+        user_entity: dict[str, Any] | None = None,
     ):
         self.calls.append(messages)
         self.request_ids.append(request_id)
         self.user_entity_ids.append(user_entity_id)
+        self.user_entities.append(user_entity)
         yield "Jian and Pu "
         yield "reside at Fort Cerritos."
+
+
+class FakeIdentityRetrieval:
+    def __init__(self) -> None:
+        self.records: list[dict[str, Any]] = [
+            {
+                "id": "person:jian_kuang",
+                "name": ["Jian Kuang", "匡健"],
+                "address_as": {"en": "Mr. Kuang", "zh": "先生"},
+                "dob": "1988-11-11",
+            }
+        ]
+        self.calls: list[tuple[str, str | None, int | None]] = []
+
+    async def search_entities(
+        self,
+        text: str,
+        entity_type: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        self.calls.append((text, entity_type, limit))
+        return self.records
 
 
 @pytest.fixture
@@ -71,6 +100,7 @@ def api_client() -> Iterator[tuple[TestClient, FakeAgent]]:
     previous_agent = getattr(app.state, "agent", None)
     previous_agents = getattr(app.state, "agents", None)
     previous_settings = getattr(app.state, "settings", None)
+    previous_retrieval = getattr(app.state, "retrieval", None)
     agent = FakeAgent()
     app.state.agent = agent
     app.state.agents = {"steward": agent}
@@ -78,6 +108,7 @@ def api_client() -> Iterator[tuple[TestClient, FakeAgent]]:
         cortex_api_key=None,
         cortex_identity_map={},
     )
+    app.state.retrieval = FakeIdentityRetrieval()
     client = TestClient(app, raise_server_exceptions=True)
     try:
         yield client, agent
@@ -95,6 +126,10 @@ def api_client() -> Iterator[tuple[TestClient, FakeAgent]]:
             del app.state.settings
         else:
             app.state.settings = previous_settings
+        if previous_retrieval is None:
+            del app.state.retrieval
+        else:
+            app.state.retrieval = previous_retrieval
 
 
 def test_models_advertises_steward_display_name(
@@ -177,7 +212,14 @@ def test_chat_completions_passes_mapped_openwebui_identity(
     )
 
     assert response.status_code == 200
-    assert agent.user_entity_ids == ["person:jian_kuang"]
+    assert agent.user_entity_ids == [None]
+    assert agent.user_entities == [
+        {
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"en": "Mr. Kuang", "zh": "先生"},
+        }
+    ]
 
 
 @pytest.mark.parametrize(
@@ -223,6 +265,35 @@ def test_chat_completions_rejects_untrusted_or_unmapped_identity(
 
     assert response.status_code == status_code
     assert response.json()["error"]["code"] == error_code
+    assert agent.calls == []
+
+
+def test_chat_completions_rejects_missing_mapped_person_record(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+    app.state.settings = SimpleNamespace(
+        cortex_api_key="test-cortex-key",
+        cortex_identity_map={
+            "id:webui-user-123": "person:jian_kuang",
+        },
+    )
+    app.state.retrieval.records = []
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={
+            "Authorization": "Bearer test-cortex-key",
+            "X-OpenWebUI-User-Id": "webui-user-123",
+        },
+        json={
+            "model": VIRTUAL_MODEL,
+            "messages": [{"role": "user", "content": "Who am I?"}],
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "identity_record_not_found"
     assert agent.calls == []
 
 
@@ -375,6 +446,7 @@ def test_unexpected_error_is_json_and_does_not_log_private_message(
             *,
             request_id: str = "-",
             user_entity_id: str | None = None,
+            user_entity: dict[str, Any] | None = None,
         ) -> None:
             raise RuntimeError(private_value)
 
