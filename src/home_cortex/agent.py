@@ -4,12 +4,14 @@ import logging
 import re
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date
 from time import perf_counter
 from typing import Any, Literal
 
 from .display import (
     DisplayNameResolver,
     DisplayTextStream,
+    INTERNAL_ID_PATTERN,
     conversation_language,
     internal_ids_requested,
     resolve_display_name,
@@ -225,6 +227,20 @@ class AgentService:
         language = conversation_language(safe_messages)
         expose_internal_ids = internal_ids_requested(safe_messages)
         identity = _normalized_identity(user_entity_id, user_entity)
+        if identity and _is_authenticated_identity_request(safe_messages, identity):
+            return self._answer_authenticated_identity(
+                safe_messages,
+                identity=identity,
+                request_id=request_id,
+                presentation_language=language,
+            )
+        if identity and _is_relationship_date_request(safe_messages):
+            return await self._answer_relationship_date(
+                safe_messages,
+                identity=identity,
+                request_id=request_id,
+                presentation_language=language,
+            )
         if _is_household_roster_request(safe_messages) and self.home_entity_id:
             return await self._answer_household_roster(
                 safe_messages,
@@ -260,6 +276,24 @@ class AgentService:
         language = conversation_language(safe_messages)
         expose_internal_ids = internal_ids_requested(safe_messages)
         identity = _normalized_identity(user_entity_id, user_entity)
+        if identity and _is_authenticated_identity_request(safe_messages, identity):
+            result = self._answer_authenticated_identity(
+                safe_messages,
+                identity=identity,
+                request_id=request_id,
+                presentation_language=language,
+            )
+            yield result.answer
+            return
+        if identity and _is_relationship_date_request(safe_messages):
+            result = await self._answer_relationship_date(
+                safe_messages,
+                identity=identity,
+                request_id=request_id,
+                presentation_language=language,
+            )
+            yield result.answer
+            return
         if _is_household_roster_request(safe_messages) and self.home_entity_id:
             result = await self._answer_household_roster(
                 safe_messages,
@@ -284,6 +318,110 @@ class AgentService:
             ),
         ):
             yield token
+
+    def _answer_authenticated_identity(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        *,
+        identity: Mapping[str, Any],
+        request_id: str,
+        presentation_language: str,
+    ) -> AgentResult:
+        name = resolve_display_name(identity, presentation_language)
+        address = _speaker_address((identity,), presentation_language)
+        if presentation_language == "zh":
+            prefix = f"{address}，" if address else ""
+            answer = f"{prefix}您是{name}。"
+        else:
+            prefix = f"{address}, " if address else ""
+            answer = f"{prefix}you are {name}."
+            if not prefix:
+                answer = answer[0].upper() + answer[1:]
+        logger.info(
+            "agent_stop request_id=%s reason=answer steps=1 tool_calls=0",
+            _safe_log_token(request_id),
+        )
+        return AgentResult(
+            answer=answer,
+            steps=1,
+            tool_calls=0,
+            stop_reason="answer",
+            messages=tuple(self._trusted_conversation(messages, identity)),
+        )
+
+    async def _answer_relationship_date(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        *,
+        identity: Mapping[str, Any],
+        request_id: str,
+        presentation_language: str,
+    ) -> AgentResult:
+        requirements = EvidenceRequirements(
+            tools=frozenset({"get_relationships"}),
+            relations=frozenset({"spouse_of"}),
+            fields=frozenset({("get_relationships", "start")}),
+        )
+        arguments: dict[str, Any] = {
+            "entity_id": identity["id"],
+            "relation": "spouse_of",
+            "limit": self.max_tool_records,
+        }
+        tool_result = await self._execute_planned_tool(
+            "get_relationships",
+            arguments,
+            requirements=requirements,
+            request_id=request_id,
+        )
+        stop_reason = _tool_failure_reason(tool_result, None)
+        records = tool_result.get("result")
+        dated_relationships = (
+            [
+                record
+                for record in records
+                if isinstance(record, Mapping)
+                and record.get("relation") == "spouse_of"
+                and isinstance(record.get("start"), str)
+            ]
+            if isinstance(records, list)
+            else []
+        )
+        if tool_result.get("ok") is not True:
+            answer = _grounding_fallback(presentation_language)
+            reason = stop_reason or "tool_error"
+        elif not dated_relationships:
+            answer = _no_records_fallback(presentation_language)
+            reason = "answer"
+        else:
+            answer = _format_relationship_date(
+                dated_relationships[0],
+                identity,
+                presentation_language,
+            )
+            reason = "answer"
+        logger.info(
+            "agent_stop request_id=%s reason=%s steps=1 tool_calls=1",
+            _safe_log_token(request_id),
+            reason,
+        )
+        return AgentResult(
+            answer=answer,
+            steps=1,
+            tool_calls=1,
+            stop_reason=reason,
+            messages=tuple(self._trusted_conversation(messages, identity)),
+        )
+
+    def _trusted_conversation(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        identity: Mapping[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        return [
+            {"role": "system", "content": self.system_prompt},
+            *(_identity_context(identity) if identity else []),
+            *(dict(message) for message in messages),
+        ]
 
     async def _answer_household_roster(
         self,
@@ -330,17 +468,12 @@ class AgentService:
             _safe_log_token(request_id),
             reason,
         )
-        conversation = [
-            {"role": "system", "content": self.system_prompt},
-            *(_identity_context(identity) if identity else []),
-            *(dict(message) for message in messages),
-        ]
         return AgentResult(
             answer=answer,
             steps=1,
             tool_calls=1,
             stop_reason=reason,
-            messages=tuple(conversation),
+            messages=tuple(self._trusted_conversation(messages, identity)),
         )
 
     async def stream(
@@ -1282,6 +1415,97 @@ def _is_household_roster_request(
     return any(re.search(pattern, latest_user) for pattern in english_patterns)
 
 
+def _is_authenticated_identity_request(
+    messages: Sequence[Mapping[str, Any]],
+    identity: Mapping[str, Any],
+) -> bool:
+    latest_user = next(
+        (
+            str(message.get("content", "")).strip().casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    if _contains_any(
+        latest_user,
+        (
+            "parent",
+            "child",
+            "daughter",
+            "son",
+            "spouse",
+            "wife",
+            "husband",
+            "home",
+            "house",
+            "household",
+            "live",
+            "reside",
+            "父母",
+            "父亲",
+            "母亲",
+            "孩子",
+            "儿子",
+            "女儿",
+            "配偶",
+            "妻子",
+            "丈夫",
+            "太太",
+            "家里",
+            "家中",
+            "住",
+            "居住",
+        ),
+    ):
+        return False
+
+    aliases = _entity_name_aliases(identity)
+    if not aliases:
+        return False
+    references_identity = bool(
+        re.search(r"(?:^|\W)(?:i|me|myself)(?:$|\W)", latest_user)
+        or re.search(r"我|本人|自己", latest_user)
+        or any(alias.casefold() in latest_user for alias in aliases)
+    )
+    asks_identity = bool(
+        re.search(r"\bwho\b|\b(?:name|identity)\b", latest_user)
+        or re.search(r"谁|哪位|身份|名字|叫什么", latest_user)
+    )
+    return references_identity and asks_identity
+
+
+def _is_relationship_date_request(
+    messages: Sequence[Mapping[str, Any]],
+) -> bool:
+    return (
+        _required_evidence_relation(messages) == "spouse_of"
+        and _required_evidence_field(messages) == "start"
+    )
+
+
+def _entity_name_aliases(entity: Mapping[str, Any]) -> tuple[str, ...]:
+    name = entity.get("name")
+    if isinstance(name, str):
+        return (name.strip(),) if name.strip() else ()
+    if isinstance(name, Mapping):
+        return tuple(
+            value.strip()
+            for value in name.values()
+            if isinstance(value, str) and value.strip()
+        )
+    if isinstance(name, Sequence) and not isinstance(
+        name,
+        (str, bytes, bytearray),
+    ):
+        return tuple(
+            value.strip()
+            for value in name
+            if isinstance(value, str) and value.strip()
+        )
+    return ()
+
+
 def _household_residents(
     tool_result: Mapping[str, Any],
 ) -> list[Mapping[str, Any]]:
@@ -1332,6 +1556,59 @@ def _format_household_roster(
             else "The current household residents are:"
         )
     return heading + "\n" + "\n".join(f"- {name}" for name in names)
+
+
+def _format_relationship_date(
+    relationship: Mapping[str, Any],
+    identity: Mapping[str, Any],
+    language: str,
+) -> str:
+    date_text = _localized_date(str(relationship["start"]), language)
+    related = relationship.get("related_entity")
+    related_name = (
+        resolve_display_name(related, language)
+        if isinstance(related, Mapping)
+        else None
+    )
+    if related_name and INTERNAL_ID_PATTERN.fullmatch(related_name):
+        related_name = None
+    address = _speaker_address((identity,), language)
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        subject = f"您与{related_name}的" if related_name else "您的"
+        return f"{prefix}{subject}结婚纪念日是{date_text}。"
+    prefix = f"{address}, " if address else ""
+    subject = (
+        f"your wedding anniversary with {related_name}"
+        if related_name
+        else "your wedding anniversary"
+    )
+    answer = f"{prefix}{subject} is {date_text}."
+    return answer if prefix else answer[0].upper() + answer[1:]
+
+
+def _localized_date(value: str, language: str) -> str:
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        return value
+    if language == "zh":
+        return f"{parsed.year}年{parsed.month}月{parsed.day}日"
+    month_names = (
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    )
+    return f"{month_names[parsed.month - 1]} {parsed.day}, {parsed.year}"
 
 
 def _requires_graph_evidence(messages: Sequence[Mapping[str, Any]]) -> bool:
@@ -1715,9 +1992,12 @@ def _required_evidence_field(
         "anniversary",
         "wedding date",
         "marriage date",
+        "when did we marry",
+        "when were we married",
         "纪念日",
         "哪天结婚",
         "何时结婚",
+        "什么时候结婚",
     )
     if _contains_any(latest_user, anniversary_terms):
         return "start"
@@ -1759,11 +2039,14 @@ def _requested_private_fields(
             "anniversary",
             "wedding date",
             "marriage date",
+            "when did we marry",
+            "when were we married",
             "move-in date",
             "when did",
             "纪念日",
             "哪天结婚",
             "何时结婚",
+            "什么时候结婚",
             "什么时候搬",
         ),
     ):
