@@ -412,7 +412,236 @@ async def test_chinese_child_questions_use_outgoing_parent_relationships(
             },
         )
     ]
-    assert "Query the parent_of relationship" in ollama.calls[1][-1]["content"]
+    assert "query the parent_of relationship" in ollama.calls[1][-1]["content"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "question",
+    [
+        "我儿子生日哪天？",
+        "您儿子的生日是否已经记录在家庭资料中？",
+    ],
+)
+async def test_child_birthday_requires_relationship_then_entity_evidence(
+    question: str,
+) -> None:
+    class FamilyBirthdayDispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if tool_name == "get_relationships":
+                result = [
+                    {
+                        "id": "parent_of:jian_dylan",
+                        "relation": "parent_of",
+                        "direction": "outgoing",
+                        "related_entity": {
+                            "id": "person:dylan_kuang",
+                            "name": ["Dylan Kuang", "匡德伦"],
+                            "gender": "male",
+                        },
+                    },
+                    {
+                        "id": "parent_of:jian_evelyn",
+                        "relation": "parent_of",
+                        "direction": "outgoing",
+                        "related_entity": {
+                            "id": "person:evelyn_kuang",
+                            "name": ["Evelyn Kuang", "匡悠然"],
+                            "gender": "female",
+                        },
+                    },
+                ]
+            else:
+                result = [
+                    {
+                        "id": "person:dylan_kuang",
+                        "name": ["Dylan Kuang", "匡德伦"],
+                        "gender": "male",
+                        "dob": "2016-10-30",
+                    }
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    ollama = FakeOllamaService(
+        [
+            _chat_response("家庭资料中没有记录。"),
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_relationships",
+                        {
+                            "entity_id": "person:jian_kuang",
+                            "relation": "parent_of",
+                            "direction": "out",
+                        },
+                    )
+                ]
+            ),
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_entity",
+                        {"entity_id": "person:dylan_kuang"},
+                    )
+                ]
+            ),
+            _chat_response("您儿子匡德伦的生日是2016年10月30日。"),
+        ]
+    )
+    dispatcher = FamilyBirthdayDispatcher()
+
+    result = await _agent(ollama, dispatcher).answer(
+        question,
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+        },
+    )
+
+    assert result.answer == "您儿子匡德伦的生日是2016年10月30日。"
+    assert result.steps == 4
+    assert result.tool_calls == 2
+    assert [tool_name for tool_name, _ in dispatcher.calls] == [
+        "get_relationships",
+        "get_entity",
+    ]
+    retry = ollama.calls[1][-1]["content"]
+    assert "query the parent_of relationship" in retry
+    assert "retrieve dob with get_entity" in retry
+    relationship_payload = ollama.calls[2][-1]["content"]
+    assert "匡德伦" in relationship_payload
+    assert "匡悠然" not in relationship_payload
+
+
+@pytest.mark.asyncio
+async def test_child_birthday_rejects_dob_from_unrelated_entity() -> None:
+    class WrongEntityDispatcher:
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: Any,
+        ) -> dict[str, Any]:
+            if tool_name == "get_relationships":
+                result = [
+                    {
+                        "id": "parent_of:jian_dylan",
+                        "relation": "parent_of",
+                        "direction": "outgoing",
+                        "related_entity": {
+                            "id": "person:dylan_kuang",
+                            "name": ["Dylan Kuang", "匡德伦"],
+                            "gender": "male",
+                        },
+                    }
+                ]
+            else:
+                result = [
+                    {
+                        "id": "person:evelyn_kuang",
+                        "name": ["Evelyn Kuang", "匡悠然"],
+                        "dob": "2019-10-08",
+                    }
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_relationships",
+                        {
+                            "entity_id": "person:jian_kuang",
+                            "relation": "parent_of",
+                            "direction": "out",
+                        },
+                    )
+                ]
+            ),
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_entity",
+                        {"entity_id": "person:evelyn_kuang"},
+                    )
+                ]
+            ),
+            _chat_response("您儿子的生日是2019年10月8日。"),
+            _chat_response("您儿子的生日是2019年10月8日。"),
+        ]
+    )
+
+    result = await _agent(ollama, WrongEntityDispatcher()).answer(
+        "我儿子生日哪天？"
+    )
+
+    assert result.answer == "家庭资料中没有找到与这个问题匹配的信息。"
+    assert "2019" not in result.answer
+
+
+@pytest.mark.asyncio
+async def test_returned_canonical_relation_satisfies_evidence_requirement() -> None:
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_relationships",
+            "result": [
+                {
+                    "id": "parent_of:jian_dylan",
+                    "relation": "parent_of",
+                    "direction": "outgoing",
+                    "related_entity": {
+                        "id": "person:dylan_kuang",
+                        "name": ["Dylan Kuang", "匡德伦"],
+                        "gender": "male",
+                    },
+                },
+                {
+                    "id": "parent_of:jian_evelyn",
+                    "relation": "parent_of",
+                    "direction": "outgoing",
+                    "related_entity": {
+                        "id": "person:evelyn_kuang",
+                        "name": ["Evelyn Kuang", "匡悠然"],
+                        "gender": "female",
+                    },
+                },
+            ],
+        }
+    )
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_relationships",
+                        {
+                            "entity_id": "person:jian_kuang",
+                            "direction": "out",
+                        },
+                    )
+                ]
+            ),
+            _chat_response("您的儿子是匡德伦。"),
+        ]
+    )
+
+    result = await _agent(ollama, dispatcher).answer("我儿子是谁？")
+
+    assert result.answer == "您的儿子是匡德伦。"
+    assert result.steps == 2
+    assert result.stop_reason == "answer"
+    scoped_payload = ollama.calls[1][-1]["content"]
+    assert "匡德伦" in scoped_payload
+    assert "匡悠然" not in scoped_payload
 
 
 @pytest.mark.asyncio
@@ -489,6 +718,7 @@ async def test_chinese_roster_tool_result_is_localized_and_privacy_minimized() -
     assert "2026-05-23" not in serialized
     assert "dob" not in serialized
     assert '"address"' not in serialized
+    assert "address_as" not in serialized
     assert '"start"' not in serialized
     assert '"end"' not in serialized
 
@@ -649,7 +879,7 @@ async def test_final_answer_uses_language_appropriate_display_name(
                 "address_as": {"zh": "太太", "en": "Mrs. Kuang"},
             },
             "person:pu_ba 已经回来了。",
-            "太太 已经回来了。",
+            "巴璞 已经回来了。",
         ),
         (
             "Am I home?",
@@ -659,11 +889,11 @@ async def test_final_answer_uses_language_appropriate_display_name(
                 "address_as": {"zh": "先生", "en": "Mr. Kuang"},
             },
             "person:jian_kuang, you are home.",
-            "Mr. Kuang, you are home.",
+            "Jian Kuang, you are home.",
         ),
     ],
 )
-async def test_final_answer_prefers_configured_form_of_address(
+async def test_final_answer_uses_localized_name_without_trusted_identity(
     question: str,
     person: dict[str, Any],
     raw_answer: str,
@@ -739,9 +969,10 @@ async def test_first_person_household_question_traverses_identity_home() -> None
             self.calls.append((tool_name, arguments))
             if arguments["entity_id"] == "person:jian_kuang":
                 records = [
-                    {
-                        "id": "lives_in:jian_home",
-                        "in": "person:jian_kuang",
+                        {
+                            "id": "lives_in:jian_home",
+                            "relation": "lives_in",
+                            "in": "person:jian_kuang",
                         "out": "location:fort_cerritos",
                         "related_entity": {
                             "id": "location:fort_cerritos",
@@ -751,17 +982,19 @@ async def test_first_person_household_question_traverses_identity_home() -> None
                 ]
             else:
                 records = [
-                    {
-                        "id": "lives_in:jian_home",
-                        "related_entity": {
+                        {
+                            "id": "lives_in:jian_home",
+                            "relation": "lives_in",
+                            "related_entity": {
                             "id": "person:jian_kuang",
                             "name": ["Jian Kuang", "匡健"],
                             "address_as": {"zh": "先生"},
                         },
                     },
-                    {
-                        "id": "lives_in:pu_home",
-                        "related_entity": {
+                        {
+                            "id": "lives_in:pu_home",
+                            "relation": "lives_in",
+                            "related_entity": {
                             "id": "person:pu_ba",
                             "name": ["Pu Ba", "巴璞"],
                             "address_as": {"zh": "太太"},
@@ -782,7 +1015,7 @@ async def test_first_person_household_question_traverses_identity_home() -> None
         },
     )
 
-    assert result.answer == "目前 先生 和 太太 都在喜瑞匡家。"
+    assert result.answer == "目前 先生 和 巴璞 都在喜瑞匡家。"
     assert [arguments["entity_id"] for _, arguments in dispatcher.calls] == [
         "person:jian_kuang",
         "location:fort_cerritos",
@@ -908,6 +1141,7 @@ async def test_completes_search_then_relationship_lookup() -> None:
                 result = [
                     {
                         "id": "lives_in:alex_location",
+                        "relation": "lives_in",
                         "in": "person:alex_example",
                         "out": "location:fort_cerritos",
                         "related_entity": {

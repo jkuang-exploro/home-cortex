@@ -24,6 +24,7 @@ def test_steward_agent_loads_successfully() -> None:
     assert "household roster semantics" in prompt.casefold()
     assert "Casual conversation" in prompt
     assert "does not by itself request graph data" in prompt
+    assert "graph tools are read-only" in prompt
     assert "location:fort_cerritos" in prompt
 
 

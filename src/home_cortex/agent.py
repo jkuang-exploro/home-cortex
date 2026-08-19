@@ -13,7 +13,6 @@ from .display import (
     conversation_language,
     internal_ids_requested,
     resolve_display_name,
-    resolve_person_reference,
 )
 from .ollama import OllamaService
 from .tools import ToolDispatcher
@@ -32,10 +31,20 @@ PRIVATE_TOOL_FIELDS = {
     "phone": "contact",
     "phone_number": "contact",
 }
-MODEL_HIDDEN_FIELDS = frozenset({"first_name", "last_name"})
+MODEL_HIDDEN_FIELDS = frozenset({"address_as", "first_name", "last_name"})
 
 logger = logging.getLogger("uvicorn.error.home_cortex.agent")
 StopReason = Literal["answer", "step_limit", "tool_error", "timeout"]
+
+
+@dataclass(frozen=True)
+class EvidenceRequirements:
+    """Independent tool, relationship, and field evidence needed for an answer."""
+
+    tools: frozenset[str] = frozenset()
+    relations: frozenset[str] = frozenset()
+    fields: frozenset[tuple[str, str]] = frozenset()
+    related_gender: str | None = None
 
 
 class AgentLimitError(RuntimeError):
@@ -209,9 +218,7 @@ class AgentService:
         failure_reason: StopReason | None = None
         grounding_retry = False
         evidence_required = _requires_graph_evidence(conversation)
-        required_tool = _required_evidence_tool(conversation)
-        required_relation = _required_evidence_relation(conversation)
-        required_field = _required_evidence_field(conversation)
+        requirements = _evidence_requirements(conversation, evidence_required)
         allowed_private_fields = _requested_private_fields(conversation)
         for step in range(1, self.max_steps + 1):
             display_stream = DisplayTextStream(
@@ -227,15 +234,13 @@ class AgentService:
             emitted_content = False
             can_emit = _has_required_evidence(
                 evidence_required,
-                required_tool,
-                required_relation,
+                requirements,
                 successful_tools,
             ) and (
                 not evidence_required
                 or _has_nonempty_evidence(
-                    required_tool,
+                    requirements,
                     nonempty_tools,
-                    required_field,
                     evidence_fields,
                 )
             )
@@ -288,15 +293,13 @@ class AgentService:
             if not tool_calls:
                 if not _has_required_evidence(
                     evidence_required,
-                    required_tool,
-                    required_relation,
+                    requirements,
                     successful_tools,
                 ):
                     if failure_reason is None and not grounding_retry and step < self.max_steps:
                         conversation.append(
                             _grounding_retry_message(
-                                required_tool,
-                                required_relation,
+                                requirements,
                             )
                         )
                         grounding_retry = True
@@ -313,9 +316,8 @@ class AgentService:
                     )
                     return
                 if evidence_required and not _has_nonempty_evidence(
-                    required_tool,
+                    requirements,
                     nonempty_tools,
-                    required_field,
                     evidence_fields,
                 ):
                     yield _no_records_fallback(presentation_language)
@@ -348,6 +350,7 @@ class AgentService:
                 failure_reason=failure_reason,
                 presentation_language=presentation_language,
                 allowed_private_fields=allowed_private_fields,
+                requirements=requirements,
             )
             successful_tools.update(successful)
             nonempty_tools.update(nonempty)
@@ -376,9 +379,7 @@ class AgentService:
         failure_reason: StopReason | None = None
         grounding_retry = False
         evidence_required = _requires_graph_evidence(conversation)
-        required_tool = _required_evidence_tool(conversation)
-        required_relation = _required_evidence_relation(conversation)
-        required_field = _required_evidence_field(conversation)
+        requirements = _evidence_requirements(conversation, evidence_required)
         allowed_private_fields = _requested_private_fields(conversation)
         for step in range(1, self.max_steps + 1):
             response = await self.ollama.chat_with_tools(conversation, self.tools)
@@ -395,15 +396,13 @@ class AgentService:
             if not tool_calls:
                 if not _has_required_evidence(
                     evidence_required,
-                    required_tool,
-                    required_relation,
+                    requirements,
                     successful_tools,
                 ):
                     if failure_reason is None and not grounding_retry and step < self.max_steps:
                         conversation.append(
                             _grounding_retry_message(
-                                required_tool,
-                                required_relation,
+                                requirements,
                             )
                         )
                         grounding_retry = True
@@ -425,9 +424,8 @@ class AgentService:
                         messages=tuple(conversation),
                     )
                 if evidence_required and not _has_nonempty_evidence(
-                    required_tool,
+                    requirements,
                     nonempty_tools,
-                    required_field,
                     evidence_fields,
                 ):
                     answer = _no_records_fallback(presentation_language)
@@ -478,6 +476,7 @@ class AgentService:
                 failure_reason=failure_reason,
                 presentation_language=presentation_language,
                 allowed_private_fields=allowed_private_fields,
+                requirements=requirements,
             )
             successful_tools.update(successful)
             nonempty_tools.update(nonempty)
@@ -526,6 +525,7 @@ class AgentService:
         failure_reason: StopReason | None,
         presentation_language: str,
         allowed_private_fields: frozenset[str],
+        requirements: EvidenceRequirements,
     ) -> tuple[StopReason | None, set[str], set[str], set[str]]:
         successful_tools: set[str] = set()
         nonempty_tools: set[str] = set()
@@ -566,8 +566,31 @@ class AgentService:
                             )
                             relation = record.get("relation")
                             if isinstance(relation, str):
+                                successful_tools.add(
+                                    f"{tool_name}:{relation}"
+                                )
                                 evidence_fields.add(
                                     f"{tool_name}.relation={relation}"
+                                )
+                                related = record.get("related_entity")
+                                if isinstance(related, Mapping):
+                                    related_id = related.get("id")
+                                    if isinstance(related_id, str):
+                                        evidence_fields.add(
+                                            f"{tool_name}:{relation}.related_id="
+                                            f"{related_id}"
+                                        )
+                                        gender = related.get("gender")
+                                        if isinstance(gender, str):
+                                            evidence_fields.add(
+                                                f"{tool_name}:{relation}."
+                                                f"related_gender={gender}.id="
+                                                f"{related_id}"
+                                            )
+                            record_id = record.get("id")
+                            if isinstance(record_id, str):
+                                evidence_fields.add(
+                                    f"{tool_name}.id={record_id}"
                                 )
             logger.info(
                 "tool_execution request_id=%s step=%d tool=%s success=%s "
@@ -589,6 +612,7 @@ class AgentService:
                         tool_result,
                         presentation_language=presentation_language,
                         allowed_private_fields=allowed_private_fields,
+                        requirements=requirements,
                     ),
                 }
             )
@@ -650,9 +674,11 @@ class AgentService:
         *,
         presentation_language: str,
         allowed_private_fields: frozenset[str],
+        requirements: EvidenceRequirements,
     ) -> str:
+        scoped_result = _scope_tool_result(tool_name, tool_result, requirements)
         bounded = _prepare_tool_value(
-            tool_result,
+            scoped_result,
             presentation_language,
             allowed_private_fields,
         )
@@ -787,7 +813,7 @@ def _requires_graph_evidence(messages: Sequence[Mapping[str, Any]]) -> bool:
     lookup_intent = (
         r"\b(?:find|identify|list|search|show|tell me|what|when|where|which|"
         r"who|whose|how many|how old)\b|谁|什么|哪|何时|什么时候|多少|几岁|"
-        r"查|找|告诉我|列出|显示"
+        r"是否|查|找|告诉我|列出|显示"
     )
     if re.search(lookup_intent, normalized):
         return True
@@ -915,37 +941,118 @@ def _required_evidence_relation(
     return None
 
 
+def _evidence_requirements(
+    messages: Sequence[Mapping[str, Any]],
+    evidence_required: bool,
+) -> EvidenceRequirements:
+    if not evidence_required:
+        return EvidenceRequirements()
+
+    primary_tool = _required_evidence_tool(messages)
+    relation = _required_evidence_relation(messages)
+    field = _required_evidence_field(messages)
+    tools: set[str] = set()
+    relations: set[str] = set()
+    fields: set[tuple[str, str]] = set()
+
+    if relation is not None:
+        tools.add("get_relationships")
+        relations.add(relation)
+    if field == "dob":
+        tools.add("get_entity")
+        fields.add(("get_entity", field))
+    elif field is not None:
+        tools.add("get_relationships")
+        fields.add(("get_relationships", field))
+    if not tools and primary_tool is not None:
+        tools.add(primary_tool)
+
+    return EvidenceRequirements(
+        tools=frozenset(tools),
+        relations=frozenset(relations),
+        fields=frozenset(fields),
+        related_gender=_required_related_gender(messages),
+    )
+
+
 def _has_required_evidence(
     evidence_required: bool,
-    required_tool: str | None,
-    required_relation: str | None,
+    requirements: EvidenceRequirements,
     successful_tools: set[str],
 ) -> bool:
     if not evidence_required:
         return True
-    if required_tool is not None:
-        if required_tool not in successful_tools:
-            return False
-        if required_relation is not None:
-            return f"{required_tool}:{required_relation}" in successful_tools
-        return True
-    return bool(successful_tools)
+    if not requirements.tools.issubset(successful_tools):
+        return False
+    return all(
+        f"get_relationships:{relation}" in successful_tools
+        for relation in requirements.relations
+    )
 
 
 def _has_nonempty_evidence(
-    required_tool: str | None,
+    requirements: EvidenceRequirements,
     nonempty_tools: set[str],
-    required_field: str | None,
     evidence_fields: set[str],
 ) -> bool:
-    if required_tool is not None:
-        if required_tool not in nonempty_tools:
+    if not requirements.tools.issubset(nonempty_tools):
+        return False
+    if not all(
+        f"{tool_name}.{field}" in evidence_fields
+        for tool_name, field in requirements.fields
+    ):
+        return False
+
+    related_ids: set[str] = set()
+    for relation in requirements.relations:
+        prefix = f"get_relationships:{relation}.related_id="
+        if requirements.related_gender is not None:
+            prefix = (
+                f"get_relationships:{relation}.related_gender="
+                f"{requirements.related_gender}.id="
+            )
+        related_ids.update(
+            item.removeprefix(prefix)
+            for item in evidence_fields
+            if item.startswith(prefix)
+        )
+    if requirements.relations and requirements.related_gender and not related_ids:
+        return False
+
+    if ("get_entity", "dob") in requirements.fields and requirements.relations:
+        entity_prefix = "get_entity.id="
+        entity_ids = {
+            item.removeprefix(entity_prefix)
+            for item in evidence_fields
+            if item.startswith(entity_prefix)
+        }
+        if not related_ids.intersection(entity_ids):
             return False
-        if required_field is not None:
-            if f"{required_tool}.{required_field}" not in evidence_fields:
-                return False
-        return True
-    return bool(nonempty_tools)
+    return True
+
+
+def _required_related_gender(
+    messages: Sequence[Mapping[str, Any]],
+) -> str | None:
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    if _contains_any(
+        latest_user,
+        ("daughter", "mother", "wife", "女儿", "母亲", "妈妈", "妻子", "太太"),
+    ):
+        return "female"
+    if _contains_any(
+        latest_user,
+        ("son", "father", "husband", "儿子", "父亲", "爸爸", "丈夫"),
+    ):
+        return "male"
+    return None
 
 
 def _required_evidence_field(
@@ -1034,6 +1141,35 @@ def _requested_private_fields(
     return frozenset(allowed)
 
 
+def _scope_tool_result(
+    tool_name: str,
+    tool_result: dict[str, Any],
+    requirements: EvidenceRequirements,
+) -> dict[str, Any]:
+    if tool_name != "get_relationships" or not requirements.relations:
+        return tool_result
+    records = tool_result.get("result")
+    if not isinstance(records, list):
+        return tool_result
+
+    scoped = dict(tool_result)
+    scoped["result"] = [
+        record
+        for record in records
+        if isinstance(record, Mapping)
+        and record.get("relation") in requirements.relations
+        and (
+            requirements.related_gender is None
+            or (
+                isinstance(record.get("related_entity"), Mapping)
+                and record["related_entity"].get("gender")
+                == requirements.related_gender
+            )
+        )
+    ]
+    return scoped
+
+
 def _prepare_tool_value(
     value: Any,
     language: str,
@@ -1058,10 +1194,6 @@ def _prepare_tool_value(
             display_name = resolve_display_name(value, language)
             if display_name and display_name != str(record_id):
                 prepared["name"] = display_name
-        if "address_as" in prepared and str(record_id).startswith("person:"):
-            address_as = resolve_person_reference(value, language, mode="address")
-            if address_as and address_as != str(record_id):
-                prepared["address_as"] = address_as
         return prepared
     if isinstance(value, Sequence) and not isinstance(
         value,
@@ -1085,16 +1217,26 @@ def _contains_any(text: str, terms: Sequence[str]) -> bool:
 
 
 def _grounding_retry_message(
-    required_tool: str | None,
-    required_relation: str | None,
+    requirements: EvidenceRequirements,
 ) -> dict[str, str]:
-    requirement = (
-        f" A successful {required_tool} call is required for this request."
-        if required_tool is not None
-        else ""
-    )
-    if required_relation is not None:
-        requirement += f" Query the {required_relation} relationship."
+    steps: list[str] = []
+    for relation in sorted(requirements.relations):
+        steps.append(f"query the {relation} relationship with get_relationships")
+    for tool_name, field in sorted(requirements.fields):
+        steps.append(f"retrieve {field} with {tool_name} for the resolved entity")
+    covered_tools = {
+        "get_relationships" if requirements.relations else "",
+        *(tool_name for tool_name, _ in requirements.fields),
+    }
+    for tool_name in sorted(requirements.tools - covered_tools):
+        steps.append(f"call {tool_name}")
+    requirement = ""
+    if steps:
+        requirement = (
+            " Required evidence steps: "
+            + "; then ".join(steps)
+            + ". Follow related_entity IDs between steps."
+        )
     return {
         "role": "system",
         "content": (

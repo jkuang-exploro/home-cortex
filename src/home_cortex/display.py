@@ -55,7 +55,12 @@ class DisplayNameResolver:
         if isinstance(value, Mapping):
             record_id = value.get("id")
             if isinstance(record_id, str) and INTERNAL_ID_PATTERN.fullmatch(record_id):
-                self._entities[record_id] = value
+                existing = self._entities.get(record_id)
+                self._entities[record_id] = (
+                    {**value, **existing}
+                    if isinstance(existing, Mapping)
+                    else value
+                )
             for item in value.values():
                 self.register(item)
         elif isinstance(value, Sequence) and not isinstance(
