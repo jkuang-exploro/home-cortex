@@ -150,6 +150,33 @@ async def test_returns_conversational_answer_without_dispatching_tools() -> None
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "How are you doing today?",
+        "Tell me a joke.",
+        "我今天有点累，陪我聊聊天吧。",
+        "My daughter had a great day. Celebrate with me.",
+        "What gift would you recommend for my wife?",
+        "我女儿今天开心吗？",
+    ],
+)
+async def test_informal_conversation_does_not_require_graph_evidence(
+    message: str,
+) -> None:
+    ollama = FakeOllamaService([_chat_response("Let's have a friendly chat.")])
+    dispatcher = FakeDispatcher()
+
+    result = await _agent(ollama, dispatcher).answer(message)
+
+    assert result.answer == "Let's have a friendly chat."
+    assert result.steps == 1
+    assert result.tool_calls == 0
+    assert dispatcher.calls == []
+    assert len(ollama.calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_factual_answer_without_evidence_is_retried_with_tools() -> None:
     ollama = FakeOllamaService(
         [

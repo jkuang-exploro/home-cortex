@@ -771,39 +771,35 @@ def _requires_graph_evidence(messages: Sequence[Mapping[str, Any]]) -> bool:
         ),
         "",
     )
-    normalized = latest_user.casefold().strip(" \t\r\n.!?。！？,，")
-    conversational = {
-        "hello",
-        "hi",
-        "hey",
-        "good morning",
-        "good afternoon",
-        "good evening",
-        "thanks",
-        "thank you",
-        "bye",
-        "goodbye",
-        "你好",
-        "您好",
-        "谢谢",
-        "再见",
-    }
-    if normalized in conversational:
+    normalized = latest_user.casefold()
+    if _required_evidence_tool(messages) is None:
         return False
-    identity_available = any(
-        message.get("role") == "system"
-        and str(message.get("content", "")).startswith(
-            "Trusted authenticated-user context:"
-        )
-        for message in messages
+
+    # Relationship words can appear in ordinary conversation without asking
+    # for a stored household fact. Require graph evidence only for lookup intent.
+    non_lookup_intent = (
+        r"\b(?:advice|chat|feel|feeling|gift|joke|opinion|recommend|story|"
+        r"suggest|talk|think)\b|建议|礼物|聊|笑话|故事|觉得|认为|心情"
     )
-    identity_questions = {
-        "who am i",
-        "do you know me",
-        "我是谁",
-        "你认识我吗",
-    }
-    return not (identity_available and normalized in identity_questions)
+    if re.search(non_lookup_intent, normalized):
+        return False
+
+    lookup_intent = (
+        r"\b(?:find|identify|list|search|show|tell me|what|when|where|which|"
+        r"who|whose|how many|how old)\b|谁|什么|哪|何时|什么时候|多少|几岁|"
+        r"查|找|告诉我|列出|显示"
+    )
+    if re.search(lookup_intent, normalized):
+        return True
+
+    # Direct yes/no requests for stored relationship predicates also need
+    # evidence, while plain statements mentioning those predicates do not.
+    yes_no_predicate = (
+        r"(?:\b(?:is|are|was|were|do|does|did)\b.*\b(?:live|lives|living|"
+        r"reside|resides|married)\b)|(?:住|居住|结婚|已婚).*吗[？?]?$|"
+        r"是否.*(?:住|居住|结婚|已婚)"
+    )
+    return re.search(yes_no_predicate, normalized.strip()) is not None
 
 
 def _required_evidence_tool(
@@ -817,7 +813,14 @@ def _required_evidence_tool(
         ),
         "",
     )
-    entity_fields = ("birthday", "date of birth", "born", "dob", "生日", "出生")
+    entity_fields = (
+        "birthday",
+        "date of birth",
+        "born",
+        "dob",
+        "生日",
+        "出生",
+    )
     relationship_fields = (
         "live",
         "lives",
@@ -956,7 +959,14 @@ def _required_evidence_field(
         ),
         "",
     )
-    birthday_terms = ("birthday", "date of birth", "born", "dob", "生日", "出生")
+    birthday_terms = (
+        "birthday",
+        "date of birth",
+        "born",
+        "dob",
+        "生日",
+        "出生",
+    )
     if _contains_any(latest_user, birthday_terms):
         return "dob"
     anniversary_terms = (
@@ -986,7 +996,14 @@ def _requested_private_fields(
     allowed: set[str] = set()
     if _contains_any(
         latest_user,
-        ("birthday", "date of birth", "born", "dob", "生日", "出生"),
+        (
+            "birthday",
+            "date of birth",
+            "born",
+            "dob",
+            "生日",
+            "出生",
+        ),
     ):
         allowed.add("dob")
     if _contains_any(
