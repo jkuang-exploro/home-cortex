@@ -1,0 +1,8 @@
+id: parent_of
+symmetric: false
+from_types:
+  - person
+to_types:
+  - person
+temporal: false
+inverse_name: child_of

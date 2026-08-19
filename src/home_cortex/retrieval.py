@@ -3,11 +3,17 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from surrealdb import RecordID
 
 from .db import Database
+from .edge_schema import (
+    EdgeSchema,
+    EdgeSchemaRegistry,
+    ResolvedEdgeSchema,
+    UnknownEdgeSchemaError,
+)
 
 RECORD_PATTERN = re.compile(
     r"^(?P<table>[A-Za-z_][A-Za-z0-9_]*):(?P<id>[A-Za-z0-9_-]+)$"
@@ -30,6 +36,7 @@ class RetrievalService:
         database: Database,
         limit: int = 100,
         data_dir: Path | None = None,
+        edge_registry: EdgeSchemaRegistry | None = None,
     ) -> None:
         self.database = database
         self.limit = limit
@@ -37,7 +44,8 @@ class RetrievalService:
             "location",
             "person",
         )
-        self.edge_tables = self._table_names(data_dir, "edges") or ("resides_in",)
+        self.edge_registry = edge_registry or _default_edge_registry(data_dir)
+        self.edge_tables = self.edge_registry.relationship_names
 
     async def search_entities(
         self,
@@ -62,10 +70,15 @@ class RetrievalService:
 
         statement = """
             SELECT * FROM type::table($table)
-            WHERE string::contains(
-                string::lowercase(type::string($this)),
-                $text
-            )
+            WHERE
+                string::contains(
+                    string::lowercase(type::string(id)),
+                    $text
+                )
+                OR string::contains(
+                    string::lowercase(type::string(name)),
+                    $text
+                )
             ORDER BY id
             LIMIT $limit;
         """
@@ -77,7 +90,12 @@ class RetrievalService:
             )
             matches.extend(_query_records(result))
 
-        matches.sort(key=lambda record: str(record.get("id", "")))
+        matches.sort(
+            key=lambda record: (
+                _entity_match_rank(record, search_text),
+                str(record.get("id", "")),
+            )
+        )
         return matches[:result_limit]
 
     async def get_entity(self, record_id: str) -> dict[str, Any] | None:
@@ -105,36 +123,54 @@ class RetrievalService:
         self,
         entity_id: str,
         relation: str | None = None,
+        direction: Literal["out", "in", "both"] | None = None,
         limit: int | None = None,
         *,
+        include_ended: bool = False,
         include_residents: bool = True,
     ) -> list[dict[str, Any]]:
         entity = _parse_record_id(entity_id)
         result_limit = self._validated_limit(limit)
 
         if relation is not None:
-            if relation not in self.edge_tables:
-                raise ValueError(
-                    f"Unknown relation {relation!r}; expected one of "
-                    f"{', '.join(self.edge_tables)}"
-                )
-            relations = (relation,)
+            try:
+                resolved_relations = (self.edge_registry.resolve(relation),)
+            except UnknownEdgeSchemaError as error:
+                raise ValueError(str(error)) from error
         else:
-            relations = self.edge_tables
+            if direction is not None:
+                raise ValueError("Direction requires a specific relation")
+            resolved_relations = tuple(
+                ResolvedEdgeSchema(self.edge_registry.get(name))
+                for name in self.edge_tables
+            )
 
-        statement = """
+        statement_template = """
             SELECT *,
                 in.* AS source_entity,
                 out.* AS target_entity
             FROM type::table($relation)
-            WHERE in = $entity OR out = $entity
+            WHERE {predicate}
             ORDER BY id
             LIMIT $limit;
         """
         relationships: list[dict[str, Any]] = []
-        for relation_name in relations:
+        for resolved in resolved_relations:
+            relation_name = resolved.schema.id
+            stored_direction = _stored_direction(
+                resolved,
+                entity.table_name,
+                direction,
+            )
+            predicate = {
+                "out": "in = $entity",
+                "in": "out = $entity",
+                "both": "in = $entity OR out = $entity",
+            }[stored_direction]
+            if not include_ended:
+                predicate = f"({predicate}) AND (end = NONE OR end = NULL)"
             result = await self.database.query(
-                statement,
+                statement_template.format(predicate=predicate),
                 {
                     "relation": relation_name,
                     "entity": entity,
@@ -142,18 +178,24 @@ class RetrievalService:
                 },
             )
             for edge in _query_records(result):
+                if not include_ended and not _is_current_relationship(edge):
+                    continue
                 edge["relation"] = relation_name
-                direction = _relationship_direction(edge, entity_id)
+                edge_direction = _relationship_direction(edge, entity_id)
+                edge["semantic_relation"] = _semantic_relation(
+                    resolved.schema,
+                    edge_direction,
+                )
                 source_entity = edge.pop("source_entity", None)
                 target_entity = edge.pop("target_entity", None)
-                edge["direction"] = direction
+                edge["direction"] = edge_direction
                 subject_entity = (
-                    source_entity if direction == "outgoing" else target_entity
+                    source_entity if edge_direction == "outgoing" else target_entity
                 )
                 if isinstance(subject_entity, dict):
                     edge["entity"] = subject_entity
                 related_entity = (
-                    source_entity if direction == "incoming" else target_entity
+                    source_entity if edge_direction == "incoming" else target_entity
                 )
                 if isinstance(related_entity, dict):
                     edge["related_entity"] = related_entity
@@ -172,12 +214,12 @@ class RetrievalService:
         relationships: list[dict[str, Any]],
         result_limit: int,
     ) -> None:
-        """A person's resides_in edge names a home, not the household roster."""
-        if "resides_in" not in self.edge_tables:
+        """A person's lives_in edge names a home, not the household roster."""
+        if "lives_in" not in self.edge_tables:
             return
         residents_by_home: dict[str, list[dict[str, Any]]] = {}
         for edge in relationships:
-            if edge.get("relation") != "resides_in":
+            if edge.get("relation") != "lives_in":
                 continue
             home_id = edge.get("out")
             if not isinstance(home_id, str) or not home_id.startswith("location:"):
@@ -185,7 +227,7 @@ class RetrievalService:
             if home_id not in residents_by_home:
                 household = await self.get_relationships(
                     home_id,
-                    relation="resides_in",
+                    relation="lives_in",
                     limit=result_limit,
                     include_residents=False,
                 )
@@ -317,6 +359,59 @@ def _relationship_direction(edge: dict[str, Any], entity_id: str) -> str:
     return "incoming"
 
 
+def _default_edge_registry(data_dir: Path | None) -> EdgeSchemaRegistry:
+    candidates = []
+    if data_dir is not None:
+        candidates.append(data_dir.parent / "schemas" / "edge")
+    candidates.extend(
+        (
+            Path(__file__).resolve().parents[2] / "schemas" / "edge",
+            Path("/app/schemas/edge"),
+        )
+    )
+    for candidate in candidates:
+        if candidate.is_dir():
+            return EdgeSchemaRegistry.from_directory(candidate)
+    raise FileNotFoundError("Could not locate schemas/edge")
+
+
+def _stored_direction(
+    resolved: ResolvedEdgeSchema,
+    entity_type: str,
+    requested: Literal["out", "in", "both"] | None,
+) -> Literal["out", "in", "both"]:
+    schema = resolved.schema
+    if schema.symmetric:
+        return "both"
+    if requested is not None:
+        if not resolved.inverse or requested == "both":
+            return requested
+        return "in" if requested == "out" else "out"
+    if resolved.inverse:
+        return "in"
+    source_only = (
+        entity_type in schema.from_types and entity_type not in schema.to_types
+    )
+    target_only = (
+        entity_type in schema.to_types and entity_type not in schema.from_types
+    )
+    if source_only:
+        return "out"
+    if target_only:
+        return "in"
+    return "both"
+
+
+def _semantic_relation(schema: EdgeSchema, direction: str) -> str:
+    if schema.symmetric or direction in {"outgoing", "both"}:
+        return schema.id
+    return schema.inverse_name or schema.id
+
+
+def _is_current_relationship(edge: dict[str, Any]) -> bool:
+    return edge.get("end") is None
+
+
 def _append_unique_record(
     records: list[dict[str, Any]],
     record: dict[str, Any],
@@ -327,3 +422,20 @@ def _append_unique_record(
     )
     if record_id and is_new:
         records.append(record)
+
+
+def _entity_match_rank(record: dict[str, Any], search_text: str) -> int:
+    values = [str(record.get("id", ""))]
+    names = record.get("name")
+    if isinstance(names, str):
+        values.append(names)
+    elif isinstance(names, list):
+        values.extend(str(name) for name in names if isinstance(name, str))
+    elif isinstance(names, dict):
+        values.extend(str(name) for name in names.values() if isinstance(name, str))
+    normalized = [value.casefold() for value in values]
+    if search_text in normalized:
+        return 0
+    if any(value.startswith(search_text) for value in normalized):
+        return 1
+    return 2

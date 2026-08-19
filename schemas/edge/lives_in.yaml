@@ -1,0 +1,7 @@
+id: lives_in
+symmetric: false
+from_types:
+  - person
+to_types:
+  - location
+temporal: true

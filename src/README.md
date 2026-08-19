@@ -8,9 +8,9 @@ grounded answer.
 
 - `GET /health` checks SurrealDB and does not require a Cortex API key.
 - `POST /admin/ingest` imports `/app/data/nodes/*.json` and
-  `/app/data/edges/*.json`. Re-running it updates nodes and relationships by
-  stable record ID without creating duplicates. When `CORTEX_API_KEY` is set,
-  this route requires that key.
+  `/app/data/edges/*.json`. It validates all input before writing, then makes
+  each JSON file authoritative for its table, including pruning records removed
+  from that file. When `CORTEX_API_KEY` is set, this route requires that key.
 - `POST /v1/retrieve` returns the graph context used for a question. When
   `CORTEX_API_KEY` is set, this route requires that key. Retrieval is
   household-scoped; per-person graph authorization is not implemented yet.
@@ -88,9 +88,41 @@ Subsequent requests containing conversation history do not repeat it.
 
 For `stream: true`, Cortex consumes Ollama's async response stream on every
 agent step. Tool-selection responses stay internal; chunks from the final
-answer are forwarded immediately as OpenAI-compatible SSE events. If the client
+answer are forwarded as OpenAI-compatible SSE events after the grounding gate
+has observed the required successful tool evidence. If the client
 disconnects, cancellation closes the active agent and Ollama streams and records
 a privacy-safe `stream_cancelled` log.
+
+## Edge schemas and graph truth
+
+Relationship meaning is defined in `schemas/edge/*.yaml`; relationship facts
+remain in human-editable `data/edges/*.json`. The initial registry defines:
+
+- `spouse_of` as a symmetric temporal Person-to-Person relationship;
+- `parent_of` as a directed, non-temporal Person-to-Person relationship with
+  the derived inverse name `child_of`;
+- `lives_in` as a directed temporal Person-to-Location relationship.
+
+Store each fact once. Do not add a reverse spouse edge or a `child_of.json`
+file. `get_relationships` consults the registry, accepts `out`, `in`, or `both`
+directions, and excludes ended temporal edges unless `include_ended` is true.
+The ingestion endpoint rejects unknown relationship files, invalid endpoint
+types, temporal fields on non-temporal edges, and reverse duplicates of a
+symmetric fact.
+
+This version renames the former `resides_in` relationship to `lives_in`. Since
+the repository intentionally does not track private household data, rename the
+deployment's `data/edges/resides_in.json` to `lives_in.json` before ingesting.
+Remove `start` and `end` from `parent_of.json`; `parent_of` is non-temporal in
+the V1 schema. The old SurrealDB `resides_in` table is no longer queried, so it
+cannot contribute facts after the application is redeployed.
+
+The agent also applies a deterministic grounding gate. Household answers
+cannot complete without a successful tool call in the current turn; birthday
+questions require `get_entity` data containing `dob`, and relationship
+questions require `get_relationships`. Empty results produce a fixed
+no-matching-data response rather than model-authored facts. Caller-supplied
+system messages are discarded before the trusted Cortex policy is applied.
 
 ## First run
 

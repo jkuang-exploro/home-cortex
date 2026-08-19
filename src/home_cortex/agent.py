@@ -24,6 +24,7 @@ TOOL_EXECUTION_TIMEOUT_SECONDS = 5.0
 logger = logging.getLogger("uvicorn.error.home_cortex.agent")
 StopReason = Literal["answer", "step_limit", "tool_error", "timeout"]
 
+
 class AgentLimitError(RuntimeError):
     """Raised when the model exceeds a hard agent-loop safety limit."""
 
@@ -132,16 +133,15 @@ class AgentService:
         user_entity: Mapping[str, Any] | None = None,
     ) -> AgentResult:
         """Answer a conversation while always applying the Cortex system prompt."""
-        if not messages:
-            raise ValueError("At least one message is required")
-        language = conversation_language(messages)
-        expose_internal_ids = internal_ids_requested(messages)
+        safe_messages = _conversation_messages(messages)
+        language = conversation_language(safe_messages)
+        expose_internal_ids = internal_ids_requested(safe_messages)
         identity = _normalized_identity(user_entity_id, user_entity)
         return await self.run(
             [
                 {"role": "system", "content": self.system_prompt},
                 *(_identity_context(identity) if identity else []),
-                *(dict(message) for message in messages),
+                *safe_messages,
             ],
             request_id=request_id,
             presentation_language=language,
@@ -158,16 +158,15 @@ class AgentService:
         user_entity: Mapping[str, Any] | None = None,
     ) -> AsyncIterator[str]:
         """Yield final-answer tokens while keeping tool steps internal."""
-        if not messages:
-            raise ValueError("At least one message is required")
-        language = conversation_language(messages)
-        expose_internal_ids = internal_ids_requested(messages)
+        safe_messages = _conversation_messages(messages)
+        language = conversation_language(safe_messages)
+        expose_internal_ids = internal_ids_requested(safe_messages)
         identity = _normalized_identity(user_entity_id, user_entity)
         async for token in self.stream(
             [
                 {"role": "system", "content": self.system_prompt},
                 *(_identity_context(identity) if identity else []),
-                *(dict(message) for message in messages),
+                *safe_messages,
             ],
             request_id=request_id,
             presentation_language=language,
@@ -191,7 +190,14 @@ class AgentService:
             raise ValueError("At least one message is required")
 
         total_tool_calls = 0
+        successful_tools: set[str] = set()
+        nonempty_tools: set[str] = set()
+        evidence_fields: set[str] = set()
         failure_reason: StopReason | None = None
+        grounding_retry = False
+        evidence_required = _requires_graph_evidence(conversation)
+        required_tool = _required_evidence_tool(conversation)
+        required_field = _required_evidence_field(conversation)
         for step in range(1, self.max_steps + 1):
             display_stream = DisplayTextStream(
                 DisplayNameResolver.from_messages(
@@ -204,6 +210,19 @@ class AgentService:
             content_parts: list[str] = []
             tool_calls: list[Any] = []
             emitted_content = False
+            can_emit = _has_required_evidence(
+                evidence_required,
+                required_tool,
+                successful_tools,
+            ) and (
+                not evidence_required
+                or _has_nonempty_evidence(
+                    required_tool,
+                    nonempty_tools,
+                    required_field,
+                    evidence_fields,
+                )
+            )
 
             async for response in self.ollama.stream_chat_with_tools(
                 conversation,
@@ -227,10 +246,11 @@ class AgentService:
                 if content:
                     content_parts.append(content)
                     if not tool_calls:
-                        emitted_content = True
-                        rendered = display_stream.feed(content)
-                        if rendered:
-                            yield rendered
+                        if can_emit:
+                            rendered = display_stream.feed(content)
+                            if rendered:
+                                emitted_content = True
+                                yield rendered
 
             assistant_message: dict[str, Any] = {
                 "role": "assistant",
@@ -250,6 +270,40 @@ class AgentService:
             )
 
             if not tool_calls:
+                if not _has_required_evidence(
+                    evidence_required,
+                    required_tool,
+                    successful_tools,
+                ):
+                    if failure_reason is None and not grounding_retry and step < self.max_steps:
+                        conversation.append(_grounding_retry_message(required_tool))
+                        grounding_retry = True
+                        continue
+                    fallback = _grounding_fallback(presentation_language)
+                    yield fallback
+                    stop_reason = failure_reason or "tool_error"
+                    logger.info(
+                        "agent_stop request_id=%s reason=%s steps=%d tool_calls=%d",
+                        _safe_log_token(request_id),
+                        stop_reason,
+                        step,
+                        total_tool_calls,
+                    )
+                    return
+                if evidence_required and not _has_nonempty_evidence(
+                    required_tool,
+                    nonempty_tools,
+                    required_field,
+                    evidence_fields,
+                ):
+                    yield _no_records_fallback(presentation_language)
+                    logger.info(
+                        "agent_stop request_id=%s reason=answer steps=%d tool_calls=%d",
+                        _safe_log_token(request_id),
+                        step,
+                        total_tool_calls,
+                    )
+                    return
                 rendered = display_stream.finish()
                 if rendered:
                     yield rendered
@@ -264,13 +318,16 @@ class AgentService:
                 return
 
             self._check_tool_call_limits(tool_calls, step, total_tool_calls, request_id)
-            failure_reason = await self._append_tool_results(
+            failure_reason, successful, nonempty, fields = await self._append_tool_results(
                 conversation,
                 tool_calls,
                 step=step,
                 request_id=request_id,
                 failure_reason=failure_reason,
             )
+            successful_tools.update(successful)
+            nonempty_tools.update(nonempty)
+            evidence_fields.update(fields)
             total_tool_calls += len(tool_calls)
 
         self._raise_step_limit(request_id, total_tool_calls)
@@ -289,7 +346,14 @@ class AgentService:
             raise ValueError("At least one message is required")
 
         total_tool_calls = 0
+        successful_tools: set[str] = set()
+        nonempty_tools: set[str] = set()
+        evidence_fields: set[str] = set()
         failure_reason: StopReason | None = None
+        grounding_retry = False
+        evidence_required = _requires_graph_evidence(conversation)
+        required_tool = _required_evidence_tool(conversation)
+        required_field = _required_evidence_field(conversation)
         for step in range(1, self.max_steps + 1):
             response = await self.ollama.chat_with_tools(conversation, self.tools)
             assistant_message = response.message.model_dump(exclude_none=True)
@@ -303,6 +367,51 @@ class AgentService:
             )
 
             if not tool_calls:
+                if not _has_required_evidence(
+                    evidence_required,
+                    required_tool,
+                    successful_tools,
+                ):
+                    if failure_reason is None and not grounding_retry and step < self.max_steps:
+                        conversation.append(_grounding_retry_message(required_tool))
+                        grounding_retry = True
+                        continue
+                    answer = _grounding_fallback(presentation_language)
+                    stop_reason = failure_reason or "tool_error"
+                    logger.info(
+                        "agent_stop request_id=%s reason=%s steps=%d tool_calls=%d",
+                        _safe_log_token(request_id),
+                        stop_reason,
+                        step,
+                        total_tool_calls,
+                    )
+                    return AgentResult(
+                        answer=answer,
+                        steps=step,
+                        tool_calls=total_tool_calls,
+                        stop_reason=stop_reason,
+                        messages=tuple(conversation),
+                    )
+                if evidence_required and not _has_nonempty_evidence(
+                    required_tool,
+                    nonempty_tools,
+                    required_field,
+                    evidence_fields,
+                ):
+                    answer = _no_records_fallback(presentation_language)
+                    logger.info(
+                        "agent_stop request_id=%s reason=answer steps=%d tool_calls=%d",
+                        _safe_log_token(request_id),
+                        step,
+                        total_tool_calls,
+                    )
+                    return AgentResult(
+                        answer=answer,
+                        steps=step,
+                        tool_calls=total_tool_calls,
+                        stop_reason="answer",
+                        messages=tuple(conversation),
+                    )
                 resolver = DisplayNameResolver.from_messages(
                     conversation,
                     presentation_values,
@@ -329,13 +438,16 @@ class AgentService:
                 )
 
             self._check_tool_call_limits(tool_calls, step, total_tool_calls, request_id)
-            failure_reason = await self._append_tool_results(
+            failure_reason, successful, nonempty, fields = await self._append_tool_results(
                 conversation,
                 tool_calls,
                 step=step,
                 request_id=request_id,
                 failure_reason=failure_reason,
             )
+            successful_tools.update(successful)
+            nonempty_tools.update(nonempty)
+            evidence_fields.update(fields)
             total_tool_calls += len(tool_calls)
 
         self._raise_step_limit(request_id, total_tool_calls)
@@ -378,7 +490,10 @@ class AgentService:
         step: int,
         request_id: str,
         failure_reason: StopReason | None,
-    ) -> StopReason | None:
+    ) -> tuple[StopReason | None, set[str], set[str], set[str]]:
+        successful_tools: set[str] = set()
+        nonempty_tools: set[str] = set()
+        evidence_fields: set[str] = set()
         for tool_call in tool_calls:
             tool_name = tool_call.function.name
             arguments = self._bounded_arguments(
@@ -400,6 +515,15 @@ class AgentService:
                     failure_reason = "timeout"
                 elif failure_reason != "timeout":
                     failure_reason = "tool_error"
+            else:
+                successful_tools.add(tool_name)
+                if record_count > 0:
+                    nonempty_tools.add(tool_name)
+                    for record in result_records:
+                        if isinstance(record, Mapping):
+                            evidence_fields.update(
+                                f"{tool_name}.{field}" for field in record
+                            )
             logger.info(
                 "tool_execution request_id=%s step=%d tool=%s success=%s "
                 "record_count=%d duration_ms=%.2f error_code=%s",
@@ -418,7 +542,7 @@ class AgentService:
                     "content": self._serialize_tool_result(tool_name, tool_result),
                 }
             )
-        return failure_reason
+        return failure_reason, successful_tools, nonempty_tools, evidence_fields
 
     def _raise_step_limit(self, request_id: str, total_tool_calls: int) -> None:
         logger.info(
@@ -565,6 +689,191 @@ def _identity_context(user_entity: Mapping[str, Any]) -> list[dict[str, str]]:
             ),
         }
     ]
+
+
+def _conversation_messages(
+    messages: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Discard caller-supplied system/tool roles before adding trusted policy."""
+    safe = [
+        dict(message)
+        for message in messages
+        if message.get("role") in {"user", "assistant"}
+    ]
+    if not safe or not any(message.get("role") == "user" for message in safe):
+        raise ValueError("At least one user message is required")
+    return safe
+
+
+def _requires_graph_evidence(messages: Sequence[Mapping[str, Any]]) -> bool:
+    latest_user = next(
+        (
+            str(message.get("content", ""))
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    normalized = latest_user.casefold().strip(" \t\r\n.!?。！？,，")
+    conversational = {
+        "hello",
+        "hi",
+        "hey",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "thanks",
+        "thank you",
+        "bye",
+        "goodbye",
+        "你好",
+        "您好",
+        "谢谢",
+        "再见",
+    }
+    if normalized in conversational:
+        return False
+    identity_available = any(
+        message.get("role") == "system"
+        and str(message.get("content", "")).startswith(
+            "Trusted authenticated-user context:"
+        )
+        for message in messages
+    )
+    identity_questions = {
+        "who am i",
+        "do you know me",
+        "我是谁",
+        "你认识我吗",
+    }
+    return not (identity_available and normalized in identity_questions)
+
+
+def _required_evidence_tool(
+    messages: Sequence[Mapping[str, Any]],
+) -> str | None:
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    entity_fields = ("birthday", "date of birth", "born", "dob", "生日", "出生")
+    relationship_fields = (
+        "live",
+        "lives",
+        "living",
+        "reside",
+        "resides",
+        "spouse",
+        "wife",
+        "husband",
+        "married",
+        "anniversary",
+        "parent",
+        "child",
+        "household",
+        "住",
+        "家里有谁",
+        "家中有谁",
+        "配偶",
+        "妻子",
+        "丈夫",
+        "父母",
+        "孩子",
+        "结婚",
+        "纪念日",
+    )
+    if any(term in latest_user for term in entity_fields):
+        return "get_entity"
+    if any(term in latest_user for term in relationship_fields):
+        return "get_relationships"
+    return None
+
+
+def _has_required_evidence(
+    evidence_required: bool,
+    required_tool: str | None,
+    successful_tools: set[str],
+) -> bool:
+    if not evidence_required:
+        return True
+    if required_tool is not None:
+        return required_tool in successful_tools
+    return bool(successful_tools)
+
+
+def _has_nonempty_evidence(
+    required_tool: str | None,
+    nonempty_tools: set[str],
+    required_field: str | None,
+    evidence_fields: set[str],
+) -> bool:
+    if required_tool is not None:
+        if required_tool not in nonempty_tools:
+            return False
+        if required_field is not None:
+            return f"{required_tool}.{required_field}" in evidence_fields
+        return True
+    return bool(nonempty_tools)
+
+
+def _required_evidence_field(
+    messages: Sequence[Mapping[str, Any]],
+) -> str | None:
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    birthday_terms = ("birthday", "date of birth", "born", "dob", "生日", "出生")
+    if any(term in latest_user for term in birthday_terms):
+        return "dob"
+    anniversary_terms = (
+        "anniversary",
+        "wedding date",
+        "marriage date",
+        "纪念日",
+        "哪天结婚",
+        "何时结婚",
+    )
+    if any(term in latest_user for term in anniversary_terms):
+        return "start"
+    return None
+
+
+def _grounding_retry_message(required_tool: str | None) -> dict[str, str]:
+    requirement = (
+        f" A successful {required_tool} call is required for this request."
+        if required_tool is not None
+        else ""
+    )
+    return {
+        "role": "system",
+        "content": (
+            "Grounding check failed: this household-fact request has no successful "
+            "Home Cortex tool evidence in the current turn. Use the provided tools "
+            "now. Do not answer from memory and do not repeat the unsupported answer."
+            f"{requirement}"
+        ),
+    }
+
+
+def _grounding_fallback(language: str) -> str:
+    if language == "zh":
+        return "老管家目前无法从家庭资料中核实这项信息。"
+    return "I could not verify that information from the home graph."
+
+
+def _no_records_fallback(language: str) -> str:
+    if language == "zh":
+        return "家庭资料中没有找到与这个问题匹配的信息。"
+    return "The home graph does not contain matching information for that request."
 
 
 def _bounded_limit(

@@ -109,7 +109,7 @@ def test_resolver_is_reusable_and_does_not_mutate_graph_results() -> None:
     tool_result = {
         "result": [
             {
-                "id": "resides_in:jian_home",
+                "id": "lives_in:jian_home",
                 "out": "location:fort_cerritos",
                 "related_entity": FORT_CERRITOS,
             }

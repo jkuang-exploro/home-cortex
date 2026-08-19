@@ -27,6 +27,7 @@ from .agents import (
 )
 from .config import Settings, get_settings
 from .db import Database
+from .edge_schema import EdgeSchemaRegistry
 from .display import conversation_language
 from .greetings import GreetingService
 from .ingestion import ingest_directory
@@ -122,10 +123,13 @@ async def lifespan(app: FastAPI):
     database = Database(settings)
     await database.connect()
     app.state.database = database
+    edge_registry = EdgeSchemaRegistry.from_directory(settings.edge_schema_dir)
+    app.state.edge_registry = edge_registry
     retrieval = RetrievalService(
         database,
         settings.retrieval_limit,
         settings.data_dir,
+        edge_registry,
     )
     app.state.retrieval = retrieval
     app.state.greetings = GreetingService(retrieval)
@@ -281,7 +285,11 @@ async def ingest(request: Request) -> dict[str, Any]:
     _authenticate_request(request)
     settings = get_settings()
     try:
-        result = await ingest_directory(request.app.state.database, settings.data_dir)
+        result = await ingest_directory(
+            request.app.state.database,
+            settings.data_dir,
+            getattr(request.app.state, "edge_registry", None),
+        )
         return {"status": "ok", **asdict(result)}
     except (FileNotFoundError, ValueError) as error:
         raise APIError(400, "ingestion_failed", str(error)) from error
@@ -420,7 +428,13 @@ async def chat_completions(
     agent = _agent_runtime(request, definition)
     completion_id = f"chatcmpl-{uuid4().hex}"
     created = int(time.time())
-    messages = [message.model_dump() for message in body.messages]
+    messages = [
+        message.model_dump()
+        for message in body.messages
+        if message.role != "system"
+    ]
+    if not messages or not any(message["role"] == "user" for message in messages):
+        raise APIError(422, "invalid_request", "Provide at least one user message")
     greeting = None
     if _is_new_conversation(messages):
         greeting = await _greeting_service(request).resolve(
@@ -451,18 +465,6 @@ async def chat_completions(
             greeting.text,
         )
     agent_messages = messages
-    if greeting is not None:
-        agent_messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Cortex has already rendered the deterministic reception "
-                    "greeting. Answer the user's request directly without adding "
-                    "another greeting, welcome, or salutation."
-                ),
-            },
-            *messages,
-        ]
     if body.stream:
         answer_stream = agent.stream_answer_messages(
             agent_messages,

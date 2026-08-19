@@ -43,19 +43,28 @@ class FakeRetrievalService:
         self,
         entity_id: str,
         relation: str | None = None,
+        direction: str | None = None,
         limit: int | None = None,
+        *,
+        include_ended: bool = False,
     ) -> list[dict[str, Any]]:
         self.calls.append(
             (
                 "get_relationships",
-                {"entity_id": entity_id, "relation": relation, "limit": limit},
+                {
+                    "entity_id": entity_id,
+                    "relation": relation,
+                    "direction": direction,
+                    "limit": limit,
+                    "include_ended": include_ended,
+                },
             )
         )
         if self.error:
             raise self.error
         return [
             {
-                "id": "resides_in:alex_location",
+                "id": "lives_in:alex_location",
                 "in": "person:alex_example",
                 "out": "location:test_house",
                 "related_entity": {
@@ -81,8 +90,8 @@ def test_tool_definitions_are_json_serializable_and_read_only() -> None:
     assert "surrealql" not in serialized.lower()
     assert "execute" not in names
     assert "person or location" in serialized
-    assert "spouse_of.start is the marriage date" in serialized
-    assert "residents: every person living at that home" in serialized
+    assert "semantic_relation" in serialized
+    assert "includes residents" in serialized
     assert all(
         tool["function"]["parameters"]["additionalProperties"] is False
         for tool in TOOLS
@@ -145,7 +154,7 @@ async def test_dispatches_relationship_lookup() -> None:
 
     response = await dispatcher.dispatch(
         "get_relationships",
-        {"entity_id": "location:test_house", "relation": "resides_in"},
+        {"entity_id": "location:test_house", "relation": "lives_in"},
     )
 
     assert response["ok"] is True
@@ -154,8 +163,10 @@ async def test_dispatches_relationship_lookup() -> None:
         "get_relationships",
         {
             "entity_id": "location:test_house",
-            "relation": "resides_in",
+            "relation": "lives_in",
+            "direction": None,
             "limit": None,
+            "include_ended": False,
         },
     )
 

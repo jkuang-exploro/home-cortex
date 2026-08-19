@@ -1,12 +1,14 @@
 import json
 import re
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 from surrealdb import RecordID
 
 from .db import Database
+from .edge_schema import EdgeSchema, EdgeSchemaRegistry, UnknownEdgeSchemaError
 
 TABLE_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 RECORD_PATTERN = re.compile(
@@ -20,6 +22,21 @@ class IngestionResult:
     edge_files: int = 0
     nodes_upserted: int = 0
     edges_upserted: int = 0
+
+
+@dataclass(frozen=True)
+class _PreparedNode:
+    record_id: RecordID
+    content: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class _PreparedEdge:
+    relation: str
+    record_id: RecordID
+    source: RecordID
+    target: RecordID
+    content: dict[str, Any]
 
 
 def _records_from_file(path: Path) -> list[dict[str, Any]]:
@@ -132,7 +149,11 @@ def _edge_record_id(
     return RecordID(relation, identifier)
 
 
-async def ingest_directory(database: Database, data_dir: Path) -> IngestionResult:
+async def ingest_directory(
+    database: Database,
+    data_dir: Path,
+    edge_registry: EdgeSchemaRegistry | None = None,
+) -> IngestionResult:
     nodes_dir = data_dir / "nodes"
     edges_dir = data_dir / "edges"
     if not nodes_dir.is_dir() or not edges_dir.is_dir():
@@ -140,19 +161,29 @@ async def ingest_directory(database: Database, data_dir: Path) -> IngestionResul
             f"Expected {nodes_dir} and {edges_dir} to both be directories"
         )
 
+    registry = edge_registry or _default_edge_registry(data_dir)
     node_files = sorted(nodes_dir.glob("*.json"))
     edge_files = sorted(edges_dir.glob("*.json"))
-    nodes_upserted = 0
-    edges_upserted = 0
+    prepared_nodes: dict[str, list[_PreparedNode]] = {}
+    prepared_edges: dict[str, list[_PreparedEdge]] = {}
 
-    # Load nodes first so every relation endpoint exists before edges are created.
+    # Validate the entire source before mutating the database.
     for path in node_files:
+        table_nodes: list[_PreparedNode] = []
+        seen_node_ids: set[str] = set()
         for record in _records_from_file(path):
             _validate_node_name(record, path)
             raw_id = record.get("id")
             if not isinstance(raw_id, str):
                 raise ValueError(f"Node in {path} is missing a string 'id'")
             record_id = parse_record_id(raw_id, source=path)
+            if record_id.table_name != path.stem:
+                raise ValueError(
+                    f"Node ID {raw_id!r} in {path} must use the {path.stem!r} table"
+                )
+            if str(record_id) in seen_node_ids:
+                raise ValueError(f"Duplicate node ID {record_id} in {path}")
+            seen_node_ids.add(str(record_id))
             _validate_address_as(record, path, record_id.table_name)
             _validate_person_relationship_status(
                 record,
@@ -160,15 +191,22 @@ async def ingest_directory(database: Database, data_dir: Path) -> IngestionResul
                 record_id.table_name,
             )
             content = {key: value for key, value in record.items() if key != "id"}
-            await database.upsert(record_id, content)
-            nodes_upserted += 1
+            table_nodes.append(_PreparedNode(record_id, content))
+        prepared_nodes[path.stem] = table_nodes
 
     for path in edge_files:
         relation = path.stem
         if TABLE_PATTERN.fullmatch(relation) is None:
             raise ValueError(f"Invalid relation table name derived from {path.name}")
 
-        implicit_pairs: set[tuple[str, str]] = set()
+        try:
+            schema = registry.get(relation)
+        except UnknownEdgeSchemaError as error:
+            raise ValueError(str(error)) from error
+
+        seen_pairs: set[tuple[str, str]] = set()
+        seen_ids: set[str] = set()
+        table_edges: list[_PreparedEdge] = []
         for record in _records_from_file(path):
             raw_from = record.get("from")
             raw_to = record.get("to")
@@ -185,38 +223,123 @@ async def ingest_directory(database: Database, data_dir: Path) -> IngestionResul
 
             source = parse_record_id(raw_from, source=path)
             target = parse_record_id(raw_to, source=path)
-            if "id" not in record:
-                pair = (str(source), str(target))
-                if pair in implicit_pairs:
-                    raise ValueError(
-                        f"Multiple {relation} edges in {path} connect {source} to "
-                        "the same target; give each edge a unique 'id'"
-                    )
-                implicit_pairs.add(pair)
+            registry.validate_endpoints(
+                relation,
+                source.table_name,
+                target.table_name,
+            )
+            _validate_temporal_fields(record, path, schema)
+
+            pair = _edge_pair(schema, source, target)
+            if pair in seen_pairs:
+                qualifier = "symmetric " if schema.symmetric else ""
+                raise ValueError(
+                    f"Duplicate {qualifier}{relation} relationship in {path}: "
+                    f"{source} -> {target}"
+                )
+            seen_pairs.add(pair)
 
             edge = _edge_record_id(relation, record, source, target, path)
+            if str(edge) in seen_ids:
+                raise ValueError(f"Duplicate edge ID {edge} in {path}")
+            seen_ids.add(str(edge))
             content = {
                 key: value
                 for key, value in record.items()
                 if key not in {"id", "from", "to", "in", "out"}
             }
 
-            # A stable edge record ID makes repeated ingestion an upsert.
-            statement = "RELATE $source->$edge->$target CONTENT $content;"
+            table_edges.append(
+                _PreparedEdge(relation, edge, source, target, content)
+            )
+        prepared_edges[relation] = table_edges
+
+    nodes_upserted = 0
+    edges_upserted = 0
+    # Nodes must exist before relationship records are related.
+    for table, nodes in prepared_nodes.items():
+        for node in nodes:
+            await database.upsert(node.record_id, node.content)
+            nodes_upserted += 1
+        await _prune_table(database, table, [node.record_id for node in nodes])
+
+    for relation, edges in prepared_edges.items():
+        for edge in edges:
             await database.query(
-                statement,
+                "RELATE $source->$edge->$target CONTENT $content;",
                 {
-                    "source": source,
-                    "edge": edge,
-                    "target": target,
-                    "content": content,
+                    "source": edge.source,
+                    "edge": edge.record_id,
+                    "target": edge.target,
+                    "content": edge.content,
                 },
             )
             edges_upserted += 1
+        await _prune_table(
+            database,
+            relation,
+            [edge.record_id for edge in edges],
+        )
 
     return IngestionResult(
         node_files=len(node_files),
         edge_files=len(edge_files),
         nodes_upserted=nodes_upserted,
         edges_upserted=edges_upserted,
+    )
+
+
+def _default_edge_registry(data_dir: Path) -> EdgeSchemaRegistry:
+    candidates = (
+        data_dir.parent / "schemas" / "edge",
+        Path(__file__).resolve().parents[2] / "schemas" / "edge",
+        Path("/app/schemas/edge"),
+    )
+    for candidate in candidates:
+        if candidate.is_dir():
+            return EdgeSchemaRegistry.from_directory(candidate)
+    raise FileNotFoundError("Could not locate schemas/edge")
+
+
+def _validate_temporal_fields(
+    record: dict[str, Any],
+    path: Path,
+    schema: EdgeSchema,
+) -> None:
+    present = {field for field in ("start", "end") if field in record}
+    if present and not schema.temporal:
+        raise ValueError(
+            f"Non-temporal relationship {schema.id!r} in {path} cannot define "
+            f"{', '.join(sorted(present))}"
+        )
+    for field in present:
+        value = record[field]
+        if field == "end" and value is None:
+            continue
+        if not isinstance(value, str):
+            raise ValueError(f"{field!r} in {path} must be an ISO date string or null")
+        try:
+            date.fromisoformat(value)
+        except ValueError as error:
+            raise ValueError(f"{field!r} in {path} must be an ISO date") from error
+
+
+def _edge_pair(
+    schema: EdgeSchema,
+    source: RecordID,
+    target: RecordID,
+) -> tuple[str, str]:
+    pair = (str(source), str(target))
+    return tuple(sorted(pair)) if schema.symmetric else pair
+
+
+async def _prune_table(
+    database: Database,
+    table: str,
+    record_ids: list[RecordID],
+) -> None:
+    """Make each JSON file the source of truth for its corresponding table."""
+    await database.query(
+        "DELETE FROM type::table($table) WHERE id NOT IN $record_ids;",
+        {"table": table, "record_ids": record_ids},
     )

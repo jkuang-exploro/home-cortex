@@ -1,5 +1,5 @@
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -31,6 +31,8 @@ class GetEntityArguments(ToolArguments):
 class GetRelationshipsArguments(ToolArguments):
     entity_id: str = Field(pattern=RECORD_ID_PATTERN)
     relation: str | None = Field(default=None, pattern=TABLE_NAME_PATTERN)
+    direction: Literal["out", "in", "both"] | None = None
+    include_ended: bool = False
     limit: int | None = Field(default=None, ge=1, le=100)
 
 
@@ -106,14 +108,13 @@ TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "get_relationships",
             "description": (
-                "Get incoming and outgoing relationships for one known entity. "
-                "Pass relation to restrict to one table, such as spouse_of, "
-                "resides_in, or parent_of. Each result includes relation, "
-                "optional start/end, and related_entity. A person's resides_in "
-                "result also includes residents: every person living at that "
-                "home. Interpret start using relation: spouse_of.start is the "
-                "marriage date, resides_in.start is when residence began, "
-                "parent_of.start is when that parent relationship began."
+                "Traverse registered graph relationships for one known entity. "
+                "The graph service applies symmetric, directed, and inverse "
+                "semantics deterministically. Each result includes the canonical "
+                "relation, semantic_relation from the queried entity's viewpoint, "
+                "direction, and related_entity. Current relationships are returned "
+                "by default. A person's lives_in result also includes residents: "
+                "every current person living at that home."
             ),
             "parameters": {
                 "type": "object",
@@ -129,7 +130,22 @@ TOOLS: list[dict[str, Any]] = [
                         "pattern": TABLE_NAME_PATTERN,
                         "description": (
                             "Optional relationship table, such as spouse_of, "
-                            "resides_in, or parent_of."
+                            "lives_in, parent_of, or the derived inverse child_of."
+                        ),
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["out", "in", "both"],
+                        "description": (
+                            "Optional semantic traversal direction. Symmetric "
+                            "relations always search both stored orientations."
+                        ),
+                    },
+                    "include_ended": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": (
+                            "Include ended temporal relationships. Defaults to false."
                         ),
                     },
                     "limit": {
@@ -273,7 +289,9 @@ class ToolDispatcher:
         return await self.retrieval.get_relationships(
             arguments.entity_id,
             relation=arguments.relation,
+            direction=arguments.direction,
             limit=arguments.limit,
+            include_ended=arguments.include_ended,
         )
 
     @staticmethod

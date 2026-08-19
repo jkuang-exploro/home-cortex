@@ -1,0 +1,7 @@
+id: spouse_of
+symmetric: true
+from_types:
+  - person
+to_types:
+  - person
+temporal: true

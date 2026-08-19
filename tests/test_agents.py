@@ -11,7 +11,8 @@ def test_steward_agent_loads_successfully() -> None:
     assert "source of truth" in steward.prompt
     assert "continue using tools" in steward.prompt
     assert 'relation="spouse_of"' in steward.prompt
-    assert "resides_in.start" in steward.prompt
+    assert "lives_in.start" in steward.prompt
+    assert "Every household-fact answer must be supported" in steward.prompt
     assert "never a wedding or anniversary date" in steward.prompt
     assert "结婚纪念日" in steward.prompt
     assert "Call get_entity with that Person ID" in steward.prompt

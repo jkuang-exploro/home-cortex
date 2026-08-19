@@ -36,10 +36,10 @@ def _relationship(
     household_id: str = "location:fort_cerritos",
 ) -> dict[str, Any]:
     relationship: dict[str, Any] = {
-        "id": f"resides_in:{person_id.rpartition(':')[2]}",
+        "id": f"lives_in:{person_id.rpartition(':')[2]}",
         "in": person_id,
         "out": household_id,
-        "relation": "resides_in",
+        "relation": "lives_in",
         "related_entity": HOUSEHOLD,
     }
     if role is not None:

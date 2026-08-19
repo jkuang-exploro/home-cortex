@@ -37,7 +37,7 @@ Person records may store `dob` as an ISO date. That field is the date of
 birth. Do not invent a birthday when `dob` is absent.
 
 Household status is contextual and belongs on the edge connecting a Person to
-a household. For a resident, add `household_role` to `resides_in`:
+a household. For a resident, add `household_role` to `lives_in`:
 
 ```json
 {
@@ -53,15 +53,21 @@ The V1 reception roles are `owner`, `minor_dependent`, `adult_dependent`, and
 `is_guest` or `person_type: guest` on the Person node. Missing, conflicting, or
 unrecognized roles resolve to the neutral `unknown` reception policy.
 
-Relationship files under `edges/` are named for the relation table. Optional
-`start` and `end` are the interval for that relation only:
+Relationship files under `edges/` are named for a registered relationship in
+`schemas/edge/`. Schema files define endpoint types, direction, symmetry, and
+whether temporal fields are allowed. Data files contain facts only.
+
+Optional `start` and `end` are the interval for a temporal relation only:
 
 - `spouse_of.start` is the marriage date (结婚纪念日).
-- `resides_in.start` is when the person began living at that location.
-- `parent_of.start` is when that parent relationship began.
+- `lives_in.start` is when the person began living at that location.
 
 `end: null` means the relationship is current. Do not reuse a `start` date
 from one relation as a fact about another.
+
+Store a symmetric `spouse_of` fact once; traversal works from either spouse.
+Store only canonical `parent_of` facts. `child_of` is a derived inverse query
+name and must not have its own data file.
 
 Do not use separate records for translations of the same person's or
 location's name. Record IDs remain language-neutral and stable.

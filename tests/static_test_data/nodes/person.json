@@ -11,5 +11,11 @@
     "name": ["Blair Example", "布莱尔"],
     "first_name": "Blair",
     "last_name": "Example"
+  },
+  {
+    "id": "person:casey_example",
+    "name": ["Casey Example", "凯西"],
+    "first_name": "Casey",
+    "last_name": "Example"
   }
 ]

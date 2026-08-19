@@ -77,6 +77,28 @@ async def test_search_entities_queries_known_tables_and_sorts_globally() -> None
     ]
     assert all(variables["text"] == "cerritos" for _, variables in database.queries)
     assert "type::table($table)" in database.queries[0][0]
+    assert "type::string(name)" in database.queries[0][0]
+    assert "type::string($this)" not in database.queries[0][0]
+
+
+@pytest.mark.asyncio
+async def test_search_prefers_exact_name_over_incidental_partial_match() -> None:
+    database = FakeDatabase(
+        {
+            "person": [
+                {"id": RecordID("person", "about_jian"), "name": ["About Jian"]},
+                {"id": RecordID("person", "jian_kuang"), "name": ["Jian Kuang"]},
+            ]
+        }
+    )
+    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
+
+    result = await service.search_entities("Jian Kuang", entity_type="person")
+
+    assert [record["id"] for record in result] == [
+        "person:jian_kuang",
+        "person:about_jian",
+    ]
 
 
 @pytest.mark.asyncio
@@ -161,9 +183,9 @@ async def test_get_entity_rejects_unknown_type_and_malformed_id() -> None:
 async def test_get_relationships_returns_direction_and_filters_relation() -> None:
     database = FakeDatabase(
         {
-            "resides_in": [
+            "lives_in": [
                 {
-                    "id": RecordID("resides_in", "person_a__location_main"),
+                    "id": RecordID("lives_in", "person_a__location_main"),
                     "in": RecordID("person", "a"),
                     "out": RecordID("location", "main"),
                     "source_entity": {
@@ -182,16 +204,16 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
 
     incoming = await service.get_relationships(
         "location:main",
-        relation="resides_in",
+        relation="lives_in",
     )
     outgoing = await service.get_relationships(
         "person:a",
-        relation="resides_in",
+        relation="lives_in",
     )
 
     assert incoming[0]["direction"] == "incoming"
     assert outgoing[0]["direction"] == "outgoing"
-    assert incoming[0]["relation"] == "resides_in"
+    assert incoming[0]["relation"] == "lives_in"
     assert incoming[0]["related_entity"] == {
         "id": "person:a",
         "first_name": "Alex",
@@ -211,7 +233,7 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
     assert "source_entity" not in incoming[0]
     assert "target_entity" not in incoming[0]
     assert database.queries[0][1]["entity"] == RecordID("location", "main")
-    assert "in = $entity OR out = $entity" in database.queries[0][0]
+    assert "out = $entity" in database.queries[0][0]
     assert "in.* AS source_entity" in database.queries[0][0]
 
 
@@ -235,7 +257,7 @@ def test_table_names_come_from_static_test_data() -> None:
     )
 
     assert service.node_tables == ("location", "person")
-    assert service.edge_tables == ("resides_in", "spouse_of")
+    assert service.edge_tables == ("lives_in", "parent_of", "spouse_of")
 
 
 def test_record_id_is_serialized() -> None:
@@ -271,11 +293,11 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
         )
         relationships = await service.get_relationships(
             "location:test_house",
-            relation="resides_in",
+            relation="lives_in",
         )
         alex_home = await service.get_relationships(
             "person:alex_example",
-            relation="resides_in",
+            relation="lives_in",
         )
         marriage = await service.get_relationships(
             "person:alex_example",
@@ -317,8 +339,84 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
         "Blair",
     ]
     assert all(
-        "related_entity" not in edge for edge in context.edges["resides_in"]
+        "related_entity" not in edge for edge in context.edges["lives_in"]
     )
+
+
+@pytest.mark.asyncio
+async def test_registry_drives_symmetric_directed_and_inverse_traversal() -> None:
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        await ingest_directory(database, STATIC_TEST_DATA)  # type: ignore[arg-type]
+        service = RetrievalService(  # type: ignore[arg-type]
+            database,
+            limit=10,
+            data_dir=STATIC_TEST_DATA,
+        )
+
+        blair_spouse = await service.get_relationships(
+            "person:blair_example",
+            relation="spouse_of",
+        )
+        alex_children = await service.get_relationships(
+            "person:alex_example",
+            relation="parent_of",
+            direction="out",
+        )
+        casey_parents = await service.get_relationships(
+            "person:casey_example",
+            relation="parent_of",
+            direction="in",
+        )
+        casey_inverse = await service.get_relationships(
+            "person:casey_example",
+            relation="child_of",
+        )
+    finally:
+        await database.close()
+
+    assert [edge["related_entity"]["id"] for edge in blair_spouse] == [
+        "person:alex_example"
+    ]
+    assert blair_spouse[0]["semantic_relation"] == "spouse_of"
+    assert [edge["related_entity"]["id"] for edge in alex_children] == [
+        "person:casey_example"
+    ]
+    assert sorted(edge["related_entity"]["id"] for edge in casey_parents) == [
+        "person:alex_example",
+        "person:blair_example",
+    ]
+    assert sorted(edge["related_entity"]["id"] for edge in casey_inverse) == [
+        "person:alex_example",
+        "person:blair_example",
+    ]
+    assert all(edge["relation"] == "parent_of" for edge in casey_inverse)
+    assert all(edge["semantic_relation"] == "child_of" for edge in casey_inverse)
+
+
+@pytest.mark.asyncio
+async def test_ended_relationships_are_excluded_unless_requested() -> None:
+    ended = {
+        "id": RecordID("spouse_of", "old_marriage"),
+        "in": RecordID("person", "a"),
+        "out": RecordID("person", "b"),
+        "end": "2020-01-01",
+    }
+    service = RetrievalService(  # type: ignore[arg-type]
+        FakeDatabase({"spouse_of": [ended]}),
+        limit=10,
+    )
+
+    current = await service.get_relationships("person:a", relation="spouse_of")
+    historical = await service.get_relationships(
+        "person:a",
+        relation="spouse_of",
+        include_ended=True,
+    )
+
+    assert current == []
+    assert historical[0]["end"] == "2020-01-01"
 
 
 @pytest.mark.asyncio
@@ -356,7 +454,7 @@ async def test_get_entity_ignores_colliding_searchable_records() -> None:
     finally:
         await database.close()
 
-    assert [record["id"] for record in colliding] == ["person:about_jian_kuang"]
+    assert [record["id"] for record in colliding] == ["person:jian_kuang"]
     assert exact is not None
     assert exact["id"] == "person:jian_kuang"
     assert exact["name"] == ["Jian Kuang"]

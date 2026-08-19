@@ -2,14 +2,16 @@
   {
     "from": "person:alex_example",
     "to": "location:test_house",
-    "residence_type": "primary",
+    "start": "2020-01-01",
+    "end": null,
     "household_role": "owner"
   },
   {
-    "id": "resides_in:blair_primary",
+    "id": "lives_in:blair_primary",
     "from": "person:blair_example",
     "to": "location:test_house",
-    "residence_type": "primary",
-    "household_role": "adult_dependent"
+    "start": "2020-01-01",
+    "end": null,
+    "household_role": "owner"
   }
 ]

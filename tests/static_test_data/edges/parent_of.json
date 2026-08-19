@@ -1,0 +1,12 @@
+[
+  {
+    "from": "person:alex_example",
+    "to": "person:casey_example",
+    "type": "parent"
+  },
+  {
+    "from": "person:blair_example",
+    "to": "person:casey_example",
+    "type": "parent"
+  }
+]

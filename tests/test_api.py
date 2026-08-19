@@ -133,7 +133,7 @@ class FakeIdentityRetrieval:
         return RetrievedContext(
             question=question,
             nodes={"person": list(self.records), "location": list(self.locations)},
-            edges={"resides_in": []},
+            edges={"lives_in": []},
             text="{}",
         )
 
@@ -146,7 +146,7 @@ class FakeIdentityRetrieval:
         self.relationship_calls.append(entity_id)
         return [
             {
-                "id": "resides_in:jian",
+                "id": "lives_in:jian",
                 "in": entity_id,
                 "out": "location:fort_cerritos",
                 "household_role": "owner",
@@ -323,8 +323,7 @@ def test_chat_completions_invokes_agent_and_returns_openai_shape(
             "finish_reason": "stop",
         }
     ]
-    assert agent.calls[0][-len(messages) :] == messages
-    assert "already rendered" in agent.calls[0][0]["content"]
+    assert agent.calls[0] == [messages[-1]]
     assert agent.request_ids == [response.headers["X-Request-ID"]]
     _assert_request_id(response)
 
@@ -531,7 +530,6 @@ def test_chat_completions_returns_openai_sse_stream(
     }
     assert chunks[4]["choices"][0]["finish_reason"] == "stop"
     assert agent.calls[0][-len(messages) :] == messages
-    assert "already rendered" in agent.calls[0][0]["content"]
     assert agent.request_ids == [response.headers["X-Request-ID"]]
     _assert_request_id(response)
 

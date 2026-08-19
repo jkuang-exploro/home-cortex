@@ -46,15 +46,15 @@ async def test_repeated_ingestion_does_not_duplicate_relationships() -> None:
             database,
             STATIC_TEST_DATA,
         )
-        edges = await database.query("SELECT * FROM resides_in;")
+        edges = await database.query("SELECT * FROM lives_in;")
     finally:
         await database.close()
 
-    assert first.nodes_upserted == second.nodes_upserted == 3
-    assert first.edges_upserted == second.edges_upserted == 3
+    assert first.nodes_upserted == second.nodes_upserted == 4
+    assert first.edges_upserted == second.edges_upserted == 5
     assert sorted(str(edge["id"]) for edge in edges) == [
-        "resides_in:blair_primary",
-        "resides_in:person_alex_example__location_test_house",
+        "lives_in:blair_primary",
+        "lives_in:person_alex_example__location_test_house",
     ]
 
 
@@ -67,11 +67,11 @@ async def test_explicit_relationship_id_is_stable() -> None:
             database,
             STATIC_TEST_DATA,
         )
-        edges = await database.query("SELECT * FROM resides_in;")
+        edges = await database.query("SELECT * FROM lives_in;")
     finally:
         await database.close()
 
-    assert "resides_in:blair_primary" in [str(edge["id"]) for edge in edges]
+    assert "lives_in:blair_primary" in [str(edge["id"]) for edge in edges]
 
 
 @pytest.mark.asyncio
@@ -82,14 +82,14 @@ async def test_duplicate_implicit_relationships_require_ids(tmp_path: Path) -> N
         "from": "person:alex_example",
         "to": "location:test_house",
     }
-    (data_dir / "edges" / "resides_in.json").write_text(
+    (data_dir / "edges" / "lives_in.json").write_text(
         json.dumps([edge, {**edge, "residence_type": "historical"}]),
         encoding="utf-8",
     )
     database = MemoryDatabase()
     await database.connect()
     try:
-        with pytest.raises(ValueError, match="unique 'id'"):
+        with pytest.raises(ValueError, match="Duplicate lives_in relationship"):
             await ingest_directory(database, data_dir)  # type: ignore[arg-type]
     finally:
         await database.close()
@@ -220,3 +220,85 @@ async def test_non_person_nodes_cannot_define_address_as(tmp_path: Path) -> None
             await ingest_directory(database, data_dir)  # type: ignore[arg-type]
     finally:
         await database.close()
+
+
+@pytest.mark.asyncio
+async def test_lives_in_rejects_reversed_endpoint_types(tmp_path: Path) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    path = data_dir / "edges" / "lives_in.json"
+    path.write_text(
+        json.dumps(
+            [{"from": "location:test_house", "to": "person:alex_example"}]
+        ),
+        encoding="utf-8",
+    )
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        with pytest.raises(ValueError, match="Invalid lives_in endpoints"):
+            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+    finally:
+        await database.close()
+
+
+@pytest.mark.asyncio
+async def test_non_temporal_parent_of_rejects_dates(tmp_path: Path) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    path = data_dir / "edges" / "parent_of.json"
+    records = json.loads(path.read_text(encoding="utf-8"))
+    records[0]["start"] = "2020-01-01"
+    path.write_text(json.dumps(records), encoding="utf-8")
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        with pytest.raises(ValueError, match="Non-temporal relationship"):
+            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+    finally:
+        await database.close()
+
+
+@pytest.mark.asyncio
+async def test_symmetric_reverse_duplicate_is_rejected(tmp_path: Path) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    path = data_dir / "edges" / "spouse_of.json"
+    records = json.loads(path.read_text(encoding="utf-8"))
+    records.append(
+        {
+            "from": "person:blair_example",
+            "to": "person:alex_example",
+            "start": "2011-03-15",
+            "end": None,
+        }
+    )
+    path.write_text(json.dumps(records), encoding="utf-8")
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        with pytest.raises(ValueError, match="Duplicate symmetric spouse_of"):
+            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+    finally:
+        await database.close()
+
+
+@pytest.mark.asyncio
+async def test_reingestion_prunes_records_removed_from_json(tmp_path: Path) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+        path = data_dir / "edges" / "lives_in.json"
+        records = json.loads(path.read_text(encoding="utf-8"))
+        path.write_text(json.dumps(records[:1]), encoding="utf-8")
+        await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+        edges = await database.query("SELECT * FROM lives_in;")
+    finally:
+        await database.close()
+
+    assert [str(edge["id"]) for edge in edges] == [
+        "lives_in:person_alex_example__location_test_house"
+    ]
