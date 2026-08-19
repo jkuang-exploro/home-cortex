@@ -29,6 +29,7 @@ def _agent(
         system_prompt=STEWARD.prompt,
         tools=STEWARD.tool_definitions,
         localized_identity=STEWARD.settings["localized_identity"],
+        home_entity_id=STEWARD.settings["home_entity_id"],
         **settings,
     )
 
@@ -831,40 +832,26 @@ async def test_chinese_roster_tool_result_is_localized_and_privacy_minimized() -
         }
     )
     ollama = FakeOllamaService(
-        [
-            _chat_response(
-                tool_calls=[
-                    _tool_call(
-                        "get_relationships",
-                        {
-                            "entity_id": "location:fort_cerritos",
-                            "relation": "lives_in",
-                            "direction": "out",
-                        },
-                    )
-                ]
-            ),
-            _chat_response("匡健住在喜瑞匡家。"),
-        ]
+        [_chat_response("匡健先生（您）— 房屋主人。")]
     )
 
     result = await _agent(ollama, dispatcher).answer("家里住着谁？")
-    tool_result = json.loads(ollama.calls[1][-1]["content"])
-    serialized = json.dumps(tool_result, ensure_ascii=False)
 
-    assert result.answer == "匡健住在喜瑞匡家。"
-    assert "匡健" in serialized
-    assert "Jian Kuang" not in serialized
-    assert '"Jian"' not in serialized
-    assert '"Kuang"' not in serialized
-    assert "1988-11-11" not in serialized
-    assert "123 Private Street" not in serialized
-    assert "2026-05-23" not in serialized
-    assert "dob" not in serialized
-    assert '"address"' not in serialized
-    assert "address_as" not in serialized
-    assert '"start"' not in serialized
-    assert '"end"' not in serialized
+    assert result.answer == "目前家里的住户有：\n- 匡健"
+    assert "1988-11-11" not in result.answer
+    assert "123 Private Street" not in result.answer
+    assert "房屋主人" not in result.answer
+    assert ollama.calls == []
+    assert dispatcher.calls == [
+        (
+            "get_relationships",
+            {
+                "entity_id": "location:fort_cerritos",
+                "relation": "lives_in",
+                "limit": 25,
+            },
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -1126,35 +1113,7 @@ async def test_final_answer_uses_localized_name_without_trusted_identity(
 
 @pytest.mark.asyncio
 async def test_first_person_household_question_traverses_identity_home() -> None:
-    ollama = FakeOllamaService(
-        [
-            _chat_response(
-                tool_calls=[
-                    _tool_call(
-                        "get_relationships",
-                        {
-                            "entity_id": "person:jian_kuang",
-                            "relation": "lives_in",
-                        },
-                    )
-                ]
-            ),
-            _chat_response(
-                tool_calls=[
-                    _tool_call(
-                        "get_relationships",
-                        {
-                            "entity_id": "location:fort_cerritos",
-                            "relation": "lives_in",
-                        },
-                    )
-                ]
-            ),
-            _chat_response(
-                "目前 person:jian_kuang 和 person:pu_ba 都在喜瑞匡家。"
-            ),
-        ]
-    )
+    ollama = FakeOllamaService([])
 
     class HouseholdDispatcher:
         def __init__(self) -> None:
@@ -1214,11 +1173,71 @@ async def test_first_person_household_question_traverses_identity_home() -> None
         },
     )
 
-    assert result.answer == "目前 先生 和 巴璞 都在喜瑞匡家。"
+    assert result.answer == "先生，目前家里的住户有：\n- 匡健\n- 巴璞"
     assert [arguments["entity_id"] for _, arguments in dispatcher.calls] == [
-        "person:jian_kuang",
         "location:fort_cerritos",
     ]
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "question",
+    ["家里都有谁？", "家中有哪些成员？", "谁住在家里？"],
+)
+async def test_household_roster_lists_only_residents_without_invented_roles(
+    question: str,
+) -> None:
+    residents = [
+        ("person:jian_kuang", "匡健"),
+        ("person:pu_ba", "巴璞"),
+        ("person:dylan_kuang", "匡德伦"),
+        ("person:evelyn_kuang", "匡悠然"),
+        ("person:zhigang_ba", "巴志刚"),
+    ]
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_relationships",
+            "result": [
+                {
+                    "id": f"lives_in:{record_id.rpartition(':')[2]}_home",
+                    "relation": "lives_in",
+                    "household_role": "owner",
+                    "related_entity": {
+                        "id": record_id,
+                        "name": [name, name],
+                    },
+                }
+                for record_id, name in residents
+            ],
+        }
+    )
+    ollama = FakeOllamaService(
+        [_chat_response("巴志刚先生是巴璞先生的成年儿子。")]
+    )
+
+    result = await _agent(ollama, dispatcher).answer(
+        question,
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == (
+        "先生，目前家里的住户有：\n"
+        "- 匡健\n"
+        "- 巴璞\n"
+        "- 匡德伦\n"
+        "- 匡悠然\n"
+        "- 巴志刚"
+    )
+    assert "主人" not in result.answer
+    assert "儿子" not in result.answer
+    assert "岳父" not in result.answer
+    assert ollama.calls == []
 
 
 @pytest.mark.asyncio

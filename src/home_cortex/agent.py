@@ -137,6 +137,7 @@ class AgentService:
         max_tool_result_bytes: int = MAX_TOOL_RESULT_BYTES,
         tool_timeout_seconds: float = TOOL_EXECUTION_TIMEOUT_SECONDS,
         localized_identity: Mapping[str, str] | None = None,
+        home_entity_id: str | None = None,
     ) -> None:
         self.ollama = ollama
         self.dispatcher = dispatcher
@@ -151,6 +152,12 @@ class AgentService:
             for language, name in (localized_identity or {}).items()
             if isinstance(name, str) and name.strip()
         }
+        if home_entity_id is not None and not re.fullmatch(
+            r"location:[A-Za-z0-9_-]+",
+            home_entity_id,
+        ):
+            raise ValueError("home_entity_id must be a location record ID")
+        self.home_entity_id = home_entity_id
         self._tools_with_limit = frozenset(
             tool["function"]["name"]
             for tool in self.tools
@@ -218,6 +225,13 @@ class AgentService:
         language = conversation_language(safe_messages)
         expose_internal_ids = internal_ids_requested(safe_messages)
         identity = _normalized_identity(user_entity_id, user_entity)
+        if _is_household_roster_request(safe_messages) and self.home_entity_id:
+            return await self._answer_household_roster(
+                safe_messages,
+                identity=identity,
+                request_id=request_id,
+                presentation_language=language,
+            )
         return await self.run(
             [
                 {"role": "system", "content": self.system_prompt},
@@ -246,6 +260,15 @@ class AgentService:
         language = conversation_language(safe_messages)
         expose_internal_ids = internal_ids_requested(safe_messages)
         identity = _normalized_identity(user_entity_id, user_entity)
+        if _is_household_roster_request(safe_messages) and self.home_entity_id:
+            result = await self._answer_household_roster(
+                safe_messages,
+                identity=identity,
+                request_id=request_id,
+                presentation_language=language,
+            )
+            yield result.answer
+            return
         async for token in self.stream(
             [
                 {"role": "system", "content": self.system_prompt},
@@ -261,6 +284,64 @@ class AgentService:
             ),
         ):
             yield token
+
+    async def _answer_household_roster(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        *,
+        identity: Mapping[str, Any] | None,
+        request_id: str,
+        presentation_language: str,
+    ) -> AgentResult:
+        """Return the configured home's current residents without model embellishment."""
+        assert self.home_entity_id is not None
+        requirements = EvidenceRequirements(
+            tools=frozenset({"get_relationships"}),
+            relations=frozenset({"lives_in"}),
+        )
+        arguments: dict[str, Any] = {
+            "entity_id": self.home_entity_id,
+            "relation": "lives_in",
+            "limit": self.max_tool_records,
+        }
+        tool_result = await self._execute_planned_tool(
+            "get_relationships",
+            arguments,
+            requirements=requirements,
+            request_id=request_id,
+        )
+        stop_reason = _tool_failure_reason(tool_result, None)
+        if tool_result.get("ok") is not True:
+            answer = _grounding_fallback(presentation_language)
+            reason = stop_reason or "tool_error"
+        else:
+            residents = _household_residents(tool_result)
+            if residents:
+                answer = _format_household_roster(
+                    residents,
+                    identity,
+                    presentation_language,
+                )
+            else:
+                answer = _no_records_fallback(presentation_language)
+            reason = "answer"
+        logger.info(
+            "agent_stop request_id=%s reason=%s steps=1 tool_calls=1",
+            _safe_log_token(request_id),
+            reason,
+        )
+        conversation = [
+            {"role": "system", "content": self.system_prompt},
+            *(_identity_context(identity) if identity else []),
+            *(dict(message) for message in messages),
+        ]
+        return AgentResult(
+            answer=answer,
+            steps=1,
+            tool_calls=1,
+            stop_reason=reason,
+            messages=tuple(conversation),
+        )
 
     async def stream(
         self,
@@ -1144,6 +1225,115 @@ def _conversation_messages(
     return safe
 
 
+def _is_household_roster_request(
+    messages: Sequence[Mapping[str, Any]],
+) -> bool:
+    """Recognize requests for a home's resident roster, not kinship facts."""
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    if _contains_any(
+        latest_user,
+        (
+            "birthday",
+            "anniversary",
+            "parent",
+            "child",
+            "daughter",
+            "son",
+            "spouse",
+            "wife",
+            "husband",
+            "生日",
+            "纪念日",
+            "父母",
+            "父亲",
+            "母亲",
+            "孩子",
+            "儿子",
+            "女儿",
+            "配偶",
+            "妻子",
+            "丈夫",
+        ),
+    ):
+        return False
+
+    chinese_home = r"(?:家里|家中|家里面|家里边|这个家|这里)"
+    chinese_people = r"(?:谁|哪些人|什么人|成员|住户)"
+    if re.search(
+        rf"(?:{chinese_home}.*{chinese_people}|"
+        rf"{chinese_people}.*(?:住|居住|待在).*{chinese_home})",
+        latest_user,
+    ):
+        return True
+
+    english_patterns = (
+        r"\bwho\b.*\b(?:live|lives|living|reside|resides|stays?)\b.*"
+        r"\b(?:home|house|household|here)\b",
+        r"\b(?:household|home|house)\s+(?:members|residents|occupants)\b",
+        r"\bwho\b.*\b(?:in|at)\b.*\b(?:my|our|the)\s+household\b",
+    )
+    return any(re.search(pattern, latest_user) for pattern in english_patterns)
+
+
+def _household_residents(
+    tool_result: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    residents: list[Mapping[str, Any]] = []
+    seen_ids: set[str] = set()
+    records = tool_result.get("result")
+    if not isinstance(records, list):
+        return residents
+
+    def append_person(value: Any) -> None:
+        if not isinstance(value, Mapping):
+            return
+        record_id = value.get("id")
+        if (
+            not isinstance(record_id, str)
+            or not record_id.startswith("person:")
+            or record_id in seen_ids
+        ):
+            return
+        seen_ids.add(record_id)
+        residents.append(value)
+
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        append_person(record.get("related_entity"))
+        nested_residents = record.get("residents")
+        if isinstance(nested_residents, list):
+            for resident in nested_residents:
+                append_person(resident)
+    return residents
+
+
+def _format_household_roster(
+    residents: Sequence[Mapping[str, Any]],
+    identity: Mapping[str, Any] | None,
+    language: str,
+) -> str:
+    names = [resolve_display_name(resident, language) for resident in residents]
+    address = _speaker_address((identity,) if identity else (), language)
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        heading = f"{prefix}目前家里的住户有："
+    else:
+        heading = (
+            f"{address}, the current household residents are:"
+            if address
+            else "The current household residents are:"
+        )
+    return heading + "\n" + "\n".join(f"- {name}" for name in names)
+
+
 def _requires_graph_evidence(messages: Sequence[Mapping[str, Any]]) -> bool:
     latest_user = next(
         (
@@ -1187,6 +1377,8 @@ def _requires_graph_evidence(messages: Sequence[Mapping[str, Any]]) -> bool:
 def _required_evidence_tool(
     messages: Sequence[Mapping[str, Any]],
 ) -> str | None:
+    if _is_household_roster_request(messages):
+        return "get_relationships"
     latest_user = next(
         (
             str(message.get("content", "")).casefold()
@@ -1242,6 +1434,8 @@ def _required_evidence_tool(
 def _required_evidence_relation(
     messages: Sequence[Mapping[str, Any]],
 ) -> str | None:
+    if _is_household_roster_request(messages):
+        return "lives_in"
     latest_user = next(
         (
             str(message.get("content", "")).casefold()
