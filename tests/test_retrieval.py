@@ -121,6 +121,34 @@ async def test_search_entities_can_restrict_entity_type_and_limit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_entity_summaries_exclude_private_profile_fields() -> None:
+    database = FakeDatabase(
+        {
+            "person": [
+                {
+                    "id": RecordID("person", "alex"),
+                    "name": ["Alex", "艾力克斯"],
+                    "gender": "male",
+                    "dob": "1980-01-02",
+                    "address": {"street": "123 Private Street"},
+                }
+            ]
+        }
+    )
+    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
+
+    result = await service.search_entities("Alex", entity_type="person")
+
+    assert result == [
+        {
+            "id": "person:alex",
+            "name": ["Alex", "艾力克斯"],
+            "gender": "male",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_search_entities_rejects_unknown_type_empty_text_and_bad_limit() -> None:
     database = FakeDatabase({})
     service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
@@ -235,6 +263,70 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
     assert database.queries[0][1]["entity"] == RecordID("location", "main")
     assert "out = $entity" in database.queries[0][0]
     assert "in.* AS source_entity" in database.queries[0][0]
+
+
+@pytest.mark.asyncio
+async def test_typed_relation_overrides_impossible_requested_direction() -> None:
+    database = FakeDatabase({"lives_in": []})
+    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
+
+    await service.get_relationships(
+        "location:main",
+        relation="lives_in",
+        direction="out",
+    )
+    await service.get_relationships(
+        "person:alex",
+        relation="lives_in",
+        direction="in",
+    )
+
+    assert "out = $entity" in database.queries[0][0]
+    assert "in = $entity" in database.queries[1][0]
+
+
+@pytest.mark.asyncio
+async def test_relationship_entity_summaries_exclude_dob_and_address() -> None:
+    database = FakeDatabase(
+        {
+            "lives_in": [
+                {
+                    "id": RecordID("lives_in", "alex_home"),
+                    "in": RecordID("person", "alex"),
+                    "out": RecordID("location", "main"),
+                    "source_entity": {
+                        "id": RecordID("person", "alex"),
+                        "name": ["Alex", "艾力克斯"],
+                        "gender": "male",
+                        "dob": "1980-01-02",
+                        "address": {"street": "123 Private Street"},
+                    },
+                    "target_entity": {
+                        "id": RecordID("location", "main"),
+                        "name": ["Main Home", "主宅"],
+                        "address": {"street": "123 Private Street"},
+                    },
+                }
+            ]
+        }
+    )
+    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
+
+    result = await service.get_relationships(
+        "location:main",
+        relation="lives_in",
+        include_residents=False,
+    )
+
+    assert result[0]["related_entity"] == {
+        "id": "person:alex",
+        "name": ["Alex", "艾力克斯"],
+        "gender": "male",
+    }
+    assert result[0]["entity"] == {
+        "id": "location:main",
+        "name": ["Main Home", "主宅"],
+    }
 
 
 @pytest.mark.asyncio

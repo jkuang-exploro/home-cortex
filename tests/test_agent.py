@@ -133,20 +133,19 @@ async def test_returns_conversational_answer_without_dispatching_tools() -> None
     assert dispatcher.calls == []
     assert ollama.tool_names == [STEWARD.allowed_tools]
     assert ollama.calls[0][0]["role"] == "system"
-    assert "never the full question" in ollama.calls[0][0]["content"]
-    assert "call get_relationships" in ollama.calls[0][0]["content"]
-    assert "native tool-calling mechanism" in ollama.calls[0][0]["content"]
-    assert "get_entity and get_relationships use entity_id" in ollama.calls[0][0][
-        "content"
-    ]
-    assert "Call get_entity with that Person ID" in ollama.calls[0][0]["content"]
-    assert "dates of birth or full addresses" in ollama.calls[0][0]["content"]
-    assert 'relation="spouse_of"' in ollama.calls[0][0]["content"]
-    assert "never a wedding or anniversary date" in ollama.calls[0][0]["content"]
-    assert "household roster" in ollama.calls[0][0]["content"]
-    assert "language of the latest user message" in ollama.calls[0][0]["content"]
-    assert "multilingual aliases" in ollama.calls[0][0]["content"]
-    assert "Never invent or translate a name" in ollama.calls[0][0]["content"]
+    prompt = " ".join(ollama.calls[0][0]["content"].split())
+    assert "never the full question" in prompt
+    assert "`get_relationships` with the canonical relation" in prompt
+    assert "Use native tool calling only" in prompt
+    assert "`get_entity` and `get_relationships` use `entity_id`" in prompt
+    assert "call `get_entity`" in prompt
+    assert "dates of birth or full addresses" in prompt
+    assert "`spouse_of` is symmetric" in prompt
+    assert "never a wedding or anniversary date" in prompt
+    assert "household roster semantics" in prompt.casefold()
+    assert "language of the latest user message" in prompt
+    assert "multilingual aliases" in prompt
+    assert "never invent or translate a missing name" in prompt
     assert ollama.calls[0][-1] == {"role": "user", "content": "Hello"}
 
 
@@ -401,6 +400,112 @@ async def test_person_word_does_not_trigger_son_relationship_routing() -> None:
     result = await _agent(ollama, FakeDispatcher()).answer("Who is this person?")
 
     assert result.answer == "This person is Alex."
+
+
+@pytest.mark.asyncio
+async def test_chinese_roster_tool_result_is_localized_and_privacy_minimized() -> None:
+    private_record = {
+        "id": "person:jian_kuang",
+        "name": ["Jian Kuang", "匡健"],
+        "address_as": {"en": "Mr. Kuang", "zh": "先生"},
+        "first_name": "Jian",
+        "last_name": "Kuang",
+        "gender": "male",
+        "dob": "1988-11-11",
+        "address": {"street": "123 Private Street"},
+    }
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_relationships",
+            "result": [
+                {
+                    "id": "lives_in:jian_home",
+                    "relation": "lives_in",
+                    "start": "2026-05-23",
+                    "end": None,
+                    "related_entity": private_record,
+                    "residents": [private_record],
+                }
+            ],
+        }
+    )
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_relationships",
+                        {
+                            "entity_id": "location:fort_cerritos",
+                            "relation": "lives_in",
+                            "direction": "out",
+                        },
+                    )
+                ]
+            ),
+            _chat_response("匡健住在喜瑞匡家。"),
+        ]
+    )
+
+    result = await _agent(ollama, dispatcher).answer("家里住着谁？")
+    tool_result = json.loads(ollama.calls[1][-1]["content"])
+    serialized = json.dumps(tool_result, ensure_ascii=False)
+
+    assert result.answer == "匡健住在喜瑞匡家。"
+    assert "匡健" in serialized
+    assert "Jian Kuang" not in serialized
+    assert '"Jian"' not in serialized
+    assert '"Kuang"' not in serialized
+    assert "1988-11-11" not in serialized
+    assert "123 Private Street" not in serialized
+    assert "2026-05-23" not in serialized
+    assert "dob" not in serialized
+    assert '"address"' not in serialized
+    assert '"start"' not in serialized
+    assert '"end"' not in serialized
+
+
+@pytest.mark.asyncio
+async def test_explicit_birthday_request_receives_dob_but_not_other_private_data() -> None:
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_entity",
+            "result": [
+                {
+                    "id": "person:jian_kuang",
+                    "name": ["Jian Kuang", "匡健"],
+                    "first_name": "Jian",
+                    "last_name": "Kuang",
+                    "dob": "1988-11-11",
+                    "address": {"street": "123 Private Street"},
+                }
+            ],
+        }
+    )
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call("get_entity", {"entity_id": "person:jian_kuang"})
+                ]
+            ),
+            _chat_response("匡健的生日是1988年11月11日。"),
+        ]
+    )
+
+    result = await _agent(ollama, dispatcher).answer("匡健的生日是什么时候？")
+    tool_result = json.loads(ollama.calls[1][-1]["content"])
+    serialized = json.dumps(tool_result, ensure_ascii=False)
+
+    assert result.answer == "匡健的生日是1988年11月11日。"
+    assert tool_result["result"][0]["name"] == "匡健"
+    assert tool_result["result"][0]["dob"] == "1988-11-11"
+    assert "first_name" not in serialized
+    assert "last_name" not in serialized
+    assert "address" not in serialized
+    assert "123 Private Street" not in serialized
 
 
 @pytest.mark.asyncio
@@ -780,6 +885,7 @@ async def test_completes_search_then_relationship_lookup() -> None:
                         "out": "location:fort_cerritos",
                         "related_entity": {
                             "id": "person:alex_example",
+                            "name": ["Alex Example", "艾力克斯"],
                             "first_name": "Alex",
                             "last_name": "Example",
                         },
@@ -803,8 +909,7 @@ async def test_completes_search_then_relationship_lookup() -> None:
     relationship_result = json.loads(ollama.calls[2][-1]["content"])
     assert relationship_result["result"][0]["related_entity"] == {
         "id": "person:alex_example",
-        "first_name": "Alex",
-        "last_name": "Example",
+        "name": "Alex Example",
     }
 
 

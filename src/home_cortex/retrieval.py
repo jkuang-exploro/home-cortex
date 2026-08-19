@@ -18,6 +18,19 @@ from .edge_schema import (
 RECORD_PATTERN = re.compile(
     r"^(?P<table>[A-Za-z_][A-Za-z0-9_]*):(?P<id>[A-Za-z0-9_-]+)$"
 )
+ENTITY_SUMMARY_FIELDS = frozenset(
+    {
+        "id",
+        "name",
+        "display_name",
+        "address_as",
+        "gender",
+        "first_name",
+        "last_name",
+        "location_type",
+        "type",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -88,7 +101,9 @@ class RetrievalService:
                 statement,
                 {"table": table, "text": search_text, "limit": result_limit},
             )
-            matches.extend(_query_records(result))
+            matches.extend(
+                _entity_summary(record) for record in _query_records(result)
+            )
 
         matches.sort(
             key=lambda record: (
@@ -193,12 +208,12 @@ class RetrievalService:
                     source_entity if edge_direction == "outgoing" else target_entity
                 )
                 if isinstance(subject_entity, dict):
-                    edge["entity"] = subject_entity
+                    edge["entity"] = _entity_summary(subject_entity)
                 related_entity = (
                     source_entity if edge_direction == "incoming" else target_entity
                 )
                 if isinstance(related_entity, dict):
-                    edge["related_entity"] = related_entity
+                    edge["related_entity"] = _entity_summary(related_entity)
                 relationships.append(edge)
 
         relationships.sort(
@@ -383,21 +398,24 @@ def _stored_direction(
     schema = resolved.schema
     if schema.symmetric:
         return "both"
-    if requested is not None:
-        if not resolved.inverse or requested == "both":
-            return requested
-        return "in" if requested == "out" else "out"
-    if resolved.inverse:
-        return "in"
     source_only = (
         entity_type in schema.from_types and entity_type not in schema.to_types
     )
     target_only = (
         entity_type in schema.to_types and entity_type not in schema.from_types
     )
+    # For differently typed endpoints, the entity's type determines the only
+    # structurally valid stored direction. Do not let a model-supplied direction
+    # turn a valid query into an impossible traversal.
     if source_only:
         return "out"
     if target_only:
+        return "in"
+    if requested is not None:
+        if not resolved.inverse or requested == "both":
+            return requested
+        return "in" if requested == "out" else "out"
+    if resolved.inverse:
         return "in"
     return "both"
 
@@ -439,3 +457,12 @@ def _entity_match_rank(record: dict[str, Any], search_text: str) -> int:
     if any(value.startswith(search_text) for value in normalized):
         return 1
     return 2
+
+
+def _entity_summary(record: dict[str, Any]) -> dict[str, Any]:
+    """Expose identity metadata without private profile fields."""
+    return {
+        field: value
+        for field, value in record.items()
+        if field in ENTITY_SUMMARY_FIELDS
+    }

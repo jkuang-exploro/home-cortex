@@ -12,6 +12,8 @@ from .display import (
     DisplayTextStream,
     conversation_language,
     internal_ids_requested,
+    resolve_display_name,
+    resolve_person_reference,
 )
 from .ollama import OllamaService
 from .tools import ToolDispatcher
@@ -21,6 +23,16 @@ MAX_TOOL_CALLS_PER_STEP = 4
 MAX_TOOL_RECORDS = 25
 MAX_TOOL_RESULT_BYTES = 16_384
 TOOL_EXECUTION_TIMEOUT_SECONDS = 5.0
+PRIVATE_TOOL_FIELDS = {
+    "dob": "dob",
+    "address": "address",
+    "start": "relationship_dates",
+    "end": "relationship_dates",
+    "email": "contact",
+    "phone": "contact",
+    "phone_number": "contact",
+}
+MODEL_HIDDEN_FIELDS = frozenset({"first_name", "last_name"})
 
 logger = logging.getLogger("uvicorn.error.home_cortex.agent")
 StopReason = Literal["answer", "step_limit", "tool_error", "timeout"]
@@ -200,6 +212,7 @@ class AgentService:
         required_tool = _required_evidence_tool(conversation)
         required_relation = _required_evidence_relation(conversation)
         required_field = _required_evidence_field(conversation)
+        allowed_private_fields = _requested_private_fields(conversation)
         for step in range(1, self.max_steps + 1):
             display_stream = DisplayTextStream(
                 DisplayNameResolver.from_messages(
@@ -333,6 +346,8 @@ class AgentService:
                 step=step,
                 request_id=request_id,
                 failure_reason=failure_reason,
+                presentation_language=presentation_language,
+                allowed_private_fields=allowed_private_fields,
             )
             successful_tools.update(successful)
             nonempty_tools.update(nonempty)
@@ -364,6 +379,7 @@ class AgentService:
         required_tool = _required_evidence_tool(conversation)
         required_relation = _required_evidence_relation(conversation)
         required_field = _required_evidence_field(conversation)
+        allowed_private_fields = _requested_private_fields(conversation)
         for step in range(1, self.max_steps + 1):
             response = await self.ollama.chat_with_tools(conversation, self.tools)
             assistant_message = response.message.model_dump(exclude_none=True)
@@ -460,6 +476,8 @@ class AgentService:
                 step=step,
                 request_id=request_id,
                 failure_reason=failure_reason,
+                presentation_language=presentation_language,
+                allowed_private_fields=allowed_private_fields,
             )
             successful_tools.update(successful)
             nonempty_tools.update(nonempty)
@@ -506,6 +524,8 @@ class AgentService:
         step: int,
         request_id: str,
         failure_reason: StopReason | None,
+        presentation_language: str,
+        allowed_private_fields: frozenset[str],
     ) -> tuple[StopReason | None, set[str], set[str], set[str]]:
         successful_tools: set[str] = set()
         nonempty_tools: set[str] = set()
@@ -564,7 +584,12 @@ class AgentService:
                 {
                     "role": "tool",
                     "tool_name": tool_name,
-                    "content": self._serialize_tool_result(tool_name, tool_result),
+                    "content": self._serialize_tool_result(
+                        tool_name,
+                        tool_result,
+                        presentation_language=presentation_language,
+                        allowed_private_fields=allowed_private_fields,
+                    ),
                 }
             )
         return failure_reason, successful_tools, nonempty_tools, evidence_fields
@@ -622,8 +647,15 @@ class AgentService:
         self,
         tool_name: str,
         tool_result: dict[str, Any],
+        *,
+        presentation_language: str,
+        allowed_private_fields: frozenset[str],
     ) -> str:
-        bounded = dict(tool_result)
+        bounded = _prepare_tool_value(
+            tool_result,
+            presentation_language,
+            allowed_private_fields,
+        )
         result = bounded.get("result")
         if bounded.get("ok") is True and isinstance(result, list):
             available = len(result)
@@ -938,6 +970,91 @@ def _required_evidence_field(
     if _contains_any(latest_user, anniversary_terms):
         return "start"
     return None
+
+
+def _requested_private_fields(
+    messages: Sequence[Mapping[str, Any]],
+) -> frozenset[str]:
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    allowed: set[str] = set()
+    if _contains_any(
+        latest_user,
+        ("birthday", "date of birth", "born", "dob", "生日", "出生"),
+    ):
+        allowed.add("dob")
+    if _contains_any(
+        latest_user,
+        ("address", "street address", "地址", "住址"),
+    ):
+        allowed.add("address")
+    if _contains_any(
+        latest_user,
+        (
+            "anniversary",
+            "wedding date",
+            "marriage date",
+            "move-in date",
+            "when did",
+            "纪念日",
+            "哪天结婚",
+            "何时结婚",
+            "什么时候搬",
+        ),
+    ):
+        allowed.add("relationship_dates")
+    if _contains_any(
+        latest_user,
+        ("email", "phone", "telephone", "邮箱", "电话"),
+    ):
+        allowed.add("contact")
+    return frozenset(allowed)
+
+
+def _prepare_tool_value(
+    value: Any,
+    language: str,
+    allowed_private_fields: frozenset[str],
+) -> Any:
+    if isinstance(value, Mapping):
+        prepared = {
+            str(key): _prepare_tool_value(
+                item,
+                language,
+                allowed_private_fields,
+            )
+            for key, item in value.items()
+            if str(key) not in MODEL_HIDDEN_FIELDS
+            and (
+                PRIVATE_TOOL_FIELDS.get(str(key)) in allowed_private_fields
+                or str(key) not in PRIVATE_TOOL_FIELDS
+            )
+        }
+        record_id = prepared.get("id")
+        if "name" in prepared:
+            display_name = resolve_display_name(value, language)
+            if display_name and display_name != str(record_id):
+                prepared["name"] = display_name
+        if "address_as" in prepared and str(record_id).startswith("person:"):
+            address_as = resolve_person_reference(value, language, mode="address")
+            if address_as and address_as != str(record_id):
+                prepared["address_as"] = address_as
+        return prepared
+    if isinstance(value, Sequence) and not isinstance(
+        value,
+        (str, bytes, bytearray),
+    ):
+        return [
+            _prepare_tool_value(item, language, allowed_private_fields)
+            for item in value
+        ]
+    return value
 
 
 def _contains_any(text: str, terms: Sequence[str]) -> bool:

@@ -5,21 +5,24 @@ from home_cortex.agents import UnknownAgentError, get_agent, list_agents
 
 def test_steward_agent_loads_successfully() -> None:
     steward = get_agent("steward")
+    prompt = " ".join(steward.prompt.split())
 
     assert steward.id == "steward"
     assert steward.model.provider == "ollama"
-    assert "source of truth" in steward.prompt
-    assert "continue using tools" in steward.prompt
-    assert 'relation="spouse_of"' in steward.prompt
-    assert "lives_in.start" in steward.prompt
-    assert "Every household-fact answer must be supported" in steward.prompt
-    assert '"我女儿是谁"' in steward.prompt
-    assert "never a wedding or anniversary date" in steward.prompt
-    assert "结婚纪念日" in steward.prompt
-    assert "Call get_entity with that Person ID" in steward.prompt
-    assert "record's `dob`" in steward.prompt
-    assert "household roster" in steward.prompt
-    assert "location:fort_cerritos" in steward.prompt
+    assert "source of truth" in prompt
+    assert "continue using tools" in prompt
+    assert "`spouse_of` is symmetric" in prompt
+    assert "lives_in.start" in prompt
+    assert "household-fact answer must be supported" in prompt
+    assert "meaning of the request" in prompt
+    assert "memorized sentence" in prompt
+    assert '"我女儿是谁"' not in prompt
+    assert '"Who is my daughter?"' not in prompt
+    assert "never a wedding or anniversary date" in prompt
+    assert "`person.dob`" in prompt
+    assert "call `get_entity`" in prompt
+    assert "household roster semantics" in prompt.casefold()
+    assert "location:fort_cerritos" in prompt
 
 
 def test_steward_has_localized_identity_and_home_scope() -> None:

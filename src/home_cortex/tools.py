@@ -114,7 +114,8 @@ TOOLS: list[dict[str, Any]] = [
                 "relation, semantic_relation from the queried entity's viewpoint, "
                 "direction, and related_entity. Current relationships are returned "
                 "by default. A person's lives_in result also includes residents: "
-                "every current person living at that home."
+                "every current person living at that home. Related entities are "
+                "privacy-minimized and do not include birthdays or addresses."
             ),
             "parameters": {
                 "type": "object",
@@ -138,7 +139,10 @@ TOOLS: list[dict[str, Any]] = [
                         "enum": ["out", "in", "both"],
                         "description": (
                             "Optional semantic traversal direction. Symmetric "
-                            "relations always search both stored orientations."
+                            "relations always search both stored orientations. For "
+                            "relations with different endpoint types, such as "
+                            "person-to-location lives_in, the entity type determines "
+                            "the valid stored direction."
                         ),
                     },
                     "include_ended": {
