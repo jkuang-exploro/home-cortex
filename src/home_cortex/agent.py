@@ -13,6 +13,7 @@ from .display import (
     conversation_language,
     internal_ids_requested,
     resolve_display_name,
+    resolve_person_reference,
 )
 from .ollama import OllamaService
 from .tools import ToolDispatcher
@@ -72,6 +73,54 @@ class AgentResult:
     messages: tuple[dict[str, Any], ...]
 
 
+class _SelfVocativeStream:
+    """Repair an agent role accidentally emitted as the user's salutation."""
+
+    def __init__(
+        self,
+        agent_name: str | None,
+        speaker_address: str | None,
+        language: str,
+    ) -> None:
+        self.agent_name = agent_name
+        self.speaker_address = speaker_address
+        self.language = language
+        self._pending = ""
+        self._resolved = agent_name is None
+
+    def feed(self, text: str) -> str:
+        if self._resolved:
+            return text
+        self._pending += text
+        prefixes = _self_vocative_prefixes(self.agent_name)
+        folded = self._pending.casefold()
+        possible = False
+        for prefix in prefixes:
+            folded_prefix = prefix.casefold()
+            if folded.startswith(folded_prefix):
+                remainder = self._pending[len(prefix) :].lstrip()
+                self._pending = ""
+                self._resolved = True
+                return (
+                    _address_prefix(self.speaker_address, self.language)
+                    + remainder
+                )
+            if folded_prefix.startswith(folded):
+                possible = True
+        if possible:
+            return ""
+        self._resolved = True
+        content = self._pending
+        self._pending = ""
+        return content
+
+    def finish(self) -> str:
+        content = self._pending
+        self._pending = ""
+        self._resolved = True
+        return content
+
+
 class AgentService:
     """Run a bounded Ollama tool-calling loop."""
 
@@ -87,6 +136,7 @@ class AgentService:
         max_tool_records: int = MAX_TOOL_RECORDS,
         max_tool_result_bytes: int = MAX_TOOL_RESULT_BYTES,
         tool_timeout_seconds: float = TOOL_EXECUTION_TIMEOUT_SECONDS,
+        localized_identity: Mapping[str, str] | None = None,
     ) -> None:
         self.ollama = ollama
         self.dispatcher = dispatcher
@@ -96,6 +146,11 @@ class AgentService:
         self.tools = tuple(dict(tool) for tool in tools)
         if not self.tools:
             raise ValueError("At least one tool definition is required")
+        self.localized_identity = {
+            str(language).casefold().split("-", 1)[0]: name.strip()
+            for language, name in (localized_identity or {}).items()
+            if isinstance(name, str) and name.strip()
+        }
         self._tools_with_limit = frozenset(
             tool["function"]["name"]
             for tool in self.tools
@@ -258,6 +313,11 @@ class AgentService:
                 presentation_language,
                 expose_internal_ids=expose_internal_ids,
             )
+            vocative_stream = _SelfVocativeStream(
+                self.localized_identity.get(presentation_language),
+                _speaker_address(presentation_values, presentation_language),
+                presentation_language,
+            )
             content_parts: list[str] = []
             tool_calls: list[Any] = []
             emitted_content = False
@@ -302,8 +362,10 @@ class AgentService:
                         if can_emit:
                             rendered = display_stream.feed(content)
                             if rendered:
-                                emitted_content = True
-                                yield rendered
+                                addressed = vocative_stream.feed(rendered)
+                                if addressed:
+                                    emitted_content = True
+                                    yield addressed
 
             assistant_message: dict[str, Any] = {
                 "role": "assistant",
@@ -368,7 +430,12 @@ class AgentService:
                     return
                 rendered = display_stream.finish()
                 if rendered:
-                    yield rendered
+                    addressed = vocative_stream.feed(rendered)
+                    if addressed:
+                        yield addressed
+                trailing = vocative_stream.finish()
+                if trailing:
+                    yield trailing
                 stop_reason = failure_reason or "answer"
                 logger.info(
                     "agent_stop request_id=%s reason=%s steps=%d tool_calls=%d",
@@ -531,6 +598,15 @@ class AgentService:
                     response.message.content or "",
                     presentation_language,
                     expose_internal_ids=expose_internal_ids,
+                )
+                answer = _repair_self_vocative(
+                    answer,
+                    self.localized_identity.get(presentation_language),
+                    _speaker_address(
+                        presentation_values,
+                        presentation_language,
+                    ),
+                    presentation_language,
                 )
                 stop_reason = failure_reason or "answer"
                 logger.info(
@@ -968,6 +1044,46 @@ class AgentService:
         return _json({"ok": False, "error": {"code": "tool_result_too_large"}})
 
 
+def _speaker_address(
+    presentation_values: Sequence[Any],
+    language: str,
+) -> str | None:
+    for value in presentation_values:
+        if (
+            isinstance(value, Mapping)
+            and str(value.get("id", "")).startswith("person:")
+        ):
+            resolved = resolve_person_reference(value, language, mode="address")
+            return resolved if resolved else None
+    return None
+
+
+def _self_vocative_prefixes(agent_name: str | None) -> tuple[str, ...]:
+    if not agent_name:
+        return ()
+    return tuple(
+        f"{agent_name}{punctuation}"
+        for punctuation in ("，", ",", "：", ":")
+    )
+
+
+def _address_prefix(speaker_address: str | None, language: str) -> str:
+    if not speaker_address:
+        return ""
+    punctuation = "，" if language == "zh" else ", "
+    return f"{speaker_address}{punctuation}"
+
+
+def _repair_self_vocative(
+    text: str,
+    agent_name: str | None,
+    speaker_address: str | None,
+    language: str,
+) -> str:
+    stream = _SelfVocativeStream(agent_name, speaker_address, language)
+    return stream.feed(text) + stream.finish()
+
+
 def _normalized_identity(
     user_entity_id: str | None,
     user_entity: Mapping[str, Any] | None,
@@ -1006,6 +1122,8 @@ def _identity_context(user_entity: Mapping[str, Any]) -> list[dict[str, str]]:
                 "- Use the supplied name and address_as directly for identity and "
                 "salutation. Other stored facts such as dob are not in this "
                 "context; retrieve them with get_entity using this Person ID. "
+                "Never address the speaker using your own agent name or role; "
+                "your identity and the speaker's identity are distinct. "
                 "Do not reveal the internal record ID unless the user asks for it."
             ),
         }

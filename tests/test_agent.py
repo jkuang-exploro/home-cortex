@@ -28,6 +28,7 @@ def _agent(
         dispatcher,
         system_prompt=STEWARD.prompt,
         tools=STEWARD.tool_definitions,
+        localized_identity=STEWARD.settings["localized_identity"],
         **settings,
     )
 
@@ -954,6 +955,61 @@ async def test_trusted_identity_has_name_and_address_but_no_private_fields() -> 
     assert "private address" not in identity_content
     assert "retrieve them with get_entity" in identity_content
     assert result.answer == "您是匡健，先生。"
+
+
+@pytest.mark.asyncio
+async def test_agent_role_name_is_not_used_to_address_authenticated_user() -> None:
+    ollama = FakeOllamaService([_chat_response("老管家，您是匡健先生。")])
+
+    result = await _agent(ollama, FakeDispatcher()).answer(
+        "我是谁？",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == "先生，您是匡健先生。"
+    identity_content = ollama.calls[0][1]["content"]
+    assert "Never address the speaker using your own agent name" in identity_content
+
+
+@pytest.mark.asyncio
+async def test_stream_repairs_agent_role_split_across_chunks() -> None:
+    ollama = FakeStreamingOllamaService(
+        [[_chat_response("老"), _chat_response("管家，"), _chat_response("您是匡健先生。")]]
+    )
+
+    chunks = [
+        chunk
+        async for chunk in _agent(ollama, FakeDispatcher()).stream_answer_messages(
+            [{"role": "user", "content": "我是谁？"}],
+            user_entity={
+                "id": "person:jian_kuang",
+                "name": ["Jian Kuang", "匡健"],
+                "address_as": {"zh": "先生"},
+            },
+        )
+    ]
+
+    assert "".join(chunks) == "先生，您是匡健先生。"
+
+
+@pytest.mark.asyncio
+async def test_legitimate_agent_self_reference_is_unchanged() -> None:
+    ollama = FakeOllamaService([_chat_response("老管家在此为您效劳。")])
+
+    result = await _agent(ollama, FakeDispatcher()).answer(
+        "你是谁？",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == "老管家在此为您效劳。"
 
 
 @pytest.mark.asyncio

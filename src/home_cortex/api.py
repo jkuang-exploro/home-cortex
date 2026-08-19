@@ -153,6 +153,7 @@ async def lifespan(app: FastAPI):
             ToolDispatcher(retrieval, definition.allowed_tools),
             system_prompt=definition.prompt,
             tools=definition.tool_definitions,
+            localized_identity=definition.settings.get("localized_identity"),
         )
     app.state.agents = runtimes
     app.state.agent = runtimes[DEFAULT_AGENT_ID]

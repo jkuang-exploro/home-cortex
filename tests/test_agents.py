@@ -43,6 +43,8 @@ def test_steward_has_localized_identity_and_home_scope() -> None:
     )
     assert 'In English, refer to yourself as "the butler"' in steward.prompt
     assert 'In Chinese, refer to yourself as "老管家"' in steward.prompt
+    assert 'Never use "老管家" or' in steward.prompt
+    assert '"the butler" as a salutation for the user' in steward.prompt
     assert "Fort Cerritos" in steward.prompt
     assert "喜瑞匡家" in steward.prompt
 
