@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from time import perf_counter
@@ -197,6 +198,7 @@ class AgentService:
         grounding_retry = False
         evidence_required = _requires_graph_evidence(conversation)
         required_tool = _required_evidence_tool(conversation)
+        required_relation = _required_evidence_relation(conversation)
         required_field = _required_evidence_field(conversation)
         for step in range(1, self.max_steps + 1):
             display_stream = DisplayTextStream(
@@ -213,6 +215,7 @@ class AgentService:
             can_emit = _has_required_evidence(
                 evidence_required,
                 required_tool,
+                required_relation,
                 successful_tools,
             ) and (
                 not evidence_required
@@ -273,10 +276,16 @@ class AgentService:
                 if not _has_required_evidence(
                     evidence_required,
                     required_tool,
+                    required_relation,
                     successful_tools,
                 ):
                     if failure_reason is None and not grounding_retry and step < self.max_steps:
-                        conversation.append(_grounding_retry_message(required_tool))
+                        conversation.append(
+                            _grounding_retry_message(
+                                required_tool,
+                                required_relation,
+                            )
+                        )
                         grounding_retry = True
                         continue
                     fallback = _grounding_fallback(presentation_language)
@@ -353,6 +362,7 @@ class AgentService:
         grounding_retry = False
         evidence_required = _requires_graph_evidence(conversation)
         required_tool = _required_evidence_tool(conversation)
+        required_relation = _required_evidence_relation(conversation)
         required_field = _required_evidence_field(conversation)
         for step in range(1, self.max_steps + 1):
             response = await self.ollama.chat_with_tools(conversation, self.tools)
@@ -370,10 +380,16 @@ class AgentService:
                 if not _has_required_evidence(
                     evidence_required,
                     required_tool,
+                    required_relation,
                     successful_tools,
                 ):
                     if failure_reason is None and not grounding_retry and step < self.max_steps:
-                        conversation.append(_grounding_retry_message(required_tool))
+                        conversation.append(
+                            _grounding_retry_message(
+                                required_tool,
+                                required_relation,
+                            )
+                        )
                         grounding_retry = True
                         continue
                     answer = _grounding_fallback(presentation_language)
@@ -517,6 +533,10 @@ class AgentService:
                     failure_reason = "tool_error"
             else:
                 successful_tools.add(tool_name)
+                if isinstance(arguments, Mapping):
+                    relation = arguments.get("relation")
+                    if isinstance(relation, str):
+                        successful_tools.add(f"{tool_name}:{relation}")
                 if record_count > 0:
                     nonempty_tools.add(tool_name)
                     for record in result_records:
@@ -524,6 +544,11 @@ class AgentService:
                             evidence_fields.update(
                                 f"{tool_name}.{field}" for field in record
                             )
+                            relation = record.get("relation")
+                            if isinstance(relation, str):
+                                evidence_fields.add(
+                                    f"{tool_name}.relation={relation}"
+                                )
             logger.info(
                 "tool_execution request_id=%s step=%d tool=%s success=%s "
                 "record_count=%d duration_ms=%.2f error_code=%s",
@@ -774,6 +799,8 @@ def _required_evidence_tool(
         "anniversary",
         "parent",
         "child",
+        "daughter",
+        "son",
         "household",
         "住",
         "家里有谁",
@@ -783,25 +810,90 @@ def _required_evidence_tool(
         "丈夫",
         "父母",
         "孩子",
+        "女儿",
+        "儿子",
         "结婚",
         "纪念日",
     )
-    if any(term in latest_user for term in entity_fields):
+    if _contains_any(latest_user, entity_fields):
         return "get_entity"
-    if any(term in latest_user for term in relationship_fields):
+    if _contains_any(latest_user, relationship_fields):
         return "get_relationships"
+    return None
+
+
+def _required_evidence_relation(
+    messages: Sequence[Mapping[str, Any]],
+) -> str | None:
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    parent_terms = (
+        "parent",
+        "child",
+        "daughter",
+        "son",
+        "父母",
+        "父亲",
+        "母亲",
+        "爸爸",
+        "妈妈",
+        "孩子",
+        "女儿",
+        "儿子",
+    )
+    spouse_terms = (
+        "spouse",
+        "wife",
+        "husband",
+        "married",
+        "anniversary",
+        "配偶",
+        "妻子",
+        "丈夫",
+        "太太",
+        "结婚",
+        "纪念日",
+    )
+    residence_terms = (
+        "live",
+        "lives",
+        "living",
+        "reside",
+        "resides",
+        "household",
+        "住",
+        "家里有谁",
+        "家中有谁",
+    )
+    if _contains_any(latest_user, parent_terms):
+        return "parent_of"
+    if _contains_any(latest_user, spouse_terms):
+        return "spouse_of"
+    if _contains_any(latest_user, residence_terms):
+        return "lives_in"
     return None
 
 
 def _has_required_evidence(
     evidence_required: bool,
     required_tool: str | None,
+    required_relation: str | None,
     successful_tools: set[str],
 ) -> bool:
     if not evidence_required:
         return True
     if required_tool is not None:
-        return required_tool in successful_tools
+        if required_tool not in successful_tools:
+            return False
+        if required_relation is not None:
+            return f"{required_tool}:{required_relation}" in successful_tools
+        return True
     return bool(successful_tools)
 
 
@@ -815,7 +907,8 @@ def _has_nonempty_evidence(
         if required_tool not in nonempty_tools:
             return False
         if required_field is not None:
-            return f"{required_tool}.{required_field}" in evidence_fields
+            if f"{required_tool}.{required_field}" not in evidence_fields:
+                return False
         return True
     return bool(nonempty_tools)
 
@@ -832,7 +925,7 @@ def _required_evidence_field(
         "",
     )
     birthday_terms = ("birthday", "date of birth", "born", "dob", "生日", "出生")
-    if any(term in latest_user for term in birthday_terms):
+    if _contains_any(latest_user, birthday_terms):
         return "dob"
     anniversary_terms = (
         "anniversary",
@@ -842,17 +935,32 @@ def _required_evidence_field(
         "哪天结婚",
         "何时结婚",
     )
-    if any(term in latest_user for term in anniversary_terms):
+    if _contains_any(latest_user, anniversary_terms):
         return "start"
     return None
 
 
-def _grounding_retry_message(required_tool: str | None) -> dict[str, str]:
+def _contains_any(text: str, terms: Sequence[str]) -> bool:
+    for term in terms:
+        if term.isascii():
+            if re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text):
+                return True
+        elif term in text:
+            return True
+    return False
+
+
+def _grounding_retry_message(
+    required_tool: str | None,
+    required_relation: str | None,
+) -> dict[str, str]:
     requirement = (
         f" A successful {required_tool} call is required for this request."
         if required_tool is not None
         else ""
     )
+    if required_relation is not None:
+        requirement += f" Query the {required_relation} relationship."
     return {
         "role": "system",
         "content": (

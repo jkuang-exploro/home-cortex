@@ -305,6 +305,105 @@ async def test_caller_system_message_is_not_forwarded_to_model() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "child", "answer"),
+    [
+        (
+            "我女儿是谁？",
+            {
+                "id": "person:evelyn_kuang",
+                "name": ["Evelyn Kuang", "匡悠然"],
+                "gender": "female",
+            },
+            "您的女儿是匡悠然。",
+        ),
+        (
+            "我儿子是谁？",
+            {
+                "id": "person:dylan_kuang",
+                "name": ["Dylan Kuang", "匡德伦"],
+                "gender": "male",
+            },
+            "您的儿子是匡德伦。",
+        ),
+    ],
+)
+async def test_chinese_child_questions_use_outgoing_parent_relationships(
+    question: str,
+    child: dict[str, Any],
+    answer: str,
+) -> None:
+    ollama = FakeOllamaService(
+        [
+            _chat_response("无法确认。"),
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_relationships",
+                        {
+                            "entity_id": "person:jian_kuang",
+                            "relation": "parent_of",
+                            "direction": "out",
+                        },
+                    )
+                ]
+            ),
+            _chat_response(answer),
+        ]
+    )
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_relationships",
+            "result": [
+                {
+                    "id": f"parent_of:jian_{child['id'].rpartition(':')[2]}",
+                    "relation": "parent_of",
+                    "direction": "outgoing",
+                    "related_entity": child,
+                }
+            ],
+        }
+    )
+
+    result = await _agent(ollama, dispatcher).answer(
+        question,
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+        },
+    )
+
+    assert result.answer == answer
+    assert dispatcher.calls == [
+        (
+            "get_relationships",
+            {
+                "entity_id": "person:jian_kuang",
+                "relation": "parent_of",
+                "direction": "out",
+                "limit": 25,
+            },
+        )
+    ]
+    assert "Query the parent_of relationship" in ollama.calls[1][-1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_person_word_does_not_trigger_son_relationship_routing() -> None:
+    ollama = FakeOllamaService(
+        [
+            _chat_response(tool_calls=[_tool_call(arguments={"text": "Alex"})]),
+            _chat_response("This person is Alex."),
+        ]
+    )
+
+    result = await _agent(ollama, FakeDispatcher()).answer("Who is this person?")
+
+    assert result.answer == "This person is Alex."
+
+
+@pytest.mark.asyncio
 async def test_adds_trusted_user_identity_before_conversation() -> None:
     ollama = FakeOllamaService([_chat_response("You are the authenticated user.")])
     agent = _agent(ollama, FakeDispatcher())

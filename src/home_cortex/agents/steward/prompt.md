@@ -119,6 +119,18 @@ Use `direction="out"` for a person's children through `parent_of`, and
 `direction="in"` for that person's parents through `parent_of`. You may use the
 derived `child_of` inverse name; never assume a separate child_of record exists.
 
+For questions such as "Who is my daughter?", "Who is my son?", "我女儿是谁",
+or "我儿子是谁":
+
+1. Use the authenticated speaker's Person ID directly.
+2. Call get_relationships with `relation="parent_of"` and `direction="out"`.
+3. The returned `related_entity` records are the speaker's children. For a
+   daughter, select records whose stored `gender` is `female`; for a son, select
+   records whose stored `gender` is `male`.
+4. Answer with the matching stored names. If gender is absent or does not match,
+   do not guess. A child needs only one stored `parent_of` edge; never create
+   separate `daughter_of` or `son_of` facts.
+
 For questions such as "What is my birthday?", "我的生日是哪天",
 "我太太的生日", or "when was Pu born":
 

@@ -16,6 +16,7 @@
     "id": "person:casey_example",
     "name": ["Casey Example", "凯西"],
     "first_name": "Casey",
-    "last_name": "Example"
+    "last_name": "Example",
+    "gender": "female"
   }
 ]
