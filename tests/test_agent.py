@@ -192,7 +192,22 @@ async def test_factual_answer_without_evidence_is_retried_with_tools() -> None:
             _chat_response("Alex lives at Test House."),
         ]
     )
-    dispatcher = FakeDispatcher()
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_relationships",
+            "result": [
+                {
+                    "id": "lives_in:alex_home",
+                    "relation": "lives_in",
+                    "related_entity": {
+                        "id": "location:test_house",
+                        "name": "Test House",
+                    },
+                }
+            ],
+        }
+    )
 
     result = await _agent(ollama, dispatcher).answer("Where does Alex live?")
 
@@ -471,30 +486,7 @@ async def test_child_birthday_requires_relationship_then_entity_evidence(
             return {"ok": True, "tool": tool_name, "result": result}
 
     ollama = FakeOllamaService(
-        [
-            _chat_response("家庭资料中没有记录。"),
-            _chat_response(
-                tool_calls=[
-                    _tool_call(
-                        "get_relationships",
-                        {
-                            "entity_id": "person:jian_kuang",
-                            "relation": "parent_of",
-                            "direction": "out",
-                        },
-                    )
-                ]
-            ),
-            _chat_response(
-                tool_calls=[
-                    _tool_call(
-                        "get_entity",
-                        {"entity_id": "person:dylan_kuang"},
-                    )
-                ]
-            ),
-            _chat_response("您儿子匡德伦的生日是2016年10月30日。"),
-        ]
+        [_chat_response("您儿子匡德伦的生日是2016年10月30日。")]
     )
     dispatcher = FamilyBirthdayDispatcher()
 
@@ -507,7 +499,7 @@ async def test_child_birthday_requires_relationship_then_entity_evidence(
     )
 
     assert result.answer == "您儿子匡德伦的生日是2016年10月30日。"
-    assert result.steps == 4
+    assert result.steps == 1
     assert result.tool_calls == 2
     assert [tool_name for tool_name, _ in dispatcher.calls] == [
         "get_relationships",
@@ -515,12 +507,78 @@ async def test_child_birthday_requires_relationship_then_entity_evidence(
     ]
     assert dispatcher.calls[0][1]["relation"] == "parent_of"
     assert dispatcher.calls[0][1]["direction"] == "out"
-    retry = ollama.calls[1][-1]["content"]
-    assert "query the parent_of relationship" in retry
-    assert "retrieve dob with get_entity" in retry
-    relationship_payload = ollama.calls[2][-1]["content"]
+    assert ollama.tool_names == [()]
+    relationship_payload = ollama.calls[0][-1]["content"]
+    assert "retrieved deterministically" in relationship_payload
     assert "匡德伦" in relationship_payload
     assert "匡悠然" not in relationship_payload
+    assert "2016-10-30" in relationship_payload
+
+
+@pytest.mark.asyncio
+async def test_spouse_birthday_is_prefetched_from_authenticated_speaker() -> None:
+    class SpouseBirthdayDispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if tool_name == "get_relationships":
+                result = [
+                    {
+                        "id": "spouse_of:jian_pu",
+                        "relation": "spouse_of",
+                        "related_entity": {
+                            "id": "person:pu_ba",
+                            "name": ["Pu Ba", "巴璞"],
+                            "gender": "female",
+                        },
+                    }
+                ]
+            else:
+                result = [
+                    {
+                        "id": "person:pu_ba",
+                        "name": ["Pu Ba", "巴璞"],
+                        "gender": "female",
+                        "dob": "1988-02-26",
+                    }
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = SpouseBirthdayDispatcher()
+    ollama = FakeOllamaService(
+        [_chat_response("您妻子巴璞的生日是1988年2月26日。")]
+    )
+
+    result = await _agent(ollama, dispatcher).answer(
+        "我妻子的生日是哪一天？",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+        },
+    )
+
+    assert result.answer == "您妻子巴璞的生日是1988年2月26日。"
+    assert result.steps == 1
+    assert result.tool_calls == 2
+    assert dispatcher.calls == [
+        (
+            "get_relationships",
+            {
+                "entity_id": "person:jian_kuang",
+                "relation": "spouse_of",
+                "limit": 25,
+            },
+        ),
+        ("get_entity", {"entity_id": "person:pu_ba"}),
+    ]
+    assert ollama.tool_names == [()]
+    assert "1988-02-26" in ollama.calls[0][-1]["content"]
 
 
 @pytest.mark.asyncio
@@ -1308,7 +1366,22 @@ async def test_streaming_tool_steps_stay_internal_before_final_tokens() -> None:
             [_chat_response("Alex "), _chat_response("resides there.")],
         ]
     )
-    dispatcher = FakeDispatcher()
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_relationships",
+            "result": [
+                {
+                    "id": "lives_in:alex_home",
+                    "relation": "lives_in",
+                    "related_entity": {
+                        "id": "person:alex",
+                        "name": "Alex",
+                    },
+                }
+            ],
+        }
+    )
     agent = _agent(ollama, dispatcher)
 
     chunks = [
@@ -1372,7 +1445,22 @@ async def test_dispatches_tool_result_and_calls_ollama_again() -> None:
             _chat_response("Alex lives at Test House."),
         ]
     )
-    dispatcher = FakeDispatcher()
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_relationships",
+            "result": [
+                {
+                    "id": "lives_in:alex_home",
+                    "relation": "lives_in",
+                    "related_entity": {
+                        "id": "location:test_house",
+                        "name": "Test House",
+                    },
+                }
+            ],
+        }
+    )
     agent = _agent(ollama, dispatcher)
 
     result = await agent.answer("Where does Alex live?")

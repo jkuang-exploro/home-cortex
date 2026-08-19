@@ -389,6 +389,50 @@ def test_existing_openai_conversation_does_not_repeat_greeting(
     assert app.state.retrieval.relationship_calls == []
 
 
+@pytest.mark.parametrize("empty_content", [None, "", "   "])
+def test_chat_completions_ignores_empty_assistant_placeholder(
+    api_client: tuple[TestClient, FakeAgent],
+    empty_content: str | None,
+) -> None:
+    client, agent = api_client
+    messages = [
+        {"role": "user", "content": "Earlier question"},
+        {"role": "assistant", "content": empty_content},
+        {"role": "user", "content": "What is my wife's birthday?"},
+    ]
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": VIRTUAL_MODEL, "stream": False, "messages": messages},
+    )
+
+    assert response.status_code == 200
+    assert agent.calls == [
+        [messages[0], messages[2]],
+    ]
+
+
+@pytest.mark.parametrize("empty_content", [None, "", "   "])
+def test_chat_completions_rejects_empty_user_message(
+    api_client: tuple[TestClient, FakeAgent],
+    empty_content: str | None,
+) -> None:
+    client, agent = api_client
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": VIRTUAL_MODEL,
+            "stream": False,
+            "messages": [{"role": "user", "content": empty_content}],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"
+    assert agent.calls == []
+
+
 def test_standalone_first_turn_greeting_does_not_call_ollama(
     api_client: tuple[TestClient, FakeAgent],
 ) -> None:

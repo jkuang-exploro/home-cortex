@@ -173,6 +173,9 @@ class AgentService:
             presentation_language=language,
             expose_internal_ids=expose_internal_ids,
             presentation_values=(identity,) if identity else (),
+            trusted_user_entity_id=(
+                str(identity["id"]) if identity is not None else None
+            ),
         )
 
     async def stream_answer_messages(
@@ -198,6 +201,9 @@ class AgentService:
             presentation_language=language,
             expose_internal_ids=expose_internal_ids,
             presentation_values=(identity,) if identity else (),
+            trusted_user_entity_id=(
+                str(identity["id"]) if identity is not None else None
+            ),
         ):
             yield token
 
@@ -209,6 +215,7 @@ class AgentService:
         presentation_language: str = "en",
         expose_internal_ids: bool = False,
         presentation_values: Sequence[Any] = (),
+        trusted_user_entity_id: str | None = None,
     ) -> AsyncIterator[str]:
         """Run the tool loop and stream chunks from the final Ollama answer."""
         conversation = [dict(message) for message in messages]
@@ -224,6 +231,24 @@ class AgentService:
         evidence_required = _requires_graph_evidence(conversation)
         requirements = _evidence_requirements(conversation, evidence_required)
         allowed_private_fields = _requested_private_fields(conversation)
+        (
+            failure_reason,
+            prefetched_successful,
+            prefetched_nonempty,
+            prefetched_fields,
+            prefetched_tool_calls,
+        ) = await self._prefetch_related_entity_facts(
+            conversation,
+            requirements=requirements,
+            trusted_user_entity_id=trusted_user_entity_id,
+            request_id=request_id,
+            presentation_language=presentation_language,
+            allowed_private_fields=allowed_private_fields,
+        )
+        successful_tools.update(prefetched_successful)
+        nonempty_tools.update(prefetched_nonempty)
+        evidence_fields.update(prefetched_fields)
+        total_tool_calls += prefetched_tool_calls
         for step in range(1, self.max_steps + 1):
             display_stream = DisplayTextStream(
                 DisplayNameResolver.from_messages(
@@ -248,10 +273,13 @@ class AgentService:
                     evidence_fields,
                 )
             )
+            available_tools = (
+                () if evidence_required and can_emit else self.tools
+            )
 
             async for response in self.ollama.stream_chat_with_tools(
                 conversation,
-                self.tools,
+                available_tools,
             ):
                 chunk_tool_calls = list(response.message.tool_calls or [])
                 if chunk_tool_calls and emitted_content:
@@ -377,6 +405,7 @@ class AgentService:
         presentation_language: str = "en",
         expose_internal_ids: bool = False,
         presentation_values: Sequence[Any] = (),
+        trusted_user_entity_id: str | None = None,
     ) -> AgentResult:
         conversation = [dict(message) for message in messages]
         if not conversation:
@@ -391,8 +420,44 @@ class AgentService:
         evidence_required = _requires_graph_evidence(conversation)
         requirements = _evidence_requirements(conversation, evidence_required)
         allowed_private_fields = _requested_private_fields(conversation)
+        (
+            failure_reason,
+            prefetched_successful,
+            prefetched_nonempty,
+            prefetched_fields,
+            prefetched_tool_calls,
+        ) = await self._prefetch_related_entity_facts(
+            conversation,
+            requirements=requirements,
+            trusted_user_entity_id=trusted_user_entity_id,
+            request_id=request_id,
+            presentation_language=presentation_language,
+            allowed_private_fields=allowed_private_fields,
+        )
+        successful_tools.update(prefetched_successful)
+        nonempty_tools.update(prefetched_nonempty)
+        evidence_fields.update(prefetched_fields)
+        total_tool_calls += prefetched_tool_calls
         for step in range(1, self.max_steps + 1):
-            response = await self.ollama.chat_with_tools(conversation, self.tools)
+            evidence_complete = _has_required_evidence(
+                evidence_required,
+                requirements,
+                successful_tools,
+            ) and (
+                not evidence_required
+                or _has_nonempty_evidence(
+                    requirements,
+                    nonempty_tools,
+                    evidence_fields,
+                )
+            )
+            available_tools = (
+                () if evidence_required and evidence_complete else self.tools
+            )
+            response = await self.ollama.chat_with_tools(
+                conversation,
+                available_tools,
+            )
             assistant_message = response.message.model_dump(exclude_none=True)
             conversation.append(assistant_message)
             tool_calls = list(response.message.tool_calls or [])
@@ -531,6 +596,177 @@ class AgentService:
                 f"Agent did not produce a final answer within {self.max_steps} steps"
             )
 
+    async def _prefetch_related_entity_facts(
+        self,
+        conversation: list[dict[str, Any]],
+        *,
+        requirements: EvidenceRequirements,
+        trusted_user_entity_id: str | None,
+        request_id: str,
+        presentation_language: str,
+        allowed_private_fields: frozenset[str],
+    ) -> tuple[StopReason | None, set[str], set[str], set[str], int]:
+        """Resolve a known speaker's relationship + person fact deterministically.
+
+        Asking the model to discover a relationship and then dereference the
+        related person consumes most of the bounded loop and is needlessly
+        nondeterministic. Cortex owns that graph traversal; the model only
+        turns the resulting, privacy-filtered evidence into natural language.
+        """
+        if (
+            trusted_user_entity_id is None
+            or len(requirements.relations) != 1
+            or ("get_entity", "dob") not in requirements.fields
+        ):
+            return None, set(), set(), set(), 0
+
+        relation = next(iter(requirements.relations))
+        relationship_arguments: dict[str, Any] = {
+            "entity_id": trusted_user_entity_id,
+            "relation": relation,
+            "limit": self.max_tool_records,
+        }
+        if requirements.relationship_direction is not None:
+            relationship_arguments["direction"] = (
+                requirements.relationship_direction
+            )
+
+        successful_tools: set[str] = set()
+        nonempty_tools: set[str] = set()
+        evidence_fields: set[str] = set()
+        evidence_payloads: list[str] = []
+        failure_reason: StopReason | None = None
+        tool_calls = 0
+
+        relationship_result = await self._execute_planned_tool(
+            "get_relationships",
+            relationship_arguments,
+            requirements=requirements,
+            request_id=request_id,
+        )
+        tool_calls += 1
+        scoped_relationship_result = _scope_tool_result(
+            "get_relationships",
+            relationship_result,
+            requirements,
+        )
+        successful, nonempty, fields = _tool_evidence(
+            "get_relationships",
+            relationship_arguments,
+            scoped_relationship_result,
+        )
+        successful_tools.update(successful)
+        nonempty_tools.update(nonempty)
+        evidence_fields.update(fields)
+        evidence_payloads.append(
+            self._serialize_tool_result(
+                "get_relationships",
+                relationship_result,
+                presentation_language=presentation_language,
+                allowed_private_fields=allowed_private_fields,
+                requirements=requirements,
+            )
+        )
+        failure_reason = _tool_failure_reason(relationship_result, failure_reason)
+
+        related_ids: list[str] = []
+        relationship_records = scoped_relationship_result.get("result")
+        if isinstance(relationship_records, list):
+            for record in relationship_records:
+                related = (
+                    record.get("related_entity")
+                    if isinstance(record, Mapping)
+                    else None
+                )
+                related_id = related.get("id") if isinstance(related, Mapping) else None
+                if (
+                    isinstance(related_id, str)
+                    and related_id not in related_ids
+                ):
+                    related_ids.append(related_id)
+
+        maximum_entity_fetches = max(0, self.max_tool_calls_per_step - 1)
+        for related_id in related_ids[
+            : min(self.max_tool_records, maximum_entity_fetches)
+        ]:
+            entity_arguments = {"entity_id": related_id}
+            entity_result = await self._execute_planned_tool(
+                "get_entity",
+                entity_arguments,
+                requirements=requirements,
+                request_id=request_id,
+            )
+            tool_calls += 1
+            successful, nonempty, fields = _tool_evidence(
+                "get_entity",
+                entity_arguments,
+                entity_result,
+            )
+            successful_tools.update(successful)
+            nonempty_tools.update(nonempty)
+            evidence_fields.update(fields)
+            evidence_payloads.append(
+                self._serialize_tool_result(
+                    "get_entity",
+                    entity_result,
+                    presentation_language=presentation_language,
+                    allowed_private_fields=allowed_private_fields,
+                    requirements=requirements,
+                )
+            )
+            failure_reason = _tool_failure_reason(entity_result, failure_reason)
+
+        conversation.append(
+            {
+                "role": "system",
+                "content": (
+                    "Trusted Home Cortex evidence was retrieved deterministically "
+                    "for the latest request. Answer only from this evidence. Do "
+                    "not call another tool when the requested relationship and "
+                    "fact are present.\n"
+                    + "\n".join(evidence_payloads)
+                ),
+            }
+        )
+        return (
+            failure_reason,
+            successful_tools,
+            nonempty_tools,
+            evidence_fields,
+            tool_calls,
+        )
+
+    async def _execute_planned_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        requirements: EvidenceRequirements,
+        request_id: str,
+    ) -> dict[str, Any]:
+        started = perf_counter()
+        tool_result = await self._dispatch(tool_name, arguments)
+        duration_ms = (perf_counter() - started) * 1_000
+        scoped_result = _scope_tool_result(tool_name, tool_result, requirements)
+        records = scoped_result.get("result")
+        record_count = len(records) if isinstance(records, list) else 0
+        error = tool_result.get("error")
+        error_code = error.get("code") if isinstance(error, Mapping) else "none"
+        logger.info(
+            "tool_execution request_id=%s step=0 tool=%s success=%s "
+            "relation=%s direction=%s record_count=%d duration_ms=%.2f "
+            "error_code=%s planned=true",
+            _safe_log_token(request_id),
+            _safe_log_token(tool_name),
+            str(tool_result.get("ok") is True).lower(),
+            _safe_log_token(str(arguments.get("relation") or "none")),
+            _safe_log_token(str(arguments.get("direction") or "none")),
+            record_count,
+            duration_ms,
+            _safe_log_token(str(error_code)),
+        )
+        return tool_result
+
     async def _append_tool_results(
         self,
         conversation: list[dict[str, Any]],
@@ -561,7 +797,12 @@ class AgentService:
             tool_result = await self._dispatch(tool_name, arguments)
             duration_ms = (perf_counter() - started) * 1_000
             success = tool_result.get("ok") is True
-            result_records = tool_result.get("result")
+            scoped_result = _scope_tool_result(
+                tool_name,
+                tool_result,
+                requirements,
+            )
+            result_records = scoped_result.get("result")
             record_count = (
                 len(result_records) if isinstance(result_records, list) else 0
             )
@@ -577,56 +818,15 @@ class AgentService:
                 if isinstance(arguments, Mapping)
                 else None
             )
-            if not success:
-                if error_code == "tool_timeout":
-                    failure_reason = "timeout"
-                elif failure_reason != "timeout":
-                    failure_reason = "tool_error"
-            else:
-                successful_tools.add(tool_name)
-                if isinstance(arguments, Mapping):
-                    relation = arguments.get("relation")
-                    if isinstance(relation, str):
-                        successful_tools.add(f"{tool_name}:{relation}")
-                if record_count > 0:
-                    nonempty_tools.add(tool_name)
-                    for record in result_records:
-                        if isinstance(record, Mapping):
-                            evidence_fields.update(
-                                f"{tool_name}.{field}" for field in record
-                            )
-                            relation = record.get("relation")
-                            if isinstance(relation, str):
-                                successful_tools.add(
-                                    f"{tool_name}:{relation}"
-                                )
-                                evidence_fields.add(
-                                    f"{tool_name}.relation={relation}"
-                                )
-                                related = record.get("related_entity")
-                                if isinstance(related, Mapping):
-                                    related_id = related.get("id")
-                                    if isinstance(related_id, str):
-                                        evidence_fields.add(
-                                            f"{tool_name}:{relation}.related_id="
-                                            f"{related_id}"
-                                        )
-                                        gender = related.get("gender")
-                                        if isinstance(gender, str):
-                                            evidence_fields.add(
-                                                f"{tool_name}:{relation}."
-                                                f"related_gender={gender}.id="
-                                                f"{related_id}"
-                                            )
-                            record_id = record.get("id")
-                            if isinstance(record_id, str):
-                                evidence_fields.add(
-                                    f"{tool_name}.id={record_id}"
-                                )
-                                evidence_fields.update(
-                                    f"{tool_name}.field={field}.id={record_id}"
-                                    for field in record
-                                )
+            failure_reason = _tool_failure_reason(tool_result, failure_reason)
+            successful, nonempty, fields = _tool_evidence(
+                tool_name,
+                arguments if isinstance(arguments, Mapping) else {},
+                scoped_result,
+            )
+            successful_tools.update(successful)
+            nonempty_tools.update(nonempty)
+            evidence_fields.update(fields)
             logger.info(
                 "tool_execution request_id=%s step=%d tool=%s success=%s "
                 "relation=%s direction=%s record_count=%d duration_ms=%.2f "
@@ -1307,6 +1507,71 @@ def _scope_tool_result(
         )
     ]
     return scoped
+
+
+def _tool_evidence(
+    tool_name: str,
+    arguments: Mapping[str, Any],
+    tool_result: Mapping[str, Any],
+) -> tuple[set[str], set[str], set[str]]:
+    """Extract evidence markers without retaining or logging private values."""
+    if tool_result.get("ok") is not True:
+        return set(), set(), set()
+
+    successful_tools = {tool_name}
+    nonempty_tools: set[str] = set()
+    evidence_fields: set[str] = set()
+    requested_relation = arguments.get("relation")
+    if isinstance(requested_relation, str):
+        successful_tools.add(f"{tool_name}:{requested_relation}")
+
+    records = tool_result.get("result")
+    if not isinstance(records, list) or not records:
+        return successful_tools, nonempty_tools, evidence_fields
+
+    nonempty_tools.add(tool_name)
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        evidence_fields.update(f"{tool_name}.{field}" for field in record)
+        relation = record.get("relation")
+        if isinstance(relation, str):
+            successful_tools.add(f"{tool_name}:{relation}")
+            evidence_fields.add(f"{tool_name}.relation={relation}")
+            related = record.get("related_entity")
+            if isinstance(related, Mapping):
+                related_id = related.get("id")
+                if isinstance(related_id, str):
+                    evidence_fields.add(
+                        f"{tool_name}:{relation}.related_id={related_id}"
+                    )
+                    gender = related.get("gender")
+                    if isinstance(gender, str):
+                        evidence_fields.add(
+                            f"{tool_name}:{relation}.related_gender={gender}.id="
+                            f"{related_id}"
+                        )
+        record_id = record.get("id")
+        if isinstance(record_id, str):
+            evidence_fields.add(f"{tool_name}.id={record_id}")
+            evidence_fields.update(
+                f"{tool_name}.field={field}.id={record_id}"
+                for field in record
+            )
+    return successful_tools, nonempty_tools, evidence_fields
+
+
+def _tool_failure_reason(
+    tool_result: Mapping[str, Any],
+    current: StopReason | None,
+) -> StopReason | None:
+    if tool_result.get("ok") is True:
+        return current
+    error = tool_result.get("error")
+    error_code = error.get("code") if isinstance(error, Mapping) else None
+    if error_code == "tool_timeout":
+        return "timeout"
+    return current if current == "timeout" else "tool_error"
 
 
 def _prepare_tool_value(

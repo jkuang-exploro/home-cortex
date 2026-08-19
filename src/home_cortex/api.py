@@ -62,7 +62,11 @@ class ChatMessage(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     role: Literal["system", "user", "assistant"]
-    content: str = Field(min_length=1)
+    # OpenAI-compatible clients may retain a null/empty assistant placeholder
+    # after an interrupted or failed streamed response. It is safe to accept
+    # that history entry and discard it before invoking the agent. User
+    # messages are still required to contain text below.
+    content: str | None = None
 
 
 class ChatCompletionRequest(BaseModel):
@@ -231,6 +235,12 @@ async def validation_error_handler(
         }
         for item in error.errors()
     ]
+    logger.info(
+        "request_validation_failed request_id=%s fields=%s types=%s",
+        _request_id(request),
+        ",".join(detail["field"] for detail in details),
+        ",".join(detail["type"] for detail in details),
+    )
     return _error_response(
         request,
         422,
@@ -428,11 +438,25 @@ async def chat_completions(
     agent = _agent_runtime(request, definition)
     completion_id = f"chatcmpl-{uuid4().hex}"
     created = int(time.time())
-    messages = [
-        message.model_dump()
-        for message in body.messages
-        if message.role != "system"
-    ]
+    messages: list[dict[str, str]] = []
+    for message in body.messages:
+        if message.role == "system":
+            continue
+        content = message.content
+        if message.role == "assistant" and (
+            content is None or not content.strip()
+        ):
+            continue
+        if message.role == "user" and (
+            content is None or not content.strip()
+        ):
+            raise APIError(
+                422,
+                "invalid_request",
+                "User messages must contain non-empty text",
+            )
+        if content is not None:
+            messages.append({"role": message.role, "content": content})
     if not messages or not any(message["role"] == "user" for message in messages):
         raise APIError(422, "invalid_request", "Provide at least one user message")
     greeting = None
