@@ -368,8 +368,8 @@ async def test_chinese_child_questions_use_outgoing_parent_relationships(
                         "get_relationships",
                         {
                             "entity_id": "person:jian_kuang",
-                            "relation": "parent_of",
-                            "direction": "out",
+                            "relation": "lives_in",
+                            "direction": "in",
                         },
                     )
                 ]
@@ -513,6 +513,8 @@ async def test_child_birthday_requires_relationship_then_entity_evidence(
         "get_relationships",
         "get_entity",
     ]
+    assert dispatcher.calls[0][1]["relation"] == "parent_of"
+    assert dispatcher.calls[0][1]["direction"] == "out"
     retry = ollama.calls[1][-1]["content"]
     assert "query the parent_of relationship" in retry
     assert "retrieve dob with get_entity" in retry
@@ -625,7 +627,8 @@ async def test_returned_canonical_relation_satisfies_evidence_requirement() -> N
                         "get_relationships",
                         {
                             "entity_id": "person:jian_kuang",
-                            "direction": "out",
+                            "relation": "lives_in",
+                            "direction": "in",
                         },
                     )
                 ]
@@ -639,9 +642,91 @@ async def test_returned_canonical_relation_satisfies_evidence_requirement() -> N
     assert result.answer == "您的儿子是匡德伦。"
     assert result.steps == 2
     assert result.stop_reason == "answer"
+    assert dispatcher.calls[0][1]["relation"] == "parent_of"
+    assert dispatcher.calls[0][1]["direction"] == "out"
     scoped_payload = ollama.calls[1][-1]["content"]
     assert "匡德伦" in scoped_payload
     assert "匡悠然" not in scoped_payload
+
+
+@pytest.mark.asyncio
+async def test_plural_birthday_followup_requires_each_entity_dob() -> None:
+    people = {
+        "person:dylan_kuang": {
+            "id": "person:dylan_kuang",
+            "name": ["Dylan Kuang", "匡德伦"],
+            "gender": "male",
+            "dob": "2016-10-30",
+        },
+        "person:evelyn_kuang": {
+            "id": "person:evelyn_kuang",
+            "name": ["Evelyn Kuang", "匡悠然"],
+            "gender": "female",
+            "dob": "2019-10-08",
+        },
+    }
+
+    class PluralBirthdayDispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            return {
+                "ok": True,
+                "tool": tool_name,
+                "result": [people[arguments["entity_id"]]],
+            }
+
+    dispatcher = PluralBirthdayDispatcher()
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_entity",
+                        {"entity_id": "person:dylan_kuang"},
+                    )
+                ]
+            ),
+            _chat_response("匡德伦的生日是2016年10月30日。"),
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_entity",
+                        {"entity_id": "person:evelyn_kuang"},
+                    )
+                ]
+            ),
+            _chat_response(
+                "匡德伦的生日是2016年10月30日，"
+                "匡悠然的生日是2019年10月8日。"
+            ),
+        ]
+    )
+
+    result = await _agent(ollama, dispatcher).answer_messages(
+        [
+            {"role": "user", "content": "我的孩子是谁？"},
+            {"role": "assistant", "content": "您的孩子是匡德伦和匡悠然。"},
+            {"role": "user", "content": "他们生日哪天？"},
+        ]
+    )
+
+    assert result.answer == (
+        "匡德伦的生日是2016年10月30日，匡悠然的生日是2019年10月8日。"
+    )
+    assert result.steps == 4
+    assert [arguments["entity_id"] for _, arguments in dispatcher.calls] == [
+        "person:dylan_kuang",
+        "person:evelyn_kuang",
+    ]
+    retry = ollama.calls[2][-1]["content"]
+    assert "at least 2 distinct entities" in retry
 
 
 @pytest.mark.asyncio

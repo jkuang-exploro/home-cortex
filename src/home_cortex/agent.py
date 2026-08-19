@@ -31,7 +31,9 @@ PRIVATE_TOOL_FIELDS = {
     "phone": "contact",
     "phone_number": "contact",
 }
-MODEL_HIDDEN_FIELDS = frozenset({"address_as", "first_name", "last_name"})
+MODEL_HIDDEN_FIELDS = frozenset(
+    {"address_as", "first_name", "gender", "last_name"}
+)
 
 logger = logging.getLogger("uvicorn.error.home_cortex.agent")
 StopReason = Literal["answer", "step_limit", "tool_error", "timeout"]
@@ -45,6 +47,8 @@ class EvidenceRequirements:
     relations: frozenset[str] = frozenset()
     fields: frozenset[tuple[str, str]] = frozenset()
     related_gender: str | None = None
+    relationship_direction: Literal["out", "in"] | None = None
+    minimum_entity_records: int = 1
 
 
 class AgentLimitError(RuntimeError):
@@ -320,6 +324,12 @@ class AgentService:
                     nonempty_tools,
                     evidence_fields,
                 ):
+                    if step < self.max_steps and _should_retry_incomplete_evidence(
+                        requirements,
+                        evidence_fields,
+                    ):
+                        conversation.append(_grounding_retry_message(requirements))
+                        continue
                     yield _no_records_fallback(presentation_language)
                     logger.info(
                         "agent_stop request_id=%s reason=answer steps=%d tool_calls=%d",
@@ -428,6 +438,12 @@ class AgentService:
                     nonempty_tools,
                     evidence_fields,
                 ):
+                    if step < self.max_steps and _should_retry_incomplete_evidence(
+                        requirements,
+                        evidence_fields,
+                    ):
+                        conversation.append(_grounding_retry_message(requirements))
+                        continue
                     answer = _no_records_fallback(presentation_language)
                     logger.info(
                         "agent_stop request_id=%s reason=answer steps=%d tool_calls=%d",
@@ -536,6 +552,11 @@ class AgentService:
                 tool_name,
                 tool_call.function.arguments,
             )
+            arguments = _constrain_tool_arguments(
+                tool_name,
+                arguments,
+                requirements,
+            )
             started = perf_counter()
             tool_result = await self._dispatch(tool_name, arguments)
             duration_ms = (perf_counter() - started) * 1_000
@@ -546,6 +567,16 @@ class AgentService:
             )
             error = tool_result.get("error")
             error_code = error.get("code") if isinstance(error, Mapping) else "none"
+            relation = (
+                arguments.get("relation")
+                if isinstance(arguments, Mapping)
+                else None
+            )
+            direction = (
+                arguments.get("direction")
+                if isinstance(arguments, Mapping)
+                else None
+            )
             if not success:
                 if error_code == "tool_timeout":
                     failure_reason = "timeout"
@@ -592,13 +623,20 @@ class AgentService:
                                 evidence_fields.add(
                                     f"{tool_name}.id={record_id}"
                                 )
+                                evidence_fields.update(
+                                    f"{tool_name}.field={field}.id={record_id}"
+                                    for field in record
+                                )
             logger.info(
                 "tool_execution request_id=%s step=%d tool=%s success=%s "
-                "record_count=%d duration_ms=%.2f error_code=%s",
+                "relation=%s direction=%s record_count=%d duration_ms=%.2f "
+                "error_code=%s",
                 _safe_log_token(request_id),
                 step,
                 _safe_log_token(tool_name),
                 str(success).lower(),
+                _safe_log_token(str(relation or "none")),
+                _safe_log_token(str(direction or "none")),
                 record_count,
                 duration_ms,
                 _safe_log_token(str(error_code)),
@@ -972,6 +1010,8 @@ def _evidence_requirements(
         relations=frozenset(relations),
         fields=frozenset(fields),
         related_gender=_required_related_gender(messages),
+        relationship_direction=_required_relationship_direction(messages),
+        minimum_entity_records=_required_entity_record_count(messages),
     )
 
 
@@ -1020,13 +1060,24 @@ def _has_nonempty_evidence(
         return False
 
     if ("get_entity", "dob") in requirements.fields and requirements.relations:
-        entity_prefix = "get_entity.id="
+        entity_prefix = "get_entity.field=dob.id="
         entity_ids = {
             item.removeprefix(entity_prefix)
             for item in evidence_fields
             if item.startswith(entity_prefix)
         }
         if not related_ids.intersection(entity_ids):
+            return False
+    for tool_name, field in requirements.fields:
+        if tool_name != "get_entity":
+            continue
+        prefix = f"{tool_name}.field={field}.id="
+        matching_ids = {
+            item.removeprefix(prefix)
+            for item in evidence_fields
+            if item.startswith(prefix)
+        }
+        if len(matching_ids) < requirements.minimum_entity_records:
             return False
     return True
 
@@ -1053,6 +1104,78 @@ def _required_related_gender(
     ):
         return "male"
     return None
+
+
+def _required_relationship_direction(
+    messages: Sequence[Mapping[str, Any]],
+) -> Literal["out", "in"] | None:
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    if _contains_any(latest_user, ("child", "daughter", "son", "孩子", "女儿", "儿子")):
+        return "out"
+    if _contains_any(
+        latest_user,
+        ("parent", "father", "mother", "父母", "父亲", "母亲", "爸爸", "妈妈"),
+    ):
+        return "in"
+    return None
+
+
+def _required_entity_record_count(
+    messages: Sequence[Mapping[str, Any]],
+) -> int:
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    if _contains_any(
+        latest_user,
+        ("both", "children", "their", "them", "they", "他们", "她们", "孩子们"),
+    ):
+        return 2
+    return 1
+
+
+def _should_retry_incomplete_evidence(
+    requirements: EvidenceRequirements,
+    evidence_fields: set[str],
+) -> bool:
+    for tool_name, field in requirements.fields:
+        if tool_name != "get_entity":
+            continue
+        prefix = f"{tool_name}.field={field}.id="
+        matching_ids = {
+            item.removeprefix(prefix)
+            for item in evidence_fields
+            if item.startswith(prefix)
+        }
+        if 0 < len(matching_ids) < requirements.minimum_entity_records:
+            return True
+
+    if ("get_entity", "dob") in requirements.fields and requirements.relations:
+        entity_prefix = "get_entity.field=dob.id="
+        entity_ids = {
+            item.removeprefix(entity_prefix)
+            for item in evidence_fields
+            if item.startswith(entity_prefix)
+        }
+        related_ids = {
+            item.rpartition(".id=")[2]
+            for item in evidence_fields
+            if item.startswith("get_relationships:") and ".related_" in item
+        }
+        return bool(entity_ids and related_ids and not entity_ids.intersection(related_ids))
+    return False
 
 
 def _required_evidence_field(
@@ -1141,6 +1264,22 @@ def _requested_private_fields(
     return frozenset(allowed)
 
 
+def _constrain_tool_arguments(
+    tool_name: str,
+    arguments: Any,
+    requirements: EvidenceRequirements,
+) -> Any:
+    if tool_name != "get_relationships" or not isinstance(arguments, Mapping):
+        return arguments
+
+    constrained = dict(arguments)
+    if len(requirements.relations) == 1:
+        constrained["relation"] = next(iter(requirements.relations))
+    if requirements.relationship_direction is not None:
+        constrained["direction"] = requirements.relationship_direction
+    return constrained
+
+
 def _scope_tool_result(
     tool_name: str,
     tool_result: dict[str, Any],
@@ -1221,9 +1360,22 @@ def _grounding_retry_message(
 ) -> dict[str, str]:
     steps: list[str] = []
     for relation in sorted(requirements.relations):
-        steps.append(f"query the {relation} relationship with get_relationships")
+        direction = (
+            f" in semantic direction {requirements.relationship_direction}"
+            if requirements.relationship_direction is not None
+            else ""
+        )
+        steps.append(
+            f"query the {relation} relationship{direction} with get_relationships"
+        )
     for tool_name, field in sorted(requirements.fields):
-        steps.append(f"retrieve {field} with {tool_name} for the resolved entity")
+        count = (
+            f" for at least {requirements.minimum_entity_records} distinct entities"
+            if tool_name == "get_entity"
+            and requirements.minimum_entity_records > 1
+            else " for the resolved entity"
+        )
+        steps.append(f"retrieve {field} with {tool_name}{count}")
     covered_tools = {
         "get_relationships" if requirements.relations else "",
         *(tool_name for tool_name, _ in requirements.fields),

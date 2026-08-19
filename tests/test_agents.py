@@ -25,6 +25,7 @@ def test_steward_agent_loads_successfully() -> None:
     assert "Casual conversation" in prompt
     assert "does not by itself request graph data" in prompt
     assert "graph tools are read-only" in prompt
+    assert "Do not append a service slogan" in prompt
     assert "location:fort_cerritos" in prompt
 
 
