@@ -241,6 +241,13 @@ class AgentService:
                 request_id=request_id,
                 presentation_language=language,
             )
+        if identity and _is_kinship_lookup_request(safe_messages):
+            return await self._answer_kinship_relationship(
+                safe_messages,
+                identity=identity,
+                request_id=request_id,
+                presentation_language=language,
+            )
         if _is_household_roster_request(safe_messages) and self.home_entity_id:
             return await self._answer_household_roster(
                 safe_messages,
@@ -287,6 +294,15 @@ class AgentService:
             return
         if identity and _is_relationship_date_request(safe_messages):
             result = await self._answer_relationship_date(
+                safe_messages,
+                identity=identity,
+                request_id=request_id,
+                presentation_language=language,
+            )
+            yield result.answer
+            return
+        if identity and _is_kinship_lookup_request(safe_messages):
+            result = await self._answer_kinship_relationship(
                 safe_messages,
                 identity=identity,
                 request_id=request_id,
@@ -396,6 +412,71 @@ class AgentService:
             answer = _format_relationship_date(
                 dated_relationships[0],
                 identity,
+                presentation_language,
+            )
+            reason = "answer"
+        logger.info(
+            "agent_stop request_id=%s reason=%s steps=1 tool_calls=1",
+            _safe_log_token(request_id),
+            reason,
+        )
+        return AgentResult(
+            answer=answer,
+            steps=1,
+            tool_calls=1,
+            stop_reason=reason,
+            messages=tuple(self._trusted_conversation(messages, identity)),
+        )
+
+    async def _answer_kinship_relationship(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        *,
+        identity: Mapping[str, Any],
+        request_id: str,
+        presentation_language: str,
+    ) -> AgentResult:
+        relation = _required_evidence_relation(messages)
+        assert relation in {"parent_of", "spouse_of"}
+        direction = _required_relationship_direction(messages)
+        gender = _required_related_gender(messages)
+        requirements = EvidenceRequirements(
+            tools=frozenset({"get_relationships"}),
+            relations=frozenset({relation}),
+            related_gender=gender,
+            relationship_direction=direction,
+        )
+        arguments: dict[str, Any] = {
+            "entity_id": identity["id"],
+            "relation": relation,
+            "limit": self.max_tool_records,
+        }
+        if direction is not None:
+            arguments["direction"] = direction
+        tool_result = await self._execute_planned_tool(
+            "get_relationships",
+            arguments,
+            requirements=requirements,
+            request_id=request_id,
+        )
+        stop_reason = _tool_failure_reason(tool_result, None)
+        scoped_result = _scope_tool_result(
+            "get_relationships",
+            tool_result,
+            requirements,
+        )
+        related_people = _related_people(scoped_result)
+        if tool_result.get("ok") is not True:
+            answer = _grounding_fallback(presentation_language)
+            reason = stop_reason or "tool_error"
+        elif not related_people:
+            answer = _no_records_fallback(presentation_language)
+            reason = "answer"
+        else:
+            answer = _format_kinship_answer(
+                related_people,
+                identity,
+                messages,
                 presentation_language,
             )
             reason = "answer"
@@ -1452,6 +1533,8 @@ def _is_authenticated_identity_request(
             "妻子",
             "丈夫",
             "太太",
+            "老婆",
+            "老公",
             "家里",
             "家中",
             "住",
@@ -1484,6 +1567,30 @@ def _is_relationship_date_request(
     )
 
 
+def _is_kinship_lookup_request(
+    messages: Sequence[Mapping[str, Any]],
+) -> bool:
+    if _required_evidence_field(messages) is not None:
+        return False
+    if _required_evidence_relation(messages) not in {"parent_of", "spouse_of"}:
+        return False
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    return bool(
+        re.search(
+            r"\b(?:who|which|list|how many|count|number)\b|"
+            r"谁|哪位|哪些|几个|几位|多少|列出",
+            latest_user,
+        )
+    )
+
+
 def _entity_name_aliases(entity: Mapping[str, Any]) -> tuple[str, ...]:
     name = entity.get("name")
     if isinstance(name, str):
@@ -1504,6 +1611,31 @@ def _entity_name_aliases(entity: Mapping[str, Any]) -> tuple[str, ...]:
             if isinstance(value, str) and value.strip()
         )
     return ()
+
+
+def _related_people(
+    tool_result: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    people: list[Mapping[str, Any]] = []
+    seen_ids: set[str] = set()
+    records = tool_result.get("result")
+    if not isinstance(records, list):
+        return people
+    for record in records:
+        related = (
+            record.get("related_entity")
+            if isinstance(record, Mapping)
+            else None
+        )
+        record_id = related.get("id") if isinstance(related, Mapping) else None
+        if (
+            isinstance(record_id, str)
+            and record_id.startswith("person:")
+            and record_id not in seen_ids
+        ):
+            seen_ids.add(record_id)
+            people.append(related)
+    return people
 
 
 def _household_residents(
@@ -1556,6 +1688,145 @@ def _format_household_roster(
             else "The current household residents are:"
         )
     return heading + "\n" + "\n".join(f"- {name}" for name in names)
+
+
+def _format_kinship_answer(
+    people: Sequence[Mapping[str, Any]],
+    identity: Mapping[str, Any],
+    messages: Sequence[Mapping[str, Any]],
+    language: str,
+) -> str:
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    kind = _requested_kinship_kind(latest_user)
+    names = [resolve_display_name(person, language) for person in people]
+    address = _speaker_address((identity,), language)
+    count_requested = bool(
+        re.search(r"\b(?:how many|count|number)\b|几个|几位|多少", latest_user)
+    )
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        if count_requested:
+            count = _chinese_person_count(len(people))
+            descriptions = [
+                _chinese_kinship_description(person, name, kind)
+                for person, name in zip(people, names, strict=True)
+            ]
+            return (
+                f"{prefix}您有{count}{_chinese_kind_plural(kind)}："
+                f"{_join_localized(descriptions, language)}。"
+            )
+        return (
+            f"{prefix}您的{_chinese_kind_label(kind)}是"
+            f"{_join_localized(names, language)}。"
+        )
+
+    prefix = f"{address}, " if address else ""
+    if count_requested:
+        noun = _english_kind_label(kind, plural=len(people) != 1)
+        answer = (
+            f"{prefix}you have {len(people)} {noun}: "
+            f"{_join_localized(names, language)}."
+        )
+    else:
+        noun = _english_kind_label(kind, plural=len(people) != 1)
+        verb = "are" if len(people) != 1 else "is"
+        answer = (
+            f"{prefix}your {noun} {verb} {_join_localized(names, language)}."
+        )
+    return answer if prefix else answer[0].upper() + answer[1:]
+
+
+def _requested_kinship_kind(text: str) -> str:
+    terms = (
+        ("daughter", ("daughter", "女儿")),
+        ("son", ("son", "儿子")),
+        ("wife", ("wife", "太太", "妻子", "老婆")),
+        ("husband", ("husband", "丈夫", "老公")),
+        ("mother", ("mother", "母亲", "妈妈")),
+        ("father", ("father", "父亲", "爸爸")),
+        ("children", ("children", "child", "孩子")),
+        ("parents", ("parents", "parent", "父母")),
+        ("spouse", ("spouse", "配偶")),
+    )
+    for kind, aliases in terms:
+        if _contains_any(text, aliases):
+            return kind
+    return "relative"
+
+
+def _chinese_person_count(count: int) -> str:
+    words = {0: "零个", 1: "一个", 2: "两个", 3: "三个", 4: "四个"}
+    return words.get(count, f"{count}个")
+
+
+def _chinese_kind_plural(kind: str) -> str:
+    return {
+        "children": "孩子",
+        "parents": "父母",
+        "spouse": "配偶",
+        "wife": "太太",
+        "husband": "丈夫",
+        "daughter": "女儿",
+        "son": "儿子",
+        "mother": "母亲",
+        "father": "父亲",
+    }.get(kind, "亲属")
+
+
+def _chinese_kind_label(kind: str) -> str:
+    return _chinese_kind_plural(kind)
+
+
+def _chinese_kinship_description(
+    person: Mapping[str, Any],
+    name: str,
+    kind: str,
+) -> str:
+    if kind != "children":
+        return name
+    gender = person.get("gender")
+    if gender == "male":
+        return f"儿子{name}"
+    if gender == "female":
+        return f"女儿{name}"
+    return name
+
+
+def _english_kind_label(kind: str, *, plural: bool) -> str:
+    singular = {
+        "children": "child",
+        "parents": "parent",
+        "spouse": "spouse",
+        "wife": "wife",
+        "husband": "husband",
+        "daughter": "daughter",
+        "son": "son",
+        "mother": "mother",
+        "father": "father",
+    }.get(kind, "relative")
+    if not plural:
+        return singular
+    return {
+        "child": "children",
+        "wife": "wives",
+    }.get(singular, f"{singular}s")
+
+
+def _join_localized(values: Sequence[str], language: str) -> str:
+    if len(values) <= 1:
+        return values[0] if values else ""
+    conjunction = "和" if language == "zh" else " and "
+    separator = "、" if language == "zh" else ", "
+    if len(values) == 2:
+        return conjunction.join(values)
+    return separator.join(values[:-1]) + conjunction + values[-1]
 
 
 def _format_relationship_date(
@@ -1694,6 +1965,8 @@ def _required_evidence_tool(
         "配偶",
         "妻子",
         "丈夫",
+        "老婆",
+        "老公",
         "父母",
         "孩子",
         "女儿",
@@ -1745,6 +2018,8 @@ def _required_evidence_relation(
         "妻子",
         "丈夫",
         "太太",
+        "老婆",
+        "老公",
         "结婚",
         "纪念日",
     )
@@ -1884,12 +2159,31 @@ def _required_related_gender(
     )
     if _contains_any(
         latest_user,
-        ("daughter", "mother", "wife", "女儿", "母亲", "妈妈", "妻子", "太太"),
+        (
+            "daughter",
+            "mother",
+            "wife",
+            "女儿",
+            "母亲",
+            "妈妈",
+            "妻子",
+            "太太",
+            "老婆",
+        ),
     ):
         return "female"
     if _contains_any(
         latest_user,
-        ("son", "father", "husband", "儿子", "父亲", "爸爸", "丈夫"),
+        (
+            "son",
+            "father",
+            "husband",
+            "儿子",
+            "父亲",
+            "爸爸",
+            "丈夫",
+            "老公",
+        ),
     ):
         return "male"
     return None

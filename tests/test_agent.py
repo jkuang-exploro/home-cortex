@@ -358,7 +358,7 @@ async def test_caller_system_message_is_not_forwarded_to_model() -> None:
                 "name": ["Evelyn Kuang", "匡悠然"],
                 "gender": "female",
             },
-            "您的女儿是匡悠然。",
+            "先生，您的女儿是匡悠然。",
         ),
         (
             "我儿子是谁？",
@@ -367,7 +367,7 @@ async def test_caller_system_message_is_not_forwarded_to_model() -> None:
                 "name": ["Dylan Kuang", "匡德伦"],
                 "gender": "male",
             },
-            "您的儿子是匡德伦。",
+            "先生，您的儿子是匡德伦。",
         ),
     ],
 )
@@ -376,24 +376,7 @@ async def test_chinese_child_questions_use_outgoing_parent_relationships(
     child: dict[str, Any],
     answer: str,
 ) -> None:
-    ollama = FakeOllamaService(
-        [
-            _chat_response("无法确认。"),
-            _chat_response(
-                tool_calls=[
-                    _tool_call(
-                        "get_relationships",
-                        {
-                            "entity_id": "person:jian_kuang",
-                            "relation": "lives_in",
-                            "direction": "in",
-                        },
-                    )
-                ]
-            ),
-            _chat_response(answer),
-        ]
-    )
+    ollama = FakeOllamaService([])
     dispatcher = FakeDispatcher(
         {
             "ok": True,
@@ -414,6 +397,7 @@ async def test_chinese_child_questions_use_outgoing_parent_relationships(
         user_entity={
             "id": "person:jian_kuang",
             "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
         },
     )
 
@@ -429,7 +413,141 @@ async def test_chinese_child_questions_use_outgoing_parent_relationships(
             },
         )
     ]
-    assert "query the parent_of relationship" in ollama.calls[1][-1]["content"]
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
+async def test_child_count_uses_all_outgoing_parent_relationships() -> None:
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_relationships",
+            "result": [
+                {
+                    "id": "parent_of:jian_dylan",
+                    "relation": "parent_of",
+                    "direction": "outgoing",
+                    "related_entity": {
+                        "id": "person:dylan_kuang",
+                        "name": ["Dylan Kuang", "匡德伦"],
+                        "gender": "male",
+                    },
+                },
+                {
+                    "id": "parent_of:jian_evelyn",
+                    "relation": "parent_of",
+                    "direction": "outgoing",
+                    "related_entity": {
+                        "id": "person:evelyn_kuang",
+                        "name": ["Evelyn Kuang", "匡悠然"],
+                        "gender": "female",
+                    },
+                },
+            ],
+        }
+    )
+    ollama = FakeOllamaService(
+        [_chat_response("先生，您有一个孩子，匡德伦。")]
+    )
+
+    result = await _agent(ollama, dispatcher).answer(
+        "我有几个孩子？",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == (
+        "先生，您有两个孩子：儿子匡德伦和女儿匡悠然。"
+    )
+    assert ollama.calls == []
+    assert dispatcher.calls[0][1] == {
+        "entity_id": "person:jian_kuang",
+        "relation": "parent_of",
+        "direction": "out",
+        "limit": 25,
+    }
+
+
+@pytest.mark.asyncio
+async def test_daughter_lookup_is_stable_with_multiple_children() -> None:
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_relationships",
+            "result": [
+                {
+                    "id": "parent_of:jian_dylan",
+                    "relation": "parent_of",
+                    "related_entity": {
+                        "id": "person:dylan_kuang",
+                        "name": ["Dylan Kuang", "匡德伦"],
+                        "gender": "male",
+                    },
+                },
+                {
+                    "id": "parent_of:jian_evelyn",
+                    "relation": "parent_of",
+                    "related_entity": {
+                        "id": "person:evelyn_kuang",
+                        "name": ["Evelyn Kuang", "匡悠然"],
+                        "gender": "female",
+                    },
+                },
+            ],
+        }
+    )
+    agent = _agent(FakeOllamaService([]), dispatcher)
+    identity = {
+        "id": "person:jian_kuang",
+        "name": ["Jian Kuang", "匡健"],
+        "address_as": {"zh": "先生"},
+    }
+
+    first = await agent.answer("我女儿是谁？", user_entity=identity)
+    second = await agent.answer("我女儿是谁？", user_entity=identity)
+
+    assert first.answer == "先生，您的女儿是匡悠然。"
+    assert second.answer == first.answer
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("question", ["我太太是谁？", "我老婆是谁？"])
+async def test_spouse_identity_is_resolved_without_model_variation(
+    question: str,
+) -> None:
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_relationships",
+            "result": [
+                {
+                    "id": "spouse_of:jian_pu",
+                    "relation": "spouse_of",
+                    "related_entity": {
+                        "id": "person:pu_ba",
+                        "name": ["Pu Ba", "巴璞"],
+                        "gender": "female",
+                    },
+                }
+            ],
+        }
+    )
+    ollama = FakeOllamaService([_chat_response("无法确认。")])
+
+    result = await _agent(ollama, dispatcher).answer(
+        question,
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == "先生，您的太太是巴璞。"
+    assert ollama.calls == []
 
 
 @pytest.mark.asyncio
