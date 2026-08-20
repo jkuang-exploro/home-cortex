@@ -558,6 +558,11 @@ async def test_spouse_identity_is_resolved_without_model_variation(
         ("匡德伦是谁？", "先生，匡德伦是您的儿子。", 2),
         ("匡悠然是谁？", "先生，匡悠然是您的女儿。", 2),
         ("巴志刚是谁？", "先生，巴志刚是您的岳父。", 3),
+        (
+            "匡德伦和匡悠然是谁？",
+            "先生，匡德伦是您的儿子；匡悠然是您的女儿。",
+            3,
+        ),
     ],
 )
 async def test_named_household_person_uses_verified_kinship_only(
