@@ -552,6 +552,118 @@ async def test_spouse_identity_is_resolved_without_model_variation(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("question", "expected", "expected_tool_calls"),
+    [
+        ("巴璞是谁？", "先生，巴璞是您的太太。", 2),
+        ("匡德伦是谁？", "先生，匡德伦是您的儿子。", 2),
+        ("匡悠然是谁？", "先生，匡悠然是您的女儿。", 2),
+        ("巴志刚是谁？", "先生，巴志刚是您的岳父。", 3),
+    ],
+)
+async def test_named_household_person_uses_verified_kinship_only(
+    question: str,
+    expected: str,
+    expected_tool_calls: int,
+) -> None:
+    people = {
+        "巴璞": {
+            "id": "person:pu_ba",
+            "name": ["Pu Ba", "巴璞"],
+            "gender": "female",
+            "dob": "1988-02-26",
+        },
+        "匡德伦": {
+            "id": "person:dylan_kuang",
+            "name": ["Dylan Kuang", "匡德伦"],
+            "gender": "male",
+            "dob": "2016-10-30",
+        },
+        "匡悠然": {
+            "id": "person:evelyn_kuang",
+            "name": ["Evelyn Kuang", "匡悠然"],
+            "gender": "female",
+            "dob": "2019-10-08",
+        },
+        "巴志刚": {
+            "id": "person:zhigang_ba",
+            "name": ["Zhigang Ba", "巴志刚"],
+            "gender": "male",
+            "dob": "1961-10-10",
+        },
+    }
+
+    class NamedPersonDispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if tool_name == "search_entities":
+                result = [people[arguments["text"]]]
+            elif arguments["entity_id"] == "person:jian_kuang":
+                result = [
+                    {
+                        "id": "spouse_of:jian_pu",
+                        "relation": "spouse_of",
+                        "direction": "outgoing",
+                        "related_entity": people["巴璞"],
+                    },
+                    {
+                        "id": "parent_of:jian_dylan",
+                        "relation": "parent_of",
+                        "direction": "outgoing",
+                        "related_entity": people["匡德伦"],
+                    },
+                    {
+                        "id": "parent_of:jian_evelyn",
+                        "relation": "parent_of",
+                        "direction": "outgoing",
+                        "related_entity": people["匡悠然"],
+                    },
+                ]
+            else:
+                result = [
+                    {
+                        "id": "parent_of:zhigang_pu",
+                        "relation": "parent_of",
+                        "direction": "incoming",
+                        "related_entity": people["巴志刚"],
+                    }
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = NamedPersonDispatcher()
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                "This person is a beloved household chef born on the wrong date."
+            )
+        ]
+    )
+
+    result = await _agent(ollama, dispatcher).answer(
+        question,
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == expected
+    assert result.tool_calls == expected_tool_calls
+    assert "生日" not in result.answer
+    assert "厨师" not in result.answer
+    assert "管家" not in result.answer
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "question",
     [
         "我儿子生日哪天？",

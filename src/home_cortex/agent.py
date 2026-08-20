@@ -248,6 +248,15 @@ class AgentService:
                 request_id=request_id,
                 presentation_language=language,
             )
+        named_subject = _named_person_subject(safe_messages)
+        if identity and named_subject:
+            return await self._answer_named_person(
+                safe_messages,
+                subject=named_subject,
+                identity=identity,
+                request_id=request_id,
+                presentation_language=language,
+            )
         if _is_household_roster_request(safe_messages) and self.home_entity_id:
             return await self._answer_household_roster(
                 safe_messages,
@@ -304,6 +313,17 @@ class AgentService:
         if identity and _is_kinship_lookup_request(safe_messages):
             result = await self._answer_kinship_relationship(
                 safe_messages,
+                identity=identity,
+                request_id=request_id,
+                presentation_language=language,
+            )
+            yield result.answer
+            return
+        named_subject = _named_person_subject(safe_messages)
+        if identity and named_subject:
+            result = await self._answer_named_person(
+                safe_messages,
+                subject=named_subject,
                 identity=identity,
                 request_id=request_id,
                 presentation_language=language,
@@ -489,6 +509,120 @@ class AgentService:
             answer=answer,
             steps=1,
             tool_calls=1,
+            stop_reason=reason,
+            messages=tuple(self._trusted_conversation(messages, identity)),
+        )
+
+    async def _answer_named_person(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        *,
+        subject: str,
+        identity: Mapping[str, Any],
+        request_id: str,
+        presentation_language: str,
+    ) -> AgentResult:
+        tool_calls = 0
+        search_result = await self._execute_planned_tool(
+            "search_entities",
+            {
+                "text": subject,
+                "entity_type": "person",
+                "limit": self.max_tool_records,
+            },
+            requirements=EvidenceRequirements(
+                tools=frozenset({"search_entities"}),
+            ),
+            request_id=request_id,
+        )
+        tool_calls += 1
+        person = _exact_named_person(search_result, subject)
+        failure_reason = _tool_failure_reason(search_result, None)
+        relationship_label: str | None = None
+
+        if person is not None and search_result.get("ok") is True:
+            direct_result = await self._execute_planned_tool(
+                "get_relationships",
+                {
+                    "entity_id": identity["id"],
+                    "limit": self.max_tool_records,
+                },
+                requirements=EvidenceRequirements(
+                    tools=frozenset({"get_relationships"}),
+                ),
+                request_id=request_id,
+            )
+            tool_calls += 1
+            failure_reason = _tool_failure_reason(
+                direct_result,
+                failure_reason,
+            )
+            relationship_label = _direct_relationship_label(
+                direct_result,
+                str(person["id"]),
+                person,
+            )
+            if relationship_label is None and direct_result.get("ok") is True:
+                spouse_ids = _related_ids_for_relation(
+                    direct_result,
+                    "spouse_of",
+                )
+                maximum_spouse_queries = max(
+                    0,
+                    self.max_tool_calls_per_step - tool_calls,
+                )
+                for spouse_id in spouse_ids[:maximum_spouse_queries]:
+                    parent_result = await self._execute_planned_tool(
+                        "get_relationships",
+                        {
+                            "entity_id": spouse_id,
+                            "relation": "parent_of",
+                            "direction": "in",
+                            "limit": self.max_tool_records,
+                        },
+                        requirements=EvidenceRequirements(
+                            tools=frozenset({"get_relationships"}),
+                            relations=frozenset({"parent_of"}),
+                            relationship_direction="in",
+                        ),
+                        request_id=request_id,
+                    )
+                    tool_calls += 1
+                    failure_reason = _tool_failure_reason(
+                        parent_result,
+                        failure_reason,
+                    )
+                    if _result_contains_related_id(
+                        parent_result,
+                        str(person["id"]),
+                    ):
+                        relationship_label = _in_law_parent_label(person)
+                        break
+
+        if search_result.get("ok") is not True or failure_reason is not None:
+            answer = _grounding_fallback(presentation_language)
+            reason = failure_reason or "tool_error"
+        elif person is None:
+            answer = _no_records_fallback(presentation_language)
+            reason = "answer"
+        else:
+            answer = _format_named_person_answer(
+                person,
+                relationship_label,
+                identity,
+                presentation_language,
+            )
+            reason = "answer"
+        logger.info(
+            "agent_stop request_id=%s reason=%s steps=1 tool_calls=%d",
+            _safe_log_token(request_id),
+            reason,
+            tool_calls,
+        )
+        return AgentResult(
+            answer=answer,
+            steps=1,
+            tool_calls=tool_calls,
             stop_reason=reason,
             messages=tuple(self._trusted_conversation(messages, identity)),
         )
@@ -1591,6 +1725,56 @@ def _is_kinship_lookup_request(
     )
 
 
+def _named_person_subject(
+    messages: Sequence[Mapping[str, Any]],
+) -> str | None:
+    latest_user = next(
+        (
+            str(message.get("content", "")).strip()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    chinese = re.fullmatch(
+        r"(?:请问|麻烦告诉我)?\s*(?P<name>.+?)\s*是谁[？?]?",
+        latest_user,
+    )
+    if chinese is not None:
+        subject = chinese.group("name").strip()
+    else:
+        english = re.fullmatch(
+            r"(?:please\s+)?(?:tell me\s+)?who is\s+(?P<name>.+?)[?]?",
+            latest_user,
+            re.IGNORECASE,
+        )
+        if english is None:
+            return None
+        subject = english.group("name").strip()
+    subject = re.sub(
+        r"(?:先生|女士|小姐|太太|夫人|mr\.?|mrs\.?|ms\.?)$",
+        "",
+        subject,
+        flags=re.IGNORECASE,
+    ).strip()
+    if not subject or subject.casefold() in {
+        "i",
+        "me",
+        "you",
+        "he",
+        "she",
+        "我",
+        "你",
+        "您",
+        "他",
+        "她",
+        "这",
+        "那",
+    }:
+        return None
+    return subject
+
+
 def _entity_name_aliases(entity: Mapping[str, Any]) -> tuple[str, ...]:
     name = entity.get("name")
     if isinstance(name, str):
@@ -1611,6 +1795,108 @@ def _entity_name_aliases(entity: Mapping[str, Any]) -> tuple[str, ...]:
             if isinstance(value, str) and value.strip()
         )
     return ()
+
+
+def _exact_named_person(
+    search_result: Mapping[str, Any],
+    subject: str,
+) -> Mapping[str, Any] | None:
+    records = search_result.get("result")
+    if not isinstance(records, list):
+        return None
+    normalized = subject.strip().casefold()
+    matches = [
+        record
+        for record in records
+        if isinstance(record, Mapping)
+        and str(record.get("id", "")).startswith("person:")
+        and (
+            normalized
+            == str(record.get("id", "")).casefold()
+            or normalized
+            in {alias.casefold() for alias in _entity_name_aliases(record)}
+        )
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _direct_relationship_label(
+    relationship_result: Mapping[str, Any],
+    target_id: str,
+    target: Mapping[str, Any],
+) -> str | None:
+    records = relationship_result.get("result")
+    if not isinstance(records, list):
+        return None
+    gender = str(target.get("gender", "")).casefold()
+    for record in records:
+        related = (
+            record.get("related_entity")
+            if isinstance(record, Mapping)
+            else None
+        )
+        if not isinstance(related, Mapping) or related.get("id") != target_id:
+            continue
+        relation = record.get("relation")
+        if relation == "spouse_of":
+            return {"female": "wife", "male": "husband"}.get(
+                gender,
+                "spouse",
+            )
+        if relation == "parent_of":
+            direction = record.get("direction")
+            if direction == "outgoing":
+                return {"female": "daughter", "male": "son"}.get(
+                    gender,
+                    "child",
+                )
+            if direction == "incoming":
+                return {"female": "mother", "male": "father"}.get(
+                    gender,
+                    "parent",
+                )
+    return None
+
+
+def _related_ids_for_relation(
+    relationship_result: Mapping[str, Any],
+    relation: str,
+) -> list[str]:
+    related_ids: list[str] = []
+    records = relationship_result.get("result")
+    if not isinstance(records, list):
+        return related_ids
+    for record in records:
+        related = (
+            record.get("related_entity")
+            if isinstance(record, Mapping)
+            and record.get("relation") == relation
+            else None
+        )
+        related_id = related.get("id") if isinstance(related, Mapping) else None
+        if isinstance(related_id, str) and related_id not in related_ids:
+            related_ids.append(related_id)
+    return related_ids
+
+
+def _result_contains_related_id(
+    relationship_result: Mapping[str, Any],
+    target_id: str,
+) -> bool:
+    records = relationship_result.get("result")
+    return isinstance(records, list) and any(
+        isinstance(record, Mapping)
+        and isinstance(record.get("related_entity"), Mapping)
+        and record["related_entity"].get("id") == target_id
+        for record in records
+    )
+
+
+def _in_law_parent_label(person: Mapping[str, Any]) -> str:
+    return {
+        "female": "mother_in_law",
+        "male": "father_in_law",
+    }.get(str(person.get("gender", "")).casefold(), "parent_in_law")
 
 
 def _related_people(
@@ -1740,6 +2026,62 @@ def _format_kinship_answer(
         answer = (
             f"{prefix}your {noun} {verb} {_join_localized(names, language)}."
         )
+    return answer if prefix else answer[0].upper() + answer[1:]
+
+
+def _format_named_person_answer(
+    person: Mapping[str, Any],
+    relationship_label: str | None,
+    identity: Mapping[str, Any],
+    language: str,
+) -> str:
+    name = resolve_display_name(person, language)
+    address = _speaker_address((identity,), language)
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        if relationship_label is None:
+            return (
+                f"{prefix}{name}记录在家庭资料中，但目前没有查到"
+                "此人与您的亲属关系。"
+            )
+        label = {
+            "wife": "太太",
+            "husband": "丈夫",
+            "spouse": "配偶",
+            "daughter": "女儿",
+            "son": "儿子",
+            "child": "孩子",
+            "mother": "母亲",
+            "father": "父亲",
+            "parent": "父母之一",
+            "mother_in_law": "岳母",
+            "father_in_law": "岳父",
+            "parent_in_law": "岳父母之一",
+        }[relationship_label]
+        return f"{prefix}{name}是您的{label}。"
+
+    prefix = f"{address}, " if address else ""
+    if relationship_label is None:
+        answer = (
+            f"{prefix}{name} is recorded in the household graph, but no "
+            "relationship to you was found."
+        )
+    else:
+        label = {
+            "wife": "wife",
+            "husband": "husband",
+            "spouse": "spouse",
+            "daughter": "daughter",
+            "son": "son",
+            "child": "child",
+            "mother": "mother",
+            "father": "father",
+            "parent": "parent",
+            "mother_in_law": "mother-in-law",
+            "father_in_law": "father-in-law",
+            "parent_in_law": "parent-in-law",
+        }[relationship_label]
+        answer = f"{prefix}{name} is your {label}."
     return answer if prefix else answer[0].upper() + answer[1:]
 
 
