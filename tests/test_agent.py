@@ -819,6 +819,106 @@ async def test_spouse_birthday_is_prefetched_from_authenticated_speaker() -> Non
 
 
 @pytest.mark.asyncio
+async def test_father_in_law_birthday_uses_verified_two_hop_relationship() -> None:
+    class FatherInLawBirthdayDispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if tool_name == "get_entity":
+                result = [
+                    {
+                        "id": "person:zhigang_ba",
+                        "name": ["Zhigang Ba", "巴志刚"],
+                        "gender": "male",
+                        "dob": "1961-10-10",
+                    }
+                ]
+            elif arguments["relation"] == "spouse_of":
+                result = [
+                    {
+                        "id": "spouse_of:jian_pu",
+                        "relation": "spouse_of",
+                        "related_entity": {
+                            "id": "person:pu_ba",
+                            "name": ["Pu Ba", "巴璞"],
+                            "gender": "female",
+                        },
+                    }
+                ]
+            else:
+                result = [
+                    {
+                        "id": "parent_of:zhigang_pu",
+                        "relation": "parent_of",
+                        "direction": "incoming",
+                        "related_entity": {
+                            "id": "person:zhigang_ba",
+                            "name": ["Zhigang Ba", "巴志刚"],
+                            "gender": "male",
+                        },
+                    }
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = FatherInLawBirthdayDispatcher()
+    ollama = FakeOllamaService([])
+    agent = _agent(ollama, dispatcher)
+    identity = {
+        "id": "person:jian_kuang",
+        "name": ["Jian Kuang", "匡健"],
+        "address_as": {"zh": "先生"},
+    }
+
+    result = await agent.answer(
+        "我岳父生日是哪天？",
+        user_entity=identity,
+    )
+
+    assert result.answer == "先生，您的岳父巴志刚的生日是1961年10月10日。"
+    assert result.steps == 1
+    assert result.tool_calls == 3
+    assert dispatcher.calls == [
+        (
+            "get_relationships",
+            {
+                "entity_id": "person:jian_kuang",
+                "relation": "spouse_of",
+                "limit": 25,
+            },
+        ),
+        (
+            "get_relationships",
+            {
+                "entity_id": "person:pu_ba",
+                "relation": "parent_of",
+                "direction": "in",
+                "limit": 25,
+            },
+        ),
+        ("get_entity", {"entity_id": "person:zhigang_ba"}),
+    ]
+    assert ollama.calls == []
+
+    chunks = [
+        chunk
+        async for chunk in agent.stream_answer_messages(
+            [{"role": "user", "content": "我岳父生日是哪天？"}],
+            user_entity=identity,
+        )
+    ]
+
+    assert chunks == [result.answer]
+    assert dispatcher.calls[3:] == dispatcher.calls[:3]
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
 async def test_child_birthday_rejects_dob_from_unrelated_entity() -> None:
     class WrongEntityDispatcher:
         async def dispatch(

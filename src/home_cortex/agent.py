@@ -234,6 +234,13 @@ class AgentService:
                 request_id=request_id,
                 presentation_language=language,
             )
+        if identity and _is_father_in_law_birthday_request(safe_messages):
+            return await self._answer_father_in_law_birthday(
+                safe_messages,
+                identity=identity,
+                request_id=request_id,
+                presentation_language=language,
+            )
         if identity and _is_relationship_date_request(safe_messages):
             return await self._answer_relationship_date(
                 safe_messages,
@@ -294,6 +301,15 @@ class AgentService:
         identity = _normalized_identity(user_entity_id, user_entity)
         if identity and _is_authenticated_identity_request(safe_messages, identity):
             result = self._answer_authenticated_identity(
+                safe_messages,
+                identity=identity,
+                request_id=request_id,
+                presentation_language=language,
+            )
+            yield result.answer
+            return
+        if identity and _is_father_in_law_birthday_request(safe_messages):
+            result = await self._answer_father_in_law_birthday(
                 safe_messages,
                 identity=identity,
                 request_id=request_id,
@@ -382,6 +398,143 @@ class AgentService:
             steps=1,
             tool_calls=0,
             stop_reason="answer",
+            messages=tuple(self._trusted_conversation(messages, identity)),
+        )
+
+    async def _answer_father_in_law_birthday(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        *,
+        identity: Mapping[str, Any],
+        request_id: str,
+        presentation_language: str,
+    ) -> AgentResult:
+        """Resolve speaker -> spouse -> spouse's father -> date of birth."""
+        tool_calls = 0
+        failure_reason: StopReason | None = None
+        spouse_requirements = EvidenceRequirements(
+            tools=frozenset({"get_relationships"}),
+            relations=frozenset({"spouse_of"}),
+            related_gender="female",
+        )
+        spouse_result = await self._execute_planned_tool(
+            "get_relationships",
+            {
+                "entity_id": identity["id"],
+                "relation": "spouse_of",
+                "limit": self.max_tool_records,
+            },
+            requirements=spouse_requirements,
+            request_id=request_id,
+        )
+        tool_calls += 1
+        failure_reason = _tool_failure_reason(spouse_result, failure_reason)
+        spouses = _related_people(
+            _scope_tool_result(
+                "get_relationships",
+                spouse_result,
+                spouse_requirements,
+            )
+        )
+
+        father: Mapping[str, Any] | None = None
+        parent_requirements = EvidenceRequirements(
+            tools=frozenset({"get_relationships"}),
+            relations=frozenset({"parent_of"}),
+            related_gender="male",
+            relationship_direction="in",
+        )
+        maximum_spouse_queries = max(
+            0,
+            self.max_tool_calls_per_step - tool_calls - 1,
+        )
+        for spouse in spouses[:maximum_spouse_queries]:
+            parent_result = await self._execute_planned_tool(
+                "get_relationships",
+                {
+                    "entity_id": spouse["id"],
+                    "relation": "parent_of",
+                    "direction": "in",
+                    "limit": self.max_tool_records,
+                },
+                requirements=parent_requirements,
+                request_id=request_id,
+            )
+            tool_calls += 1
+            failure_reason = _tool_failure_reason(
+                parent_result,
+                failure_reason,
+            )
+            fathers = _related_people(
+                _scope_tool_result(
+                    "get_relationships",
+                    parent_result,
+                    parent_requirements,
+                )
+            )
+            if fathers:
+                father = fathers[0]
+                break
+
+        father_record: Mapping[str, Any] | None = None
+        if father is not None and failure_reason is None:
+            entity_result = await self._execute_planned_tool(
+                "get_entity",
+                {"entity_id": father["id"]},
+                requirements=EvidenceRequirements(
+                    tools=frozenset({"get_entity"}),
+                    fields=frozenset({("get_entity", "dob")}),
+                ),
+                request_id=request_id,
+            )
+            tool_calls += 1
+            failure_reason = _tool_failure_reason(
+                entity_result,
+                failure_reason,
+            )
+            records = entity_result.get("result")
+            if isinstance(records, list):
+                father_record = next(
+                    (
+                        record
+                        for record in records
+                        if isinstance(record, Mapping)
+                        and record.get("id") == father.get("id")
+                    ),
+                    None,
+                )
+
+        if failure_reason is not None:
+            answer = _grounding_fallback(presentation_language)
+            reason = failure_reason
+        elif father_record is None or not isinstance(
+            father_record.get("dob"),
+            str,
+        ):
+            answer = _format_missing_father_in_law_birthday(
+                identity,
+                presentation_language,
+            )
+            reason = "answer"
+        else:
+            answer = _format_father_in_law_birthday(
+                father_record,
+                identity,
+                presentation_language,
+            )
+            reason = "answer"
+
+        logger.info(
+            "agent_stop request_id=%s reason=%s steps=1 tool_calls=%d",
+            _safe_log_token(request_id),
+            reason,
+            tool_calls,
+        )
+        return AgentResult(
+            answer=answer,
+            steps=1,
+            tool_calls=tool_calls,
+            stop_reason=reason,
             messages=tuple(self._trusted_conversation(messages, identity)),
         )
 
@@ -1734,6 +1887,20 @@ def _is_relationship_date_request(
     )
 
 
+def _is_father_in_law_birthday_request(
+    messages: Sequence[Mapping[str, Any]],
+) -> bool:
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    return _required_evidence_field(messages) == "dob" and "岳父" in latest_user
+
+
 def _is_kinship_lookup_request(
     messages: Sequence[Mapping[str, Any]],
 ) -> bool:
@@ -2239,6 +2406,35 @@ def _join_localized(values: Sequence[str], language: str) -> str:
     if len(values) == 2:
         return conjunction.join(values)
     return separator.join(values[:-1]) + conjunction + values[-1]
+
+
+def _format_father_in_law_birthday(
+    father: Mapping[str, Any],
+    identity: Mapping[str, Any],
+    language: str,
+) -> str:
+    name = resolve_display_name(father, language)
+    birthday = _localized_date(str(father["dob"]), language)
+    address = _speaker_address((identity,), language)
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        return f"{prefix}您的岳父{name}的生日是{birthday}。"
+    prefix = f"{address}, " if address else ""
+    answer = f"{prefix}your father-in-law {name}'s birthday is {birthday}."
+    return answer if prefix else answer[0].upper() + answer[1:]
+
+
+def _format_missing_father_in_law_birthday(
+    identity: Mapping[str, Any],
+    language: str,
+) -> str:
+    address = _speaker_address((identity,), language)
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        return f"{prefix}家庭资料中没有记录您岳父的生日。"
+    prefix = f"{address}, " if address else ""
+    answer = f"{prefix}your father-in-law's birthday is not recorded."
+    return answer if prefix else answer[0].upper() + answer[1:]
 
 
 def _format_relationship_date(
