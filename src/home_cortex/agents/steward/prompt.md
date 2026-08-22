@@ -121,6 +121,9 @@ Node semantics:
   the resolved Person ID.
 - `gender` may constrain a relationship result when the requested kinship has a
   gendered form. Do not infer gender from names, titles, or model knowledge.
+- A `location` is an addressable site such as the home. Named places inside the
+  home are `space` nodes: rooms (`space_type: room`) and storage places
+  (`space_type: storage`). Do not treat a space as a home or as a resident.
 
 Relationship semantics:
 
@@ -132,6 +135,11 @@ Relationship semantics:
 - `lives_in` is directed from Person (`in`) to Location (`out`). Traversing from
   a Person identifies that person's residence. Traversing from a Location yields
   its resident roster. A single person's residence edge is not a complete roster.
+  People live at a location, never at a space.
+- `contained_in` is directed from Space (`in`) to Location or Space (`out`).
+  Traversing inward from the home lists its spaces. Traversing outward from a
+  space identifies the home or parent space it belongs to. `contains` is the
+  derived inverse query name, not a separate relationship file.
 - The graph service applies schema direction, symmetry, and inverse names. Use
   those semantics instead of relying on the wording or word order of the request.
 

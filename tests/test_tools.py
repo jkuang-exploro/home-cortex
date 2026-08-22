@@ -89,7 +89,7 @@ def test_tool_definitions_are_json_serializable_and_read_only() -> None:
     assert "Person record stores date of birth in dob" in serialized
     assert "surrealql" not in serialized.lower()
     assert "execute" not in names
-    assert "person or location" in serialized
+    assert "person, location, or space" in serialized
     assert "semantic_relation" in serialized
     assert "includes residents" in serialized
     assert all(

@@ -101,7 +101,9 @@ remain in human-editable `data/edges/*.json`. The initial registry defines:
 - `spouse_of` as a symmetric temporal Person-to-Person relationship;
 - `parent_of` as a directed, non-temporal Person-to-Person relationship with
   the derived inverse name `child_of`;
-- `lives_in` as a directed temporal Person-to-Location relationship.
+- `lives_in` as a directed temporal Person-to-Location relationship;
+- `contained_in` as a directed, non-temporal Space-to-Location or Space-to-Space
+  relationship with the derived inverse name `contains`.
 
 Store each fact once. Do not add a reverse spouse edge or a `child_of.json`
 file. `get_relationships` consults the registry, accepts `out`, `in`, or `both`

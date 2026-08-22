@@ -28,6 +28,7 @@ ENTITY_SUMMARY_FIELDS = frozenset(
         "first_name",
         "last_name",
         "location_type",
+        "space_type",
         "type",
     }
 )
@@ -56,6 +57,7 @@ class RetrievalService:
         self.node_tables = self._table_names(data_dir, "nodes") or (
             "location",
             "person",
+            "space",
         )
         self.edge_registry = edge_registry or _default_edge_registry(data_dir)
         self.edge_tables = self.edge_registry.relationship_names

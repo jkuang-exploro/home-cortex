@@ -27,6 +27,8 @@ def test_steward_agent_loads_successfully() -> None:
     assert "graph tools are read-only" in prompt
     assert "Do not append a service slogan" in prompt
     assert "location:fort_cerritos" in prompt
+    assert "`contained_in` is directed from Space" in prompt
+    assert "People live at a location, never at a space" in prompt
 
 
 def test_steward_has_localized_identity_and_home_scope() -> None:

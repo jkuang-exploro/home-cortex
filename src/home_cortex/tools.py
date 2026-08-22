@@ -64,7 +64,7 @@ TOOLS: list[dict[str, Any]] = [
                         "type": "string",
                         "pattern": TABLE_NAME_PATTERN,
                         "description": (
-                            "Optional node table, such as person or location."
+                            "Optional node table, such as person, location, or space."
                         ),
                     },
                     "limit": {
@@ -132,7 +132,8 @@ TOOLS: list[dict[str, Any]] = [
                         "pattern": TABLE_NAME_PATTERN,
                         "description": (
                             "Optional relationship table, such as spouse_of, "
-                            "lives_in, parent_of, or the derived inverse child_of."
+                            "lives_in, parent_of, contained_in, or a derived "
+                            "inverse such as child_of or contains."
                         ),
                     },
                     "direction": {

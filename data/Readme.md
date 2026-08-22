@@ -69,5 +69,24 @@ Store a symmetric `spouse_of` fact once; traversal works from either spouse.
 Store only canonical `parent_of` facts. `child_of` is a derived inverse query
 name and must not have its own data file.
 
-Do not use separate records for translations of the same person's or
-location's name. Record IDs remain language-neutral and stable.
+Named places inside a home are `space` nodes, not extra `location` records.
+A `location` is an addressable site such as the home. A `space` is a room or
+storage place inside a location, or nested inside another space. Attach each
+space with `contained_in`:
+
+```json
+{
+  "from": "space:kitchen",
+  "to": "location:example_home"
+}
+```
+
+`space_type` is `room` or `storage`. Nesting is allowed (`space` → `space`)
+when a storage place belongs inside a room. Do not add a reverse `contains`
+file; that name is a derived inverse query. Record IDs cannot contain extra
+colons, so use `space:kitchen`, not `space:home:kitchen`.
+
+People live at a `location`. Do not attach `lives_in` to a space.
+
+Do not use separate records for translations of the same person's,
+location's, or space's name. Record IDs remain language-neutral and stable.

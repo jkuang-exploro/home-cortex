@@ -74,6 +74,7 @@ async def test_search_entities_queries_known_tables_and_sorts_globally() -> None
     assert [variables["table"] for _, variables in database.queries] == [
         "location",
         "person",
+        "space",
     ]
     assert all(variables["text"] == "cerritos" for _, variables in database.queries)
     assert "type::table($table)" in database.queries[0][0]
@@ -348,8 +349,13 @@ def test_table_names_come_from_static_test_data() -> None:
         data_dir=STATIC_TEST_DATA,
     )
 
-    assert service.node_tables == ("location", "person")
-    assert service.edge_tables == ("lives_in", "parent_of", "spouse_of")
+    assert service.node_tables == ("location", "person", "space")
+    assert service.edge_tables == (
+        "contained_in",
+        "lives_in",
+        "parent_of",
+        "spouse_of",
+    )
 
 
 def test_record_id_is_serialized() -> None:
@@ -383,6 +389,10 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
             "艾力克斯",
             entity_type="person",
         )
+        kitchens = await service.search_entities(
+            "厨房",
+            entity_type="space",
+        )
         relationships = await service.get_relationships(
             "location:test_house",
             relation="lives_in",
@@ -406,6 +416,8 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
     assert [entity["id"] for entity in chinese_people] == [
         "person:alex_example"
     ]
+    assert [entity["id"] for entity in kitchens] == ["space:kitchen"]
+    assert kitchens[0]["space_type"] == "room"
     assert chinese_people[0]["name"] == ["Alex Example", "艾力克斯"]
     assert sorted(edge["in"] for edge in relationships) == [
         "person:alex_example",
@@ -465,6 +477,14 @@ async def test_registry_drives_symmetric_directed_and_inverse_traversal() -> Non
             "person:casey_example",
             relation="child_of",
         )
+        kitchen_parent = await service.get_relationships(
+            "space:kitchen",
+            relation="contained_in",
+        )
+        home_spaces = await service.get_relationships(
+            "location:test_house",
+            relation="contains",
+        )
     finally:
         await database.close()
 
@@ -485,6 +505,17 @@ async def test_registry_drives_symmetric_directed_and_inverse_traversal() -> Non
     ]
     assert all(edge["relation"] == "parent_of" for edge in casey_inverse)
     assert all(edge["semantic_relation"] == "child_of" for edge in casey_inverse)
+    assert [edge["related_entity"]["id"] for edge in kitchen_parent] == [
+        "location:test_house"
+    ]
+    assert kitchen_parent[0]["relation"] == "contained_in"
+    assert kitchen_parent[0]["semantic_relation"] == "contained_in"
+    assert [edge["related_entity"]["id"] for edge in home_spaces] == [
+        "space:kitchen"
+    ]
+    assert home_spaces[0]["relation"] == "contained_in"
+    assert home_spaces[0]["semantic_relation"] == "contains"
+    assert home_spaces[0]["related_entity"]["space_type"] == "room"
 
 
 @pytest.mark.asyncio

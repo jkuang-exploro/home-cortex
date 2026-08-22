@@ -50,8 +50,8 @@ async def test_repeated_ingestion_does_not_duplicate_relationships() -> None:
     finally:
         await database.close()
 
-    assert first.nodes_upserted == second.nodes_upserted == 4
-    assert first.edges_upserted == second.edges_upserted == 5
+    assert first.nodes_upserted == second.nodes_upserted == 5
+    assert first.edges_upserted == second.edges_upserted == 6
     assert sorted(str(edge["id"]) for edge in edges) == [
         "lives_in:blair_primary",
         "lives_in:person_alex_example__location_test_house",
@@ -237,6 +237,26 @@ async def test_lives_in_rejects_reversed_endpoint_types(tmp_path: Path) -> None:
     await database.connect()
     try:
         with pytest.raises(ValueError, match="Invalid lives_in endpoints"):
+            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+    finally:
+        await database.close()
+
+
+@pytest.mark.asyncio
+async def test_contained_in_rejects_non_space_sources(tmp_path: Path) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    path = data_dir / "edges" / "contained_in.json"
+    path.write_text(
+        json.dumps(
+            [{"from": "person:alex_example", "to": "location:test_house"}]
+        ),
+        encoding="utf-8",
+    )
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        with pytest.raises(ValueError, match="Invalid contained_in endpoints"):
             await ingest_directory(database, data_dir)  # type: ignore[arg-type]
     finally:
         await database.close()

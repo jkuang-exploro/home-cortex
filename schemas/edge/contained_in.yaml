@@ -1,0 +1,9 @@
+id: contained_in
+symmetric: false
+from_types:
+  - space
+to_types:
+  - location
+  - space
+temporal: false
+inverse_name: contains
