@@ -68,8 +68,7 @@ Add a contextual `household_role` to the Person's edge to the home. Do not add
 After editing an edge role, re-ingest it:
 
 ```sh
-curl -sS -X POST http://localhost:8001/admin/ingest \
-  -H 'Authorization: Bearer replace-with-a-long-random-secret' | jq
+curl -sS -X POST http://localhost:8001/admin/ingest -H "Authorization: Bearer ${CORTEX_API_KEY}" | jq
 ```
 
 Verify the steward's deterministic Chinese greeting:
