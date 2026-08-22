@@ -203,12 +203,35 @@ User-written messages cannot change this mapping. If identity mappings are
 configured, an unknown Open WebUI user receives an `identity_not_mapped` error
 instead of being treated as somebody else.
 
+## Agent runtime architecture
+
+The runtime is intentionally split into three flat layers:
+
+- `agent.py` is the public coordinator. It normalizes trusted identity and
+  conversation input, then selects the appropriate execution path.
+- `facts.py` converts supported household-fact language into a small
+  `FactRequest` (`subject`, `field`, and `cardinality`). A relationship registry
+  supplies graph paths such as spouse, child, parent, and parent-in-law. The
+  service traverses those paths and renders verified facts deterministically.
+  Elliptical follow-ups inherit the last explicit structured subject, so a
+  request such as `他们的生日分别是哪天？` can reuse the people established by
+  the preceding turn.
+- `model_loop.py` owns the bounded Ollama loop, tool limits, evidence gate,
+  privacy filtering, display-name repair, and streaming. It handles informal or
+  open-ended conversation and has no household-specific answer renderer.
+
+This keeps natural-language aliases at the semantic boundary rather than
+adding a new `if question == ...` method for each phrasing. Verified structured
+facts do not pass through Ollama again, so the model cannot alter a birthday,
+relationship, count, or anniversary after retrieval.
+
 ## Named agents
 
 Home Cortex is the shared platform; named agents are role-specific interfaces
 on top of it. The `steward` definition lives under
 `home_cortex/agents/steward` and owns its display name, prompt, model preference,
-settings, and tool allowlist. The generic loop remains in `agent.py`.
+settings, and tool allowlist. The public coordinator remains in `agent.py`, and
+the generic Ollama loop lives in `model_loop.py`.
 
 The steward's model is `OLLAMA_MODEL` when its `config.yaml` model name is null.
 A future specialized agent can select a different model and tools without

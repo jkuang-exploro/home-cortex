@@ -735,7 +735,7 @@ async def test_child_birthday_requires_relationship_then_entity_evidence(
         },
     )
 
-    assert result.answer == "您儿子匡德伦的生日是2016年10月30日。"
+    assert result.answer == "您的儿子匡德伦的生日是2016年10月30日。"
     assert result.steps == 1
     assert result.tool_calls == 2
     assert [tool_name for tool_name, _ in dispatcher.calls] == [
@@ -744,12 +744,8 @@ async def test_child_birthday_requires_relationship_then_entity_evidence(
     ]
     assert dispatcher.calls[0][1]["relation"] == "parent_of"
     assert dispatcher.calls[0][1]["direction"] == "out"
-    assert ollama.tool_names == [()]
-    relationship_payload = ollama.calls[0][-1]["content"]
-    assert "retrieved deterministically" in relationship_payload
-    assert "匡德伦" in relationship_payload
-    assert "匡悠然" not in relationship_payload
-    assert "2016-10-30" in relationship_payload
+    # Structured facts are rendered directly; the model cannot alter them.
+    assert ollama.calls == []
 
 
 @pytest.mark.asyncio
@@ -800,7 +796,7 @@ async def test_spouse_birthday_is_prefetched_from_authenticated_speaker() -> Non
         },
     )
 
-    assert result.answer == "您妻子巴璞的生日是1988年2月26日。"
+    assert result.answer == "您的太太巴璞的生日是1988年2月26日。"
     assert result.steps == 1
     assert result.tool_calls == 2
     assert dispatcher.calls == [
@@ -814,8 +810,7 @@ async def test_spouse_birthday_is_prefetched_from_authenticated_speaker() -> Non
         ),
         ("get_entity", {"entity_id": "person:pu_ba"}),
     ]
-    assert ollama.tool_names == [()]
-    assert "1988-02-26" in ollama.calls[0][-1]["content"]
+    assert ollama.calls == []
 
 
 @pytest.mark.asyncio
