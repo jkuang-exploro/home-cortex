@@ -180,9 +180,9 @@ async def test_home_address_followup_uses_stored_location_without_model() -> Non
 
     result = await _agent(ollama, dispatcher).answer_messages(
         [
-            {"role": "user", "content": "家的位置"},
-            {"role": "assistant", "content": "当前没有显示具体地址。"},
-            {"role": "user", "content": "地址信息没看到呢"},
+            {"role": "user", "content": "这是哪里"},
+            {"role": "assistant", "content": "这里是喜瑞匡家。"},
+            {"role": "user", "content": "地址在哪里"},
         ],
         user_entity={
             "id": "person:jian_kuang",
@@ -196,6 +196,39 @@ async def test_home_address_followup_uses_stored_location_without_model() -> Non
         "12745 Droxford St, Cerritos, CA 90703。"
     )
     assert result.tool_calls == 1
+    assert dispatcher.calls == [
+        ("get_entity", {"entity_id": "location:fort_cerritos"})
+    ]
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
+async def test_this_place_is_resolved_as_the_configured_home() -> None:
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_entity",
+            "result": [
+                {
+                    "id": "location:fort_cerritos",
+                    "name": ["Fort Cerritos", "喜瑞匡家"],
+                    "address": {"street": "12745 Droxford St"},
+                }
+            ],
+        }
+    )
+    ollama = FakeOllamaService([])
+
+    result = await _agent(ollama, dispatcher).answer(
+        "这是哪里",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == "先生，这里是喜瑞匡家。"
     assert dispatcher.calls == [
         ("get_entity", {"entity_id": "location:fort_cerritos"})
     ]

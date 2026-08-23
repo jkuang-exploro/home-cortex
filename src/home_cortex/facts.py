@@ -365,8 +365,10 @@ class FactService:
         if request.subject.kind == "home":
             if self.home_entity_id is None:
                 return _no_records_fallback(language)
-            if request.field == "address":
+            if request.field in {"address", "identity"}:
                 home = await self._home_entity(execution)
+                if request.field == "identity":
+                    return _format_home_identity(home, identity, language)
                 return _format_home_address(home, identity, language)
             residents = await self._home_residents(execution)
             return _format_residents(residents, identity, language)
@@ -787,6 +789,9 @@ def parse_fact_request(
     ):
         return FactRequest(SubjectReference("home"), "address")
 
+    if _is_home_identity_request(normalized):
+        return FactRequest(SubjectReference("home"), "identity")
+
     if _is_roster_request(normalized, registry.aliases):
         return FactRequest(SubjectReference("home"), "residents", "all")
 
@@ -886,6 +891,15 @@ def _is_home_address_request(text: str) -> bool:
         and _contains_any(text, ("address", "street address"))
     )
     return chinese or english
+
+
+def _is_home_identity_request(text: str) -> bool:
+    return bool(
+        re.fullmatch(
+            r"(?:这|这里|这儿|这个地方)(?:是)?(?:哪里|哪儿|哪)[?？。！!]?",
+            text,
+        )
+    )
 
 
 def _previous_home_subject(
@@ -1229,6 +1243,25 @@ def _format_home_address(
     prefix = f"{speaker_address}, " if speaker_address else ""
     label = f"your home ({name})" if name else "your home"
     answer = f"{prefix}{label} is at {address}."
+    return answer if prefix else answer[0].upper() + answer[1:]
+
+
+def _format_home_identity(
+    home: Mapping[str, Any] | None,
+    identity: Mapping[str, Any] | None,
+    language: str,
+) -> str:
+    if home is None:
+        return _no_records_fallback(language)
+    name = resolve_display_name(home, language)
+    if INTERNAL_ID_PATTERN.fullmatch(name):
+        return _no_records_fallback(language)
+    speaker_address = _speaker_address(identity, language)
+    if language == "zh":
+        prefix = f"{speaker_address}，" if speaker_address else ""
+        return f"{prefix}这里是{name}。"
+    prefix = f"{speaker_address}, " if speaker_address else ""
+    answer = f"{prefix}this is {name}."
     return answer if prefix else answer[0].upper() + answer[1:]
 
 

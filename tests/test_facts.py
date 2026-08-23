@@ -84,6 +84,14 @@ IDENTITY: dict[str, Any] = {
             FactRequest(SubjectReference("home"), "address"),
         ),
         (
+            "家里地址是哪",
+            FactRequest(SubjectReference("home"), "address"),
+        ),
+        (
+            "这是哪里",
+            FactRequest(SubjectReference("home"), "identity"),
+        ),
+        (
             "What is my home address?",
             FactRequest(SubjectReference("home"), "address"),
         ),
@@ -169,9 +177,9 @@ def test_birthday_countdown_followup_inherits_previous_semantic_subject() -> Non
 def test_address_followup_inherits_home_subject() -> None:
     request = parse_fact_request(
         [
-            {"role": "user", "content": "家的位置"},
-            {"role": "assistant", "content": "家在 Fort Cerritos。"},
-            {"role": "user", "content": "地址信息没看到呢"},
+            {"role": "user", "content": "这是哪里"},
+            {"role": "assistant", "content": "这里是喜瑞匡家。"},
+            {"role": "user", "content": "地址在哪里"},
         ],
         identity=IDENTITY,
     )
