@@ -941,6 +941,82 @@ async def test_father_in_law_birthday_uses_verified_two_hop_relationship() -> No
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("residence_target", "expected"),
+    [
+        ("location:fort_cerritos", "先生，是的。"),
+        ("location:another_home", "先生，不是。"),
+    ],
+)
+async def test_relative_home_membership_is_verified_through_the_graph(
+    residence_target: str,
+    expected: str,
+) -> None:
+    class Dispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: dict[str, Any],
+            **_: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            entity_id = arguments["entity_id"]
+            relation = arguments["relation"]
+            if relation == "spouse_of":
+                related = {
+                    "id": "person:pu_ba",
+                    "name": ["Pu Ba", "巴璞"],
+                    "gender": "female",
+                }
+            elif relation == "parent_of":
+                related = {
+                    "id": "person:zhigang_ba",
+                    "name": ["Zhigang Ba", "巴志刚"],
+                    "gender": "male",
+                }
+            else:
+                assert entity_id == "person:zhigang_ba"
+                related = {
+                    "id": residence_target,
+                    "name": "Fort Cerritos",
+                }
+            return {
+                "ok": True,
+                "tool": tool_name,
+                "result": [
+                    {
+                        "relation": relation,
+                        "related_entity": related,
+                    }
+                ],
+            }
+
+    dispatcher = Dispatcher()
+    ollama = FakeOllamaService([])
+
+    result = await _agent(ollama, dispatcher).answer(
+        "我岳父住在我家吗？",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == expected
+    assert result.tool_calls == 3
+    assert [arguments["relation"] for _, arguments in dispatcher.calls] == [
+        "spouse_of",
+        "parent_of",
+        "lives_in",
+    ]
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
 async def test_child_birthday_rejects_dob_from_unrelated_entity() -> None:
     class WrongEntityDispatcher:
         async def dispatch(

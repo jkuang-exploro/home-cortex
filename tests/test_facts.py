@@ -67,6 +67,15 @@ IDENTITY: dict[str, Any] = {
             ),
         ),
         (
+            "我岳父住在我家吗？",
+            FactRequest(
+                SubjectReference("relative", "father_in_law"),
+                "relationship_exists",
+                relation="lives_in",
+                target=SubjectReference("home"),
+            ),
+        ),
+        (
             "家里都有谁？",
             FactRequest(SubjectReference("home"), "residents", "all"),
         ),

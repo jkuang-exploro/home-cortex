@@ -31,6 +31,7 @@ from .memorable_dates import (
 FactField = Literal[
     "identity",
     "relationship_to_speaker",
+    "relationship_exists",
     "count",
     "memorable_date",
     "residents",
@@ -55,6 +56,8 @@ class FactRequest:
     cardinality: Literal["one", "all"] = "one"
     memorable_date: str | None = None
     date_query: DateQuery = "stored"
+    relation: str | None = None
+    target: SubjectReference | None = None
 
 
 @dataclass(frozen=True)
@@ -156,6 +159,30 @@ _LOOKUP_TERMS = (
     "列出",
 )
 _COUNT_TERMS = ("how many", "count", "number", "几个", "几位", "多少")
+_RESIDENCE_TERMS = (
+    "live in",
+    "lives in",
+    "living in",
+    "live at",
+    "lives at",
+    "reside in",
+    "resides in",
+    "住",
+    "住在",
+    "居住在",
+)
+_HOME_REFERENCE_TERMS = (
+    "my home",
+    "our home",
+    "my house",
+    "our house",
+    "my household",
+    "our household",
+    "我家",
+    "我们家",
+    "家里",
+    "家中",
+)
 
 
 class _FactFailure(RuntimeError):
@@ -397,6 +424,21 @@ class FactService:
                 language,
                 current_date,
             )
+        if request.field == "relationship_exists":
+            if (
+                request.relation is None
+                or request.target is None
+                or request.target.kind != "home"
+                or self.home_entity_id is None
+            ):
+                return _no_records_fallback(language)
+            matches = await self._relationship_matches(
+                traversal.entities,
+                request.relation,
+                self.home_entity_id,
+                execution,
+            )
+            return _format_boolean_answer(all(matches), identity, language)
         if request.field == "count":
             return _format_relative_count(
                 traversal.entities,
@@ -410,6 +452,41 @@ class FactService:
             identity,
             language,
         )
+
+    async def _relationship_matches(
+        self,
+        subjects: Sequence[Mapping[str, Any]],
+        relation: str,
+        target_id: str,
+        execution: _Execution,
+    ) -> list[bool]:
+        if not subjects:
+            raise _FactFailure("tool_error")
+        matches: list[bool] = []
+        for subject in subjects:
+            subject_id = subject.get("id")
+            if not isinstance(subject_id, str):
+                raise _FactFailure("tool_error")
+            result = await execution.call(
+                "get_relationships",
+                {
+                    "entity_id": subject_id,
+                    "relation": relation,
+                    "limit": execution.max_records,
+                },
+            )
+            records = result.get("result")
+            if not isinstance(records, list):
+                raise _FactFailure("tool_error")
+            matches.append(
+                any(
+                    isinstance(record, Mapping)
+                    and isinstance(record.get("related_entity"), Mapping)
+                    and record["related_entity"].get("id") == target_id
+                    for record in records
+                )
+            )
+        return matches
 
     async def _traverse(
         self,
@@ -684,6 +761,13 @@ def parse_fact_request(
                 memorable_date=date_schema.id,
                 date_query=date_query,
             )
+        if _is_home_residence_check(normalized):
+            return FactRequest(
+                SubjectReference("relative", relative),
+                "relationship_exists",
+                relation="lives_in",
+                target=SubjectReference("home"),
+            )
         if _contains_any(normalized, _COUNT_TERMS):
             return FactRequest(SubjectReference("relative", relative), "count", "all")
         if _contains_any(normalized, _LOOKUP_TERMS):
@@ -749,6 +833,18 @@ def _latest_user_text(messages: Sequence[Mapping[str, Any]]) -> str:
 
 def _is_next_occurrence(text: str) -> bool:
     return any(re.search(pattern, text) for pattern in _NEXT_OCCURRENCE_PATTERNS)
+
+
+def _is_home_residence_check(text: str) -> bool:
+    if not (
+        _contains_any(text, _RESIDENCE_TERMS)
+        and _contains_any(text, _HOME_REFERENCE_TERMS)
+    ):
+        return False
+    return bool(
+        re.search(r"(?:吗[？?]?$|是否|是不是|有没有)", text)
+        or re.match(r"\s*(?:do|does|is|are)\b", text)
+    )
 
 
 def _previous_fact_subject(
@@ -994,6 +1090,20 @@ def _format_speaker_identity(
         return f"{prefix}您是{name}。"
     prefix = f"{address}, " if address else ""
     answer = f"{prefix}you are {name}."
+    return answer if prefix else answer[0].upper() + answer[1:]
+
+
+def _format_boolean_answer(
+    value: bool,
+    identity: Mapping[str, Any] | None,
+    language: str,
+) -> str:
+    address = _speaker_address(identity, language)
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        return f"{prefix}{'是的' if value else '不是'}。"
+    prefix = f"{address}, " if address else ""
+    answer = f"{prefix}{'yes' if value else 'no'}."
     return answer if prefix else answer[0].upper() + answer[1:]
 
 
