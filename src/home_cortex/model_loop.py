@@ -38,7 +38,7 @@ MODEL_HIDDEN_FIELDS = frozenset(
     {"address_as", "first_name", "gender", "last_name"}
 )
 
-logger = logging.getLogger("uvicorn.error.home_cortex.agent")
+logger = logging.getLogger("uvicorn.error.home_cortex.agent_service")
 StopReason = Literal["answer", "step_limit", "tool_error", "timeout"]
 
 

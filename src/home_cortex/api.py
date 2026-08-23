@@ -17,7 +17,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import JSONResponse, StreamingResponse
 
 from . import __version__
-from .agent import AgentLimitError, AgentService, AgentStreamingError
+from .agent_service import AgentLimitError, AgentService, AgentStreamingError
 from .agents import (
     AgentDefinition,
     UnknownAgentError,

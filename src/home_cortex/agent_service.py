@@ -1,4 +1,4 @@
-"""Public household-agent coordinator.
+"""Public household agent-service coordinator.
 
 The coordinator deliberately contains no memorized question handlers.  It
 normalizes trusted context, gives structured household facts to ``FactService``,

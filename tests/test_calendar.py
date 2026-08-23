@@ -18,7 +18,7 @@ from home_cortex.calendar import (
     normalize_google_event,
 )
 from home_cortex.tools import ToolDispatcher
-from test_agent import (
+from test_agent_service import (
     FakeDispatcher,
     FakeOllamaService,
     _agent,

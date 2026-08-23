@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from ollama import ChatResponse
 
-from home_cortex.agent import (
+from home_cortex.agent_service import (
     MAX_AGENT_STEPS,
     AgentLimitError,
     AgentService,
@@ -2096,7 +2096,7 @@ async def test_stops_after_hard_agent_step_limit(
 
     with caplog.at_level(
         logging.INFO,
-        logger="uvicorn.error.home_cortex.agent",
+        logger="uvicorn.error.home_cortex.agent_service",
     ):
         with pytest.raises(AgentLimitError, match="within 4 steps") as error:
             await agent.answer("Never-ending lookup", request_id="request-limit")
@@ -2126,7 +2126,7 @@ async def test_tool_timeout_becomes_a_bounded_tool_error(
 
     with caplog.at_level(
         logging.INFO,
-        logger="uvicorn.error.home_cortex.agent",
+        logger="uvicorn.error.home_cortex.agent_service",
     ):
         result = await agent.answer("Find the home", request_id="request-timeout")
 
@@ -2163,7 +2163,7 @@ async def test_tool_error_is_recorded_as_stop_reason(
 
     with caplog.at_level(
         logging.INFO,
-        logger="uvicorn.error.home_cortex.agent",
+        logger="uvicorn.error.home_cortex.agent_service",
     ):
         result = await agent.answer(
             "Find a location",
@@ -2210,7 +2210,7 @@ async def test_logs_agent_and_tool_metadata_without_private_values(
 
     with caplog.at_level(
         logging.INFO,
-        logger="uvicorn.error.home_cortex.agent",
+        logger="uvicorn.error.home_cortex.agent_service",
     ):
         result = await agent.answer(private_question, request_id="request-123")
 

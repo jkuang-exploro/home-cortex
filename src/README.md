@@ -210,7 +210,7 @@ instead of being treated as somebody else.
 
 The runtime is intentionally split into three flat layers:
 
-- `agent.py` is the public coordinator. It normalizes trusted identity and
+- `agent_service.py` is the public coordinator. It normalizes trusted identity and
   conversation input, then selects the appropriate execution path.
 - `facts.py` converts supported household-fact language into a small
   `FactRequest` (`subject`, `field`, and `cardinality`). A relationship registry
@@ -233,8 +233,8 @@ relationship, count, or anniversary after retrieval.
 Home Cortex is the shared platform; named agents are role-specific interfaces
 on top of it. The `steward` definition lives under
 `home_cortex/agents/steward` and owns its display name, prompt, model preference,
-settings, and tool allowlist. The public coordinator remains in `agent.py`, and
-the generic Ollama loop lives in `model_loop.py`.
+settings, and tool allowlist. The public coordinator remains in
+`agent_service.py`, and the generic Ollama loop lives in `model_loop.py`.
 
 The steward's model is `OLLAMA_MODEL` when its `config.yaml` model name is null.
 A future specialized agent can select a different model and tools without
