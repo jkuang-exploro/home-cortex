@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -871,7 +872,11 @@ async def test_father_in_law_birthday_uses_verified_two_hop_relationship() -> No
 
     dispatcher = FatherInLawBirthdayDispatcher()
     ollama = FakeOllamaService([])
-    agent = _agent(ollama, dispatcher)
+    agent = _agent(
+        ollama,
+        dispatcher,
+        clock=lambda: datetime.fromisoformat("2026-08-22T16:30:00-07:00"),
+    )
     identity = {
         "id": "person:jian_kuang",
         "name": ["Jian Kuang", "匡健"],
@@ -918,6 +923,20 @@ async def test_father_in_law_birthday_uses_verified_two_hop_relationship() -> No
 
     assert chunks == [result.answer]
     assert dispatcher.calls[3:] == dispatcher.calls[:3]
+    assert ollama.calls == []
+
+    countdown = await agent.answer_messages(
+        [
+            {"role": "user", "content": "我岳父生日是哪天？"},
+            {"role": "assistant", "content": result.answer},
+            {"role": "user", "content": "还有多少天过生日？"},
+        ],
+        user_entity=identity,
+    )
+
+    assert countdown.answer == "先生，您的岳父巴志刚的生日还有49天。"
+    assert countdown.tool_calls == 3
+    assert dispatcher.calls[6:] == dispatcher.calls[:3]
     assert ollama.calls == []
 
 
@@ -1412,6 +1431,44 @@ async def test_marriage_date_stream_does_not_invoke_ollama() -> None:
 
 
 @pytest.mark.asyncio
+async def test_anniversary_uses_the_same_annual_recurrence_pipeline() -> None:
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_relationships",
+            "result": [
+                {
+                    "id": "spouse_of:jian_pu",
+                    "relation": "spouse_of",
+                    "start": "2014-05-04",
+                    "related_entity": {
+                        "id": "person:pu_ba",
+                        "name": ["Pu Ba", "巴璞"],
+                    },
+                }
+            ],
+        }
+    )
+    agent = _agent(
+        FakeOllamaService([]),
+        dispatcher,
+        clock=lambda: datetime.fromisoformat("2026-08-22T16:30:00-07:00"),
+    )
+
+    result = await agent.answer(
+        "距离我们的结婚纪念日还有多少天？",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == "先生，您与巴璞的结婚纪念日还有255天。"
+    assert result.tool_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_agent_role_name_is_not_used_to_address_authenticated_user() -> None:
     ollama = FakeOllamaService([_chat_response("老管家，您是匡健先生。")])
 
@@ -1455,11 +1512,52 @@ async def test_stream_repairs_agent_role_split_across_chunks() -> None:
 
 
 @pytest.mark.asyncio
+async def test_agent_identity_question_uses_configured_role_and_speaker_address() -> None:
+    ollama = FakeOllamaService([])
+
+    result = await _agent(ollama, FakeDispatcher()).answer(
+        "你是谁？",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == "先生，我是老管家。"
+    assert result.tool_calls == 0
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
+async def test_streamed_agent_identity_uses_configured_role() -> None:
+    ollama = FakeStreamingOllamaService([])
+
+    chunks = [
+        chunk
+        async for chunk in _agent(
+            ollama,
+            FakeDispatcher(),
+        ).stream_answer_messages(
+            [{"role": "user", "content": "你是谁？"}],
+            user_entity={
+                "id": "person:jian_kuang",
+                "name": ["Jian Kuang", "匡健"],
+                "address_as": {"zh": "先生"},
+            },
+        )
+    ]
+
+    assert chunks == ["先生，我是老管家。"]
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
 async def test_legitimate_agent_self_reference_is_unchanged() -> None:
     ollama = FakeOllamaService([_chat_response("老管家在此为您效劳。")])
 
     result = await _agent(ollama, FakeDispatcher()).answer(
-        "你是谁？",
+        "你能帮我做些什么？",
         user_entity={
             "id": "person:jian_kuang",
             "name": ["Jian Kuang", "匡健"],

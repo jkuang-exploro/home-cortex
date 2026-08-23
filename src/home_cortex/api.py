@@ -28,6 +28,7 @@ from .agents import (
 from .config import Settings, get_settings
 from .db import Database
 from .edge_schema import EdgeSchemaRegistry
+from .memorable_dates import MemorableDateRegistry
 from .display import conversation_language
 from .greetings import GreetingService
 from .ingestion import ingest_directory
@@ -130,6 +131,10 @@ async def lifespan(app: FastAPI):
     app.state.database = database
     edge_registry = EdgeSchemaRegistry.from_directory(settings.edge_schema_dir)
     app.state.edge_registry = edge_registry
+    memorable_dates = MemorableDateRegistry.from_file(
+        settings.memorable_date_schema_path
+    )
+    app.state.memorable_dates = memorable_dates
     retrieval = RetrievalService(
         database,
         settings.retrieval_limit,
@@ -162,6 +167,7 @@ async def lifespan(app: FastAPI):
             tools=definition.tool_definitions,
             localized_identity=definition.settings.get("localized_identity"),
             home_entity_id=definition.settings.get("home_entity_id"),
+            memorable_dates=memorable_dates,
             household_timezone=settings.calendar_timezone,
         )
     app.state.agents = runtimes

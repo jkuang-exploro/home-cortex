@@ -59,6 +59,7 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL}
       DATA_DIR: /app/data
       EDGE_SCHEMA_DIR: /app/schemas/edge
+      MEMORABLE_DATE_SCHEMA_PATH: /app/schemas/memorable_dates.yaml
       CORTEX_API_KEY: ${CORTEX_API_KEY:-}
       CORTEX_IDENTITY_MAP: '${CORTEX_IDENTITY_MAP:-{}}'
       GOOGLE_CALENDAR_CLIENT_ID: ${GOOGLE_CALENDAR_CLIENT_ID:-}

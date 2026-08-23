@@ -1,20 +1,26 @@
 """Public household agent-service coordinator.
 
-The coordinator deliberately contains no memorized question handlers.  It
-normalizes trusted context, gives structured household facts to ``FactService``,
-and delegates everything else to the bounded Ollama ``ModelLoop``.
+The coordinator contains no memorized household-fact answers. It normalizes
+trusted context, gives structured household facts to ``FactService``, handles
+configured agent identity, and delegates everything else to ``ModelLoop``.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from .display import conversation_language, internal_ids_requested
+from .display import (
+    conversation_language,
+    internal_ids_requested,
+    resolve_person_reference,
+)
 from .facts import FactService
+from .memorable_dates import MemorableDateRegistry
 from .model_loop import (
     MAX_AGENT_STEPS,
     MAX_TOOL_CALLS_PER_STEP,
@@ -47,6 +53,7 @@ class AgentService:
         tool_timeout_seconds: float = TOOL_EXECUTION_TIMEOUT_SECONDS,
         localized_identity: Mapping[str, str] | None = None,
         home_entity_id: str | None = None,
+        memorable_dates: MemorableDateRegistry | None = None,
         household_timezone: str = "America/Los_Angeles",
         clock: Callable[[], datetime] | None = None,
     ) -> None:
@@ -61,12 +68,14 @@ class AgentService:
             max_tool_result_bytes=max_tool_result_bytes,
             tool_timeout_seconds=tool_timeout_seconds,
             localized_identity=localized_identity,
+            memorable_dates=memorable_dates,
         )
         self.household_timezone = household_timezone
         self._clock = clock
         self.facts = FactService(
             dispatcher,
             home_entity_id=home_entity_id,
+            memorable_dates=self.model_loop.memorable_dates,
             max_tool_calls=self.model_loop.max_tool_calls_per_step,
             max_records=self.model_loop.max_tool_records,
             timeout_seconds=self.model_loop.tool_timeout_seconds,
@@ -101,19 +110,35 @@ class AgentService:
         safe_messages = _conversation_messages(messages)
         language = conversation_language(safe_messages)
         identity = _normalized_identity(user_entity_id, user_entity)
+        now = self._now()
         fact_answer = await self.facts.try_answer(
             safe_messages,
             identity=identity,
             language=language,
             request_id=request_id,
+            current_date=_household_date(self.household_timezone, now),
         )
-        trusted = self._trusted_conversation(safe_messages, identity)
+        trusted = self._trusted_conversation(safe_messages, identity, now=now)
         if fact_answer is not None:
             return AgentResult(
                 answer=fact_answer.text,
                 steps=1,
                 tool_calls=fact_answer.tool_calls,
                 stop_reason=fact_answer.stop_reason,
+                messages=tuple(trusted),
+            )
+        identity_answer = _agent_identity_answer(
+            safe_messages,
+            localized_identity=self.model_loop.localized_identity,
+            speaker=identity,
+            language=language,
+        )
+        if identity_answer is not None:
+            return AgentResult(
+                answer=identity_answer,
+                steps=1,
+                tool_calls=0,
+                stop_reason="answer",
                 messages=tuple(trusted),
             )
         return await self.model_loop.run(
@@ -136,17 +161,28 @@ class AgentService:
         safe_messages = _conversation_messages(messages)
         language = conversation_language(safe_messages)
         identity = _normalized_identity(user_entity_id, user_entity)
+        now = self._now()
         fact_answer = await self.facts.try_answer(
             safe_messages,
             identity=identity,
             language=language,
             request_id=request_id,
+            current_date=_household_date(self.household_timezone, now),
         )
         if fact_answer is not None:
             yield fact_answer.text
             return
+        identity_answer = _agent_identity_answer(
+            safe_messages,
+            localized_identity=self.model_loop.localized_identity,
+            speaker=identity,
+            language=language,
+        )
+        if identity_answer is not None:
+            yield identity_answer
+            return
         async for token in self.model_loop.stream(
-            self._trusted_conversation(safe_messages, identity),
+            self._trusted_conversation(safe_messages, identity, now=now),
             request_id=request_id,
             presentation_language=language,
             expose_internal_ids=internal_ids_requested(safe_messages),
@@ -159,10 +195,12 @@ class AgentService:
         self,
         messages: Sequence[Mapping[str, Any]],
         identity: Mapping[str, Any] | None,
+        *,
+        now: datetime,
     ) -> list[dict[str, Any]]:
         return [
             {"role": "system", "content": self.model_loop.system_prompt},
-            *_clock_context(self.household_timezone, self._now()),
+            *_clock_context(self.household_timezone, now),
             *(_identity_context(identity) if identity else []),
             *(dict(message) for message in messages),
         ]
@@ -194,7 +232,7 @@ def _normalized_identity(
 
 def _clock_context(timezone_name: str, now: datetime) -> list[dict[str, str]]:
     zone = ZoneInfo(timezone_name)
-    current = now.astimezone(zone) if now.tzinfo is not None else now.replace(tzinfo=zone)
+    current = _household_datetime(zone, now)
     return [
         {
             "role": "system",
@@ -210,6 +248,57 @@ def _clock_context(timezone_name: str, now: datetime) -> list[dict[str, str]]:
             ),
         }
     ]
+
+
+def _household_date(timezone_name: str, now: datetime) -> date:
+    return _household_datetime(ZoneInfo(timezone_name), now).date()
+
+
+def _household_datetime(zone: ZoneInfo, now: datetime) -> datetime:
+    return now.astimezone(zone) if now.tzinfo is not None else now.replace(tzinfo=zone)
+
+
+def _agent_identity_answer(
+    messages: Sequence[Mapping[str, Any]],
+    *,
+    localized_identity: Mapping[str, str],
+    speaker: Mapping[str, Any] | None,
+    language: str,
+) -> str | None:
+    latest = next(
+        (
+            str(message.get("content", "")).strip()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    normalized = latest.casefold().strip(" \t\r\n?!？。！")
+    asks_identity = bool(
+        re.fullmatch(r"(?:你|您)(?:是)?谁", normalized)
+        or re.fullmatch(r"(?:你|您)(?:叫)?什么(?:名字)?", normalized)
+        or re.fullmatch(
+            r"who are you|what are you|what(?:'s| is) your name",
+            normalized,
+        )
+    )
+    if not asks_identity:
+        return None
+    agent_name = (
+        localized_identity.get(language)
+        or localized_identity.get("en")
+        or next(iter(localized_identity.values()), None)
+    )
+    if not agent_name:
+        return None
+    address = None
+    if speaker is not None and speaker.get("address_as"):
+        address = resolve_person_reference(speaker, language, mode="address")
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        return f"{prefix}我是{agent_name}。"
+    prefix = f"{address}, " if address else ""
+    return f"{prefix}I am {agent_name}."
 
 
 def _identity_context(user_entity: Mapping[str, Any]) -> list[dict[str, str]]:

@@ -17,6 +17,10 @@ from .display import (
     resolve_display_name,
     resolve_person_reference,
 )
+from .memorable_dates import (
+    MemorableDateRegistry,
+    default_memorable_date_registry,
+)
 from .ollama import OllamaService
 from .tools import GRAPH_TOOL_NAMES, ToolDispatcher
 
@@ -139,6 +143,7 @@ class ModelLoop:
         max_tool_result_bytes: int = MAX_TOOL_RESULT_BYTES,
         tool_timeout_seconds: float = TOOL_EXECUTION_TIMEOUT_SECONDS,
         localized_identity: Mapping[str, str] | None = None,
+        memorable_dates: MemorableDateRegistry | None = None,
     ) -> None:
         self.ollama = ollama
         self.dispatcher = dispatcher
@@ -158,6 +163,7 @@ class ModelLoop:
             for language, name in (localized_identity or {}).items()
             if isinstance(name, str) and name.strip()
         }
+        self.memorable_dates = memorable_dates or default_memorable_date_registry()
         self._tools_with_limit = frozenset(
             tool["function"]["name"]
             for tool in self.tools
@@ -215,9 +221,19 @@ class ModelLoop:
         evidence_fields: set[str] = set()
         failure_reason: StopReason | None = None
         grounding_retry = False
-        evidence_required = _requires_graph_evidence(conversation)
-        requirements = _evidence_requirements(conversation, evidence_required)
-        allowed_private_fields = _requested_private_fields(conversation)
+        evidence_required = _requires_graph_evidence(
+            conversation,
+            self.memorable_dates,
+        )
+        requirements = _evidence_requirements(
+            conversation,
+            evidence_required,
+            self.memorable_dates,
+        )
+        allowed_private_fields = _requested_private_fields(
+            conversation,
+            self.memorable_dates,
+        )
         (
             failure_reason,
             prefetched_successful,
@@ -418,9 +434,19 @@ class ModelLoop:
         evidence_fields: set[str] = set()
         failure_reason: StopReason | None = None
         grounding_retry = False
-        evidence_required = _requires_graph_evidence(conversation)
-        requirements = _evidence_requirements(conversation, evidence_required)
-        allowed_private_fields = _requested_private_fields(conversation)
+        evidence_required = _requires_graph_evidence(
+            conversation,
+            self.memorable_dates,
+        )
+        requirements = _evidence_requirements(
+            conversation,
+            evidence_required,
+            self.memorable_dates,
+        )
+        allowed_private_fields = _requested_private_fields(
+            conversation,
+            self.memorable_dates,
+        )
         (
             failure_reason,
             prefetched_successful,
@@ -1052,6 +1078,7 @@ def _repair_self_vocative(
 
 def _is_household_roster_request(
     messages: Sequence[Mapping[str, Any]],
+    memorable_dates: MemorableDateRegistry,
 ) -> bool:
     """Recognize resident-roster requests for generic evidence enforcement."""
     latest_user = next(
@@ -1064,11 +1091,24 @@ def _is_household_roster_request(
     )
     if _contains_any(
         latest_user,
-        (
-            "birthday", "anniversary", "parent", "child", "daughter",
-            "son", "spouse", "wife", "husband", "生日", "纪念日",
-            "父母", "父亲", "母亲", "孩子", "儿子", "女儿", "配偶",
-            "妻子", "丈夫",
+        memorable_dates.aliases
+        + (
+            "parent",
+            "child",
+            "daughter",
+            "son",
+            "spouse",
+            "wife",
+            "husband",
+            "父母",
+            "父亲",
+            "母亲",
+            "孩子",
+            "儿子",
+            "女儿",
+            "配偶",
+            "妻子",
+            "丈夫",
         ),
     ):
         return False
@@ -1091,7 +1131,10 @@ def _is_household_roster_request(
     return any(re.search(pattern, latest_user) for pattern in patterns)
 
 
-def _requires_graph_evidence(messages: Sequence[Mapping[str, Any]]) -> bool:
+def _requires_graph_evidence(
+    messages: Sequence[Mapping[str, Any]],
+    memorable_dates: MemorableDateRegistry,
+) -> bool:
     latest_user = next(
         (
             str(message.get("content", ""))
@@ -1101,7 +1144,7 @@ def _requires_graph_evidence(messages: Sequence[Mapping[str, Any]]) -> bool:
         "",
     )
     normalized = latest_user.casefold()
-    if _required_evidence_tool(messages) is None:
+    if _required_evidence_tool(messages, memorable_dates) is None:
         return False
 
     # Relationship words can appear in ordinary conversation without asking
@@ -1133,8 +1176,9 @@ def _requires_graph_evidence(messages: Sequence[Mapping[str, Any]]) -> bool:
 
 def _required_evidence_tool(
     messages: Sequence[Mapping[str, Any]],
+    memorable_dates: MemorableDateRegistry,
 ) -> str | None:
-    if _is_household_roster_request(messages):
+    if _is_household_roster_request(messages, memorable_dates):
         return "get_relationships"
     latest_user = next(
         (
@@ -1144,14 +1188,13 @@ def _required_evidence_tool(
         ),
         "",
     )
-    entity_fields = (
-        "birthday",
-        "date of birth",
-        "born",
-        "dob",
-        "生日",
-        "出生",
-    )
+    date_schema = memorable_dates.match(latest_user)
+    if date_schema is not None:
+        return (
+            "get_entity"
+            if date_schema.source_kind == "node"
+            else "get_relationships"
+        )
     relationship_fields = (
         "live",
         "lives",
@@ -1162,7 +1205,6 @@ def _required_evidence_tool(
         "wife",
         "husband",
         "married",
-        "anniversary",
         "parent",
         "child",
         "daughter",
@@ -1181,10 +1223,7 @@ def _required_evidence_tool(
         "女儿",
         "儿子",
         "结婚",
-        "纪念日",
     )
-    if _contains_any(latest_user, entity_fields):
-        return "get_entity"
     if _contains_any(latest_user, relationship_fields):
         return "get_relationships"
     return None
@@ -1192,8 +1231,9 @@ def _required_evidence_tool(
 
 def _required_evidence_relation(
     messages: Sequence[Mapping[str, Any]],
+    memorable_dates: MemorableDateRegistry,
 ) -> str | None:
-    if _is_household_roster_request(messages):
+    if _is_household_roster_request(messages, memorable_dates):
         return "lives_in"
     latest_user = next(
         (
@@ -1203,6 +1243,9 @@ def _required_evidence_relation(
         ),
         "",
     )
+    date_schema = memorable_dates.match(latest_user)
+    if date_schema is not None and date_schema.source_kind == "edge":
+        return date_schema.source_type
     parent_terms = (
         "parent",
         "child",
@@ -1255,13 +1298,14 @@ def _required_evidence_relation(
 def _evidence_requirements(
     messages: Sequence[Mapping[str, Any]],
     evidence_required: bool,
+    memorable_dates: MemorableDateRegistry,
 ) -> EvidenceRequirements:
     if not evidence_required:
         return EvidenceRequirements()
 
-    primary_tool = _required_evidence_tool(messages)
-    relation = _required_evidence_relation(messages)
-    field = _required_evidence_field(messages)
+    primary_tool = _required_evidence_tool(messages, memorable_dates)
+    relation = _required_evidence_relation(messages, memorable_dates)
+    field = _required_evidence_field(messages, memorable_dates)
     tools: set[str] = set()
     relations: set[str] = set()
     fields: set[tuple[str, str]] = set()
@@ -1269,12 +1313,9 @@ def _evidence_requirements(
     if relation is not None:
         tools.add("get_relationships")
         relations.add(relation)
-    if field == "dob":
-        tools.add("get_entity")
-        fields.add(("get_entity", field))
-    elif field is not None:
-        tools.add("get_relationships")
-        fields.add(("get_relationships", field))
+    if field is not None and primary_tool is not None:
+        tools.add(primary_tool)
+        fields.add((primary_tool, field))
     if not tools and primary_tool is not None:
         tools.add(primary_tool)
 
@@ -1472,6 +1513,7 @@ def _should_retry_incomplete_evidence(
 
 def _required_evidence_field(
     messages: Sequence[Mapping[str, Any]],
+    memorable_dates: MemorableDateRegistry,
 ) -> str | None:
     latest_user = next(
         (
@@ -1481,34 +1523,13 @@ def _required_evidence_field(
         ),
         "",
     )
-    birthday_terms = (
-        "birthday",
-        "date of birth",
-        "born",
-        "dob",
-        "生日",
-        "出生",
-    )
-    if _contains_any(latest_user, birthday_terms):
-        return "dob"
-    anniversary_terms = (
-        "anniversary",
-        "wedding date",
-        "marriage date",
-        "when did we marry",
-        "when were we married",
-        "纪念日",
-        "哪天结婚",
-        "何时结婚",
-        "什么时候结婚",
-    )
-    if _contains_any(latest_user, anniversary_terms):
-        return "start"
-    return None
+    schema = memorable_dates.match(latest_user)
+    return schema.source_field if schema is not None else None
 
 
 def _requested_private_fields(
     messages: Sequence[Mapping[str, Any]],
+    memorable_dates: MemorableDateRegistry,
 ) -> frozenset[str]:
     latest_user = next(
         (
@@ -1519,18 +1540,11 @@ def _requested_private_fields(
         "",
     )
     allowed: set[str] = set()
-    if _contains_any(
-        latest_user,
-        (
-            "birthday",
-            "date of birth",
-            "born",
-            "dob",
-            "生日",
-            "出生",
-        ),
-    ):
-        allowed.add("dob")
+    schema = memorable_dates.match(latest_user)
+    if schema is not None:
+        private_field = PRIVATE_TOOL_FIELDS.get(schema.source_field)
+        if private_field is not None:
+            allowed.add(private_field)
     if _contains_any(
         latest_user,
         ("address", "street address", "地址", "住址"),
@@ -1538,20 +1552,7 @@ def _requested_private_fields(
         allowed.add("address")
     if _contains_any(
         latest_user,
-        (
-            "anniversary",
-            "wedding date",
-            "marriage date",
-            "when did we marry",
-            "when were we married",
-            "move-in date",
-            "when did",
-            "纪念日",
-            "哪天结婚",
-            "何时结婚",
-            "什么时候结婚",
-            "什么时候搬",
-        ),
+        ("move-in date", "when did", "什么时候搬"),
     ):
         allowed.add("relationship_dates")
     if _contains_any(

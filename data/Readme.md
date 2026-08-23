@@ -36,6 +36,13 @@ the household has explicitly chosen the preference.
 Person records may store `dob` as an ISO date. That field is the date of
 birth. Do not invent a birthday when `dob` is absent.
 
+Recurring date semantics live in `schemas/memorable_dates.yaml`. The registry
+maps a localized concept such as `birthday` or `wedding_anniversary` to its
+authoritative node/edge field and recurrence rule. Keep the actual date only in
+that source field: do not copy `person.dob` or `spouse_of.start` into a second
+"memorable dates" data file. To introduce another recurring date, add its
+aliases, localized label, recurrence, and source mapping to the registry.
+
 Household status is contextual and belongs on the edge connecting a Person to
 a household. For a resident, add `household_role` to `lives_in`:
 

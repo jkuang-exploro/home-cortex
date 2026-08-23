@@ -22,16 +22,21 @@ from .display import (
     resolve_display_name,
     resolve_person_reference,
 )
+from .memorable_dates import (
+    MemorableDateRegistry,
+    MemorableDateSchema,
+    default_memorable_date_registry,
+)
 
 FactField = Literal[
     "identity",
     "relationship_to_speaker",
     "count",
-    "dob",
+    "memorable_date",
     "residents",
-    "relationship_start",
 ]
 SubjectKind = Literal["speaker", "home", "named", "relative"]
+DateQuery = Literal["stored", "next"]
 StopReason = Literal["answer", "tool_error", "timeout"]
 
 logger = logging.getLogger("uvicorn.error.home_cortex.facts")
@@ -48,6 +53,8 @@ class FactRequest:
     subject: SubjectReference
     field: FactField
     cardinality: Literal["one", "all"] = "one"
+    memorable_date: str | None = None
+    date_query: DateQuery = "stored"
 
 
 @dataclass(frozen=True)
@@ -132,17 +139,11 @@ _RELATIVE_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("spouse", ("spouse", "配偶")),
 )
 
-_BIRTHDAY_TERMS = ("birthday", "date of birth", "born", "dob", "生日", "出生")
-_ANNIVERSARY_TERMS = (
-    "anniversary",
-    "wedding date",
-    "marriage date",
-    "when did we marry",
-    "when were we married",
-    "纪念日",
-    "哪天结婚",
-    "何时结婚",
-    "什么时候结婚",
+_NEXT_OCCURRENCE_PATTERNS = (
+    r"\b(?:how many days|days)\s+(?:are\s+)?(?:left\s+)?until\b",
+    r"\bhow long until\b",
+    r"(?:还有|再过)(?:多少|几)天",
+    r"(?:还有多久|多久以后)",
 )
 _LOOKUP_TERMS = (
     "who",
@@ -247,6 +248,7 @@ class FactService:
         dispatcher: Any,
         *,
         home_entity_id: str | None,
+        memorable_dates: MemorableDateRegistry | None = None,
         max_tool_calls: int = 4,
         max_records: int = 25,
         timeout_seconds: float = 5.0,
@@ -258,6 +260,7 @@ class FactService:
             raise ValueError("home_entity_id must be a location record ID")
         self.dispatcher = dispatcher
         self.home_entity_id = home_entity_id
+        self.memorable_dates = memorable_dates or default_memorable_date_registry()
         self.max_tool_calls = max_tool_calls
         self.max_records = max_records
         self.timeout_seconds = timeout_seconds
@@ -269,8 +272,13 @@ class FactService:
         identity: Mapping[str, Any] | None,
         language: str,
         request_id: str,
+        current_date: date | None = None,
     ) -> FactAnswer | None:
-        request = parse_fact_request(messages, identity=identity)
+        request = parse_fact_request(
+            messages,
+            identity=identity,
+            memorable_dates=self.memorable_dates,
+        )
         if request is None:
             return None
 
@@ -287,6 +295,7 @@ class FactService:
                 execution,
                 identity=identity,
                 language=language,
+                current_date=current_date or date.today(),
             )
             reason: StopReason = "answer"
         except _FactFailure as error:
@@ -308,6 +317,7 @@ class FactService:
         *,
         identity: Mapping[str, Any] | None,
         language: str,
+        current_date: date,
     ) -> str:
         if request.subject.kind == "speaker":
             if identity is None:
@@ -323,12 +333,18 @@ class FactService:
         if request.subject.kind == "named":
             names = request.subject.value
             assert isinstance(names, tuple)
-            if request.field == "dob":
-                return await self._answer_named_birthdays(
+            if request.field == "memorable_date":
+                schema = self._request_date_schema(request)
+                if schema.source_kind != "node" or schema.source_type != "person":
+                    return _no_records_fallback(language)
+                return await self._answer_named_memorable_dates(
                     names,
                     execution,
+                    schema=schema,
+                    date_query=request.date_query,
                     identity=identity,
                     language=language,
+                    current_date=current_date,
                 )
             return await self._answer_named_relationships(
                 names,
@@ -341,30 +357,49 @@ class FactService:
         assert isinstance(relative, str)
         if identity is None:
             return _no_records_fallback(language)
-        definition = RELATIVES[relative]
+        schema = (
+            self._request_date_schema(request)
+            if request.field == "memorable_date"
+            else None
+        )
+        definition = (
+            RelativeDefinition((RelationshipStep(schema.source_type),))
+            if schema is not None and schema.source_kind == "edge"
+            else RELATIVES[relative]
+        )
         traversal = await self._traverse(
             str(identity["id"]),
             definition,
             execution,
         )
-        if request.field == "relationship_start":
-            return _format_relationship_start(
-                traversal.edges,
+        if request.field == "memorable_date":
+            assert schema is not None
+            if schema.source_kind == "edge":
+                return _format_edge_memorable_date(
+                    traversal.edges,
+                    self.memorable_dates,
+                    schema,
+                    request.date_query,
+                    identity,
+                    language,
+                    current_date,
+                )
+            if schema.source_kind != "node" or schema.source_type != "person":
+                return _no_records_fallback(language)
+            people = await self._load_entities(traversal.entities, execution)
+            return _format_relative_memorable_dates(
+                people,
                 relative,
+                self.memorable_dates,
+                schema,
+                request.date_query,
                 identity,
                 language,
+                current_date,
             )
         if request.field == "count":
             return _format_relative_count(
                 traversal.entities,
-                relative,
-                identity,
-                language,
-            )
-        if request.field == "dob":
-            people = await self._load_entities(traversal.entities, execution)
-            return _format_relative_birthdays(
-                people,
                 relative,
                 identity,
                 language,
@@ -568,13 +603,24 @@ class FactService:
             language,
         )
 
-    async def _answer_named_birthdays(
+    def _request_date_schema(self, request: FactRequest) -> MemorableDateSchema:
+        if request.memorable_date is None:
+            raise _FactFailure("tool_error")
+        try:
+            return self.memorable_dates.get(request.memorable_date)
+        except LookupError as error:
+            raise _FactFailure("tool_error") from error
+
+    async def _answer_named_memorable_dates(
         self,
         names: Sequence[str],
         execution: _Execution,
         *,
+        schema: MemorableDateSchema,
+        date_query: DateQuery,
         identity: Mapping[str, Any] | None,
         language: str,
+        current_date: date,
     ) -> str:
         summaries: list[Mapping[str, Any]] = []
         missing: list[str] = []
@@ -593,11 +639,15 @@ class FactService:
             else:
                 summaries.append(person)
         people = await self._load_entities(summaries, execution)
-        return _format_named_birthdays(
+        return _format_named_memorable_dates(
             people,
             missing,
+            self.memorable_dates,
+            schema,
+            date_query,
             identity,
             language,
+            current_date,
         )
 
 
@@ -605,25 +655,34 @@ def parse_fact_request(
     messages: Sequence[Mapping[str, Any]],
     *,
     identity: Mapping[str, Any] | None,
+    memorable_dates: MemorableDateRegistry | None = None,
 ) -> FactRequest | None:
     """Reduce common fact language to semantics without memorizing sentences."""
+    registry = memorable_dates or default_memorable_date_registry()
     text = _latest_user_text(messages)
     normalized = text.casefold()
+    date_schema = registry.match(normalized)
+    date_query: DateQuery = (
+        "next" if _is_next_occurrence(normalized) else "stored"
+    )
 
     # Classify the more specific household and kinship concepts before the
     # generic first-person identity concept.  For example, ``我女儿是谁``
     # contains both "my" and "who", but its subject is the daughter.
-    if _is_roster_request(normalized):
+    if _is_roster_request(normalized, registry.aliases):
         return FactRequest(SubjectReference("home"), "residents", "all")
 
     relative = _relative_kind(normalized)
     if relative is not None and identity is not None:
-        if _contains_any(normalized, _BIRTHDAY_TERMS):
-            return FactRequest(SubjectReference("relative", relative), "dob")
-        if _contains_any(normalized, _ANNIVERSARY_TERMS):
+        if date_schema is not None:
+            date_relative = (
+                "spouse" if date_schema.source_kind == "edge" else relative
+            )
             return FactRequest(
-                SubjectReference("relative", "spouse"),
-                "relationship_start",
+                SubjectReference("relative", date_relative),
+                "memorable_date",
+                memorable_date=date_schema.id,
+                date_query=date_query,
             )
         if _contains_any(normalized, _COUNT_TERMS):
             return FactRequest(SubjectReference("relative", relative), "count", "all")
@@ -634,10 +693,16 @@ def parse_fact_request(
                 "all" if relative in {"children", "parents"} else "one",
             )
 
-    if identity is not None and _contains_any(normalized, _ANNIVERSARY_TERMS):
+    if (
+        identity is not None
+        and date_schema is not None
+        and date_schema.source_kind == "edge"
+    ):
         return FactRequest(
             SubjectReference("relative", "spouse"),
-            "relationship_start",
+            "memorable_date",
+            memorable_date=date_schema.id,
+            date_query=date_query,
         )
 
     if _is_speaker_identity(normalized, identity):
@@ -658,10 +723,16 @@ def parse_fact_request(
     # subject in the conversation.  This supports pronouns such as "他们" and
     # short follow-ups such as "生日呢" without asking the model to remember a
     # special sentence.
-    if identity is not None and _contains_any(normalized, _BIRTHDAY_TERMS):
-        inherited = _previous_fact_subject(messages, identity)
+    if identity is not None and date_schema is not None:
+        inherited = _previous_fact_subject(messages, identity, registry)
         if inherited is not None:
-            return FactRequest(inherited, "dob", "all")
+            return FactRequest(
+                inherited,
+                "memorable_date",
+                "all",
+                memorable_date=date_schema.id,
+                date_query=date_query,
+            )
     return None
 
 
@@ -676,9 +747,14 @@ def _latest_user_text(messages: Sequence[Mapping[str, Any]]) -> str:
     )
 
 
+def _is_next_occurrence(text: str) -> bool:
+    return any(re.search(pattern, text) for pattern in _NEXT_OCCURRENCE_PATTERNS)
+
+
 def _previous_fact_subject(
     messages: Sequence[Mapping[str, Any]],
     identity: Mapping[str, Any],
+    memorable_dates: MemorableDateRegistry,
 ) -> SubjectReference | None:
     latest_index = next(
         (
@@ -690,7 +766,11 @@ def _previous_fact_subject(
     )
     if latest_index <= 0:
         return None
-    previous = parse_fact_request(messages[:latest_index], identity=identity)
+    previous = parse_fact_request(
+        messages[:latest_index],
+        identity=identity,
+        memorable_dates=memorable_dates,
+    )
     if previous is None or previous.subject.kind not in {"named", "relative"}:
         return None
     return previous.subject
@@ -722,11 +802,10 @@ def _is_speaker_identity(
     return any(alias.casefold() in text for alias in _entity_aliases(identity))
 
 
-def _is_roster_request(text: str) -> bool:
+def _is_roster_request(text: str, date_aliases: Sequence[str]) -> bool:
     if _contains_any(
         text,
-        _BIRTHDAY_TERMS
-        + _ANNIVERSARY_TERMS
+        tuple(date_aliases)
         + tuple(alias for _, aliases in _RELATIVE_ALIASES for alias in aliases),
     ):
         return False
@@ -990,11 +1069,15 @@ def _format_relative_count(
     return answer if prefix else answer[0].upper() + answer[1:]
 
 
-def _format_relative_birthdays(
+def _format_relative_memorable_dates(
     people: Sequence[Mapping[str, Any]],
     relative: str,
+    registry: MemorableDateRegistry,
+    schema: MemorableDateSchema,
+    date_query: DateQuery,
     identity: Mapping[str, Any],
     language: str,
+    current_date: date,
 ) -> str:
     if not people:
         return _no_records_fallback(language)
@@ -1003,86 +1086,88 @@ def _format_relative_birthdays(
     clauses: list[str] = []
     for person in people:
         name = resolve_display_name(person, language)
-        dob = person.get("dob")
         if language == "zh":
-            subject = (
+            owner = (
                 name
                 if multiple
                 else f"您的{_relative_label(relative, language, False)}{name}"
             )
-            clauses.append(
-                f"{subject}的生日是{_localized_date(dob, language)}"
-                if isinstance(dob, str)
-                else f"家庭资料中没有记录{subject}的生日"
-            )
         else:
-            subject = (
+            owner = (
                 name
                 if multiple
                 else f"your {_relative_label(relative, language, False)} {name}"
             )
-            clauses.append(
-                f"{subject}'s birthday is {_localized_date(dob, language)}"
-                if isinstance(dob, str)
-                else f"{subject}'s birthday is not recorded"
+        phrase = _owned_memorable_date_phrase(owner, schema, language)
+        clauses.append(
+            _format_memorable_date_clause(
+                phrase,
+                person.get(schema.source_field),
+                registry,
+                schema,
+                date_query,
+                language,
+                current_date,
             )
-    prefix = f"{address}，" if address and language == "zh" else (
-        f"{address}, " if address else ""
-    )
-    separator = "；" if language == "zh" else "; "
-    answer = f"{prefix}{separator.join(clauses)}。" if language == "zh" else (
-        f"{prefix}{separator.join(clauses)}."
-    )
-    return answer if prefix or language == "zh" else answer[0].upper() + answer[1:]
+        )
+    return _finish_clauses(clauses, address, language)
 
 
-def _format_named_birthdays(
+def _format_named_memorable_dates(
     people: Sequence[Mapping[str, Any]],
     missing: Sequence[str],
+    registry: MemorableDateRegistry,
+    schema: MemorableDateSchema,
+    date_query: DateQuery,
     identity: Mapping[str, Any] | None,
     language: str,
+    current_date: date,
 ) -> str:
     if not people and not missing:
         return _no_records_fallback(language)
-    address = _speaker_address(identity, language)
     clauses: list[str] = []
     for person in people:
-        name = resolve_display_name(person, language)
-        dob = person.get("dob")
-        if language == "zh":
-            clauses.append(
-                f"{name}的生日是{_localized_date(dob, language)}"
-                if isinstance(dob, str)
-                else f"家庭资料中没有记录{name}的生日"
+        owner = resolve_display_name(person, language)
+        phrase = _owned_memorable_date_phrase(owner, schema, language)
+        clauses.append(
+            _format_memorable_date_clause(
+                phrase,
+                person.get(schema.source_field),
+                registry,
+                schema,
+                date_query,
+                language,
+                current_date,
             )
-        else:
-            clauses.append(
-                f"{name}'s birthday is {_localized_date(dob, language)}"
-                if isinstance(dob, str)
-                else f"{name}'s birthday is not recorded"
-            )
+        )
+    address = _speaker_address(identity, language)
     if language == "zh":
         clauses.extend(f'家庭资料中没有找到“{name}”' for name in missing)
-        prefix = f"{address}，" if address else ""
-        return f"{prefix}{'；'.join(clauses)}。"
-    clauses.extend(f'no household record matched "{name}"' for name in missing)
-    prefix = f"{address}, " if address else ""
-    answer = f"{prefix}{'; '.join(clauses)}."
-    return answer if prefix else answer[0].upper() + answer[1:]
+    else:
+        clauses.extend(f'no household record matched "{name}"' for name in missing)
+    return _finish_clauses(clauses, address, language)
 
 
-def _format_relationship_start(
+def _format_edge_memorable_date(
     edges: Sequence[Mapping[str, Any]],
-    relative: str,
+    registry: MemorableDateRegistry,
+    schema: MemorableDateSchema,
+    date_query: DateQuery,
     identity: Mapping[str, Any],
     language: str,
+    current_date: date,
 ) -> str:
-    dated = [edge for edge in edges if isinstance(edge.get("start"), str)]
-    if not dated:
+    matching = [
+        edge
+        for edge in edges
+        if edge.get("relation") == schema.source_type
+        and isinstance(edge.get(schema.source_field), str)
+    ]
+    if not matching:
         return _no_records_fallback(language)
-    if len(dated) > 1:
+    if len(matching) > 1:
         return _ambiguous_fallback(language)
-    edge = dated[0]
+    edge = matching[0]
     related = edge.get("related_entity")
     name = (
         resolve_display_name(related, language)
@@ -1091,18 +1176,83 @@ def _format_relationship_start(
     )
     if name and INTERNAL_ID_PATTERN.fullmatch(name):
         name = None
-    value = _localized_date(str(edge["start"]), language)
     address = _speaker_address(identity, language)
+    label = _memorable_date_label(schema, language)
     if language == "zh":
-        prefix = f"{address}，" if address else ""
-        subject = f"您与{name}的" if name else "您的"
-        return f"{prefix}{subject}结婚纪念日是{value}。"
-    prefix = f"{address}, " if address else ""
-    subject = f"your wedding anniversary with {name}" if name else (
-        "your wedding anniversary"
+        phrase = f"您与{name}的{label}" if name else f"您的{label}"
+    else:
+        phrase = f"your {label} with {name}" if name else f"your {label}"
+    clause = _format_memorable_date_clause(
+        phrase,
+        edge.get(schema.source_field),
+        registry,
+        schema,
+        date_query,
+        language,
+        current_date,
     )
-    answer = f"{prefix}{subject} is {value}."
-    return answer if prefix else answer[0].upper() + answer[1:]
+    return _finish_clauses([clause], address, language)
+
+
+def _owned_memorable_date_phrase(
+    owner: str,
+    schema: MemorableDateSchema,
+    language: str,
+) -> str:
+    label = _memorable_date_label(schema, language)
+    if language == "zh":
+        return f"{owner}的{label}"
+    possessive = f"{owner}'" if owner.endswith("s") else f"{owner}'s"
+    return f"{possessive} {label}"
+
+
+def _memorable_date_label(schema: MemorableDateSchema, language: str) -> str:
+    return schema.label.get(language) or schema.label.get("en") or schema.id
+
+
+def _format_memorable_date_clause(
+    phrase: str,
+    value: Any,
+    registry: MemorableDateRegistry,
+    schema: MemorableDateSchema,
+    date_query: DateQuery,
+    language: str,
+    current_date: date,
+) -> str:
+    occurrence = registry.occurrence(schema, value, as_of=current_date)
+    if occurrence is None:
+        return (
+            f"家庭资料中没有记录{phrase}"
+            if language == "zh"
+            else f"{phrase} is not recorded"
+        )
+    if date_query == "stored":
+        value_text = _localized_date(occurrence.stored_date.isoformat(), language)
+        return (
+            f"{phrase}是{value_text}"
+            if language == "zh"
+            else f"{phrase} is {value_text}"
+        )
+    if occurrence.days_until == 0:
+        return f"{phrase}就是今天" if language == "zh" else f"{phrase} is today"
+    return (
+        f"{phrase}还有{occurrence.days_until}天"
+        if language == "zh"
+        else f"{phrase} is in {occurrence.days_until} days"
+    )
+
+
+def _finish_clauses(
+    clauses: Sequence[str],
+    address: str | None,
+    language: str,
+) -> str:
+    prefix = f"{address}，" if address and language == "zh" else (
+        f"{address}, " if address else ""
+    )
+    separator = "；" if language == "zh" else "; "
+    answer = prefix + separator.join(clauses) + ("。" if language == "zh" else ".")
+    return answer if prefix or language == "zh" else answer[0].upper() + answer[1:]
 
 
 def _format_named_relationships(
