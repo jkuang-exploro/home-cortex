@@ -80,6 +80,14 @@ IDENTITY: dict[str, Any] = {
             FactRequest(SubjectReference("home"), "residents", "all"),
         ),
         (
+            "家的位置",
+            FactRequest(SubjectReference("home"), "address"),
+        ),
+        (
+            "What is my home address?",
+            FactRequest(SubjectReference("home"), "address"),
+        ),
+        (
             "匡德伦和匡悠然是谁？",
             FactRequest(
                 SubjectReference("named", ("匡德伦", "匡悠然")),
@@ -156,6 +164,70 @@ def test_birthday_countdown_followup_inherits_previous_semantic_subject() -> Non
         memorable_date="birthday",
         date_query="next",
     )
+
+
+def test_address_followup_inherits_home_subject() -> None:
+    request = parse_fact_request(
+        [
+            {"role": "user", "content": "家的位置"},
+            {"role": "assistant", "content": "家在 Fort Cerritos。"},
+            {"role": "user", "content": "地址信息没看到呢"},
+        ],
+        identity=IDENTITY,
+    )
+
+    assert request == FactRequest(SubjectReference("home"), "address")
+
+
+@pytest.mark.asyncio
+async def test_home_address_is_loaded_from_configured_location() -> None:
+    class Dispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, Any]]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: dict[str, Any],
+            **_: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            return {
+                "ok": True,
+                "tool": tool_name,
+                "result": [
+                    {
+                        "id": "location:fort_cerritos",
+                        "name": ["Fort Cerritos", "喜瑞匡家"],
+                        "address": {
+                            "street": "12745 Droxford St",
+                            "city": "Cerritos",
+                            "state": "CA",
+                            "zip": "90703",
+                        },
+                    }
+                ],
+            }
+
+    dispatcher = Dispatcher()
+    answer = await FactService(
+        dispatcher,
+        home_entity_id="location:fort_cerritos",
+    ).try_answer(
+        [{"role": "user", "content": "家的位置"}],
+        identity={**IDENTITY, "address_as": {"zh": "先生"}},
+        language="zh",
+        request_id="test-home-address",
+    )
+
+    assert answer is not None
+    assert answer.text == (
+        "先生，家（喜瑞匡家）的地址是 "
+        "12745 Droxford St, Cerritos, CA 90703。"
+    )
+    assert dispatcher.calls == [
+        ("get_entity", {"entity_id": "location:fort_cerritos"})
+    ]
 
 
 @pytest.mark.asyncio

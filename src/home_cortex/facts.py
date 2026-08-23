@@ -29,6 +29,7 @@ from .memorable_dates import (
 )
 
 FactField = Literal[
+    "address",
     "identity",
     "relationship_to_speaker",
     "relationship_exists",
@@ -182,6 +183,16 @@ _HOME_REFERENCE_TERMS = (
     "我们家",
     "家里",
     "家中",
+)
+_ADDRESS_TERMS = (
+    "address",
+    "street address",
+    "地址",
+    "住址",
+    "位置",
+    "哪里",
+    "哪儿",
+    "在哪",
 )
 
 
@@ -354,6 +365,9 @@ class FactService:
         if request.subject.kind == "home":
             if self.home_entity_id is None:
                 return _no_records_fallback(language)
+            if request.field == "address":
+                home = await self._home_entity(execution)
+                return _format_home_address(home, identity, language)
             residents = await self._home_residents(execution)
             return _format_residents(residents, identity, language)
 
@@ -581,6 +595,27 @@ class FactService:
                     _append_unique_entity(residents, person)
         return residents
 
+    async def _home_entity(
+        self,
+        execution: _Execution,
+    ) -> Mapping[str, Any] | None:
+        result = await execution.call(
+            "get_entity",
+            {"entity_id": self.home_entity_id},
+        )
+        records = result.get("result")
+        if not isinstance(records, list):
+            raise _FactFailure("tool_error")
+        return next(
+            (
+                record
+                for record in records
+                if isinstance(record, Mapping)
+                and record.get("id") == self.home_entity_id
+            ),
+            None,
+        )
+
     async def _answer_named_relationships(
         self,
         names: Sequence[str],
@@ -746,6 +781,12 @@ def parse_fact_request(
     # Classify the more specific household and kinship concepts before the
     # generic first-person identity concept.  For example, ``我女儿是谁``
     # contains both "my" and "who", but its subject is the daughter.
+    if _is_home_address_request(normalized) or (
+        _contains_any(normalized, ("address", "地址", "住址"))
+        and _previous_home_subject(messages, identity, registry)
+    ):
+        return FactRequest(SubjectReference("home"), "address")
+
     if _is_roster_request(normalized, registry.aliases):
         return FactRequest(SubjectReference("home"), "residents", "all")
 
@@ -833,6 +874,41 @@ def _latest_user_text(messages: Sequence[Mapping[str, Any]]) -> str:
 
 def _is_next_occurrence(text: str) -> bool:
     return any(re.search(pattern, text) for pattern in _NEXT_OCCURRENCE_PATTERNS)
+
+
+def _is_home_address_request(text: str) -> bool:
+    chinese = bool(
+        re.search(r"(?:我们?家|这个家|家里|家中|^家的?)", text)
+        and _contains_any(text, _ADDRESS_TERMS)
+    )
+    english = bool(
+        re.search(r"\b(?:my|our|the)\s+(?:home|house)\b", text)
+        and _contains_any(text, ("address", "street address"))
+    )
+    return chinese or english
+
+
+def _previous_home_subject(
+    messages: Sequence[Mapping[str, Any]],
+    identity: Mapping[str, Any] | None,
+    memorable_dates: MemorableDateRegistry,
+) -> bool:
+    latest_index = next(
+        (
+            index
+            for index in range(len(messages) - 1, -1, -1)
+            if messages[index].get("role") == "user"
+        ),
+        -1,
+    )
+    if latest_index <= 0:
+        return False
+    previous = parse_fact_request(
+        messages[:latest_index],
+        identity=identity,
+        memorable_dates=memorable_dates,
+    )
+    return previous is not None and previous.subject.kind == "home"
 
 
 def _is_home_residence_check(text: str) -> bool:
@@ -1126,6 +1202,92 @@ def _format_residents(
             else "The current household residents are:"
         )
     return heading + "\n" + "\n".join(f"- {name}" for name in names)
+
+
+def _format_home_address(
+    home: Mapping[str, Any] | None,
+    identity: Mapping[str, Any] | None,
+    language: str,
+) -> str:
+    address = _localized_address(home.get("address"), language) if home else None
+    speaker_address = _speaker_address(identity, language)
+    if not address:
+        if language == "zh":
+            prefix = f"{speaker_address}，" if speaker_address else ""
+            return f"{prefix}家庭资料中没有记录家的地址。"
+        prefix = f"{speaker_address}, " if speaker_address else ""
+        answer = f"{prefix}the home address is not recorded."
+        return answer if prefix else answer[0].upper() + answer[1:]
+
+    name = resolve_display_name(home, language) if home else ""
+    if INTERNAL_ID_PATTERN.fullmatch(name):
+        name = ""
+    if language == "zh":
+        prefix = f"{speaker_address}，" if speaker_address else ""
+        label = f"家（{name}）" if name else "家"
+        return f"{prefix}{label}的地址是 {address}。"
+    prefix = f"{speaker_address}, " if speaker_address else ""
+    label = f"your home ({name})" if name else "your home"
+    answer = f"{prefix}{label} is at {address}."
+    return answer if prefix else answer[0].upper() + answer[1:]
+
+
+def _localized_address(value: Any, language: str) -> str | None:
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, Sequence) and not isinstance(
+        value,
+        (str, bytes, bytearray),
+    ):
+        parts = [
+            str(part).strip()
+            for part in value
+            if part is not None and str(part).strip()
+        ]
+        return ", ".join(parts) or None
+    if not isinstance(value, Mapping):
+        return None
+
+    structured_keys = {
+        "street",
+        "street2",
+        "unit",
+        "city",
+        "state",
+        "zip",
+        "postal_code",
+        "country",
+    }
+    if not structured_keys.intersection(value):
+        localized = value.get(language) or value.get("en")
+        if not isinstance(localized, str):
+            localized = next(
+                (item for item in value.values() if isinstance(item, str)),
+                None,
+            )
+        return (
+            localized.strip()
+            if isinstance(localized, str) and localized.strip()
+            else None
+        )
+
+    street_parts = [
+        str(value[key]).strip()
+        for key in ("street", "street2", "unit")
+        if value.get(key) is not None and str(value[key]).strip()
+    ]
+    city = str(value.get("city", "")).strip()
+    state = str(value.get("state", "")).strip()
+    postal = str(value.get("zip") or value.get("postal_code") or "").strip()
+    region = " ".join(filter(None, (state, postal)))
+    locality = ", ".join(part for part in (city, region) if part)
+    country = str(value.get("country", "")).strip()
+    parts = [
+        *street_parts,
+        *([locality] if locality else []),
+        *([country] if country else []),
+    ]
+    return ", ".join(parts) or None
 
 
 def _format_relatives(
