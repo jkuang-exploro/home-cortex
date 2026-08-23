@@ -18,7 +18,7 @@ from .display import (
     resolve_person_reference,
 )
 from .ollama import OllamaService
-from .tools import GRAPH_TOOL_NAMES, ToolDispatcher, tool_caller_scope
+from .tools import GRAPH_TOOL_NAMES, ToolDispatcher
 
 MAX_AGENT_STEPS = 4
 MAX_TOOL_CALLS_PER_STEP = 4
@@ -148,6 +148,11 @@ class ModelLoop:
         self.tools = tuple(dict(tool) for tool in tools)
         if not self.tools:
             raise ValueError("At least one tool definition is required")
+        self._post_graph_tools = tuple(
+            tool
+            for tool in self.tools
+            if tool["function"]["name"] not in GRAPH_TOOL_NAMES
+        )
         self.localized_identity = {
             str(language).casefold().split("-", 1)[0]: name.strip()
             for language, name in (localized_identity or {}).items()
@@ -260,8 +265,9 @@ class ModelLoop:
                     evidence_fields,
                 )
             )
-            available_tools = (
-                () if evidence_required and can_emit else self.tools
+            available_tools = self._available_tools(
+                evidence_required,
+                can_emit,
             )
 
             async for response in self.ollama.stream_chat_with_tools(
@@ -446,8 +452,9 @@ class ModelLoop:
                     evidence_fields,
                 )
             )
-            available_tools = (
-                () if evidence_required and evidence_complete else self.tools
+            available_tools = self._available_tools(
+                evidence_required,
+                evidence_complete,
             )
             response = await self.ollama.chat_with_tools(
                 conversation,
@@ -884,6 +891,15 @@ class ModelLoop:
             f"Agent did not produce a final answer within {self.max_steps} steps"
         )
 
+    def _available_tools(
+        self,
+        evidence_required: bool,
+        graph_evidence_complete: bool,
+    ) -> tuple[dict[str, Any], ...]:
+        if evidence_required and graph_evidence_complete:
+            return self._post_graph_tools
+        return self.tools
+
     async def _dispatch(
         self,
         tool_name: str,
@@ -891,24 +907,27 @@ class ModelLoop:
         *,
         caller_entity_id: str | None,
     ) -> dict[str, Any]:
-        with tool_caller_scope(caller_entity_id):
-            try:
-                return await asyncio.wait_for(
-                    self.dispatcher.dispatch(tool_name, arguments),
-                    timeout=self.tool_timeout_seconds,
-                )
-            except TimeoutError:
-                return {
-                    "ok": False,
-                    "tool": tool_name,
-                    "error": {
-                        "code": "tool_timeout",
-                        "message": (
-                            "Tool execution exceeded the "
-                            f"{self.tool_timeout_seconds:g} second limit"
-                        ),
-                    },
-                }
+        try:
+            return await asyncio.wait_for(
+                self.dispatcher.dispatch(
+                    tool_name,
+                    arguments,
+                    caller_entity_id=caller_entity_id,
+                ),
+                timeout=self.tool_timeout_seconds,
+            )
+        except TimeoutError:
+            return {
+                "ok": False,
+                "tool": tool_name,
+                "error": {
+                    "code": "tool_timeout",
+                    "message": (
+                        "Tool execution exceeded the "
+                        f"{self.tool_timeout_seconds:g} second limit"
+                    ),
+                },
+            }
 
     def _bounded_arguments(self, tool_name: str, arguments: Any) -> Any:
         if (
@@ -946,31 +965,29 @@ class ModelLoop:
             tool_name=tool_name,
         )
         result = bounded.get("result")
-        if bounded.get("ok") is True and isinstance(result, list):
-            available = len(result)
-            bounded["result"] = result[: self.max_tool_records]
-            if len(bounded["result"]) < available:
-                bounded["meta"] = {
-                    "truncated": True,
-                    "records_available": available,
-                    "records_returned": len(bounded["result"]),
-                }
+        items, item_key = _truncatable_items(result)
+        available = len(items) if items is not None else 0
+        if bounded.get("ok") is True and items is not None:
+            bounded = _with_truncated_items(
+                bounded,
+                item_key,
+                items[: self.max_tool_records],
+                available,
+            )
+            items, item_key = _truncatable_items(bounded.get("result"))
 
         serialized = _json(bounded)
         if _byte_length(serialized) <= self.max_tool_result_bytes:
             return serialized
 
-        records = bounded.get("result")
-        if bounded.get("ok") is True and isinstance(records, list):
-            available = len(result) if isinstance(result, list) else len(records)
-            for count in range(len(records) - 1, -1, -1):
-                candidate = dict(bounded)
-                candidate["result"] = records[:count]
-                candidate["meta"] = {
-                    "truncated": True,
-                    "records_available": available,
-                    "records_returned": count,
-                }
+        if bounded.get("ok") is True and items is not None:
+            for count in range(len(items) - 1, -1, -1):
+                candidate = _with_truncated_items(
+                    bounded,
+                    item_key,
+                    items[:count],
+                    available,
+                )
                 serialized = _json(candidate)
                 if _byte_length(serialized) <= self.max_tool_result_bytes:
                     return serialized
@@ -1653,6 +1670,46 @@ def _tool_failure_reason(
     if error_code == "tool_timeout":
         return "timeout"
     return current if current == "timeout" else "tool_error"
+
+
+def _truncatable_items(result: Any) -> tuple[list[Any] | None, str | None]:
+    if isinstance(result, list):
+        return result, None
+    if isinstance(result, Mapping):
+        for key in ("events", "conflicts"):
+            value = result.get(key)
+            if isinstance(value, list):
+                return value, key
+    return None, None
+
+
+def _with_truncated_items(
+    bounded: Mapping[str, Any],
+    item_key: str | None,
+    items: list[Any],
+    available: int,
+) -> dict[str, Any]:
+    updated = dict(bounded)
+    if item_key is None:
+        updated["result"] = items
+    else:
+        payload = dict(bounded.get("result") or {})
+        payload[item_key] = items
+        if len(items) < available:
+            if "complete" in payload:
+                payload["complete"] = False
+            if "checked" in payload:
+                payload["checked"] = False
+            if "available" in payload:
+                payload["available"] = False
+        updated["result"] = payload
+    if len(items) < available:
+        updated["meta"] = {
+            "truncated": True,
+            "records_available": available,
+            "records_returned": len(items),
+        }
+    return updated
 
 
 def _prepare_tool_value(

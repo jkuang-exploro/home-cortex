@@ -99,6 +99,8 @@ def test_tool_definitions_are_json_serializable_and_read_only() -> None:
     assert "person, location, or space" in serialized
     assert "semantic_relation" in serialized
     assert "includes residents" in serialized
+    assert "If complete is false" in serialized
+    assert "date-only end equal to start" in serialized
     assert all(
         tool["function"]["parameters"]["additionalProperties"] is False
         for tool in TOOLS

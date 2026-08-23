@@ -162,6 +162,7 @@ async def lifespan(app: FastAPI):
             tools=definition.tool_definitions,
             localized_identity=definition.settings.get("localized_identity"),
             home_entity_id=definition.settings.get("home_entity_id"),
+            household_timezone=settings.calendar_timezone,
         )
     app.state.agents = runtimes
     app.state.agent = runtimes[DEFAULT_AGENT_ID]

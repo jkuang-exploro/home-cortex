@@ -28,6 +28,9 @@ def test_steward_agent_loads_successfully() -> None:
     assert "Use `calculate` for exact arithmetic" in prompt
     assert "`calendar.list_events`" in prompt
     assert "`calendar.check_availability`" in prompt
+    assert "If `complete` is false" in prompt
+    assert "`unavailable_calendars`" in prompt
+    assert "trusted household clock" in prompt
     assert "Do not append a service slogan" in prompt
     assert "location:fort_cerritos" in prompt
     assert "`contained_in` is directed from Space" in prompt

@@ -135,6 +135,7 @@ async def test_named_birthday_followup_is_rendered_without_a_model() -> None:
             self,
             tool_name: str,
             arguments: dict[str, Any],
+            **_: Any,
         ) -> dict[str, Any]:
             if tool_name == "search_entities":
                 result = [people[arguments["text"]]]

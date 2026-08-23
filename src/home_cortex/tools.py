@@ -252,11 +252,15 @@ TOOLS: list[dict[str, Any]] = [
             "description": (
                 "List household calendar events in a date-time range. "
                 "Use for schedules, plans, and questions such as what the "
-                "speaker has tomorrow. Dates preserve timezone. Defaults to "
-                "calendars the authenticated speaker may read. Do not pass "
-                "another person's ID or a calendar ID unless the user asked "
-                "about that calendar and the caller is authorized. Read-only; "
-                "events are not stored in the household graph."
+                "speaker has tomorrow. Compute start and end from the trusted "
+                "household clock; never guess the current date. Dates preserve "
+                "timezone. Defaults to calendars the authenticated speaker may "
+                "read. Do not pass another person's ID or a calendar ID unless "
+                "the user asked about that calendar and the caller is "
+                "authorized. If complete is false, do not present the returned "
+                "events as the complete schedule; identify unavailable_calendars "
+                "or truncated_calendars as partial sources. Read-only; events are "
+                "not stored in the household graph."
             ),
             "parameters": {
                 "type": "object",
@@ -275,8 +279,9 @@ TOOLS: list[dict[str, Any]] = [
                         "type": "string",
                         "minLength": 1,
                         "description": (
-                            "Exclusive range end as an ISO 8601 date or "
-                            "datetime. Must be after start."
+                            "Range end as an ISO 8601 date or datetime. "
+                            "Datetimes are exclusive. A date-only end equal to "
+                            "start means that whole household-local day."
                         ),
                     },
                     "calendar": {
@@ -313,9 +318,11 @@ TOOLS: list[dict[str, Any]] = [
             "name": "calendar.check_availability",
             "description": (
                 "Check whether a date-time window is free of busy events on "
-                "authorized household calendars. Use for conflicts, "
-                "availability, and whether a specified time is open. "
-                "Read-only. Unauthorized calendars fail closed."
+                "authorized household calendars. Compute start and end from "
+                "the trusted household clock. available is true only when every "
+                "requested calendar was read and has no busy conflicts. If "
+                "checked is false, do not claim the window is free. Read-only. "
+                "Unauthorized calendars fail closed."
             ),
             "parameters": {
                 "type": "object",
@@ -333,8 +340,9 @@ TOOLS: list[dict[str, Any]] = [
                         "type": "string",
                         "minLength": 1,
                         "description": (
-                            "Exclusive window end as an ISO 8601 date or "
-                            "datetime. Must be after start."
+                            "Window end as an ISO 8601 date or datetime. "
+                            "Datetimes are exclusive. A date-only end equal to "
+                            "start means that whole household-local day."
                         ),
                     },
                     "calendar": {
@@ -411,6 +419,8 @@ class ToolDispatcher:
         self,
         tool_name: str,
         arguments: Any,
+        *,
+        caller_entity_id: str | None = None,
     ) -> dict[str, Any]:
         argument_model = self._argument_models.get(tool_name)
         handler = self._handlers.get(tool_name)
@@ -446,8 +456,11 @@ class ToolDispatcher:
                 ],
             )
 
+        if caller_entity_id is None:
+            caller_entity_id = current_caller_entity_id()
         try:
-            result = await handler(validated)
+            with tool_caller_scope(caller_entity_id):
+                result = await handler(validated)
         except CalculationError as error:
             return self._error(
                 tool_name,

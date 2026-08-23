@@ -6,7 +6,7 @@ import asyncio
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from time import monotonic
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
@@ -18,7 +18,9 @@ PERSON_ID_PATTERN = r"^person:[A-Za-z0-9_-]+$"
 CALENDAR_ID_PATTERN = r"^[A-Za-z][A-Za-z0-9_-]*$"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
-HTTP_TIMEOUT_SECONDS = 4.0
+HTTP_TIMEOUT_SECONDS = 1.5
+GOOGLE_FETCH_BUDGET_SECONDS = 3.5
+CALENDAR_BINDING_TIMEOUT_SECONDS = 4.0
 TOKEN_EXPIRY_SKEW_SECONDS = 60.0
 DEFAULT_EVENT_LIMIT = 25
 MAX_EVENT_LIMIT = 100
@@ -30,6 +32,10 @@ class CalendarAuthorizationError(PermissionError):
 
 class CalendarUnavailableError(RuntimeError):
     """Raised when the provider cannot complete a read."""
+
+
+class _CalendarDeadlineExceeded(TimeoutError):
+    """Raised internally when another provider request cannot fit the budget."""
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,14 @@ class ProviderEvent:
     busy: bool
 
 
+@dataclass(frozen=True)
+class ProviderEventBatch:
+    """A bounded event page plus whether it covers the full query window."""
+
+    events: tuple[ProviderEvent, ...]
+    complete: bool
+
+
 class CalendarProvider(Protocol):
     async def list_events(
         self,
@@ -64,8 +78,8 @@ class CalendarProvider(Protocol):
         end: datetime,
         *,
         limit: int,
-    ) -> list[ProviderEvent]:
-        """Return provider events overlapping [start, end)."""
+    ) -> ProviderEventBatch:
+        """Return ordered events overlapping [start, end) and completeness."""
 
 
 class UnconfiguredCalendarProvider:
@@ -76,7 +90,7 @@ class UnconfiguredCalendarProvider:
         end: datetime,
         *,
         limit: int,
-    ) -> list[ProviderEvent]:
+    ) -> ProviderEventBatch:
         raise CalendarUnavailableError("The calendar service is not configured")
 
 
@@ -89,11 +103,15 @@ class CalendarService:
         provider: CalendarProvider,
         *,
         default_timezone: str,
+        binding_timeout_seconds: float = CALENDAR_BINDING_TIMEOUT_SECONDS,
     ) -> None:
+        if binding_timeout_seconds <= 0:
+            raise ValueError("binding_timeout_seconds must be greater than zero")
         self._bindings = tuple(bindings)
         self._provider = provider
         self._default_timezone = ZoneInfo(default_timezone)
         self._default_timezone_name = default_timezone
+        self._binding_timeout_seconds = binding_timeout_seconds
         ids = [binding.id for binding in self._bindings]
         if len(ids) != len(set(ids)):
             raise ValueError("Calendar binding IDs must be unique")
@@ -115,40 +133,78 @@ class CalendarService:
             person_id=person_id,
         )
         event_limit = DEFAULT_EVENT_LIMIT if limit is None else limit
-        events: list[dict[str, Any]] = []
-        unavailable: list[str] = []
-        remaining = event_limit
-        for binding in selected:
-            if remaining <= 0:
-                break
-            try:
-                provider_events = await self._provider.list_events(
-                    binding.provider_calendar_id,
+        loaded = await asyncio.gather(
+            *(
+                self._load_binding(
+                    binding,
                     window_start,
                     window_end,
-                    limit=remaining,
+                    event_limit,
                 )
-            except CalendarUnavailableError:
-                unavailable.append(binding.id)
+                for binding in selected
+            )
+        )
+        unavailable: list[str] = []
+        truncated: list[str] = []
+        fetched: list[str] = []
+        keyed: list[tuple[datetime, str, dict[str, Any]]] = []
+        for binding, provider_events, failed_id, truncated_id in loaded:
+            if failed_id is not None:
+                unavailable.append(failed_id)
                 continue
+            fetched.append(binding.id)
+            if truncated_id is not None:
+                truncated.append(truncated_id)
             for event in provider_events:
-                events.append(_cortex_event(binding, event))
-                remaining -= 1
-                if remaining <= 0:
-                    break
-        if not events and unavailable and len(unavailable) == len(selected):
+                record = _cortex_event(binding, event)
+                keyed.append(
+                    (_aware(event.start, self._default_timezone), record["id"], record)
+                )
+        if not fetched and unavailable:
             raise CalendarUnavailableError(
                 "The calendar service is temporarily unavailable"
             )
-        events.sort(key=lambda item: (item["start"], item["id"]))
+        keyed.sort()
+        complete = not unavailable and not truncated and len(keyed) <= event_limit
         return {
             "start": _isoformat(window_start),
             "end": _isoformat(window_end),
             "timezone": self._default_timezone_name,
-            "calendars": [binding.id for binding in selected],
-            "events": events,
+            "calendars": fetched,
+            "events": [record for _, _, record in keyed[:event_limit]],
+            "complete": complete,
             "unavailable_calendars": unavailable,
+            "truncated_calendars": truncated,
         }
+
+    async def _load_binding(
+        self,
+        binding: CalendarBinding,
+        window_start: datetime,
+        window_end: datetime,
+        event_limit: int,
+    ) -> tuple[
+        CalendarBinding,
+        tuple[ProviderEvent, ...],
+        str | None,
+        str | None,
+    ]:
+        try:
+            async with asyncio.timeout(self._binding_timeout_seconds):
+                batch = await self._provider.list_events(
+                    binding.provider_calendar_id,
+                    window_start,
+                    window_end,
+                    limit=event_limit,
+                )
+        except (CalendarUnavailableError, TimeoutError):
+            return binding, (), binding.id, None
+        return (
+            binding,
+            batch.events,
+            None,
+            None if batch.complete else binding.id,
+        )
 
     async def check_availability(
         self,
@@ -181,14 +237,17 @@ class CalendarService:
             for event in listing["events"]
             if event["busy"] and event["status"] != "cancelled"
         ]
+        checked = bool(listing["complete"])
         return {
             "start": listing["start"],
             "end": listing["end"],
             "timezone": listing["timezone"],
             "calendars": listing["calendars"],
-            "available": not conflicts,
+            "checked": checked,
+            "available": checked and not conflicts,
             "conflicts": conflicts,
             "unavailable_calendars": listing["unavailable_calendars"],
+            "truncated_calendars": listing["truncated_calendars"],
         }
 
     def _authorized_calendars(
@@ -224,6 +283,8 @@ class CalendarService:
     def _parse_window(self, start: str, end: str) -> tuple[datetime, datetime]:
         window_start = parse_calendar_datetime(start, self._default_timezone)
         window_end = parse_calendar_datetime(end, self._default_timezone)
+        if window_end <= window_start and _is_date_only(end.strip()):
+            window_end = window_end + timedelta(days=1)
         if window_end <= window_start:
             raise ValueError("end must be after start")
         return window_start, window_end
@@ -264,6 +325,12 @@ def _isoformat(value: datetime) -> str:
     return value.isoformat()
 
 
+def _aware(value: datetime, default_timezone: ZoneInfo) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=default_timezone)
+    return value
+
+
 def _cortex_event(binding: CalendarBinding, event: ProviderEvent) -> dict[str, Any]:
     return {
         "id": f"{binding.id}:{event.provider_event_id}",
@@ -291,12 +358,16 @@ class GoogleCalendarProvider:
         refresh_token: str,
         default_timezone: str,
         http_json: Any | None = None,
+        fetch_budget_seconds: float = GOOGLE_FETCH_BUDGET_SECONDS,
     ) -> None:
+        if fetch_budget_seconds <= 0:
+            raise ValueError("fetch_budget_seconds must be greater than zero")
         self._client_id = client_id
         self._client_secret = client_secret
         self._refresh_token = refresh_token
         self._default_timezone = default_timezone
         self._http_json = http_json or request_json
+        self._fetch_budget_seconds = fetch_budget_seconds
         self._token: str | None = None
         self._token_expires_at = 0.0
         self._lock = asyncio.Lock()
@@ -311,27 +382,56 @@ class GoogleCalendarProvider:
         end: datetime,
         *,
         limit: int,
-    ) -> list[ProviderEvent]:
-        token = await self._access_token()
-        payload = await self._get_events(
-            provider_calendar_id,
-            start,
-            end,
-            limit=limit,
-            token=token,
-        )
-        items = payload.get("items")
-        if not isinstance(items, list):
-            return []
+    ) -> ProviderEventBatch:
+        deadline = monotonic() + self._fetch_budget_seconds
         events: list[ProviderEvent] = []
-        for item in items:
-            if not isinstance(item, Mapping):
-                continue
-            normalized = normalize_google_event(item, self._default_timezone)
-            if normalized is None:
-                continue
-            events.append(normalized)
-        return events[:limit]
+        page_token: str | None = None
+        seen_page_tokens: set[str] = set()
+        while len(events) < limit:
+            try:
+                token = await self._access_token(deadline=deadline)
+                payload = await self._get_events(
+                    provider_calendar_id,
+                    start,
+                    end,
+                    limit=limit - len(events),
+                    token=token,
+                    page_token=page_token,
+                    deadline=deadline,
+                )
+            except _CalendarDeadlineExceeded:
+                return ProviderEventBatch(tuple(events), complete=False)
+            except CalendarUnavailableError:
+                if events:
+                    return ProviderEventBatch(tuple(events), complete=False)
+                raise
+            items = payload.get("items")
+            if isinstance(items, list):
+                for item in items:
+                    if not isinstance(item, Mapping):
+                        continue
+                    normalized = normalize_google_event(
+                        item,
+                        self._default_timezone,
+                    )
+                    if normalized is not None:
+                        events.append(normalized)
+                        if len(events) >= limit:
+                            break
+
+            next_page_token = payload.get("nextPageToken")
+            if not isinstance(next_page_token, str) or not next_page_token:
+                return ProviderEventBatch(tuple(events), complete=True)
+            if next_page_token in seen_page_tokens:
+                raise CalendarUnavailableError(
+                    "The calendar service is temporarily unavailable"
+                )
+            if len(events) >= limit:
+                return ProviderEventBatch(tuple(events), complete=False)
+            seen_page_tokens.add(next_page_token)
+            page_token = next_page_token
+
+        return ProviderEventBatch(tuple(events), complete=True)
 
     async def _get_events(
         self,
@@ -341,18 +441,21 @@ class GoogleCalendarProvider:
         *,
         limit: int,
         token: str,
+        page_token: str | None = None,
         retry_unauthorized: bool = True,
+        deadline: float,
     ) -> Mapping[str, Any]:
-        query = urlencode(
-            {
-                "timeMin": _rfc3339(start),
-                "timeMax": _rfc3339(end),
-                "singleEvents": "true",
-                "orderBy": "startTime",
-                "maxResults": str(min(max(limit, 1), MAX_EVENT_LIMIT)),
-                "timeZone": self._default_timezone,
-            }
-        )
+        query_parameters = {
+            "timeMin": _rfc3339(start),
+            "timeMax": _rfc3339(end),
+            "singleEvents": "true",
+            "orderBy": "startTime",
+            "maxResults": str(min(max(limit, 1), MAX_EVENT_LIMIT)),
+            "timeZone": self._default_timezone,
+        }
+        if page_token is not None:
+            query_parameters["pageToken"] = page_token
+        query = urlencode(query_parameters)
         url = (
             GOOGLE_EVENTS_URL.format(
                 calendar_id=quote(provider_calendar_id, safe="")
@@ -360,22 +463,29 @@ class GoogleCalendarProvider:
             + "?"
             + query
         )
-        status, payload = await asyncio.to_thread(
-            self._http_json,
+        self._require_remaining(deadline, HTTP_TIMEOUT_SECONDS)
+        status, payload = await self._request(
             "GET",
             url,
             {"Authorization": f"Bearer {token}", "Accept": "application/json"},
             None,
+            deadline=deadline,
         )
         if status == 401 and retry_unauthorized:
-            token = await self._access_token(force_refresh=True)
+            self._require_remaining(deadline, HTTP_TIMEOUT_SECONDS * 2)
+            token = await self._access_token(
+                force_refresh=True,
+                deadline=deadline,
+            )
             return await self._get_events(
                 provider_calendar_id,
                 start,
                 end,
                 limit=limit,
                 token=token,
+                page_token=page_token,
                 retry_unauthorized=False,
+                deadline=deadline,
             )
         if status in {403, 404}:
             raise CalendarUnavailableError(
@@ -387,14 +497,25 @@ class GoogleCalendarProvider:
             )
         return payload
 
-    async def _access_token(self, *, force_refresh: bool = False) -> str:
-        async with self._lock:
+    async def _access_token(
+        self,
+        *,
+        force_refresh: bool = False,
+        deadline: float,
+    ) -> str:
+        remaining = self._remaining(deadline)
+        try:
+            await asyncio.wait_for(self._lock.acquire(), timeout=remaining)
+        except TimeoutError as error:
+            raise _CalendarDeadlineExceeded from error
+        try:
             if (
                 not force_refresh
                 and self._token is not None
                 and monotonic() < self._token_expires_at
             ):
                 return self._token
+            self._require_remaining(deadline, HTTP_TIMEOUT_SECONDS)
             body = urlencode(
                 {
                     "client_id": self._client_id,
@@ -403,8 +524,7 @@ class GoogleCalendarProvider:
                     "grant_type": "refresh_token",
                 }
             ).encode("utf-8")
-            status, payload = await asyncio.to_thread(
-                self._http_json,
+            status, payload = await self._request(
                 "POST",
                 GOOGLE_TOKEN_URL,
                 {
@@ -412,6 +532,7 @@ class GoogleCalendarProvider:
                     "Content-Type": "application/x-www-form-urlencoded",
                 },
                 body,
+                deadline=deadline,
             )
             token = (
                 payload.get("access_token")
@@ -438,6 +559,44 @@ class GoogleCalendarProvider:
                 30.0,
             )
             return token
+        finally:
+            self._lock.release()
+
+    async def _request(
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str],
+        data: bytes | None,
+        *,
+        deadline: float,
+    ) -> tuple[int, Any]:
+        remaining = self._remaining(deadline)
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._http_json,
+                    method,
+                    url,
+                    headers,
+                    data,
+                ),
+                timeout=remaining,
+            )
+        except TimeoutError as error:
+            raise _CalendarDeadlineExceeded from error
+
+    @staticmethod
+    def _remaining(deadline: float) -> float:
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise _CalendarDeadlineExceeded
+        return remaining
+
+    @staticmethod
+    def _require_remaining(deadline: float, required: float) -> None:
+        if deadline - monotonic() < required:
+            raise _CalendarDeadlineExceeded
 
 
 def normalize_google_event(
