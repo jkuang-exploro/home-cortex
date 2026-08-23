@@ -18,7 +18,7 @@ from .display import (
     resolve_person_reference,
 )
 from .ollama import OllamaService
-from .tools import ToolDispatcher
+from .tools import GRAPH_TOOL_NAMES, ToolDispatcher, tool_caller_scope
 
 MAX_AGENT_STEPS = 4
 MAX_TOOL_CALLS_PER_STEP = 4
@@ -383,6 +383,7 @@ class ModelLoop:
                 presentation_language=presentation_language,
                 allowed_private_fields=allowed_private_fields,
                 requirements=requirements,
+                caller_entity_id=trusted_user_entity_id,
             )
             successful_tools.update(successful)
             nonempty_tools.update(nonempty)
@@ -561,6 +562,7 @@ class ModelLoop:
                 presentation_language=presentation_language,
                 allowed_private_fields=allowed_private_fields,
                 requirements=requirements,
+                caller_entity_id=trusted_user_entity_id,
             )
             successful_tools.update(successful)
             nonempty_tools.update(nonempty)
@@ -646,6 +648,7 @@ class ModelLoop:
             relationship_arguments,
             requirements=requirements,
             request_id=request_id,
+            caller_entity_id=trusted_user_entity_id,
         )
         tool_calls += 1
         scoped_relationship_result = _scope_tool_result(
@@ -698,6 +701,7 @@ class ModelLoop:
                 entity_arguments,
                 requirements=requirements,
                 request_id=request_id,
+                caller_entity_id=trusted_user_entity_id,
             )
             tool_calls += 1
             successful, nonempty, fields = _tool_evidence(
@@ -746,9 +750,14 @@ class ModelLoop:
         *,
         requirements: EvidenceRequirements,
         request_id: str,
+        caller_entity_id: str | None,
     ) -> dict[str, Any]:
         started = perf_counter()
-        tool_result = await self._dispatch(tool_name, arguments)
+        tool_result = await self._dispatch(
+            tool_name,
+            arguments,
+            caller_entity_id=caller_entity_id,
+        )
         duration_ms = (perf_counter() - started) * 1_000
         scoped_result = _scope_tool_result(tool_name, tool_result, requirements)
         records = scoped_result.get("result")
@@ -781,6 +790,7 @@ class ModelLoop:
         presentation_language: str,
         allowed_private_fields: frozenset[str],
         requirements: EvidenceRequirements,
+        caller_entity_id: str | None,
     ) -> tuple[StopReason | None, set[str], set[str], set[str]]:
         successful_tools: set[str] = set()
         nonempty_tools: set[str] = set()
@@ -797,7 +807,11 @@ class ModelLoop:
                 requirements,
             )
             started = perf_counter()
-            tool_result = await self._dispatch(tool_name, arguments)
+            tool_result = await self._dispatch(
+                tool_name,
+                arguments,
+                caller_entity_id=caller_entity_id,
+            )
             duration_ms = (perf_counter() - started) * 1_000
             success = tool_result.get("ok") is True
             scoped_result = _scope_tool_result(
@@ -870,24 +884,31 @@ class ModelLoop:
             f"Agent did not produce a final answer within {self.max_steps} steps"
         )
 
-    async def _dispatch(self, tool_name: str, arguments: Any) -> dict[str, Any]:
-        try:
-            return await asyncio.wait_for(
-                self.dispatcher.dispatch(tool_name, arguments),
-                timeout=self.tool_timeout_seconds,
-            )
-        except TimeoutError:
-            return {
-                "ok": False,
-                "tool": tool_name,
-                "error": {
-                    "code": "tool_timeout",
-                    "message": (
-                        "Tool execution exceeded the "
-                        f"{self.tool_timeout_seconds:g} second limit"
-                    ),
-                },
-            }
+    async def _dispatch(
+        self,
+        tool_name: str,
+        arguments: Any,
+        *,
+        caller_entity_id: str | None,
+    ) -> dict[str, Any]:
+        with tool_caller_scope(caller_entity_id):
+            try:
+                return await asyncio.wait_for(
+                    self.dispatcher.dispatch(tool_name, arguments),
+                    timeout=self.tool_timeout_seconds,
+                )
+            except TimeoutError:
+                return {
+                    "ok": False,
+                    "tool": tool_name,
+                    "error": {
+                        "code": "tool_timeout",
+                        "message": (
+                            "Tool execution exceeded the "
+                            f"{self.tool_timeout_seconds:g} second limit"
+                        ),
+                    },
+                }
 
     def _bounded_arguments(self, tool_name: str, arguments: Any) -> Any:
         if (
@@ -922,6 +943,7 @@ class ModelLoop:
             scoped_result,
             presentation_language,
             allowed_private_fields,
+            tool_name=tool_name,
         )
         result = bounded.get("result")
         if bounded.get("ok") is True and isinstance(result, list):
@@ -1637,19 +1659,25 @@ def _prepare_tool_value(
     value: Any,
     language: str,
     allowed_private_fields: frozenset[str],
+    *,
+    tool_name: str | None = None,
 ) -> Any:
+    private_fields = (
+        PRIVATE_TOOL_FIELDS if tool_name in GRAPH_TOOL_NAMES else {}
+    )
     if isinstance(value, Mapping):
         prepared = {
             str(key): _prepare_tool_value(
                 item,
                 language,
                 allowed_private_fields,
+                tool_name=tool_name,
             )
             for key, item in value.items()
             if str(key) not in MODEL_HIDDEN_FIELDS
             and (
-                PRIVATE_TOOL_FIELDS.get(str(key)) in allowed_private_fields
-                or str(key) not in PRIVATE_TOOL_FIELDS
+                private_fields.get(str(key)) in allowed_private_fields
+                or str(key) not in private_fields
             )
         }
         record_id = prepared.get("id")
@@ -1663,7 +1691,12 @@ def _prepare_tool_value(
         (str, bytes, bytearray),
     ):
         return [
-            _prepare_tool_value(item, language, allowed_private_fields)
+            _prepare_tool_value(
+                item,
+                language,
+                allowed_private_fields,
+                tool_name=tool_name,
+            )
             for item in value
         ]
     return value

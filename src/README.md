@@ -1,8 +1,9 @@
 # Home Cortex API
 
 This package provides a FastAPI RAG service over SurrealDB. The API calls
-Ollama, dispatches the model's allowlisted graph tools, and returns the final
-grounded answer.
+Ollama, dispatches the model's allowlisted Cortex tools, and returns the final
+grounded answer. Shared tools include household-graph lookup, local
+`calculate`, and read-only Google Calendar access.
 
 ## Endpoints
 
@@ -240,6 +241,35 @@ A future specialized agent can select a different model and tools without
 changing the shared runtime. For example, a future `accountant` directory can
 define `账房` and finance-only tools; those tools will not be granted to
 `steward` automatically.
+
+## Shared Cortex tools
+
+Tools are registered centrally in `home_cortex.tools` and granted per agent
+through that agent's `ALLOWED_TOOLS`. The steward currently receives graph
+lookup, `calculate`, `calendar.list_events`, and `calendar.check_availability`.
+
+`calculate` evaluates arithmetic with an allowlisted AST parser. It does not
+use Python `eval()`, has no network dependency, and returns a structured
+numeric result such as `{"result": 14}`.
+
+Calendar Phase 1 is read-only. Google Calendar is the source of truth; events
+are not copied into SurrealDB. Bind household calendars with OAuth settings
+and `CALENDAR_BINDINGS`. Each binding has a Cortex calendar ID, the owning
+person, the Google calendar ID, and optional extra `readers`. A caller cannot
+read another person's calendar merely by supplying that person or calendar ID.
+
+```dotenv
+GOOGLE_CALENDAR_CLIENT_ID=...
+GOOGLE_CALENDAR_CLIENT_SECRET=...
+GOOGLE_CALENDAR_REFRESH_TOKEN=...
+CALENDAR_TIMEZONE=America/Los_Angeles
+CALENDAR_BINDINGS=[{"id":"jian_primary","person_id":"person:jian_kuang","provider_calendar_id":"primary","readers":[]}]
+```
+
+Do not place Google credentials or access tokens in prompts or tool results.
+Unauthorized or unconfigured calendars fail closed with a structured error
+instead of crashing the agent loop. Event creation, updates, and deletion are
+out of scope for Phase 1.
 
 ## Human-facing entity names
 

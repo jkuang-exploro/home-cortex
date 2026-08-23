@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from home_cortex.tools import TOOLS, ToolDispatcher
+from home_cortex.tools import TOOLS, ToolDispatcher, get_tool_definitions
 
 
 class FakeRetrievalService:
@@ -85,7 +85,14 @@ def test_tool_definitions_are_json_serializable_and_read_only() -> None:
     serialized = json.dumps(TOOLS)
     names = {tool["function"]["name"] for tool in TOOLS}
 
-    assert names == {"get_entity", "search_entities", "get_relationships"}
+    assert names == {
+        "calculate",
+        "calendar.check_availability",
+        "calendar.list_events",
+        "get_entity",
+        "get_relationships",
+        "search_entities",
+    }
     assert "Person record stores date of birth in dob" in serialized
     assert "surrealql" not in serialized.lower()
     assert "execute" not in names
@@ -184,6 +191,9 @@ async def test_rejects_unknown_tool_without_calling_retrieval() -> None:
             "code": "unknown_tool",
             "message": "Tool 'execute_surrealql' is not available",
             "available_tools": [
+                "calculate",
+                "calendar.check_availability",
+                "calendar.list_events",
                 "get_entity",
                 "get_relationships",
                 "search_entities",
@@ -284,3 +294,43 @@ async def test_does_not_expose_internal_execution_errors() -> None:
         "code": "tool_execution_failed",
         "message": "The tool could not complete its read operation",
     }
+
+
+def test_calculate_and_calendar_can_be_granted_without_graph_tools() -> None:
+    definitions = get_tool_definitions(
+        ("calculate", "calendar.list_events", "calendar.check_availability")
+    )
+
+    assert tuple(tool["function"]["name"] for tool in definitions) == (
+        "calculate",
+        "calendar.list_events",
+        "calendar.check_availability",
+    )
+
+
+@pytest.mark.asyncio
+async def test_calculate_returns_structured_numeric_result() -> None:
+    dispatcher, retrieval = _dispatcher()
+
+    response = await dispatcher.dispatch("calculate", {"expression": "2 + 3 * 4"})
+
+    assert response == {
+        "ok": True,
+        "tool": "calculate",
+        "result": {"result": 14},
+    }
+    assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_calculate_rejects_arbitrary_code() -> None:
+    dispatcher, retrieval = _dispatcher()
+
+    response = await dispatcher.dispatch(
+        "calculate",
+        {"expression": "__import__('os').system('echo pwned')"},
+    )
+
+    assert response["ok"] is False
+    assert response["error"]["code"] == "invalid_arguments"
+    assert retrieval.calls == []

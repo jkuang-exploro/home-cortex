@@ -34,6 +34,7 @@ from .ingestion import ingest_directory
 from .identity import resolve_user_entity_id
 from .ollama import OllamaService
 from .retrieval import RetrievalService
+from .calendar import calendar_service_from_settings
 from .tools import ToolDispatcher
 
 DEFAULT_AGENT_ID = "steward"
@@ -138,6 +139,8 @@ async def lifespan(app: FastAPI):
     app.state.retrieval = retrieval
     app.state.greetings = GreetingService(retrieval)
     app.state.conversations = ConversationStore()
+    calendar = calendar_service_from_settings(settings)
+    app.state.calendar = calendar
     runtimes: dict[str, AgentService] = {}
     ollama_services: list[OllamaService] = []
     for definition in list_agents():
@@ -150,7 +153,11 @@ async def lifespan(app: FastAPI):
         ollama_services.append(ollama)
         runtimes[definition.id] = AgentService(
             ollama,
-            ToolDispatcher(retrieval, definition.allowed_tools),
+            ToolDispatcher(
+                retrieval,
+                definition.allowed_tools,
+                calendar=calendar,
+            ),
             system_prompt=definition.prompt,
             tools=definition.tool_definitions,
             localized_identity=definition.settings.get("localized_identity"),

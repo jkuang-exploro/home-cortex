@@ -4,4 +4,7 @@ ALLOWED_TOOLS = (
     "get_entity",
     "search_entities",
     "get_relationships",
+    "calculate",
+    "calendar.list_events",
+    "calendar.check_availability",
 )

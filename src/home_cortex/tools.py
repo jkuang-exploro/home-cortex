@@ -1,12 +1,44 @@
 from collections.abc import Awaitable, Callable, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from .calculate import CalculationError, evaluate_expression
+from .calendar import (
+    CALENDAR_ID_PATTERN,
+    CalendarAuthorizationError,
+    CalendarService,
+    CalendarUnavailableError,
+    PERSON_ID_PATTERN,
+)
 from .retrieval import RetrievalService
 
 TABLE_NAME_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
 RECORD_ID_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*:[A-Za-z0-9_-]+$"
+GRAPH_TOOL_NAMES = frozenset(
+    {"get_entity", "get_relationships", "search_entities"}
+)
+
+_caller_entity_id: ContextVar[str | None] = ContextVar(
+    "home_cortex_caller_entity_id",
+    default=None,
+)
+
+
+@contextmanager
+def tool_caller_scope(entity_id: str | None):
+    """Bind the authenticated person ID for the current tool dispatch."""
+    token = _caller_entity_id.set(entity_id)
+    try:
+        yield
+    finally:
+        _caller_entity_id.reset(token)
+
+
+def current_caller_entity_id() -> str | None:
+    return _caller_entity_id.get()
 
 
 class ToolArguments(BaseModel):
@@ -34,6 +66,25 @@ class GetRelationshipsArguments(ToolArguments):
     direction: Literal["out", "in", "both"] | None = None
     include_ended: bool = False
     limit: int | None = Field(default=None, ge=1, le=100)
+
+
+class CalculateArguments(ToolArguments):
+    expression: str = Field(min_length=1, max_length=256)
+
+
+class ListEventsArguments(ToolArguments):
+    start: str = Field(min_length=1)
+    end: str = Field(min_length=1)
+    calendar: str | None = Field(default=None, pattern=CALENDAR_ID_PATTERN)
+    person: str | None = Field(default=None, pattern=PERSON_ID_PATTERN)
+    limit: int | None = Field(default=None, ge=1, le=100)
+
+
+class CheckAvailabilityArguments(ToolArguments):
+    start: str = Field(min_length=1)
+    end: str = Field(min_length=1)
+    calendar: str | None = Field(default=None, pattern=CALENDAR_ID_PATTERN)
+    person: str | None = Field(default=None, pattern=PERSON_ID_PATTERN)
 
 
 TOOLS: list[dict[str, Any]] = [
@@ -165,6 +216,145 @@ TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate",
+            "description": (
+                "Evaluate exact arithmetic locally. Use this for any numerical "
+                "computation instead of estimating. Supports + - * / // % **, "
+                "parentheses, numeric literals, pi, e, tau, and functions such "
+                "as abs, round, min, max, sqrt, log, exp, sin, and cos. "
+                "Arbitrary code is rejected."
+            ),
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256,
+                        "description": (
+                            "Arithmetic expression to evaluate, for example "
+                            "'(4350 * 12) / 365' or '2 + 3 * 4'."
+                        ),
+                    },
+                },
+                "required": ["expression"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar.list_events",
+            "description": (
+                "List household calendar events in a date-time range. "
+                "Use for schedules, plans, and questions such as what the "
+                "speaker has tomorrow. Dates preserve timezone. Defaults to "
+                "calendars the authenticated speaker may read. Do not pass "
+                "another person's ID or a calendar ID unless the user asked "
+                "about that calendar and the caller is authorized. Read-only; "
+                "events are not stored in the household graph."
+            ),
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "start": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": (
+                            "Inclusive range start as an ISO 8601 date or "
+                            "datetime. Date-only values use the household "
+                            "timezone."
+                        ),
+                    },
+                    "end": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": (
+                            "Exclusive range end as an ISO 8601 date or "
+                            "datetime. Must be after start."
+                        ),
+                    },
+                    "calendar": {
+                        "type": "string",
+                        "pattern": CALENDAR_ID_PATTERN,
+                        "description": (
+                            "Optional Cortex calendar ID, such as jian_primary. "
+                            "Never a Google credential or provider token."
+                        ),
+                    },
+                    "person": {
+                        "type": "string",
+                        "pattern": PERSON_ID_PATTERN,
+                        "description": (
+                            "Optional person record ID whose authorized "
+                            "calendars should be queried, such as "
+                            "person:jian_kuang."
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "description": "Maximum number of events to return.",
+                    },
+                },
+                "required": ["start", "end"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar.check_availability",
+            "description": (
+                "Check whether a date-time window is free of busy events on "
+                "authorized household calendars. Use for conflicts, "
+                "availability, and whether a specified time is open. "
+                "Read-only. Unauthorized calendars fail closed."
+            ),
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "start": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": (
+                            "Inclusive window start as an ISO 8601 date or "
+                            "datetime."
+                        ),
+                    },
+                    "end": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": (
+                            "Exclusive window end as an ISO 8601 date or "
+                            "datetime. Must be after start."
+                        ),
+                    },
+                    "calendar": {
+                        "type": "string",
+                        "pattern": CALENDAR_ID_PATTERN,
+                        "description": "Optional Cortex calendar ID to check.",
+                    },
+                    "person": {
+                        "type": "string",
+                        "pattern": PERSON_ID_PATTERN,
+                        "description": (
+                            "Optional person record ID whose authorized "
+                            "calendars should be checked."
+                        ),
+                    },
+                },
+                "required": ["start", "end"],
+            },
+        },
+    },
 ]
 
 
@@ -177,7 +367,7 @@ def get_tool_definitions(tool_names: Sequence[str]) -> list[dict[str, Any]]:
     return [catalog[name] for name in tool_names]
 
 
-Handler = Callable[[ToolArguments], Awaitable[list[dict[str, Any]]]]
+Handler = Callable[[ToolArguments], Awaitable[Any]]
 
 
 class ToolDispatcher:
@@ -187,17 +377,26 @@ class ToolDispatcher:
         self,
         retrieval: RetrievalService,
         allowed_tools: Sequence[str] | None = None,
+        *,
+        calendar: CalendarService | None = None,
     ) -> None:
         self.retrieval = retrieval
+        self.calendar = calendar
         argument_models: dict[str, type[ToolArguments]] = {
             "search_entities": SearchEntitiesArguments,
             "get_entity": GetEntityArguments,
             "get_relationships": GetRelationshipsArguments,
+            "calculate": CalculateArguments,
+            "calendar.list_events": ListEventsArguments,
+            "calendar.check_availability": CheckAvailabilityArguments,
         }
         handlers: dict[str, Handler] = {
             "search_entities": self._search_entities,
             "get_entity": self._get_entity,
             "get_relationships": self._get_relationships,
+            "calculate": self._calculate,
+            "calendar.list_events": self._list_events,
+            "calendar.check_availability": self._check_availability,
         }
         selected = (
             tuple(allowed_tools) if allowed_tools is not None else tuple(handlers)
@@ -249,6 +448,24 @@ class ToolDispatcher:
 
         try:
             result = await handler(validated)
+        except CalculationError as error:
+            return self._error(
+                tool_name,
+                "calculation_error",
+                str(error),
+            )
+        except CalendarAuthorizationError as error:
+            return self._error(
+                tool_name,
+                "unauthorized",
+                str(error),
+            )
+        except CalendarUnavailableError:
+            return self._error(
+                tool_name,
+                "calendar_unavailable",
+                "The calendar service is temporarily unavailable",
+            )
         except ValueError as error:
             return self._error(
                 tool_name,
@@ -299,6 +516,39 @@ class ToolDispatcher:
             limit=arguments.limit,
             include_ended=arguments.include_ended,
         )
+
+    async def _calculate(self, arguments: ToolArguments) -> dict[str, Any]:
+        assert isinstance(arguments, CalculateArguments)
+        value = evaluate_expression(arguments.expression)
+        return {"result": value}
+
+    async def _list_events(self, arguments: ToolArguments) -> dict[str, Any]:
+        assert isinstance(arguments, ListEventsArguments)
+        return await self._calendar_service().list_events(
+            start=arguments.start,
+            end=arguments.end,
+            calendar_id=arguments.calendar,
+            person_id=arguments.person,
+            limit=arguments.limit,
+            caller_entity_id=current_caller_entity_id(),
+        )
+
+    async def _check_availability(self, arguments: ToolArguments) -> dict[str, Any]:
+        assert isinstance(arguments, CheckAvailabilityArguments)
+        return await self._calendar_service().check_availability(
+            start=arguments.start,
+            end=arguments.end,
+            calendar_id=arguments.calendar,
+            person_id=arguments.person,
+            caller_entity_id=current_caller_entity_id(),
+        )
+
+    def _calendar_service(self) -> CalendarService:
+        if self.calendar is None:
+            raise CalendarUnavailableError(
+                "The calendar service is not configured"
+            )
+        return self.calendar
 
     @staticmethod
     def _error(
