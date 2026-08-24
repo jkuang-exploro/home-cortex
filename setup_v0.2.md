@@ -165,3 +165,33 @@ curl -N -sS -X POST http://localhost:8001/v1/chat/completions \
 Cortex keeps tool-selection responses internal and forwards each final-answer
 chunk from Ollama as an OpenAI-compatible SSE event. The stream ends with a
 chunk whose `finish_reason` is `stop`, followed by `data: [DONE]`.
+
+User ID obtaining
+curl -sS   'http://localhost:3000/api/v1/users/?query=example@email.com&page=1'   -H "Authorization: Bearer $OPEN_WEBUI_TOKEN"   | jq -r '.users[] | select(.email == "example@email.com") | .id'
+
+Checking user access
+curl -sS -X POST \
+  "http://localhost:3000/api/v1/users $user_id/update" -H "Authorization: Bearer $OPEN_WEBUI_TOKEN" -H 'Content-Type: application/json' -d '{"role":"user"}' jq '{id,email,role}'
+
+Granting Butler Access
+User_ID='xxxxxx'
+
+jq -n \
+  --arg user_id "$User_ID" \
+  '{
+    id: "老管家",
+    name: "老管家",
+    access_grants: [
+      {
+        principal_type: "user",
+        principal_id: $user_id,
+        permission: "read"
+      }
+    ]
+  }' \
+| curl --fail-with-body -sS -X POST \
+    'http://localhost:3000/api/v1/models/model/access/update' \
+    -H "Authorization: Bearer $OPEN_WEBUI_TOKEN" \
+    -H 'Content-Type: application/json' \
+    --data-binary @- \
+| jq '{id, name, is_active, access_grants}'
