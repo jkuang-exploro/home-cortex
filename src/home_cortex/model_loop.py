@@ -1121,12 +1121,19 @@ def _is_household_roster_request(
         latest_user,
     ):
         return True
+    if re.search(
+        rf"{chinese_home}.*(?:多少|几)(?:个|位)?(?:人|住户|居民)",
+        latest_user,
+    ):
+        return True
 
     patterns = (
         r"\bwho\b.*\b(?:live|lives|living|reside|resides|stays?)\b.*"
         r"\b(?:home|house|household|here)\b",
         r"\b(?:household|home|house)\s+(?:members|residents|occupants)\b",
         r"\bwho\b.*\b(?:in|at)\b.*\b(?:my|our|the)\s+household\b",
+        r"\bhow many\b.*\b(?:people|residents|occupants)\b.*"
+        r"\b(?:my|our|the)\s+(?:home|house|household)\b",
     )
     return any(re.search(pattern, latest_user) for pattern in patterns)
 

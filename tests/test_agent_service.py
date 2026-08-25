@@ -2034,6 +2034,66 @@ async def test_household_roster_lists_only_residents_without_invented_roles(
 
 
 @pytest.mark.asyncio
+async def test_elliptical_resident_count_uses_home_roster_without_model() -> None:
+    residents = [
+        ("person:jian_kuang", "匡健"),
+        ("person:pu_ba", "巴璞"),
+        ("person:dylan_kuang", "匡德伦"),
+        ("person:evelyn_kuang", "匡悠然"),
+        ("person:zhigang_ba", "巴志刚"),
+    ]
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_relationships",
+            "result": [
+                {
+                    "id": f"lives_in:{record_id.rpartition(':')[2]}_home",
+                    "relation": "lives_in",
+                    "related_entity": {
+                        "id": record_id,
+                        "name": [name, name],
+                    },
+                }
+                for record_id, name in residents
+            ],
+        }
+    )
+    ollama = FakeOllamaService(
+        [_chat_response("匡健家目前有3人：李雅、王磊和匡健。")]
+    )
+
+    result = await _agent(ollama, dispatcher).answer_messages(
+        [
+            {"role": "user", "content": "家里有哪些房间？"},
+            {"role": "assistant", "content": "家里有厨房和客房。"},
+            {"role": "user", "content": "有多少人？"},
+        ],
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == "先生，家里目前有 5 位住户。"
+    assert result.tool_calls == 1
+    assert dispatcher.calls == [
+        (
+            "get_relationships",
+            {
+                "entity_id": "location:fort_cerritos",
+                "relation": "lives_in",
+                "limit": 25,
+            },
+        )
+    ]
+    assert "李雅" not in result.answer
+    assert "王磊" not in result.answer
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
 async def test_explicit_internal_id_request_preserves_id_in_final_answer() -> None:
     ollama = FakeOllamaService(
         [

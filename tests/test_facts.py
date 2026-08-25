@@ -80,6 +80,24 @@ IDENTITY: dict[str, Any] = {
             FactRequest(SubjectReference("home"), "residents", "all"),
         ),
         (
+            "家里有多少人？",
+            FactRequest(
+                SubjectReference("home"),
+                "count",
+                "all",
+                relation="lives_in",
+            ),
+        ),
+        (
+            "How many people are in my home?",
+            FactRequest(
+                SubjectReference("home"),
+                "count",
+                "all",
+                relation="lives_in",
+            ),
+        ),
+        (
             "家的位置",
             FactRequest(SubjectReference("home"), "address"),
         ),
@@ -217,6 +235,24 @@ def test_address_followup_inherits_home_subject() -> None:
     )
 
     assert request == FactRequest(SubjectReference("home"), "address")
+
+
+def test_resident_count_followup_inherits_home_subject() -> None:
+    request = parse_fact_request(
+        [
+            {"role": "user", "content": "家里有哪些房间？"},
+            {"role": "assistant", "content": "家里有厨房和客房。"},
+            {"role": "user", "content": "有多少人？"},
+        ],
+        identity=IDENTITY,
+    )
+
+    assert request == FactRequest(
+        SubjectReference("home"),
+        "count",
+        "all",
+        relation="lives_in",
+    )
 
 
 @pytest.mark.asyncio

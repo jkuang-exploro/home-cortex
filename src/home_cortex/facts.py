@@ -423,6 +423,8 @@ class FactService:
                     language,
                 )
             residents = await self._home_residents(execution)
+            if request.field == "count" and request.relation == "lives_in":
+                return _format_resident_count(residents, identity, language)
             return _format_residents(residents, identity, language)
 
         if request.subject.kind == "named":
@@ -909,6 +911,17 @@ def parse_fact_request(
             space_type=home_space_type,
         )
 
+    if _is_home_roster_count_request(normalized) or (
+        _is_elliptical_roster_count_request(normalized)
+        and _previous_home_subject(messages, identity, registry)
+    ):
+        return FactRequest(
+            SubjectReference("home"),
+            "count",
+            "all",
+            relation="lives_in",
+        )
+
     if _is_roster_request(normalized, registry.aliases):
         return FactRequest(SubjectReference("home"), "residents", "all")
 
@@ -1030,6 +1043,30 @@ def _home_space_request(text: str) -> tuple[bool, str | None]:
     if _contains_any(text, _ROOM_TERMS):
         return True, "room"
     return True, None
+
+
+def _is_home_roster_count_request(text: str) -> bool:
+    chinese_home = r"(?:家里|家中|家里面|家里边|这个家|这里)"
+    chinese_count = r"(?:多少|几)(?:个|位)?(?:人|住户|居民)"
+    if re.search(rf"{chinese_home}.*{chinese_count}", text):
+        return True
+    return bool(
+        re.search(r"\bhow many\b.*\b(?:people|residents|occupants)\b", text)
+        and re.search(r"\b(?:my|our|the)\s+(?:home|house|household)\b", text)
+    )
+
+
+def _is_elliptical_roster_count_request(text: str) -> bool:
+    return bool(
+        re.fullmatch(
+            r"(?:一共|总共)?(?:有)?(?:多少|几)(?:个|位)?人[?？。！!]?",
+            text,
+        )
+        or re.fullmatch(
+            r"how many (?:people|residents|occupants)(?: are there)?[?]?",
+            text,
+        )
+    )
 
 
 def _previous_home_subject(
@@ -1346,6 +1383,21 @@ def _format_residents(
             else "The current household residents are:"
         )
     return heading + "\n" + "\n".join(f"- {name}" for name in names)
+
+
+def _format_resident_count(
+    residents: Sequence[Mapping[str, Any]],
+    identity: Mapping[str, Any] | None,
+    language: str,
+) -> str:
+    address = _speaker_address(identity, language)
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        return f"{prefix}家里目前有 {len(residents)} 位住户。"
+    prefix = f"{address}, " if address else ""
+    label = "resident" if len(residents) == 1 else "residents"
+    answer = f"{prefix}the home currently has {len(residents)} {label}."
+    return answer if prefix else answer[0].upper() + answer[1:]
 
 
 def _format_home_space_count(
