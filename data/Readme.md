@@ -79,28 +79,37 @@ Store a symmetric `spouse_of` fact once; traversal works from either spouse.
 Store only canonical `parent_of` facts. `child_of` is a derived inverse query
 name and must not have its own data file.
 
-Named places inside a home are `space` nodes, not extra `location` records.
-A `location` is an addressable site such as the home. A `space` is a room or
-storage place inside a location, nested inside another space, or provided by a
-tracked physical Item. Attach structural spaces with `contained_in`:
+An addressable home site is a `location`; the physical house on that site is a
+tracked `item`. Place the house Item at the Location with `located_in`:
 
 ```json
 {
-  "from": "space:kitchen",
+  "from": "item:example_house",
   "to": "location:example_home"
 }
 ```
 
-`space_type` is `room` or `storage`. Nesting is allowed (`space` → `space`)
-when a storage place belongs inside a room. `contained_in` is the canonical
-structural relationship, with `contains` as its derived inverse query.
+Named rooms and outdoor areas belonging to the house are `space` nodes hosted
+by that house Item:
+
+```json
+{
+  "from": "space:kitchen",
+  "to": "item:example_house"
+}
+```
+
+`space_type` is `room` or `storage`. Structural membership is modeled solely
+through `hosted_by`. Every modeled Space has one explicit edge to the physical
+Item that provides it.
 
 An Item is a physical entity tracked as an independent identity unit. Its
-current position uses `located_in` (`item` → `space`). A Space provided or
-defined by an Item uses `hosted_by` (`space` → `item`). `hosts_space` is
-derived by reverse traversal and must not have its own JSON file. Hosted spaces
-are always explicit; never generate them from `item_type`. Items hosting zero,
-one, or many spaces are all valid.
+current position uses `located_in` (`item` → `location` or `space`). A Space
+provided or defined by an Item uses `hosted_by` (`space` → `item`). This applies
+equally to house rooms and to container regions such as a refrigerator
+interior. `hosts_space` is derived by reverse traversal and must not have its
+own JSON file. Hosted spaces are always explicit; never generate them from
+`item_type`. Items hosting zero, one, or many spaces are all valid.
 
 Record keys may contain non-empty colon-delimited segments, so a nested space
 may use `space:home:kitchen:fridge_01:interior`. Keep the table name before the

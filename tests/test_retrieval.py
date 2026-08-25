@@ -352,7 +352,6 @@ def test_table_names_come_from_static_test_data() -> None:
 
     assert service.node_tables == ("item", "location", "person", "space")
     assert service.edge_tables == (
-        "contained_in",
         "hosted_by",
         "lives_in",
         "located_in",
@@ -484,13 +483,17 @@ async def test_registry_drives_symmetric_directed_and_inverse_traversal() -> Non
             "person:casey_example",
             relation="child_of",
         )
-        kitchen_parent = await service.get_relationships(
+        kitchen_host = await service.get_relationships(
             "space:kitchen",
-            relation="contained_in",
+            relation="hosted_by",
         )
-        home_spaces = await service.get_relationships(
-            "location:test_house",
-            relation="contains",
+        house_spaces = await service.get_relationships(
+            "item:test_house",
+            relation="hosts_space",
+        )
+        house_location = await service.get_relationships(
+            "item:test_house",
+            relation="located_in",
         )
     finally:
         await database.close()
@@ -512,17 +515,20 @@ async def test_registry_drives_symmetric_directed_and_inverse_traversal() -> Non
     ]
     assert all(edge["relation"] == "parent_of" for edge in casey_inverse)
     assert all(edge["semantic_relation"] == "child_of" for edge in casey_inverse)
-    assert [edge["related_entity"]["id"] for edge in kitchen_parent] == [
-        "location:test_house"
+    assert [edge["related_entity"]["id"] for edge in kitchen_host] == [
+        "item:test_house"
     ]
-    assert kitchen_parent[0]["relation"] == "contained_in"
-    assert kitchen_parent[0]["semantic_relation"] == "contained_in"
-    assert [edge["related_entity"]["id"] for edge in home_spaces] == [
+    assert kitchen_host[0]["relation"] == "hosted_by"
+    assert kitchen_host[0]["semantic_relation"] == "hosted_by"
+    assert [edge["related_entity"]["id"] for edge in house_spaces] == [
         "space:kitchen"
     ]
-    assert home_spaces[0]["relation"] == "contained_in"
-    assert home_spaces[0]["semantic_relation"] == "contains"
-    assert home_spaces[0]["related_entity"]["space_type"] == "room"
+    assert house_spaces[0]["relation"] == "hosted_by"
+    assert house_spaces[0]["semantic_relation"] == "hosts_space"
+    assert house_spaces[0]["related_entity"]["space_type"] == "room"
+    assert [edge["related_entity"]["id"] for edge in house_location] == [
+        "location:test_house"
+    ]
 
 
 @pytest.mark.asyncio

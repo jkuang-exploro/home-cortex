@@ -48,7 +48,7 @@ async def test_hosted_by_ingests_multi_segment_ids_once() -> None:
     finally:
         await database.close()
 
-    assert len(stored) == 3
+    assert len(stored) == 4
     assert inverse_table == []
     assert {
         f"{edge['in'].table_name}:{edge['in'].id}" for edge in stored
@@ -56,6 +56,7 @@ async def test_hosted_by_ingests_multi_segment_ids_once() -> None:
         "space:test_house:kitchen:fridge_01:interior",
         "space:test_house:kitchen:fridge_01:freezer",
         "space:drawer_1:interior",
+        "space:kitchen",
     }
     assert all(edge["in"].table_name == "space" for edge in stored)
     assert all(edge["out"].table_name == "item" for edge in stored)
@@ -76,7 +77,7 @@ async def test_repeated_ingestion_keeps_one_canonical_hosted_by_edge_per_pair() 
     assert [str(edge["id"]) for edge in first] == [
         str(edge["id"]) for edge in second
     ]
-    assert len(second) == 3
+    assert len(second) == 4
 
 
 @pytest.mark.asyncio
@@ -141,7 +142,7 @@ async def test_empty_hosted_by_file_prunes_previously_stored_facts(
     finally:
         await database.close()
 
-    assert len(before) == 3
+    assert len(before) == 4
     assert after == []
 
 
@@ -237,8 +238,11 @@ async def test_spatial_relationships_remain_distinct_for_nested_contents() -> No
             "space:test_house:kitchen:fridge_01:interior",
             relation="hosted_by",
         )
-        kitchen_parent = await service.get_relationships(
-            "space:kitchen", relation="contained_in"
+        kitchen_host = await service.get_relationships(
+            "space:kitchen", relation="hosted_by"
+        )
+        house_location = await service.get_relationships(
+            "item:test_house", relation="located_in"
         )
     finally:
         await database.close()
@@ -249,13 +253,15 @@ async def test_spatial_relationships_remain_distinct_for_nested_contents() -> No
         == "space:test_house:kitchen:fridge_01:interior"
     )
     assert interior_host[0]["related_entity"]["id"] == "item:fridge_01"
-    assert kitchen_parent[0]["related_entity"]["id"] == "location:test_house"
+    assert kitchen_host[0]["related_entity"]["id"] == "item:test_house"
+    assert house_location[0]["related_entity"]["id"] == "location:test_house"
     assert {
         fridge_location[0]["relation"],
         milk_location[0]["relation"],
         interior_host[0]["relation"],
-        kitchen_parent[0]["relation"],
-    } == {"located_in", "hosted_by", "contained_in"}
+        kitchen_host[0]["relation"],
+        house_location[0]["relation"],
+    } == {"located_in", "hosted_by"}
 
 
 @pytest.mark.asyncio
@@ -272,10 +278,6 @@ async def test_item_rejects_multiple_current_locations(tmp_path: Path) -> None:
         }
     )
     space_path.write_text(json.dumps(spaces), encoding="utf-8")
-    contained_path = data_dir / "edges" / "contained_in.json"
-    contained = json.loads(contained_path.read_text(encoding="utf-8"))
-    contained.append({"from": "space:pantry", "to": "space:kitchen"})
-    contained_path.write_text(json.dumps(contained), encoding="utf-8")
     located_path = data_dir / "edges" / "located_in.json"
     located = json.loads(located_path.read_text(encoding="utf-8"))
     located.append({"from": "item:fridge_01", "to": "space:pantry"})

@@ -185,9 +185,8 @@ TOOLS: list[dict[str, Any]] = [
                         "pattern": TABLE_NAME_PATTERN,
                         "description": (
                             "Optional relationship table, such as spouse_of, "
-                            "lives_in, parent_of, contained_in, located_in, hosted_by, "
-                            "or a derived inverse such as child_of, contains, or "
-                            "hosts_space."
+                            "lives_in, parent_of, located_in, or hosted_by, or a "
+                            "derived inverse such as child_of or hosts_space."
                         ),
                     },
                     "direction": {

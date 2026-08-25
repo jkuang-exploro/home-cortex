@@ -4,7 +4,7 @@ from shutil import copytree
 from typing import Any
 
 import pytest
-from surrealdb import AsyncSurreal
+from surrealdb import AsyncSurreal, RecordID
 
 from home_cortex.ingestion import ingest_directory
 
@@ -50,8 +50,8 @@ async def test_repeated_ingestion_does_not_duplicate_relationships() -> None:
     finally:
         await database.close()
 
-    assert first.nodes_upserted == second.nodes_upserted == 12
-    assert first.edges_upserted == second.edges_upserted == 12
+    assert first.nodes_upserted == second.nodes_upserted == 13
+    assert first.edges_upserted == second.edges_upserted == 13
     assert sorted(str(edge["id"]) for edge in edges) == [
         "lives_in:blair_primary",
         "lives_in:person_alex_example__location_test_house",
@@ -289,26 +289,6 @@ async def test_relationships_reject_missing_endpoint_nodes(
 
 
 @pytest.mark.asyncio
-async def test_contained_in_rejects_non_space_sources(tmp_path: Path) -> None:
-    data_dir = tmp_path / "static_test_data"
-    copytree(STATIC_TEST_DATA, data_dir)
-    path = data_dir / "edges" / "contained_in.json"
-    path.write_text(
-        json.dumps(
-            [{"from": "person:alex_example", "to": "location:test_house"}]
-        ),
-        encoding="utf-8",
-    )
-    database = MemoryDatabase()
-    await database.connect()
-    try:
-        with pytest.raises(ValueError, match="Invalid contained_in endpoints"):
-            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
-    finally:
-        await database.close()
-
-
-@pytest.mark.asyncio
 async def test_non_temporal_parent_of_rejects_dates(tmp_path: Path) -> None:
     data_dir = tmp_path / "static_test_data"
     copytree(STATIC_TEST_DATA, data_dir)
@@ -368,3 +348,26 @@ async def test_reingestion_prunes_records_removed_from_json(tmp_path: Path) -> N
     assert [str(edge["id"]) for edge in edges] == [
         "lives_in:person_alex_example__location_test_house"
     ]
+
+
+@pytest.mark.asyncio
+async def test_ingestion_prunes_retired_relationship_tables() -> None:
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        await ingest_directory(database, STATIC_TEST_DATA)  # type: ignore[arg-type]
+        await database.query(
+            "RELATE $source->contained_in->$target;",
+            {
+                "source": RecordID("space", "kitchen"),
+                "target": RecordID("location", "test_house"),
+            },
+        )
+        legacy = await database.query("SELECT * FROM contained_in;")
+        await ingest_directory(database, STATIC_TEST_DATA)  # type: ignore[arg-type]
+        remaining = await database.query("SELECT * FROM contained_in;")
+    finally:
+        await database.close()
+
+    assert len(legacy) == 1
+    assert remaining == []

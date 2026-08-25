@@ -1,5 +1,10 @@
 [
   {
+    "id": "item:test_house",
+    "item_type": "house",
+    "name": {"en": "Test house building", "zh": "测试房屋"}
+  },
+  {
     "id": "item:fridge_01",
     "item_type": "refrigerator",
     "name": {"en": "Refrigerator", "zh": "冰箱"}

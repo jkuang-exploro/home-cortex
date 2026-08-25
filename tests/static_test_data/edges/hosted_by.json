@@ -1,5 +1,9 @@
 [
   {
+    "from": "space:kitchen",
+    "to": "item:test_house"
+  },
+  {
     "from": "space:test_house:kitchen:fridge_01:interior",
     "to": "item:fridge_01"
   },

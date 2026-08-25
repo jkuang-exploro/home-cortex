@@ -18,6 +18,7 @@ from .record_ids import (
 
 TABLE_PATTERN = TABLE_NAME_RE
 RECORD_PATTERN = RECORD_ID_RE
+_RETIRED_EDGE_TABLES = ("contained_in",)
 
 
 @dataclass(frozen=True)
@@ -326,6 +327,11 @@ async def ingest_directory(
             relation,
             [edge.record_id for edge in edges],
         )
+
+    # A retired relationship has no current source file to drive pruning.
+    # Keep this explicit so ingestion never deletes unrelated database tables.
+    for relation in _RETIRED_EDGE_TABLES:
+        await _prune_table(database, relation, [])
 
     return IngestionResult(
         node_files=len(node_files),

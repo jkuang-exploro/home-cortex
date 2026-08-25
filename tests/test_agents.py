@@ -33,13 +33,15 @@ def test_steward_agent_loads_successfully() -> None:
     assert "trusted household clock" in prompt
     assert "Do not append a service slogan" in prompt
     assert "location:fort_cerritos" in prompt
-    assert "`contained_in` is directed from Space" in prompt
+    assert "item:fort_cerritos_house" in prompt
     assert "`hosted_by` is directed from Space" in prompt
     assert "`hosts_space` is" in prompt
     assert "Never infer a hosted space" in prompt
     assert "Item-container lookup" in prompt
     assert "`entity_type` set to `item`" in prompt
     assert "For each hosted Space, traverse `located_in`" in prompt
+    assert "Home-space lookup" in prompt
+    assert "`contained_in`" not in prompt
     assert "`part_of`" not in prompt
     assert "People live at a location, never at a space" in prompt
 
