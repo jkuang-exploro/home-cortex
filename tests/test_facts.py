@@ -239,6 +239,10 @@ def test_fact_parser_maps_language_to_semantics(
         "我女儿今天开心吗？",
         "What room should I add to my house?",
         "我家房间应该怎么装修？",
+        "家里够住吗？",
+        "家里的房间够住吗？",
+        "家里住得舒服吗？",
+        "Is our house big enough for us?",
     ],
 )
 def test_fact_parser_leaves_open_ended_conversation_to_model(text: str) -> None:

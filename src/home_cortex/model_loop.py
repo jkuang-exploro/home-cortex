@@ -1220,8 +1220,10 @@ def _requires_graph_evidence(
     # for a stored household fact. Require graph evidence only for lookup intent.
     non_lookup_intent = (
         r"\b(?:advice|chat|feel|feeling|gift|joke|opinion|recommend|story|"
-        r"suggest|talk|think|add|decorate|design|remodel|should)\b|"
-        r"建议|推荐|礼物|聊|笑话|故事|觉得|认为|心情|装修|设计|改造|增加"
+        r"suggest|talk|think|add|decorate|design|remodel|should|enough|"
+        r"adequate|comfortable|crowded|spacious|suitable|fit)\b|"
+        r"建议|推荐|礼物|聊|笑话|故事|觉得|认为|心情|装修|设计|改造|增加|"
+        r"够|合适|适合|舒服|舒适|拥挤|宽敞|好不好|怎么样|如何"
     )
     if re.search(non_lookup_intent, normalized):
         return False

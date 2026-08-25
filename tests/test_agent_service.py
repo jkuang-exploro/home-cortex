@@ -527,6 +527,10 @@ async def test_this_place_is_resolved_as_the_configured_home() -> None:
         "My daughter had a great day. Celebrate with me.",
         "What gift would you recommend for my wife?",
         "我女儿今天开心吗？",
+        "家里够住吗？",
+        "家里的房间够住吗？",
+        "家里住得舒服吗？",
+        "Is our house big enough for us?",
     ],
 )
 async def test_informal_conversation_does_not_require_graph_evidence(

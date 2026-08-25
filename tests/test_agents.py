@@ -24,6 +24,8 @@ def test_steward_agent_loads_successfully() -> None:
     assert "household roster semantics" in prompt.casefold()
     assert "Casual conversation" in prompt
     assert "does not by itself request graph data" in prompt
+    assert "evaluative conversation" in prompt
+    assert "graph verification failure" in prompt
     assert "graph and calendar tools are read-only" in prompt
     assert "Use `calculate` for exact arithmetic" in prompt
     assert "`calendar.list_events`" in prompt
