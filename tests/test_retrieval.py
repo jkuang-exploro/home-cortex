@@ -54,9 +54,9 @@ class MemoryDatabase:
 async def test_search_entities_queries_known_tables_and_sorts_globally() -> None:
     database = FakeDatabase(
         {
-            "location": [
+            "address": [
                 {
-                    "id": RecordID("location", "fort_cerritos"),
+                    "id": RecordID("address", "fort_cerritos"),
                     "name": ["Fort Cerritos", "喜瑞都堡"],
                 }
             ],
@@ -68,12 +68,12 @@ async def test_search_entities_queries_known_tables_and_sorts_globally() -> None
     result = await service.search_entities("  CERRITOS  ")
 
     assert [record["id"] for record in result] == [
-        "location:fort_cerritos",
+        "address:fort_cerritos",
         "person:jian",
     ]
     assert [variables["table"] for _, variables in database.queries] == [
+        "address",
         "item",
-        "location",
         "person",
         "space",
     ]
@@ -215,15 +215,15 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
         {
             "lives_in": [
                 {
-                    "id": RecordID("lives_in", "person_a__location_main"),
+                    "id": RecordID("lives_in", "person_a__address_main"),
                     "in": RecordID("person", "a"),
-                    "out": RecordID("location", "main"),
+                    "out": RecordID("address", "main"),
                     "source_entity": {
                         "id": RecordID("person", "a"),
                         "first_name": "Alex",
                     },
                     "target_entity": {
-                        "id": RecordID("location", "main"),
+                        "id": RecordID("address", "main"),
                         "name": ["Main Home"],
                     },
                 }
@@ -233,7 +233,7 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
     service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
 
     incoming = await service.get_relationships(
-        "location:main",
+        "address:main",
         relation="lives_in",
     )
     outgoing = await service.get_relationships(
@@ -249,11 +249,11 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
         "first_name": "Alex",
     }
     assert incoming[0]["entity"] == {
-        "id": "location:main",
+        "id": "address:main",
         "name": ["Main Home"],
     }
     assert outgoing[0]["related_entity"] == {
-        "id": "location:main",
+        "id": "address:main",
         "name": ["Main Home"],
     }
     assert outgoing[0]["entity"] == {
@@ -262,7 +262,7 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
     }
     assert "source_entity" not in incoming[0]
     assert "target_entity" not in incoming[0]
-    assert database.queries[0][1]["entity"] == RecordID("location", "main")
+    assert database.queries[0][1]["entity"] == RecordID("address", "main")
     assert "out = $entity" in database.queries[0][0]
     assert "in.* AS source_entity" in database.queries[0][0]
 
@@ -273,7 +273,7 @@ async def test_typed_relation_overrides_impossible_requested_direction() -> None
     service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
 
     await service.get_relationships(
-        "location:main",
+        "address:main",
         relation="lives_in",
         direction="out",
     )
@@ -295,7 +295,7 @@ async def test_relationship_entity_summaries_exclude_dob_and_address() -> None:
                 {
                     "id": RecordID("lives_in", "alex_home"),
                     "in": RecordID("person", "alex"),
-                    "out": RecordID("location", "main"),
+                    "out": RecordID("address", "main"),
                     "source_entity": {
                         "id": RecordID("person", "alex"),
                         "name": ["Alex", "艾力克斯"],
@@ -304,7 +304,7 @@ async def test_relationship_entity_summaries_exclude_dob_and_address() -> None:
                         "address": {"street": "123 Private Street"},
                     },
                     "target_entity": {
-                        "id": RecordID("location", "main"),
+                        "id": RecordID("address", "main"),
                         "name": ["Main Home", "主宅"],
                         "address": {"street": "123 Private Street"},
                     },
@@ -315,7 +315,7 @@ async def test_relationship_entity_summaries_exclude_dob_and_address() -> None:
     service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
 
     result = await service.get_relationships(
-        "location:main",
+        "address:main",
         relation="lives_in",
         include_residents=False,
     )
@@ -326,7 +326,7 @@ async def test_relationship_entity_summaries_exclude_dob_and_address() -> None:
         "gender": "male",
     }
     assert result[0]["entity"] == {
-        "id": "location:main",
+        "id": "address:main",
         "name": ["Main Home", "主宅"],
     }
 
@@ -350,7 +350,7 @@ def test_table_names_come_from_static_test_data() -> None:
         data_dir=STATIC_TEST_DATA,
     )
 
-    assert service.node_tables == ("item", "location", "person", "space")
+    assert service.node_tables == ("address", "item", "person", "space")
     assert service.edge_tables == (
         "hosted_by",
         "lives_in",
@@ -358,6 +358,17 @@ def test_table_names_come_from_static_test_data() -> None:
         "parent_of",
         "spouse_of",
     )
+
+
+@pytest.mark.asyncio
+async def test_legacy_location_is_not_a_searchable_entity_type() -> None:
+    service = RetrievalService(  # type: ignore[arg-type]
+        FakeDatabase({}),
+        data_dir=STATIC_TEST_DATA,
+    )
+
+    with pytest.raises(ValueError, match="Unknown entity type 'location'"):
+        await service.search_entities("home", entity_type="location")
 
 
 def test_record_id_is_serialized() -> None:
@@ -385,11 +396,11 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
 
         entities = await service.search_entities(
             "test house",
-            entity_type="location",
+            entity_type="address",
         )
         chinese_entities = await service.search_entities(
             "测试之家",
-            entity_type="location",
+            entity_type="address",
         )
         chinese_people = await service.search_entities(
             "艾力克斯",
@@ -400,7 +411,7 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
             entity_type="space",
         )
         relationships = await service.get_relationships(
-            "location:test_house",
+            "address:test_house",
             relation="lives_in",
         )
         alex_home = await service.get_relationships(
@@ -415,9 +426,9 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
     finally:
         await database.close()
 
-    assert [entity["id"] for entity in entities] == ["location:test_house"]
+    assert [entity["id"] for entity in entities] == ["address:test_house"]
     assert [entity["id"] for entity in chinese_entities] == [
-        "location:test_house"
+        "address:test_house"
     ]
     assert [entity["id"] for entity in chinese_people] == [
         "person:alex_example"
@@ -429,7 +440,7 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
         "person:alex_example",
         "person:blair_example",
     ]
-    assert all(edge["out"] == "location:test_house" for edge in relationships)
+    assert all(edge["out"] == "address:test_house" for edge in relationships)
     assert all(edge["direction"] == "incoming" for edge in relationships)
     assert "residents" not in relationships[0]
     assert [person["id"] for person in alex_home[0]["residents"]] == [
@@ -491,7 +502,7 @@ async def test_registry_drives_symmetric_directed_and_inverse_traversal() -> Non
             "item:test_house",
             relation="hosts_space",
         )
-        house_location = await service.get_relationships(
+        house_address = await service.get_relationships(
             "item:test_house",
             relation="located_in",
         )
@@ -526,8 +537,8 @@ async def test_registry_drives_symmetric_directed_and_inverse_traversal() -> Non
     assert house_spaces[0]["relation"] == "hosted_by"
     assert house_spaces[0]["semantic_relation"] == "hosts_space"
     assert house_spaces[0]["related_entity"]["space_type"] == "room"
-    assert [edge["related_entity"]["id"] for edge in house_location] == [
-        "location:test_house"
+    assert [edge["related_entity"]["id"] for edge in house_address] == [
+        "address:test_house"
     ]
 
 

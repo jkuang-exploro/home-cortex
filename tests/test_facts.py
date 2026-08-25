@@ -277,6 +277,11 @@ def test_fact_parser_leaves_open_ended_conversation_to_model(text: str) -> None:
     ) is None
 
 
+def test_fact_service_rejects_legacy_location_home_id() -> None:
+    with pytest.raises(ValueError, match="address record ID"):
+        FactService(object(), home_entity_id="location:legacy_home")
+
+
 def test_relative_request_requires_trusted_identity() -> None:
     assert parse_fact_request(
         [{"role": "user", "content": "Who is my son?"}],
@@ -370,7 +375,7 @@ async def test_home_address_is_loaded_from_configured_location() -> None:
                 "tool": tool_name,
                 "result": [
                     {
-                        "id": "location:fort_cerritos",
+                        "id": "address:fort_cerritos",
                         "name": ["Fort Cerritos", "喜瑞匡家"],
                         "address": {
                             "street": "12745 Droxford St",
@@ -385,7 +390,7 @@ async def test_home_address_is_loaded_from_configured_location() -> None:
     dispatcher = Dispatcher()
     answer = await FactService(
         dispatcher,
-        home_entity_id="location:fort_cerritos",
+        home_entity_id="address:fort_cerritos",
     ).try_answer(
         [{"role": "user", "content": "家的位置"}],
         identity={**IDENTITY, "address_as": {"zh": "先生"}},
@@ -399,7 +404,7 @@ async def test_home_address_is_loaded_from_configured_location() -> None:
         "12745 Droxford St, Cerritos, CA 90703。"
     )
     assert dispatcher.calls == [
-        ("get_entity", {"entity_id": "location:fort_cerritos"})
+        ("get_entity", {"entity_id": "address:fort_cerritos"})
     ]
 
 
@@ -480,7 +485,7 @@ async def test_home_rooms_follow_house_item_hosted_spaces(
     dispatcher = Dispatcher()
     answer = await FactService(
         dispatcher,
-        home_entity_id="location:fort_cerritos",
+        home_entity_id="address:fort_cerritos",
     ).try_answer(
         [{"role": "user", "content": question}],
         identity={**IDENTITY, "address_as": {"zh": "先生"}},
@@ -495,7 +500,7 @@ async def test_home_rooms_follow_house_item_hosted_spaces(
         (
             "get_relationships",
             {
-                "entity_id": "location:fort_cerritos",
+                "entity_id": "address:fort_cerritos",
                 "relation": "located_in",
                 "limit": 25,
             },
@@ -551,7 +556,7 @@ async def test_item_location_uses_stored_located_in_relationship(
     dispatcher = Dispatcher()
     answer = await FactService(
         dispatcher,
-        home_entity_id="location:fort_cerritos",
+        home_entity_id="address:fort_cerritos",
     ).try_answer(
         [{"role": "user", "content": question}],
         identity={**IDENTITY, "address_as": {"zh": "先生"}},
@@ -624,7 +629,7 @@ async def test_scoped_item_location_is_not_misclassified_as_home_address(
     dispatcher = Dispatcher()
     answer = await FactService(
         dispatcher,
-        home_entity_id="location:fort_cerritos",
+        home_entity_id="address:fort_cerritos",
     ).try_answer(
         [{"role": "user", "content": question}],
         identity={**IDENTITY, "address_as": {"zh": "先生"}},
@@ -724,7 +729,7 @@ async def test_space_inventory_follows_located_items_and_their_hosted_spaces(
     dispatcher = Dispatcher()
     answer = await FactService(
         dispatcher,
-        home_entity_id="location:fort_cerritos",
+        home_entity_id="address:fort_cerritos",
     ).try_answer(
         [{"role": "user", "content": question}],
         identity={**IDENTITY, "address_as": {"zh": "先生"}},
@@ -831,7 +836,7 @@ async def test_new_edge_date_kind_needs_only_a_registry_entry() -> None:
                         "relation": "lives_in",
                         "start": "2020-09-01",
                         "related_entity": {
-                            "id": "location:fort_cerritos",
+                            "id": "address:fort_cerritos",
                             "name": "Fort Cerritos",
                         },
                     }

@@ -59,7 +59,7 @@ Add a contextual `household_role` to the Person's edge to the home. Do not add
 ```json
 {
   "from": "person:jian_kuang",
-  "to": "location:fort_cerritos",
+  "to": "address:fort_cerritos",
   "residence_type": "primary",
   "household_role": "owner"
 }

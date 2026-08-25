@@ -3,7 +3,7 @@ symmetric: false
 from_types:
   - item
 to_types:
-  - location
+  - address
   - space
 temporal: false
 unique_from: true

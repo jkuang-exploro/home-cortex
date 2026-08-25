@@ -116,7 +116,7 @@ TOOLS: list[dict[str, Any]] = [
                         "type": "string",
                         "pattern": TABLE_NAME_PATTERN,
                         "description": (
-                            "Optional node table, such as person, location, space, "
+                            "Optional node table, such as person, address, space, "
                             "or item."
                         ),
                     },
@@ -196,7 +196,7 @@ TOOLS: list[dict[str, Any]] = [
                             "Optional semantic traversal direction. Symmetric "
                             "relations always search both stored orientations. For "
                             "relations with different endpoint types, such as "
-                            "person-to-location lives_in, the entity type determines "
+                            "person-to-address lives_in, the entity type determines "
                             "the valid stored direction."
                         ),
                     },

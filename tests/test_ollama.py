@@ -90,7 +90,7 @@ async def test_tool_call_response() -> None:
                                 "name": "search_entities",
                                 "arguments": {
                                     "text": "Test House",
-                                    "entity_type": "location",
+                                    "entity_type": "address",
                                 },
                             }
                         }
@@ -114,7 +114,7 @@ async def test_tool_call_response() -> None:
     assert call.function.name == "search_entities"
     assert call.function.arguments == {
         "text": "Test House",
-        "entity_type": "location",
+        "entity_type": "address",
     }
     assert client.calls[0]["tools"] == TOOLS
     assert client.calls[0]["stream"] is False

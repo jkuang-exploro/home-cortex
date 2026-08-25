@@ -9,7 +9,7 @@ from home_cortex.display import (
 )
 
 FORT_CERRITOS = {
-    "id": "location:fort_cerritos",
+    "id": "address:fort_cerritos",
     "name": ["Fort Cerritos", "喜瑞匡家"],
 }
 
@@ -50,7 +50,7 @@ def test_render_replaces_known_ids_but_preserves_unknown_ids() -> None:
     resolver = DisplayNameResolver([FORT_CERRITOS])
 
     rendered = resolver.render(
-        "Home location:fort_cerritos; unknown vehicle:missing.",
+        "Home address:fort_cerritos; unknown vehicle:missing.",
         "en",
     )
 
@@ -71,7 +71,7 @@ def test_normal_render_hides_all_known_internal_id_shapes() -> None:
 
     rendered = resolver.render(
         "person:jian_kuang uses vehicle:model_y at "
-        "location:fort_cerritos in space:fort_cerritos:garage.",
+        "address:fort_cerritos in space:fort_cerritos:garage.",
         "en",
     )
 
@@ -87,17 +87,17 @@ def test_explicit_internal_id_request_disables_presentation_replacement() -> Non
         [{"role": "user", "content": "What is its internal ID?"}]
     )
     assert resolver.render(
-        "location:fort_cerritos",
+        "address:fort_cerritos",
         "en",
         expose_internal_ids=True,
-    ) == "location:fort_cerritos"
+    ) == "address:fort_cerritos"
 
 
 def test_stream_renderer_handles_an_id_split_across_chunks() -> None:
     stream = DisplayTextStream(DisplayNameResolver([FORT_CERRITOS]), "zh")
 
     chunks = [
-        stream.feed("这里是 location:"),
+        stream.feed("这里是 address:"),
         stream.feed("fort_cerritos。"),
         stream.finish(),
     ]
@@ -110,7 +110,7 @@ def test_resolver_is_reusable_and_does_not_mutate_graph_results() -> None:
         "result": [
             {
                 "id": "lives_in:jian_home",
-                "out": "location:fort_cerritos",
+                "out": "address:fort_cerritos",
                 "related_entity": FORT_CERRITOS,
             }
         ]
@@ -118,7 +118,7 @@ def test_resolver_is_reusable_and_does_not_mutate_graph_results() -> None:
     original = deepcopy(tool_result)
     resolver = DisplayNameResolver([tool_result])
 
-    assert resolver.resolve("location:fort_cerritos", "zh") == "喜瑞匡家"
+    assert resolver.resolve("address:fort_cerritos", "zh") == "喜瑞匡家"
     assert tool_result == original
 
 

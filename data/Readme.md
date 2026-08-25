@@ -49,7 +49,7 @@ a household. For a resident, add `household_role` to `lives_in`:
 ```json
 {
   "from": "person:example",
-  "to": "location:example_home",
+  "to": "address:example_home",
   "residence_type": "primary",
   "household_role": "owner"
 }
@@ -70,7 +70,7 @@ invalid source configuration.
 Optional `start` and `end` are the interval for a temporal relation only:
 
 - `spouse_of.start` is the marriage date (结婚纪念日).
-- `lives_in.start` is when the person began living at that location.
+- `lives_in.start` is when the person began living at that address.
 
 `end: null` means the relationship is current. Do not reuse a `start` date
 from one relation as a fact about another.
@@ -79,13 +79,13 @@ Store a symmetric `spouse_of` fact once; traversal works from either spouse.
 Store only canonical `parent_of` facts. `child_of` is a derived inverse query
 name and must not have its own data file.
 
-An addressable home site is a `location`; the physical house on that site is a
-tracked `item`. Place the house Item at the Location with `located_in`:
+An addressable home site is an `address`; the physical house on that site is a
+tracked `item`. Place the house Item at the Address with `located_in`:
 
 ```json
 {
   "from": "item:example_house",
-  "to": "location:example_home"
+  "to": "address:example_home"
 }
 ```
 
@@ -104,7 +104,7 @@ through `hosted_by`. Every modeled Space has one explicit edge to the physical
 Item that provides it.
 
 An Item is a physical entity tracked as an independent identity unit. Its
-current position uses `located_in` (`item` → `location` or `space`). A Space
+current position uses `located_in` (`item` → `address` or `space`). A Space
 provided or defined by an Item uses `hosted_by` (`space` → `item`). This applies
 equally to house rooms and to container regions such as a refrigerator
 interior. `hosts_space` is derived by reverse traversal and must not have its
@@ -115,7 +115,7 @@ Record keys may contain non-empty colon-delimited segments, so a nested space
 may use `space:home:kitchen:fridge_01:interior`. Keep the table name before the
 first colon and use only letters, digits, `_`, or `-` within each segment.
 
-People live at a `location`. Do not attach `lives_in` to a space.
+People live at an `address`. Do not attach `lives_in` to a space.
 
-Do not use separate records for translations of the same person's, location's,
+Do not use separate records for translations of the same person's, address's,
 space's, or item's name. Record IDs remain language-neutral and stable.

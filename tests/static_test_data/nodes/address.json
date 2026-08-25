@@ -1,6 +1,6 @@
 {
-  "id": "location:test_house",
-  "location_type": "home",
+  "id": "address:test_house",
+  "address_type": "home",
   "name": ["Test House", "测试之家"],
   "address": {
     "city": "Testville",

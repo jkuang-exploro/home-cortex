@@ -61,7 +61,7 @@ Add the role to a household relationship, not the Person node:
 ```json
 {
   "from": "person:jian_kuang",
-  "to": "location:fort_cerritos",
+  "to": "address:fort_cerritos",
   "residence_type": "primary",
   "household_role": "owner"
 }
@@ -102,14 +102,14 @@ remain in human-editable `data/edges/*.json`. The initial registry defines:
 - `spouse_of` as a symmetric temporal Person-to-Person relationship;
 - `parent_of` as a directed, non-temporal Person-to-Person relationship with
   the derived inverse name `child_of`;
-- `lives_in` as a directed temporal Person-to-Location relationship;
-- `located_in` as a directed, non-temporal Item-to-Location-or-Space
+- `lives_in` as a directed temporal Person-to-Address relationship;
+- `located_in` as a directed, non-temporal Item-to-Address-or-Space
   relationship;
 - `hosted_by` as a directed, non-temporal Space-to-Item relationship with the
   derived inverse name `hosts_space`.
 
-Store each fact once. Model an addressable home as a Location, its physical
-house as an Item located at that Location, and its rooms as Spaces hosted by the
+Store each fact once. Model an addressable home as an Address, its physical
+house as an Item located at that Address, and its rooms as Spaces hosted by the
 house Item. Do not add a reverse spouse edge or a `child_of.json` file.
 Likewise, do not add `hosts_space.json`; inverse hosted-space traversal uses the
 canonical `hosted_by` table. `get_relationships` consults the registry,
@@ -120,8 +120,8 @@ types, references to nodes missing from the source data, temporal fields on
 non-temporal edges, reverse duplicates of a symmetric fact, and a registered
 relationship without a corresponding JSON source file. An empty relationship
 must be represented by `[]` so re-ingestion can prune previously stored facts.
-Ingestion also clears records from explicitly retired relationship tables
-during ontology migrations.
+Ingestion also clears records from explicitly retired relationship and node
+tables during ontology migrations.
 
 This version renames the former `resides_in` relationship to `lives_in`. Since
 the repository intentionally does not track private household data, rename the
@@ -284,7 +284,7 @@ out of scope for Phase 1.
 ## Human-facing entity names
 
 Tool calls and graph traversal retain stable IDs such as
-`location:fort_cerritos`. Before a final answer reaches the user, the shared
+`address:fort_cerritos`. Before a final answer reaches the user, the shared
 display-name resolver replaces known IDs with stored names appropriate to the
 conversation language. It supports both localized name objects and the current
 ordered alias lists. Explicit requests for internal IDs and debugging details

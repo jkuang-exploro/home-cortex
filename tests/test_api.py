@@ -99,9 +99,9 @@ class FakeIdentityRetrieval:
                 "dob": "1988-11-11",
             }
         ]
-        self.locations: list[dict[str, Any]] = [
+        self.addresses: list[dict[str, Any]] = [
             {
-                "id": "location:fort_cerritos",
+                "id": "address:fort_cerritos",
                 "name": ["Fort Cerritos", "喜瑞匡家"],
             }
         ]
@@ -112,7 +112,7 @@ class FakeIdentityRetrieval:
 
     async def get_entity(self, record_id: str) -> dict[str, Any] | None:
         self.entity_calls.append(record_id)
-        for record in (*self.records, *self.locations):
+        for record in (*self.records, *self.addresses):
             if record.get("id") == record_id:
                 return record
         return None
@@ -124,15 +124,15 @@ class FakeIdentityRetrieval:
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
         self.calls.append((text, entity_type, limit))
-        if entity_type == "location":
-            return list(self.locations)
+        if entity_type == "address":
+            return list(self.addresses)
         return list(self.records)
 
     async def retrieve(self, question: str) -> RetrievedContext:
         self.retrieve_calls.append(question)
         return RetrievedContext(
             question=question,
-            nodes={"person": list(self.records), "location": list(self.locations)},
+            nodes={"person": list(self.records), "address": list(self.addresses)},
             edges={"lives_in": []},
             text="{}",
         )
@@ -148,10 +148,10 @@ class FakeIdentityRetrieval:
             {
                 "id": "lives_in:jian",
                 "in": entity_id,
-                "out": "location:fort_cerritos",
+                "out": "address:fort_cerritos",
                 "household_role": "owner",
                 "related_entity": {
-                    "id": "location:fort_cerritos",
+                    "id": "address:fort_cerritos",
                     "name": ["Fort Cerritos", "喜瑞匡家"],
                 },
             }

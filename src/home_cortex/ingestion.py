@@ -19,6 +19,7 @@ from .record_ids import (
 TABLE_PATTERN = TABLE_NAME_RE
 RECORD_PATTERN = RECORD_ID_RE
 _RETIRED_EDGE_TABLES = ("contained_in",)
+_RETIRED_NODE_TABLES = ("location",)
 
 
 @dataclass(frozen=True)
@@ -332,6 +333,11 @@ async def ingest_directory(
     # Keep this explicit so ingestion never deletes unrelated database tables.
     for relation in _RETIRED_EDGE_TABLES:
         await _prune_table(database, relation, [])
+
+    # A renamed node table also has no current source file to drive pruning.
+    # Remove retired Address predecessors only after current edges are rebuilt.
+    for table in _RETIRED_NODE_TABLES:
+        await _prune_table(database, table, [])
 
     return IngestionResult(
         node_files=len(node_files),

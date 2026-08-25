@@ -34,7 +34,7 @@ def test_steward_agent_loads_successfully() -> None:
     assert "`unavailable_calendars`" in prompt
     assert "trusted household clock" in prompt
     assert "Do not append a service slogan" in prompt
-    assert "location:fort_cerritos" in prompt
+    assert "address:fort_cerritos" in prompt
     assert "item:fort_cerritos_house" in prompt
     assert "`hosted_by` is directed from Space" in prompt
     assert "`hosts_space` is" in prompt
@@ -45,14 +45,14 @@ def test_steward_agent_loads_successfully() -> None:
     assert "Home-space lookup" in prompt
     assert "`contained_in`" not in prompt
     assert "`part_of`" not in prompt
-    assert "People live at a location, never at a space" in prompt
+    assert "People live at an address, never at a space" in prompt
 
 
 def test_steward_has_localized_identity_and_home_scope() -> None:
     steward = get_agent("steward")
 
     assert steward.display_name == "老管家"
-    assert steward.settings["home_entity_id"] == "location:fort_cerritos"
+    assert steward.settings["home_entity_id"] == "address:fort_cerritos"
     assert steward.settings["localized_identity"] == {
         "en": "the butler",
         "zh": "老管家",

@@ -7,7 +7,7 @@ from home_cortex.agents import AgentDefinition, ModelConfiguration, get_agent
 from home_cortex.greetings import GreetingResolver, GreetingService
 
 HOUSEHOLD = {
-    "id": "location:fort_cerritos",
+    "id": "address:fort_cerritos",
     "name": ["Fort Cerritos", "喜瑞匡家"],
 }
 
@@ -33,7 +33,7 @@ def _person(
 def _relationship(
     person_id: str,
     role: str | None,
-    household_id: str = "location:fort_cerritos",
+    household_id: str = "address:fort_cerritos",
 ) -> dict[str, Any]:
     relationship: dict[str, Any] = {
         "id": f"lives_in:{person_id.rpartition(':')[2]}",
@@ -59,7 +59,7 @@ def _resolve(
         person=person,
         household=HOUSEHOLD,
         relationships=relationships,
-        household_id="location:fort_cerritos",
+        household_id="address:fort_cerritos",
         language=language,
     )
 
@@ -178,7 +178,7 @@ def test_conflicting_relationship_roles_fail_closed_to_unknown() -> None:
         person=person,
         household=HOUSEHOLD,
         relationships=relationships,
-        household_id="location:fort_cerritos",
+        household_id="address:fort_cerritos",
         language="zh",
     )
 
@@ -270,7 +270,7 @@ async def test_greeting_service_uses_graph_state_without_an_llm_call() -> None:
 
     assert greeting.reception_category == "owner"
     assert retrieval.calls == [
-        ("entity", "location:fort_cerritos"),
+        ("entity", "address:fort_cerritos"),
         ("relationships", "person:jian_kuang"),
     ]
 
@@ -286,7 +286,7 @@ def test_switching_inference_models_does_not_change_greeting_policy() -> None:
         person=person,
         household=HOUSEHOLD,
         relationships=[_relationship(str(person["id"]), "owner")],
-        household_id="location:fort_cerritos",
+        household_id="address:fort_cerritos",
         language="zh",
     )
     model_switched_definition = AgentDefinition(
@@ -303,7 +303,7 @@ def test_switching_inference_models_does_not_change_greeting_policy() -> None:
         person=person,
         household=HOUSEHOLD,
         relationships=[_relationship(str(person["id"]), "owner")],
-        household_id="location:fort_cerritos",
+        household_id="address:fort_cerritos",
         language="zh",
     )
 
@@ -326,7 +326,7 @@ def test_another_agent_can_supply_an_independent_reception_policy() -> None:
         tool_definitions=(),
         settings=MappingProxyType(
             {
-                "home_entity_id": "location:fort_cerritos",
+                "home_entity_id": "address:fort_cerritos",
                 "reception": {
                     "default_language": "en",
                     "greetings": {
@@ -344,7 +344,7 @@ def test_another_agent_can_supply_an_independent_reception_policy() -> None:
         person=person,
         household=HOUSEHOLD,
         relationships=[_relationship(str(person["id"]), "owner")],
-        household_id="location:fort_cerritos",
+        household_id="address:fort_cerritos",
         language="en",
     )
 

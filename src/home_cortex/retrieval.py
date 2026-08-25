@@ -25,7 +25,7 @@ ENTITY_SUMMARY_FIELDS = frozenset(
         "gender",
         "first_name",
         "last_name",
-        "location_type",
+        "address_type",
         "item_type",
         "space_type",
         "type",
@@ -54,8 +54,8 @@ class RetrievalService:
         self.database = database
         self.limit = limit
         self.node_tables = self._table_names(data_dir, "nodes") or (
+            "address",
             "item",
-            "location",
             "person",
             "space",
         )
@@ -239,7 +239,7 @@ class RetrievalService:
             if edge.get("relation") != "lives_in":
                 continue
             home_id = edge.get("out")
-            if not isinstance(home_id, str) or not home_id.startswith("location:"):
+            if not isinstance(home_id, str) or not home_id.startswith("address:"):
                 continue
             if home_id not in residents_by_home:
                 household = await self.get_relationships(

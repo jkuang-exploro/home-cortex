@@ -54,7 +54,7 @@ async def test_repeated_ingestion_does_not_duplicate_relationships() -> None:
     assert first.edges_upserted == second.edges_upserted == 13
     assert sorted(str(edge["id"]) for edge in edges) == [
         "lives_in:blair_primary",
-        "lives_in:person_alex_example__location_test_house",
+        "lives_in:person_alex_example__address_test_house",
     ]
 
 
@@ -80,7 +80,7 @@ async def test_duplicate_implicit_relationships_require_ids(tmp_path: Path) -> N
     copytree(STATIC_TEST_DATA, data_dir)
     edge = {
         "from": "person:alex_example",
-        "to": "location:test_house",
+        "to": "address:test_house",
     }
     (data_dir / "edges" / "lives_in.json").write_text(
         json.dumps([edge, {**edge, "residence_type": "historical"}]),
@@ -119,10 +119,10 @@ async def test_registered_relationship_requires_a_source_file(tmp_path: Path) ->
 async def test_node_name_must_be_a_non_empty_string_list(tmp_path: Path) -> None:
     data_dir = tmp_path / "static_test_data"
     copytree(STATIC_TEST_DATA, data_dir)
-    location_path = data_dir / "nodes" / "location.json"
-    location = json.loads(location_path.read_text(encoding="utf-8"))
-    location["name"] = "Test House"
-    location_path.write_text(json.dumps(location), encoding="utf-8")
+    address_path = data_dir / "nodes" / "address.json"
+    address = json.loads(address_path.read_text(encoding="utf-8"))
+    address["name"] = "Test House"
+    address_path.write_text(json.dumps(address), encoding="utf-8")
 
     database = MemoryDatabase()
     await database.connect()
@@ -183,20 +183,20 @@ async def test_guest_status_must_be_stored_on_a_relationship(
 async def test_localized_name_object_is_accepted(tmp_path: Path) -> None:
     data_dir = tmp_path / "static_test_data"
     copytree(STATIC_TEST_DATA, data_dir)
-    location_path = data_dir / "nodes" / "location.json"
-    location = json.loads(location_path.read_text(encoding="utf-8"))
-    location["name"] = {"en": "Test House", "zh": "测试之家"}
-    location_path.write_text(json.dumps(location), encoding="utf-8")
+    address_path = data_dir / "nodes" / "address.json"
+    address = json.loads(address_path.read_text(encoding="utf-8"))
+    address["name"] = {"en": "Test House", "zh": "测试之家"}
+    address_path.write_text(json.dumps(address), encoding="utf-8")
 
     database = MemoryDatabase()
     await database.connect()
     try:
         await ingest_directory(database, data_dir)  # type: ignore[arg-type]
-        locations = await database.query("SELECT * FROM location;")
+        addresses = await database.query("SELECT * FROM address;")
     finally:
         await database.close()
 
-    assert locations[0]["name"] == {"en": "Test House", "zh": "测试之家"}
+    assert addresses[0]["name"] == {"en": "Test House", "zh": "测试之家"}
 
 
 @pytest.mark.asyncio
@@ -228,10 +228,10 @@ async def test_person_address_as_must_be_a_localized_object(
 async def test_non_person_nodes_cannot_define_address_as(tmp_path: Path) -> None:
     data_dir = tmp_path / "static_test_data"
     copytree(STATIC_TEST_DATA, data_dir)
-    location_path = data_dir / "nodes" / "location.json"
-    location = json.loads(location_path.read_text(encoding="utf-8"))
-    location["address_as"] = {"en": "Home"}
-    location_path.write_text(json.dumps(location), encoding="utf-8")
+    address_path = data_dir / "nodes" / "address.json"
+    address = json.loads(address_path.read_text(encoding="utf-8"))
+    address["address_as"] = {"en": "Home"}
+    address_path.write_text(json.dumps(address), encoding="utf-8")
 
     database = MemoryDatabase()
     await database.connect()
@@ -249,7 +249,7 @@ async def test_lives_in_rejects_reversed_endpoint_types(tmp_path: Path) -> None:
     path = data_dir / "edges" / "lives_in.json"
     path.write_text(
         json.dumps(
-            [{"from": "location:test_house", "to": "person:alex_example"}]
+            [{"from": "address:test_house", "to": "person:alex_example"}]
         ),
         encoding="utf-8",
     )
@@ -346,7 +346,7 @@ async def test_reingestion_prunes_records_removed_from_json(tmp_path: Path) -> N
         await database.close()
 
     assert [str(edge["id"]) for edge in edges] == [
-        "lives_in:person_alex_example__location_test_house"
+        "lives_in:person_alex_example__address_test_house"
     ]
 
 
@@ -360,7 +360,7 @@ async def test_ingestion_prunes_retired_relationship_tables() -> None:
             "RELATE $source->contained_in->$target;",
             {
                 "source": RecordID("space", "kitchen"),
-                "target": RecordID("location", "test_house"),
+                "target": RecordID("address", "test_house"),
             },
         )
         legacy = await database.query("SELECT * FROM contained_in;")
@@ -371,3 +371,24 @@ async def test_ingestion_prunes_retired_relationship_tables() -> None:
 
     assert len(legacy) == 1
     assert remaining == []
+
+
+@pytest.mark.asyncio
+async def test_ingestion_prunes_retired_location_node_table() -> None:
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        await database.upsert(
+            RecordID("location", "legacy_home"),
+            {"name": "Legacy Home"},
+        )
+        legacy = await database.query("SELECT * FROM location;")
+        await ingest_directory(database, STATIC_TEST_DATA)  # type: ignore[arg-type]
+        remaining = await database.query("SELECT * FROM location;")
+        addresses = await database.query("SELECT * FROM address;")
+    finally:
+        await database.close()
+
+    assert len(legacy) == 1
+    assert remaining == []
+    assert [str(record["id"]) for record in addresses] == ["address:test_house"]

@@ -254,7 +254,7 @@ async def test_spatial_relationships_remain_distinct_for_nested_contents() -> No
     )
     assert interior_host[0]["related_entity"]["id"] == "item:fridge_01"
     assert kitchen_host[0]["related_entity"]["id"] == "item:test_house"
-    assert house_location[0]["related_entity"]["id"] == "location:test_house"
+    assert house_location[0]["related_entity"]["id"] == "address:test_house"
     assert {
         fridge_location[0]["relation"],
         milk_location[0]["relation"],

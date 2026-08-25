@@ -330,10 +330,10 @@ class FactService:
         timeout_seconds: float = 5.0,
     ) -> None:
         if home_entity_id is not None and not re.fullmatch(
-            r"location:[A-Za-z0-9_-]+",
+            r"address:[A-Za-z0-9_-]+",
             home_entity_id,
         ):
-            raise ValueError("home_entity_id must be a location record ID")
+            raise ValueError("home_entity_id must be an address record ID")
         self.dispatcher = dispatcher
         self.home_entity_id = home_entity_id
         self.memorable_dates = memorable_dates or default_memorable_date_registry()

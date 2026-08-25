@@ -1,7 +1,7 @@
 [
   {
     "from": "item:test_house",
-    "to": "location:test_house"
+    "to": "address:test_house"
   },
   {
     "from": "item:fridge_01",

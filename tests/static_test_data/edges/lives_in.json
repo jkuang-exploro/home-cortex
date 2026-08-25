@@ -1,7 +1,7 @@
 [
   {
     "from": "person:alex_example",
-    "to": "location:test_house",
+    "to": "address:test_house",
     "start": "2020-01-01",
     "end": null,
     "household_role": "owner"
@@ -9,7 +9,7 @@
   {
     "id": "lives_in:blair_primary",
     "from": "person:blair_example",
-    "to": "location:test_house",
+    "to": "address:test_house",
     "start": "2020-01-01",
     "end": null,
     "household_role": "owner"

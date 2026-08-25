@@ -86,7 +86,7 @@ def test_unknown_calendar_timezone_is_rejected() -> None:
     "identity_map",
     [
         {"Jian Kuang": "person:jian_kuang"},
-        {"id:webui-user-123": "location:fort_cerritos"},
+        {"id:webui-user-123": "address:fort_cerritos"},
     ],
 )
 def test_identity_map_rejects_unsafe_keys_and_non_person_values(

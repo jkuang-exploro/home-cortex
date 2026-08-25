@@ -84,7 +84,7 @@ class GreetingResolver:
             address_as=address_as,
             household_name=household_name,
         ).strip()
-        if not rendered or "person:" in rendered or "location:" in rendered:
+        if not rendered or "person:" in rendered or "address:" in rendered:
             raise ValueError("Greeting policy produced an unsafe greeting")
         return Greeting(
             text=rendered,

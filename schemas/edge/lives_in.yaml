@@ -3,5 +3,5 @@ symmetric: false
 from_types:
   - person
 to_types:
-  - location
+  - address
 temporal: true

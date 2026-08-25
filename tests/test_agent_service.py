@@ -79,7 +79,7 @@ class FakeDispatcher:
         self.result = result or {
             "ok": True,
             "tool": "search_entities",
-            "result": [{"id": "location:test_house", "name": "Test House"}],
+            "result": [{"id": "address:test_house", "name": "Test House"}],
         }
         self.delay = delay
         self.calls: list[tuple[str, Any]] = []
@@ -164,7 +164,7 @@ async def test_home_address_followup_uses_stored_location_without_model() -> Non
             "tool": "get_entity",
             "result": [
                 {
-                    "id": "location:fort_cerritos",
+                    "id": "address:fort_cerritos",
                     "name": ["Fort Cerritos", "喜瑞匡家"],
                     "address": {
                         "street": "12745 Droxford St",
@@ -197,7 +197,7 @@ async def test_home_address_followup_uses_stored_location_without_model() -> Non
     )
     assert result.tool_calls == 1
     assert dispatcher.calls == [
-        ("get_entity", {"entity_id": "location:fort_cerritos"})
+        ("get_entity", {"entity_id": "address:fort_cerritos"})
     ]
     assert ollama.calls == []
 
@@ -210,7 +210,7 @@ async def test_home_residence_wording_returns_stored_address_without_model() -> 
             "tool": "get_entity",
             "result": [
                 {
-                    "id": "location:fort_cerritos",
+                    "id": "address:fort_cerritos",
                     "name": ["Fort Cerritos", "喜瑞匡家"],
                     "address": {
                         "street": "12745 Droxford St",
@@ -531,7 +531,7 @@ async def test_this_place_is_resolved_as_the_configured_home() -> None:
             "tool": "get_entity",
             "result": [
                 {
-                    "id": "location:fort_cerritos",
+                    "id": "address:fort_cerritos",
                     "name": ["Fort Cerritos", "喜瑞匡家"],
                     "address": {"street": "12745 Droxford St"},
                 }
@@ -551,7 +551,7 @@ async def test_this_place_is_resolved_as_the_configured_home() -> None:
 
     assert result.answer == "先生，这里是喜瑞匡家。"
     assert dispatcher.calls == [
-        ("get_entity", {"entity_id": "location:fort_cerritos"})
+        ("get_entity", {"entity_id": "address:fort_cerritos"})
     ]
     assert ollama.calls == []
 
@@ -709,7 +709,7 @@ async def test_factual_answer_without_evidence_is_retried_with_tools() -> None:
                     "id": "lives_in:alex_home",
                     "relation": "lives_in",
                     "related_entity": {
-                        "id": "location:test_house",
+                        "id": "address:test_house",
                         "name": "Test House",
                     },
                 }
@@ -1445,8 +1445,8 @@ async def test_father_in_law_birthday_uses_verified_two_hop_relationship() -> No
 @pytest.mark.parametrize(
     ("residence_target", "expected"),
     [
-        ("location:fort_cerritos", "先生，是的。"),
-        ("location:another_home", "先生，不是。"),
+        ("address:fort_cerritos", "先生，是的。"),
+        ("address:another_home", "先生，不是。"),
     ],
 )
 async def test_relative_home_membership_is_verified_through_the_graph(
@@ -1782,7 +1782,7 @@ async def test_chinese_roster_tool_result_is_localized_and_privacy_minimized() -
         (
             "get_relationships",
             {
-                "entity_id": "location:fort_cerritos",
+                "entity_id": "address:fort_cerritos",
                 "relation": "lives_in",
                 "limit": 25,
             },
@@ -2151,12 +2151,12 @@ async def test_legitimate_agent_self_reference_is_unchanged() -> None:
     [
         (
             "这是我的家吗？",
-            "是的，这是您的家，即 location:fort_cerritos。",
+            "是的，这是您的家，即 address:fort_cerritos。",
             "是的，这是您的家，即 喜瑞匡家。",
         ),
         (
             "Is this my home?",
-            "Yes, this is location:fort_cerritos.",
+            "Yes, this is address:fort_cerritos.",
             "Yes, this is Fort Cerritos.",
         ),
     ],
@@ -2172,7 +2172,7 @@ async def test_final_answer_uses_language_appropriate_display_name(
                 tool_calls=[
                     _tool_call(
                         "search_entities",
-                        {"text": "location:fort_cerritos"},
+                        {"text": "address:fort_cerritos"},
                     )
                 ]
             ),
@@ -2185,7 +2185,7 @@ async def test_final_answer_uses_language_appropriate_display_name(
             "tool": "search_entities",
             "result": [
                 {
-                    "id": "location:fort_cerritos",
+                    "id": "address:fort_cerritos",
                     "name": ["Fort Cerritos", "喜瑞匡家"],
                 }
             ],
@@ -2195,8 +2195,8 @@ async def test_final_answer_uses_language_appropriate_display_name(
     result = await _agent(ollama, dispatcher).answer(question)
 
     assert result.answer == expected_answer
-    assert "location:fort_cerritos" not in result.answer
-    assert dispatcher.calls[0][1]["text"] == "location:fort_cerritos"
+    assert "address:fort_cerritos" not in result.answer
+    assert dispatcher.calls[0][1]["text"] == "address:fort_cerritos"
 
 
 @pytest.mark.asyncio
@@ -2278,9 +2278,9 @@ async def test_first_person_household_question_traverses_identity_home() -> None
                             "id": "lives_in:jian_home",
                             "relation": "lives_in",
                             "in": "person:jian_kuang",
-                        "out": "location:fort_cerritos",
+                        "out": "address:fort_cerritos",
                         "related_entity": {
-                            "id": "location:fort_cerritos",
+                            "id": "address:fort_cerritos",
                             "name": ["Fort Cerritos", "喜瑞匡家"],
                         },
                     }
@@ -2322,7 +2322,7 @@ async def test_first_person_household_question_traverses_identity_home() -> None
 
     assert result.answer == "先生，目前家里的住户有：\n- 匡健\n- 巴璞"
     assert [arguments["entity_id"] for _, arguments in dispatcher.calls] == [
-        "location:fort_cerritos",
+        "address:fort_cerritos",
     ]
     assert ollama.calls == []
 
@@ -2445,7 +2445,7 @@ async def test_resident_count_uses_home_roster_without_model(
         (
             "get_relationships",
             {
-                "entity_id": "location:fort_cerritos",
+                "entity_id": "address:fort_cerritos",
                 "relation": "lives_in",
                 "limit": 25,
             },
@@ -2468,7 +2468,7 @@ async def test_explicit_internal_id_request_preserves_id_in_final_answer() -> No
                     )
                 ]
             ),
-            _chat_response("Its internal ID is location:fort_cerritos."),
+            _chat_response("Its internal ID is address:fort_cerritos."),
         ]
     )
     dispatcher = FakeDispatcher(
@@ -2477,7 +2477,7 @@ async def test_explicit_internal_id_request_preserves_id_in_final_answer() -> No
             "tool": "search_entities",
             "result": [
                 {
-                    "id": "location:fort_cerritos",
+                    "id": "address:fort_cerritos",
                     "name": ["Fort Cerritos", "喜瑞匡家"],
                 }
             ],
@@ -2488,7 +2488,7 @@ async def test_explicit_internal_id_request_preserves_id_in_final_answer() -> No
         "What is Fort Cerritos's internal ID?"
     )
 
-    assert result.answer == "Its internal ID is location:fort_cerritos."
+    assert result.answer == "Its internal ID is address:fort_cerritos."
 
 
 @pytest.mark.asyncio
@@ -2506,7 +2506,7 @@ async def test_streaming_final_answer_localizes_split_internal_id() -> None:
                 )
             ],
             [
-                _chat_response("Your home is location:"),
+                _chat_response("Your home is address:"),
                 _chat_response("fort_cerritos."),
             ],
         ]
@@ -2517,7 +2517,7 @@ async def test_streaming_final_answer_localizes_split_internal_id() -> None:
             "tool": "search_entities",
             "result": [
                 {
-                    "id": "location:fort_cerritos",
+                    "id": "address:fort_cerritos",
                     "name": ["Fort Cerritos", "喜瑞匡家"],
                 }
             ],
@@ -2542,7 +2542,7 @@ async def test_completes_search_then_relationship_lookup() -> None:
                 tool_calls=[
                     _tool_call(
                         "search_entities",
-                        {"text": "Fort Cerritos", "entity_type": "location"},
+                        {"text": "Fort Cerritos", "entity_type": "address"},
                     )
                 ]
             ),
@@ -2551,7 +2551,7 @@ async def test_completes_search_then_relationship_lookup() -> None:
                     _tool_call(
                         "get_relationships",
                         {
-                            "entity_id": "location:fort_cerritos",
+                            "entity_id": "address:fort_cerritos",
                             "relation": "lives_in",
                         },
                     )
@@ -2571,7 +2571,7 @@ async def test_completes_search_then_relationship_lookup() -> None:
             self.calls.append((tool_name, arguments))
             if tool_name == "search_entities":
                 result = [
-                    {"id": "location:fort_cerritos", "name": "Fort Cerritos"}
+                    {"id": "address:fort_cerritos", "name": "Fort Cerritos"}
                 ]
             else:
                 result = [
@@ -2579,7 +2579,7 @@ async def test_completes_search_then_relationship_lookup() -> None:
                         "id": "lives_in:alex_location",
                         "relation": "lives_in",
                         "in": "person:alex_example",
-                        "out": "location:fort_cerritos",
+                        "out": "address:fort_cerritos",
                         "related_entity": {
                             "id": "person:alex_example",
                             "name": ["Alex Example", "艾力克斯"],
@@ -2649,7 +2649,7 @@ async def test_streaming_tool_steps_stay_internal_before_final_tokens() -> None:
                         _tool_call(
                             "get_relationships",
                             {
-                                "entity_id": "location:fort_cerritos",
+                                "entity_id": "address:fort_cerritos",
                                 "relation": "lives_in",
                             },
                         )
@@ -2690,7 +2690,7 @@ async def test_streaming_tool_steps_stay_internal_before_final_tokens() -> None:
         (
             "get_relationships",
             {
-                "entity_id": "location:fort_cerritos",
+                "entity_id": "address:fort_cerritos",
                 "relation": "lives_in",
                 "limit": 25,
             },
@@ -2747,7 +2747,7 @@ async def test_dispatches_tool_result_and_calls_ollama_again() -> None:
                     "id": "lives_in:alex_home",
                     "relation": "lives_in",
                     "related_entity": {
-                        "id": "location:test_house",
+                        "id": "address:test_house",
                         "name": "Test House",
                     },
                 }
@@ -2976,7 +2976,7 @@ async def test_oversized_tool_record_is_truncated_before_sending_to_ollama() -> 
         {
             "ok": True,
             "tool": "search_entities",
-            "result": [{"id": "location:test", "description": "x" * 2_000}],
+            "result": [{"id": "address:test", "description": "x" * 2_000}],
         }
     )
     ollama = FakeOllamaService(

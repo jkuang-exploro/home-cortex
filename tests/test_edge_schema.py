@@ -24,7 +24,7 @@ def test_registry_loads_required_relationship_semantics() -> None:
     assert hosted_by.unique_from is True
     located_in = registry.get("located_in")
     assert located_in.from_types == ("item",)
-    assert located_in.to_types == ("location", "space")
+    assert located_in.to_types == ("address", "space")
     assert located_in.unique_from is True
 
 
@@ -53,10 +53,10 @@ def test_unknown_relationship_fails_cleanly() -> None:
 def test_registry_validates_endpoint_types() -> None:
     registry = EdgeSchemaRegistry.from_directory(SCHEMA_DIR)
 
-    registry.validate_endpoints("lives_in", "person", "location")
+    registry.validate_endpoints("lives_in", "person", "address")
     with pytest.raises(ValueError, match="Invalid lives_in endpoints"):
-        registry.validate_endpoints("lives_in", "location", "person")
-    registry.validate_endpoints("located_in", "item", "location")
+        registry.validate_endpoints("lives_in", "address", "person")
+    registry.validate_endpoints("located_in", "item", "address")
     registry.validate_endpoints("located_in", "item", "space")
     with pytest.raises(ValueError, match="Invalid located_in endpoints"):
         registry.validate_endpoints("located_in", "space", "item")
