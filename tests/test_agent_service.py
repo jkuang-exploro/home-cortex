@@ -203,7 +203,46 @@ async def test_home_address_followup_uses_stored_location_without_model() -> Non
 
 
 @pytest.mark.asyncio
-async def test_home_room_list_is_resolved_without_model_planning_text() -> None:
+async def test_home_residence_wording_returns_stored_address_without_model() -> None:
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_entity",
+            "result": [
+                {
+                    "id": "location:fort_cerritos",
+                    "name": ["Fort Cerritos", "喜瑞匡家"],
+                    "address": {
+                        "street": "12745 Droxford St",
+                        "city": "Cerritos",
+                        "state": "CA",
+                        "zip": "90703",
+                    },
+                }
+            ],
+        }
+    )
+    ollama = FakeOllamaService([])
+
+    result = await _agent(ollama, dispatcher).answer(
+        "我家住在哪里",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert "12745 Droxford St, Cerritos, CA 90703" in result.answer
+    assert result.tool_calls == 1
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("question", ["家里有哪些房间？", "有哪些房间？"])
+async def test_home_room_list_is_resolved_without_model_planning_text(
+    question: str,
+) -> None:
     class HomeSpaceDispatcher:
         def __init__(self) -> None:
             self.calls: list[tuple[str, Any]] = []
@@ -253,7 +292,7 @@ async def test_home_room_list_is_resolved_without_model_planning_text() -> None:
     )
 
     result = await _agent(ollama, dispatcher).answer(
-        "家里有哪些房间？",
+        question,
         user_entity={
             "id": "person:jian_kuang",
             "name": ["Jian Kuang", "匡健"],
@@ -527,10 +566,6 @@ async def test_this_place_is_resolved_as_the_configured_home() -> None:
         "My daughter had a great day. Celebrate with me.",
         "What gift would you recommend for my wife?",
         "我女儿今天开心吗？",
-        "家里够住吗？",
-        "家里的房间够住吗？",
-        "家里住得舒服吗？",
-        "Is our house big enough for us?",
     ],
 )
 async def test_informal_conversation_does_not_require_graph_evidence(
@@ -546,6 +581,107 @@ async def test_informal_conversation_does_not_require_graph_evidence(
     assert result.tool_calls == 0
     assert dispatcher.calls == []
     assert len(ollama.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "家里够住吗？",
+        "家里的房间够住吗？",
+        "家里住得舒服吗？",
+        "五个人住得下吗？",
+        "家里够不够住？",
+        "家里有五个人，够住吗？",
+        "家里有几个房间，够住吗？",
+        "Is our house big enough for us?",
+    ],
+)
+async def test_home_adequacy_uses_facts_as_model_context(message: str) -> None:
+    class HomeContextDispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: Any,
+            **_: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            relation = arguments["relation"]
+            if relation == "lives_in":
+                result = [
+                    {
+                        "relation": relation,
+                        "related_entity": {
+                            "id": f"person:resident_{index}",
+                            "name": f"住户{index}",
+                        },
+                    }
+                    for index in range(1, 6)
+                ]
+            elif relation == "located_in":
+                result = [
+                    {
+                        "relation": relation,
+                        "related_entity": {
+                            "id": "item:fort_cerritos_house",
+                            "item_type": "house",
+                            "name": "喜瑞匡家房屋",
+                        },
+                    }
+                ]
+            else:
+                room_names = (
+                    "车库",
+                    "客房",
+                    "走廊浴室",
+                    "厨房",
+                    "主浴室",
+                    "主卧室",
+                    "榻榻米房间",
+                )
+                result = [
+                    {
+                        "relation": "hosted_by",
+                        "related_entity": {
+                            "id": f"space:room_{index}",
+                            "space_type": "room",
+                            "name": name,
+                        },
+                    }
+                    for index, name in enumerate(room_names, 1)
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = HomeContextDispatcher()
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                "按现有房间配置，五个人有安排空间，"
+                "但舒适度取决于睡房分配。"
+            )
+        ]
+    )
+
+    result = await _agent(ollama, dispatcher).answer(message)
+
+    assert "五个人" in result.answer
+    assert result.tool_calls == 3
+    assert [arguments["relation"] for _, arguments in dispatcher.calls] == [
+        "lives_in",
+        "located_in",
+        "hosts_space",
+    ]
+    context = next(
+        item["content"]
+        for item in ollama.calls[0]
+        if item["role"] == "system" and "evaluative question" in item["content"]
+    )
+    assert "Stored current resident count: 5" in context
+    assert "Stored room count: 7" in context
+    assert "主卧室" in context
 
 
 @pytest.mark.asyncio
@@ -2252,7 +2388,20 @@ async def test_household_roster_lists_only_residents_without_invented_roles(
 
 
 @pytest.mark.asyncio
-async def test_elliptical_resident_count_uses_home_roster_without_model() -> None:
+@pytest.mark.parametrize(
+    "messages",
+    [
+        [
+            {"role": "user", "content": "家里有哪些房间？"},
+            {"role": "assistant", "content": "家里有厨房和客房。"},
+            {"role": "user", "content": "有多少人？"},
+        ],
+        [{"role": "user", "content": "多少人住在这里？"}],
+    ],
+)
+async def test_resident_count_uses_home_roster_without_model(
+    messages: list[dict[str, str]],
+) -> None:
     residents = [
         ("person:jian_kuang", "匡健"),
         ("person:pu_ba", "巴璞"),
@@ -2282,11 +2431,7 @@ async def test_elliptical_resident_count_uses_home_roster_without_model() -> Non
     )
 
     result = await _agent(ollama, dispatcher).answer_messages(
-        [
-            {"role": "user", "content": "家里有哪些房间？"},
-            {"role": "assistant", "content": "家里有厨房和客房。"},
-            {"role": "user", "content": "有多少人？"},
-        ],
+        messages,
         user_entity={
             "id": "person:jian_kuang",
             "name": ["Jian Kuang", "匡健"],

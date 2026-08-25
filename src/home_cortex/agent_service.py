@@ -118,8 +118,8 @@ class AgentService:
             request_id=request_id,
             current_date=_household_date(self.household_timezone, now),
         )
-        trusted = self._trusted_conversation(safe_messages, identity, now=now)
         if fact_answer is not None:
+            trusted = self._trusted_conversation(safe_messages, identity, now=now)
             return AgentResult(
                 answer=fact_answer.text,
                 steps=1,
@@ -127,6 +127,17 @@ class AgentService:
                 stop_reason=fact_answer.stop_reason,
                 messages=tuple(trusted),
             )
+        fact_context = await self.facts.try_context(
+            safe_messages,
+            language=language,
+            request_id=request_id,
+        )
+        trusted = self._trusted_conversation(
+            safe_messages,
+            identity,
+            now=now,
+            fact_context=fact_context.text if fact_context else None,
+        )
         identity_answer = _agent_identity_answer(
             safe_messages,
             localized_identity=self.model_loop.localized_identity,
@@ -141,13 +152,22 @@ class AgentService:
                 stop_reason="answer",
                 messages=tuple(trusted),
             )
-        return await self.model_loop.run(
+        result = await self.model_loop.run(
             trusted,
             request_id=request_id,
             presentation_language=language,
             expose_internal_ids=internal_ids_requested(safe_messages),
             presentation_values=(identity,) if identity else (),
             trusted_user_entity_id=str(identity["id"]) if identity else None,
+        )
+        if fact_context is None or fact_context.tool_calls == 0:
+            return result
+        return AgentResult(
+            answer=result.answer,
+            steps=result.steps,
+            tool_calls=result.tool_calls + fact_context.tool_calls,
+            stop_reason=result.stop_reason,
+            messages=result.messages,
         )
 
     async def stream_answer_messages(
@@ -172,6 +192,11 @@ class AgentService:
         if fact_answer is not None:
             yield fact_answer.text
             return
+        fact_context = await self.facts.try_context(
+            safe_messages,
+            language=language,
+            request_id=request_id,
+        )
         identity_answer = _agent_identity_answer(
             safe_messages,
             localized_identity=self.model_loop.localized_identity,
@@ -182,7 +207,12 @@ class AgentService:
             yield identity_answer
             return
         async for token in self.model_loop.stream(
-            self._trusted_conversation(safe_messages, identity, now=now),
+            self._trusted_conversation(
+                safe_messages,
+                identity,
+                now=now,
+                fact_context=fact_context.text if fact_context else None,
+            ),
             request_id=request_id,
             presentation_language=language,
             expose_internal_ids=internal_ids_requested(safe_messages),
@@ -197,11 +227,17 @@ class AgentService:
         identity: Mapping[str, Any] | None,
         *,
         now: datetime,
+        fact_context: str | None = None,
     ) -> list[dict[str, Any]]:
         return [
             {"role": "system", "content": self.model_loop.system_prompt},
             *_clock_context(self.household_timezone, now),
             *(_identity_context(identity) if identity else []),
+            *(
+                [{"role": "system", "content": fact_context}]
+                if fact_context
+                else []
+            ),
             *(dict(message) for message in messages),
         ]
 

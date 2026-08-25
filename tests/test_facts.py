@@ -89,6 +89,15 @@ IDENTITY: dict[str, Any] = {
             ),
         ),
         (
+            "多少人住在这里？",
+            FactRequest(
+                SubjectReference("home"),
+                "count",
+                "all",
+                relation="lives_in",
+            ),
+        ),
+        (
             "How many people are in my home?",
             FactRequest(
                 SubjectReference("home"),
@@ -99,6 +108,10 @@ IDENTITY: dict[str, Any] = {
         ),
         (
             "家的位置",
+            FactRequest(SubjectReference("home"), "address"),
+        ),
+        (
+            "我家住在哪里",
             FactRequest(SubjectReference("home"), "address"),
         ),
         (
@@ -125,6 +138,16 @@ IDENTITY: dict[str, Any] = {
         ),
         (
             "家里有哪些房间？",
+            FactRequest(
+                SubjectReference("home"),
+                "spaces",
+                "all",
+                relation="hosts_space",
+                space_type="room",
+            ),
+        ),
+        (
+            "有哪些房间？",
             FactRequest(
                 SubjectReference("home"),
                 "spaces",
@@ -242,6 +265,8 @@ def test_fact_parser_maps_language_to_semantics(
         "家里够住吗？",
         "家里的房间够住吗？",
         "家里住得舒服吗？",
+        "五个人住得下吗？",
+        "家里够不够住？",
         "Is our house big enough for us?",
     ],
 )

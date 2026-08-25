@@ -85,6 +85,14 @@ class FactAnswer:
 
 
 @dataclass(frozen=True)
+class FactContext:
+    """Trusted graph context supplied to an open-ended model response."""
+
+    text: str
+    tool_calls: int
+
+
+@dataclass(frozen=True)
 class _Traversal:
     entities: tuple[Mapping[str, Any], ...]
     edges: tuple[Mapping[str, Any], ...]
@@ -342,6 +350,12 @@ class FactService:
         request_id: str,
         current_date: date | None = None,
     ) -> FactAnswer | None:
+        # A request may contain a retrievable sub-fact without being answerable
+        # by that fact alone (for example, "How many rooms do we have, and is
+        # that enough?"). Preserve the whole intent for fact-assisted model
+        # reasoning instead of returning only the parsed sub-fact.
+        if _is_home_adequacy_request(_latest_user_text(messages).casefold()):
+            return None
         request = parse_fact_request(
             messages,
             identity=identity,
@@ -377,6 +391,82 @@ class FactService:
             execution.tool_calls,
         )
         return FactAnswer(text=text, tool_calls=execution.tool_calls, stop_reason=reason)
+
+    async def try_context(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        *,
+        language: str,
+        request_id: str,
+    ) -> FactContext | None:
+        """Retrieve facts that inform, but do not determine, a judgment."""
+        if not _is_home_adequacy_request(_latest_user_text(messages).casefold()):
+            return None
+        if self.home_entity_id is None:
+            return FactContext(
+                text=(
+                    "No configured home is available. Treat the user's question "
+                    "as an open-ended judgment and ask only for information that "
+                    "would materially affect the answer."
+                ),
+                tool_calls=0,
+            )
+
+        execution = _Execution(
+            self.dispatcher,
+            request_id=request_id,
+            max_tool_calls=self.max_tool_calls,
+            max_records=self.max_records,
+            timeout_seconds=self.timeout_seconds,
+        )
+        residents: list[Mapping[str, Any]] | None = None
+        rooms: list[Mapping[str, Any]] | None = None
+        try:
+            residents = await self._home_residents(execution)
+        except _FactFailure:
+            pass
+        try:
+            rooms = [
+                space
+                for space in await self._home_spaces(execution)
+                if space.get("space_type") == "room"
+            ]
+        except _FactFailure:
+            pass
+
+        lines = [
+            "Trusted household facts for the latest evaluative question:",
+        ]
+        if residents is None:
+            lines.append("- The stored resident count could not be retrieved.")
+        else:
+            lines.append(f"- Stored current resident count: {len(residents)}.")
+        if rooms is None:
+            lines.append("- The stored room list could not be retrieved.")
+        elif rooms:
+            room_names = ", ".join(
+                resolve_display_name(room, language) for room in rooms
+            )
+            lines.extend(
+                (
+                    f"- Stored room count: {len(rooms)}.",
+                    f"- Stored rooms: {room_names}.",
+                )
+            )
+        else:
+            lines.append("- No rooms are recorded in the household graph.")
+        lines.append(
+            "Use these as factual inputs, not as a predetermined conclusion. "
+            "If the user supplies a hypothetical or updated resident count, "
+            "reason from that scenario rather than replacing it with the stored "
+            "current count. "
+            "Room count alone does not establish sleeping capacity, floor area, "
+            "comfort, crowding, or legal occupancy. Give a practical, qualified "
+            "answer and ask for missing preferences only when useful. Do not "
+            "introduce legal, household-registration, or ownership issues unless "
+            "the user asks about them."
+        )
+        return FactContext(text="\n".join(lines), tool_calls=execution.tool_calls)
 
     async def _execute(
         self,
@@ -1043,14 +1133,6 @@ def parse_fact_request(
     # Classify the more specific household and kinship concepts before the
     # generic first-person identity concept.  For example, ``我女儿是谁``
     # contains both "my" and "who", but its subject is the daughter.
-    item_name = _item_location_subject(normalized)
-    if item_name is not None:
-        return FactRequest(
-            SubjectReference("item", item_name),
-            "location",
-            relation="located_in",
-        )
-
     space_inventory = _space_inventory_request(normalized)
     if space_inventory is not None:
         space_name, field, space_type = space_inventory
@@ -1068,10 +1150,22 @@ def parse_fact_request(
     ):
         return FactRequest(SubjectReference("home"), "address")
 
+    item_name = _item_location_subject(normalized)
+    if item_name is not None:
+        return FactRequest(
+            SubjectReference("item", item_name),
+            "location",
+            relation="located_in",
+        )
+
     if _is_home_identity_request(normalized):
         return FactRequest(SubjectReference("home"), "identity")
 
     is_home_space_request, home_space_type = _home_space_request(normalized)
+    if not is_home_space_request:
+        is_home_space_request, home_space_type = _elliptical_home_space_request(
+            normalized
+        )
     if is_home_space_request:
         field: FactField = (
             "count" if _contains_any(normalized, _COUNT_TERMS) else "spaces"
@@ -1186,8 +1280,16 @@ def _is_next_occurrence(text: str) -> bool:
 
 def _is_home_address_request(text: str) -> bool:
     chinese = bool(
-        re.search(r"(?:我们?家|这个家|家里|家中|^家的?)", text)
-        and _contains_any(text, _ADDRESS_TERMS)
+        re.fullmatch(
+            r"(?:我们?家|这个家|家里|家中|^家的?)"
+            r"(?:的)?(?:"
+            r"(?:住在|位于|在)?(?:哪里|哪儿|哪|在哪)|"
+            r"(?:位置|地址|住址)(?:是|在|位于)?"
+            r"(?:哪里|哪儿|哪)?"
+            r")"
+            r"[?？。！!]?",
+            text,
+        )
     )
     english = bool(
         re.search(r"\b(?:my|our|the)\s+(?:home|house)\b", text)
@@ -1218,10 +1320,34 @@ def _home_space_request(text: str) -> tuple[bool, str | None]:
     return True, None
 
 
+def _elliptical_home_space_request(text: str) -> tuple[bool, str | None]:
+    """Resolve a bare room/space lookup against the configured home."""
+    chinese = re.fullmatch(
+        r"(?:一共|总共)?(?:有)?(?:哪些|什么|多少|几(?:个|间)?)"
+        r"(?:房间|空间|区域)[?？。！!]?",
+        text,
+    )
+    if chinese is not None:
+        field_type = "room" if "房间" in text else None
+        return True, field_type
+    english = re.fullmatch(
+        r"(?:what|which|how many) (?:rooms|spaces)(?: are there)?[?]?",
+        text,
+    )
+    if english is not None:
+        return True, "room" if "room" in text else None
+    return False, None
+
+
 def _is_home_roster_count_request(text: str) -> bool:
     chinese_home = r"(?:家里|家中|家里面|家里边|这个家|这里)"
     chinese_count = r"(?:多少|几)(?:个|位)?(?:人|住户|居民)"
     if re.search(rf"{chinese_home}.*{chinese_count}", text):
+        return True
+    if re.search(
+        rf"{chinese_count}.*(?:住|居住|待在).*(?:{chinese_home})",
+        text,
+    ):
         return True
     return bool(
         re.search(r"\bhow many\b.*\b(?:people|residents|occupants)\b", text)
@@ -1239,6 +1365,33 @@ def _is_elliptical_roster_count_request(text: str) -> bool:
             r"how many (?:people|residents|occupants)(?: are there)?[?]?",
             text,
         )
+    )
+
+
+def _is_home_adequacy_request(text: str) -> bool:
+    """Identify home judgments that benefit from facts but need model reasoning."""
+    chinese_direct = re.search(
+        r"(?:够不够住|够住|住得下|住不下|住得开|住不开|住得舒服|"
+        r"住着舒服|住.*(?:拥挤|宽敞|合适|适合))",
+        text,
+    )
+    chinese_home = re.search(
+        r"(?:家里|家中|我家|我们家|房子|住宅|房间|空间)",
+        text,
+    )
+    chinese_evaluation = re.search(
+        r"(?:够不够|够|合适|适合|舒服|舒适|拥挤|宽敞|"
+        r"大不大|大吗|小吗)",
+        text,
+    )
+    english = re.search(
+        r"\b(?:enough|adequate|comfortable|crowded|spacious|suitable|fit)\b",
+        text,
+    ) and re.search(r"\b(?:home|house|room|rooms|live|living)\b", text)
+    return (
+        chinese_direct is not None
+        or (chinese_home is not None and chinese_evaluation is not None)
+        or bool(english)
     )
 
 
