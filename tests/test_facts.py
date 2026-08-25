@@ -96,6 +96,36 @@ IDENTITY: dict[str, Any] = {
             FactRequest(SubjectReference("home"), "address"),
         ),
         (
+            "家里有几个房间？",
+            FactRequest(
+                SubjectReference("home"),
+                "count",
+                "all",
+                relation="hosts_space",
+                space_type="room",
+            ),
+        ),
+        (
+            "家里有哪些房间？",
+            FactRequest(
+                SubjectReference("home"),
+                "spaces",
+                "all",
+                relation="hosts_space",
+                space_type="room",
+            ),
+        ),
+        (
+            "What rooms are in my house?",
+            FactRequest(
+                SubjectReference("home"),
+                "spaces",
+                "all",
+                relation="hosts_space",
+                space_type="room",
+            ),
+        ),
+        (
             "匡德伦和匡悠然是谁？",
             FactRequest(
                 SubjectReference("named", ("匡德伦", "匡悠然")),
@@ -121,6 +151,8 @@ def test_fact_parser_maps_language_to_semantics(
         "Tell me a joke.",
         "What gift should I buy for my wife?",
         "我女儿今天开心吗？",
+        "What room should I add to my house?",
+        "我家房间应该怎么装修？",
     ],
 )
 def test_fact_parser_leaves_open_ended_conversation_to_model(text: str) -> None:
@@ -235,6 +267,114 @@ async def test_home_address_is_loaded_from_configured_location() -> None:
     )
     assert dispatcher.calls == [
         ("get_entity", {"entity_id": "location:fort_cerritos"})
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("家里有几个房间？", "先生，家里共有 3 个房间。"),
+        (
+            "家里有哪些房间？",
+            "先生，家里的房间有：厨房、主卧室和客房。",
+        ),
+    ],
+)
+async def test_home_rooms_follow_house_item_hosted_spaces(
+    question: str,
+    expected: str,
+) -> None:
+    class Dispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, Any]]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: dict[str, Any],
+            **_: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if arguments["relation"] == "located_in":
+                result = [
+                    {
+                        "relation": "located_in",
+                        "related_entity": {
+                            "id": "item:fort_cerritos_house",
+                            "item_type": "house",
+                            "name": "喜瑞匡家房屋",
+                        },
+                    }
+                ]
+            else:
+                result = [
+                    {
+                        "relation": "hosted_by",
+                        "related_entity": {
+                            "id": "space:kitchen",
+                            "space_type": "room",
+                            "name": "厨房",
+                        },
+                    },
+                    {
+                        "relation": "hosted_by",
+                        "related_entity": {
+                            "id": "space:master_room",
+                            "space_type": "room",
+                            "name": "主卧室",
+                        },
+                    },
+                    {
+                        "relation": "hosted_by",
+                        "related_entity": {
+                            "id": "space:guest_room",
+                            "space_type": "room",
+                            "name": "客房",
+                        },
+                    },
+                    {
+                        "relation": "hosted_by",
+                        "related_entity": {
+                            "id": "space:backyard",
+                            "space_type": "outdoor_space",
+                            "name": "后院",
+                        },
+                    },
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = Dispatcher()
+    answer = await FactService(
+        dispatcher,
+        home_entity_id="location:fort_cerritos",
+    ).try_answer(
+        [{"role": "user", "content": question}],
+        identity={**IDENTITY, "address_as": {"zh": "先生"}},
+        language="zh",
+        request_id="test-home-rooms",
+    )
+
+    assert answer is not None
+    assert answer.text == expected
+    assert answer.tool_calls == 2
+    assert dispatcher.calls == [
+        (
+            "get_relationships",
+            {
+                "entity_id": "location:fort_cerritos",
+                "relation": "located_in",
+                "limit": 25,
+            },
+        ),
+        (
+            "get_relationships",
+            {
+                "entity_id": "item:fort_cerritos_house",
+                "relation": "hosts_space",
+                "limit": 25,
+            },
+        ),
     ]
 
 

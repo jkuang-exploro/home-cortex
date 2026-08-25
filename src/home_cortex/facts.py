@@ -36,6 +36,7 @@ FactField = Literal[
     "count",
     "memorable_date",
     "residents",
+    "spaces",
 ]
 SubjectKind = Literal["speaker", "home", "named", "relative"]
 DateQuery = Literal["stored", "next"]
@@ -59,6 +60,7 @@ class FactRequest:
     date_query: DateQuery = "stored"
     relation: str | None = None
     target: SubjectReference | None = None
+    space_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -193,6 +195,32 @@ _ADDRESS_TERMS = (
     "哪里",
     "哪儿",
     "在哪",
+)
+_ROOM_TERMS = ("room", "rooms", "房间")
+_SPACE_TERMS = _ROOM_TERMS + ("space", "spaces", "区域", "空间")
+_SPACE_LOOKUP_TERMS = _COUNT_TERMS + (
+    "what",
+    "which",
+    "list",
+    "show",
+    "哪些",
+    "有什么",
+    "列出",
+    "显示",
+)
+_SPACE_NON_LOOKUP_TERMS = (
+    "add",
+    "decorate",
+    "design",
+    "recommend",
+    "remodel",
+    "should",
+    "建议",
+    "推荐",
+    "装修",
+    "设计",
+    "改造",
+    "增加",
 )
 
 
@@ -370,6 +398,30 @@ class FactService:
                 if request.field == "identity":
                     return _format_home_identity(home, identity, language)
                 return _format_home_address(home, identity, language)
+            if (
+                request.field in {"spaces", "count"}
+                and request.relation == "hosts_space"
+            ):
+                spaces = await self._home_spaces(execution)
+                if request.space_type is not None:
+                    spaces = [
+                        space
+                        for space in spaces
+                        if space.get("space_type") == request.space_type
+                    ]
+                if request.field == "count":
+                    return _format_home_space_count(
+                        spaces,
+                        request.space_type,
+                        identity,
+                        language,
+                    )
+                return _format_home_spaces(
+                    spaces,
+                    request.space_type,
+                    identity,
+                    language,
+                )
             residents = await self._home_residents(execution)
             return _format_residents(residents, identity, language)
 
@@ -597,6 +649,58 @@ class FactService:
                     _append_unique_entity(residents, person)
         return residents
 
+    async def _home_spaces(
+        self,
+        execution: _Execution,
+    ) -> list[Mapping[str, Any]]:
+        houses_result = await execution.call(
+            "get_relationships",
+            {
+                "entity_id": self.home_entity_id,
+                "relation": "located_in",
+                "limit": execution.max_records,
+            },
+        )
+        houses: list[Mapping[str, Any]] = []
+        house_records = houses_result.get("result")
+        if isinstance(house_records, list):
+            for record in house_records:
+                related = (
+                    record.get("related_entity")
+                    if isinstance(record, Mapping)
+                    else None
+                )
+                if (
+                    isinstance(related, Mapping)
+                    and related.get("item_type") == "house"
+                ):
+                    _append_unique_entity(houses, related)
+
+        spaces: list[Mapping[str, Any]] = []
+        for house in houses:
+            house_id = house.get("id")
+            if not isinstance(house_id, str):
+                continue
+            hosted_result = await execution.call(
+                "get_relationships",
+                {
+                    "entity_id": house_id,
+                    "relation": "hosts_space",
+                    "limit": execution.max_records,
+                },
+            )
+            hosted_records = hosted_result.get("result")
+            if not isinstance(hosted_records, list):
+                continue
+            for record in hosted_records:
+                related = (
+                    record.get("related_entity")
+                    if isinstance(record, Mapping)
+                    else None
+                )
+                _append_unique_entity(spaces, related)
+        return spaces
+
     async def _home_entity(
         self,
         execution: _Execution,
@@ -792,6 +896,19 @@ def parse_fact_request(
     if _is_home_identity_request(normalized):
         return FactRequest(SubjectReference("home"), "identity")
 
+    is_home_space_request, home_space_type = _home_space_request(normalized)
+    if is_home_space_request:
+        field: FactField = (
+            "count" if _contains_any(normalized, _COUNT_TERMS) else "spaces"
+        )
+        return FactRequest(
+            SubjectReference("home"),
+            field,
+            "all",
+            relation="hosts_space",
+            space_type=home_space_type,
+        )
+
     if _is_roster_request(normalized, registry.aliases):
         return FactRequest(SubjectReference("home"), "residents", "all")
 
@@ -900,6 +1017,19 @@ def _is_home_identity_request(text: str) -> bool:
             text,
         )
     )
+
+
+def _home_space_request(text: str) -> tuple[bool, str | None]:
+    home_terms = _HOME_REFERENCE_TERMS + ("the home", "the house", "这个家")
+    if not _contains_any(text, home_terms) or not _contains_any(text, _SPACE_TERMS):
+        return False, None
+    if _contains_any(text, _SPACE_NON_LOOKUP_TERMS):
+        return False, None
+    if not _contains_any(text, _SPACE_LOOKUP_TERMS):
+        return False, None
+    if _contains_any(text, _ROOM_TERMS):
+        return True, "room"
+    return True, None
 
 
 def _previous_home_subject(
@@ -1074,7 +1204,7 @@ def _append_unique_entity(
     if not isinstance(candidate, Mapping):
         return
     record_id = candidate.get("id")
-    if not isinstance(record_id, str) or not record_id.startswith("person:"):
+    if not isinstance(record_id, str):
         return
     if all(value.get("id") != record_id for value in values):
         values.append(candidate)
@@ -1216,6 +1346,45 @@ def _format_residents(
             else "The current household residents are:"
         )
     return heading + "\n" + "\n".join(f"- {name}" for name in names)
+
+
+def _format_home_space_count(
+    spaces: Sequence[Mapping[str, Any]],
+    space_type: str | None,
+    identity: Mapping[str, Any] | None,
+    language: str,
+) -> str:
+    address = _speaker_address(identity, language)
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        label = "房间" if space_type == "room" else "空间"
+        return f"{prefix}家里共有 {len(spaces)} 个{label}。"
+    prefix = f"{address}, " if address else ""
+    label = "room" if space_type == "room" else "space"
+    if len(spaces) != 1:
+        label += "s"
+    answer = f"{prefix}the home has {len(spaces)} {label}."
+    return answer if prefix else answer[0].upper() + answer[1:]
+
+
+def _format_home_spaces(
+    spaces: Sequence[Mapping[str, Any]],
+    space_type: str | None,
+    identity: Mapping[str, Any] | None,
+    language: str,
+) -> str:
+    if not spaces:
+        return _no_records_fallback(language)
+    names = [resolve_display_name(space, language) for space in spaces]
+    address = _speaker_address(identity, language)
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        label = "房间" if space_type == "room" else "空间"
+        return f"{prefix}家里的{label}有：{_join_localized(names, language)}。"
+    prefix = f"{address}, " if address else ""
+    label = "rooms" if space_type == "room" else "spaces"
+    answer = f"{prefix}the home's {label} are {_join_localized(names, language)}."
+    return answer if prefix else answer[0].upper() + answer[1:]
 
 
 def _format_home_address(

@@ -1131,6 +1131,33 @@ def _is_household_roster_request(
     return any(re.search(pattern, latest_user) for pattern in patterns)
 
 
+def _is_household_space_request(
+    messages: Sequence[Mapping[str, Any]],
+) -> bool:
+    """Recognize home room/space lookups for generic evidence enforcement."""
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    chinese = re.search(
+        r"(?:家里|家中|家里面|家里边|这个家).*(?:房间|空间|区域)|"
+        r"(?:房间|空间|区域).*(?:家里|家中|这个家)",
+        latest_user,
+    )
+    english = re.search(
+        r"\b(?:room|rooms|space|spaces)\b.*\b(?:my|our|the)\s+"
+        r"(?:home|house)\b|"
+        r"\b(?:my|our|the)\s+(?:home|house)\b.*"
+        r"\b(?:room|rooms|space|spaces)\b",
+        latest_user,
+    )
+    return chinese is not None or english is not None
+
+
 def _requires_graph_evidence(
     messages: Sequence[Mapping[str, Any]],
     memorable_dates: MemorableDateRegistry,
@@ -1151,7 +1178,8 @@ def _requires_graph_evidence(
     # for a stored household fact. Require graph evidence only for lookup intent.
     non_lookup_intent = (
         r"\b(?:advice|chat|feel|feeling|gift|joke|opinion|recommend|story|"
-        r"suggest|talk|think)\b|建议|礼物|聊|笑话|故事|觉得|认为|心情"
+        r"suggest|talk|think|add|decorate|design|remodel|should)\b|"
+        r"建议|推荐|礼物|聊|笑话|故事|觉得|认为|心情|装修|设计|改造|增加"
     )
     if re.search(non_lookup_intent, normalized):
         return False
@@ -1159,7 +1187,7 @@ def _requires_graph_evidence(
     lookup_intent = (
         r"\b(?:find|identify|list|search|show|tell me|what|when|where|which|"
         r"who|whose|how many|how old)\b|谁|什么|哪|何时|什么时候|多少|几岁|"
-        r"是否|查|找|告诉我|列出|显示"
+        r"几个|几间|是否|查|找|告诉我|列出|显示"
     )
     if re.search(lookup_intent, normalized):
         return True
@@ -1179,6 +1207,8 @@ def _required_evidence_tool(
     memorable_dates: MemorableDateRegistry,
 ) -> str | None:
     if _is_household_roster_request(messages, memorable_dates):
+        return "get_relationships"
+    if _is_household_space_request(messages):
         return "get_relationships"
     latest_user = next(
         (
@@ -1235,6 +1265,8 @@ def _required_evidence_relation(
 ) -> str | None:
     if _is_household_roster_request(messages, memorable_dates):
         return "lives_in"
+    if _is_household_space_request(messages):
+        return "hosts_space"
     latest_user = next(
         (
             str(message.get("content", "")).casefold()

@@ -203,6 +203,74 @@ async def test_home_address_followup_uses_stored_location_without_model() -> Non
 
 
 @pytest.mark.asyncio
+async def test_home_room_list_is_resolved_without_model_planning_text() -> None:
+    class HomeSpaceDispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: Any,
+            **_: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if arguments["relation"] == "located_in":
+                result = [
+                    {
+                        "relation": "located_in",
+                        "related_entity": {
+                            "id": "item:fort_cerritos_house",
+                            "item_type": "house",
+                            "name": "喜瑞匡家房屋",
+                        },
+                    }
+                ]
+            else:
+                result = [
+                    {
+                        "relation": "hosted_by",
+                        "related_entity": {
+                            "id": "space:kitchen",
+                            "space_type": "room",
+                            "name": "厨房",
+                        },
+                    },
+                    {
+                        "relation": "hosted_by",
+                        "related_entity": {
+                            "id": "space:backyard",
+                            "space_type": "outdoor_space",
+                            "name": "后院",
+                        },
+                    },
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = HomeSpaceDispatcher()
+    ollama = FakeOllamaService(
+        [_chat_response("I will first search the location and output JSON.")]
+    )
+
+    result = await _agent(ollama, dispatcher).answer(
+        "家里有哪些房间？",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == "先生，家里的房间有：厨房。"
+    assert result.tool_calls == 2
+    assert [call[1]["relation"] for call in dispatcher.calls] == [
+        "located_in",
+        "hosts_space",
+    ]
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
 async def test_this_place_is_resolved_as_the_configured_home() -> None:
     dispatcher = FakeDispatcher(
         {
