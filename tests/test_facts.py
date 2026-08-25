@@ -152,6 +152,22 @@ IDENTITY: dict[str, Any] = {
             ),
         ),
         (
+            "家里牛奶在哪里？",
+            FactRequest(
+                SubjectReference("item", "牛奶"),
+                "location",
+                relation="located_in",
+            ),
+        ),
+        (
+            "牛奶在哪里？",
+            FactRequest(
+                SubjectReference("item", "牛奶"),
+                "location",
+                relation="located_in",
+            ),
+        ),
+        (
             "冰箱位于哪个房间？",
             FactRequest(
                 SubjectReference("item", "冰箱"),
@@ -503,6 +519,70 @@ async def test_item_location_uses_stored_located_in_relationship(
             },
         ),
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("question", ["家里牛奶在哪里？", "牛奶在哪里？"])
+async def test_scoped_item_location_is_not_misclassified_as_home_address(
+    question: str,
+) -> None:
+    class Dispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, Any]]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: dict[str, Any],
+            **_: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if tool_name == "search_entities":
+                result = [
+                    {
+                        "id": "item:milk",
+                        "item_type": "food",
+                        "name": {"en": "Milk", "zh": "牛奶"},
+                    }
+                ]
+            else:
+                result = [
+                    {
+                        "relation": "located_in",
+                        "related_entity": {
+                            "id": (
+                                "space:fort_cerritos:kitchen:"
+                                "fridge_01:interior"
+                            ),
+                            "space_type": "storage",
+                            "name": {
+                                "en": "Refrigerator interior",
+                                "zh": "冰箱内部",
+                            },
+                        },
+                    }
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = Dispatcher()
+    answer = await FactService(
+        dispatcher,
+        home_entity_id="location:fort_cerritos",
+    ).try_answer(
+        [{"role": "user", "content": question}],
+        identity={**IDENTITY, "address_as": {"zh": "先生"}},
+        language="zh",
+        request_id="test-milk-location",
+    )
+
+    assert answer is not None
+    assert answer.text == "先生，牛奶在冰箱内部。"
+    assert answer.tool_calls == 2
+    assert dispatcher.calls[0] == (
+        "search_entities",
+        {"text": "牛奶", "entity_type": "item", "limit": 25},
+    )
+    assert dispatcher.calls[1][1]["relation"] == "located_in"
 
 
 @pytest.mark.asyncio

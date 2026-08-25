@@ -943,6 +943,14 @@ def parse_fact_request(
     # Classify the more specific household and kinship concepts before the
     # generic first-person identity concept.  For example, ``我女儿是谁``
     # contains both "my" and "who", but its subject is the daughter.
+    item_name = _item_location_subject(normalized)
+    if item_name is not None:
+        return FactRequest(
+            SubjectReference("item", item_name),
+            "location",
+            relation="located_in",
+        )
+
     if _is_home_address_request(normalized) or (
         _contains_any(normalized, ("address", "地址", "住址"))
         and _previous_home_subject(messages, identity, registry)
@@ -978,14 +986,6 @@ def parse_fact_request(
 
     if _is_roster_request(normalized, registry.aliases):
         return FactRequest(SubjectReference("home"), "residents", "all")
-
-    item_name = _item_location_subject(normalized)
-    if item_name is not None:
-        return FactRequest(
-            SubjectReference("item", item_name),
-            "location",
-            relation="located_in",
-        )
 
     relative = _relative_kind(normalized)
     if relative is not None and identity is not None:
@@ -1144,6 +1144,23 @@ def _item_location_subject(text: str) -> str | None:
             "",
             chinese.group("name").strip(),
         )
+        if name in {
+            "家",
+            "家里",
+            "家中",
+            "这个家",
+            "这里",
+            "这儿",
+            "地址",
+            "住址",
+            "位置",
+        }:
+            return None
+        if _contains_any(
+            name,
+            tuple(alias for _, aliases in _RELATIVE_ALIASES for alias in aliases),
+        ):
+            return None
         return name or None
 
     patterns = (

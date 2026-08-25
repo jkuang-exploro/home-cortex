@@ -327,6 +327,75 @@ async def test_item_location_is_resolved_without_model_hallucination() -> None:
 
 
 @pytest.mark.asyncio
+async def test_scoped_milk_location_does_not_return_home_address_or_cabinet() -> None:
+    class MilkLocationDispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: Any,
+            **_: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if tool_name == "search_entities":
+                result = [
+                    {
+                        "id": "item:milk",
+                        "item_type": "food",
+                        "name": {"en": "Milk", "zh": "牛奶"},
+                    }
+                ]
+            else:
+                result = [
+                    {
+                        "relation": "located_in",
+                        "related_entity": {
+                            "id": (
+                                "space:fort_cerritos:kitchen:"
+                                "fridge_01:interior"
+                            ),
+                            "space_type": "storage",
+                            "name": {
+                                "en": "Refrigerator interior",
+                                "zh": "冰箱内部",
+                            },
+                        },
+                    }
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = MilkLocationDispatcher()
+    ollama = FakeOllamaService(
+        [
+            _chat_response("家在 12745 Droxford St。"),
+            _chat_response("牛奶在橱柜里。"),
+        ]
+    )
+    agent = _agent(ollama, dispatcher)
+    identity = {
+        "id": "person:jian_kuang",
+        "name": ["Jian Kuang", "匡健"],
+        "address_as": {"zh": "先生"},
+    }
+
+    scoped = await agent.answer("家里牛奶在哪里？", user_entity=identity)
+    direct = await agent.answer("牛奶在哪里？", user_entity=identity)
+
+    assert scoped.answer == direct.answer == "先生，牛奶在冰箱内部。"
+    assert "Droxford" not in scoped.answer
+    assert "橱柜" not in direct.answer
+    assert [call[0] for call in dispatcher.calls] == [
+        "search_entities",
+        "get_relationships",
+        "search_entities",
+        "get_relationships",
+    ]
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
 async def test_this_place_is_resolved_as_the_configured_home() -> None:
     dispatcher = FakeDispatcher(
         {
