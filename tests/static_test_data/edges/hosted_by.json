@@ -1,0 +1,14 @@
+[
+  {
+    "from": "space:test_house:kitchen:fridge_01:interior",
+    "to": "item:fridge_01"
+  },
+  {
+    "from": "space:test_house:kitchen:fridge_01:freezer",
+    "to": "item:fridge_01"
+  },
+  {
+    "from": "space:drawer_1:interior",
+    "to": "item:drawer_1"
+  }
+]

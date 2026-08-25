@@ -1,0 +1,14 @@
+[
+  {
+    "from": "item:fridge_01",
+    "to": "space:kitchen"
+  },
+  {
+    "from": "item:milk",
+    "to": "space:test_house:kitchen:fridge_01:interior"
+  },
+  {
+    "from": "item:drawer_1",
+    "to": "space:kitchen"
+  }
+]

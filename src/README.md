@@ -104,14 +104,21 @@ remain in human-editable `data/edges/*.json`. The initial registry defines:
   the derived inverse name `child_of`;
 - `lives_in` as a directed temporal Person-to-Location relationship;
 - `contained_in` as a directed, non-temporal Space-to-Location or Space-to-Space
-  relationship with the derived inverse name `contains`.
+  structural relationship with the derived inverse name `contains`;
+- `located_in` as a directed, non-temporal Item-to-Space relationship;
+- `hosted_by` as a directed, non-temporal Space-to-Item relationship with the
+  derived inverse name `hosts_space`.
 
 Store each fact once. Do not add a reverse spouse edge or a `child_of.json`
-file. `get_relationships` consults the registry, accepts `out`, `in`, or `both`
-directions, and excludes ended temporal edges unless `include_ended` is true.
+file. Likewise, do not add `hosts_space.json`; inverse hosted-space traversal
+uses the canonical `hosted_by` table. `get_relationships` consults the registry,
+accepts `out`, `in`, or `both` directions, and excludes ended temporal edges
+unless `include_ended` is true.
 The ingestion endpoint rejects unknown relationship files, invalid endpoint
-types, temporal fields on non-temporal edges, and reverse duplicates of a
-symmetric fact.
+types, references to nodes missing from the source data, temporal fields on
+non-temporal edges, reverse duplicates of a symmetric fact, and a registered
+relationship without a corresponding JSON source file. An empty relationship
+must be represented by `[]` so re-ingestion can prune previously stored facts.
 
 This version renames the former `resides_in` relationship to `lives_in`. Since
 the repository intentionally does not track private household data, rename the

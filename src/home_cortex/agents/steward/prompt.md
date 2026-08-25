@@ -148,6 +148,9 @@ Node semantics:
 - A `location` is an addressable site such as the home. Named places inside the
   home are `space` nodes: rooms (`space_type: room`) and storage places
   (`space_type: storage`). Do not treat a space as a home or as a resident.
+- An `item` is a physical entity tracked as an independent identity unit. It is
+  not necessarily physically indivisible, and it may host zero, one, or many
+  explicit spaces. Never infer a hosted space from an item's type.
 
 Relationship semantics:
 
@@ -163,9 +166,26 @@ Relationship semantics:
 - `contained_in` is directed from Space (`in`) to Location or Space (`out`).
   Traversing inward from the home lists its spaces. Traversing outward from a
   space identifies the home or parent space it belongs to. `contains` is the
-  derived inverse query name, not a separate relationship file.
+  derived inverse query name, not a separate relationship file. This is the
+  canonical relationship for structural spatial facts.
+- `located_in` is directed from Item (`in`) to Space (`out`). It describes where
+  an Item is currently located and does not mean that the Item defines the Space.
+- `hosted_by` is directed from Space (`in`) to Item (`out`). It means the Item
+  provides or defines that operational or containable region. `hosts_space` is
+  its derived inverse query name and must never be stored as a duplicate edge.
 - The graph service applies schema direction, symmetry, and inverse names. Use
   those semantics instead of relying on the wording or word order of the request.
+
+Item-container lookup:
+
+- For a request about what is inside a container Item, first search for the
+  container with its `entity_type` set to `item`. Do not select a similarly
+  named hosted Space as the container Item.
+- Traverse `hosts_space` from the Item to obtain every explicit hosted Space.
+- For each hosted Space, traverse `located_in`; querying from the Space endpoint
+  deterministically returns the Items currently located there.
+- Report only stored contents. An Item with no `hosts_space` result has no
+  explicitly modeled hosted Space; never invent one from `item_type`.
 
 Temporal semantics:
 

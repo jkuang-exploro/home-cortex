@@ -72,6 +72,7 @@ async def test_search_entities_queries_known_tables_and_sorts_globally() -> None
         "person:jian",
     ]
     assert [variables["table"] for _, variables in database.queries] == [
+        "item",
         "location",
         "person",
         "space",
@@ -349,10 +350,12 @@ def test_table_names_come_from_static_test_data() -> None:
         data_dir=STATIC_TEST_DATA,
     )
 
-    assert service.node_tables == ("location", "person", "space")
+    assert service.node_tables == ("item", "location", "person", "space")
     assert service.edge_tables == (
         "contained_in",
+        "hosted_by",
         "lives_in",
+        "located_in",
         "parent_of",
         "spouse_of",
     )
@@ -360,6 +363,10 @@ def test_table_names_come_from_static_test_data() -> None:
 
 def test_record_id_is_serialized() -> None:
     assert to_json_value(RecordID("person", "alice")) == "person:alice"
+    assert (
+        to_json_value(RecordID("space", "fridge_01:interior"))
+        == "space:fridge_01:interior"
+    )
 
 
 @pytest.mark.asyncio

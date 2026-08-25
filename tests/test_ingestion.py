@@ -50,8 +50,8 @@ async def test_repeated_ingestion_does_not_duplicate_relationships() -> None:
     finally:
         await database.close()
 
-    assert first.nodes_upserted == second.nodes_upserted == 5
-    assert first.edges_upserted == second.edges_upserted == 6
+    assert first.nodes_upserted == second.nodes_upserted == 12
+    assert first.edges_upserted == second.edges_upserted == 12
     assert sorted(str(edge["id"]) for edge in edges) == [
         "lives_in:blair_primary",
         "lives_in:person_alex_example__location_test_house",
@@ -93,6 +93,26 @@ async def test_duplicate_implicit_relationships_require_ids(tmp_path: Path) -> N
             await ingest_directory(database, data_dir)  # type: ignore[arg-type]
     finally:
         await database.close()
+
+
+@pytest.mark.asyncio
+async def test_registered_relationship_requires_a_source_file(tmp_path: Path) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    (data_dir / "edges" / "hosted_by.json").unlink()
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        with pytest.raises(
+            ValueError,
+            match=r"Missing relationship data files.*hosted_by\.json",
+        ):
+            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+        nodes = await database.query("SELECT * FROM person;")
+    finally:
+        await database.close()
+
+    assert nodes == []
 
 
 @pytest.mark.asyncio
@@ -237,6 +257,32 @@ async def test_lives_in_rejects_reversed_endpoint_types(tmp_path: Path) -> None:
     await database.connect()
     try:
         with pytest.raises(ValueError, match="Invalid lives_in endpoints"):
+            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+    finally:
+        await database.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["from", "to"])
+async def test_relationships_reject_missing_endpoint_nodes(
+    tmp_path: Path,
+    role: str,
+) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    path = data_dir / "edges" / "hosted_by.json"
+    edge = {
+        "from": "space:test_house:kitchen:fridge_01:interior",
+        "to": "item:fridge_01",
+    }
+    edge[role] = (
+        "space:missing:interior" if role == "from" else "item:missing"
+    )
+    path.write_text(json.dumps([edge]), encoding="utf-8")
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        with pytest.raises(ValueError, match=rf"unknown {role} node"):
             await ingest_directory(database, data_dir)  # type: ignore[arg-type]
     finally:
         await database.close()

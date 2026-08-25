@@ -1,0 +1,8 @@
+id: located_in
+symmetric: false
+from_types:
+  - item
+to_types:
+  - space
+temporal: false
+unique_from: true

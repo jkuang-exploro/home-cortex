@@ -1,5 +1,4 @@
 import json
-import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -14,10 +13,9 @@ from .edge_schema import (
     ResolvedEdgeSchema,
     UnknownEdgeSchemaError,
 )
+from .record_ids import RECORD_ID_RE, canonical_record_id, split_record_id
 
-RECORD_PATTERN = re.compile(
-    r"^(?P<table>[A-Za-z_][A-Za-z0-9_]*):(?P<id>[A-Za-z0-9_-]+)$"
-)
+RECORD_PATTERN = RECORD_ID_RE
 ENTITY_SUMMARY_FIELDS = frozenset(
     {
         "id",
@@ -28,6 +26,7 @@ ENTITY_SUMMARY_FIELDS = frozenset(
         "first_name",
         "last_name",
         "location_type",
+        "item_type",
         "space_type",
         "type",
     }
@@ -55,6 +54,7 @@ class RetrievalService:
         self.database = database
         self.limit = limit
         self.node_tables = self._table_names(data_dir, "nodes") or (
+            "item",
             "location",
             "person",
             "space",
@@ -340,7 +340,7 @@ def to_json_value(value: Any) -> Any:
     table = getattr(value, "table_name", None)
     record_id = getattr(value, "id", None)
     if table is not None and record_id is not None:
-        return f"{table}:{record_id}"
+        return canonical_record_id(value)
     return str(value)
 
 
@@ -360,10 +360,8 @@ def _query_records(value: Any) -> list[dict[str, Any]]:
 def _parse_record_id(value: str) -> RecordID:
     if not isinstance(value, str):
         raise ValueError("Entity ID must use the table:record_id format")
-    match = RECORD_PATTERN.fullmatch(value)
-    if match is None:
-        raise ValueError("Entity ID must use the table:record_id format")
-    return RecordID(match.group("table"), match.group("id"))
+    table, record_id = split_record_id(value)
+    return RecordID(table, record_id)
 
 
 def _relationship_direction(edge: dict[str, Any], entity_id: str) -> str:

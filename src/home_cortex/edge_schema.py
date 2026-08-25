@@ -21,6 +21,7 @@ class EdgeSchema:
     to_types: tuple[str, ...]
     temporal: bool
     inverse_name: str | None = None
+    unique_from: bool = False
 
 
 @dataclass(frozen=True)
@@ -112,7 +113,15 @@ class EdgeSchemaRegistry:
 def _parse_schema(raw: Any, path: Path) -> EdgeSchema:
     if not isinstance(raw, dict):
         raise ValueError(f"{path} must contain a YAML object")
-    allowed = {"id", "symmetric", "from_types", "to_types", "temporal", "inverse_name"}
+    allowed = {
+        "id",
+        "symmetric",
+        "from_types",
+        "to_types",
+        "temporal",
+        "inverse_name",
+        "unique_from",
+    }
     extra = sorted(set(raw) - allowed)
     if extra:
         raise ValueError(f"Unknown fields in {path}: {', '.join(extra)}")
@@ -121,6 +130,7 @@ def _parse_schema(raw: Any, path: Path) -> EdgeSchema:
     from_types = _names(raw.get("from_types"), "from_types", path)
     to_types = _names(raw.get("to_types"), "to_types", path)
     temporal = _boolean(raw.get("temporal"), "temporal", path)
+    unique_from = _boolean(raw.get("unique_from", False), "unique_from", path)
     inverse = raw.get("inverse_name")
     if inverse is not None:
         inverse = _name(inverse, "inverse_name", path)
@@ -128,7 +138,19 @@ def _parse_schema(raw: Any, path: Path) -> EdgeSchema:
             raise ValueError(f"Symmetric edge schema {schema_id!r} cannot define an inverse")
         if inverse == schema_id:
             raise ValueError(f"Edge schema {schema_id!r} cannot be its own inverse")
-    return EdgeSchema(schema_id, symmetric, from_types, to_types, temporal, inverse)
+    if symmetric and unique_from:
+        raise ValueError(
+            f"Symmetric edge schema {schema_id!r} cannot define unique_from"
+        )
+    return EdgeSchema(
+        schema_id,
+        symmetric,
+        from_types,
+        to_types,
+        temporal,
+        inverse,
+        unique_from,
+    )
 
 
 def _name(value: Any, field: str, path: Path) -> str:

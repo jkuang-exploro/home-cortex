@@ -96,7 +96,8 @@ def test_tool_definitions_are_json_serializable_and_read_only() -> None:
     assert "Person record stores date of birth in dob" in serialized
     assert "surrealql" not in serialized.lower()
     assert "execute" not in names
-    assert "person, location, or space" in serialized
+    assert "person, location, space, or item" in serialized
+    assert "hosts_space" in serialized
     assert "semantic_relation" in serialized
     assert "includes residents" in serialized
     assert "If complete is false" in serialized
@@ -249,7 +250,7 @@ async def test_rejects_invalid_search_arguments(arguments: Any) -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "entity_id",
-    ["location", "location:", "bad-table:one", "location:test:extra"],
+    ["location", "location:", "bad-table:one", "location:test::extra"],
 )
 async def test_rejects_invalid_record_ids(entity_id: str) -> None:
     dispatcher, retrieval = _dispatcher()
@@ -262,6 +263,33 @@ async def test_rejects_invalid_record_ids(entity_id: str) -> None:
     assert response["ok"] is False
     assert response["error"]["code"] == "invalid_arguments"
     assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_accepts_multi_segment_space_ids_for_inverse_traversal() -> None:
+    dispatcher, retrieval = _dispatcher()
+
+    response = await dispatcher.dispatch(
+        "get_relationships",
+        {
+            "entity_id": "space:home:kitchen:fridge_01:interior",
+            "relation": "hosted_by",
+        },
+    )
+
+    assert response["ok"] is True
+    assert retrieval.calls == [
+        (
+            "get_relationships",
+            {
+                "entity_id": "space:home:kitchen:fridge_01:interior",
+                "relation": "hosted_by",
+                "direction": None,
+                "limit": None,
+                "include_ended": False,
+            },
+        )
+    ]
 
 
 @pytest.mark.asyncio

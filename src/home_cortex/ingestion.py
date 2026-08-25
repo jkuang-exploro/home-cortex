@@ -1,5 +1,5 @@
+import base64
 import json
-import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -9,11 +9,15 @@ from surrealdb import RecordID
 
 from .db import Database
 from .edge_schema import EdgeSchema, EdgeSchemaRegistry, UnknownEdgeSchemaError
-
-TABLE_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-RECORD_PATTERN = re.compile(
-    r"^(?P<table>[A-Za-z_][A-Za-z0-9_]*):(?P<id>[A-Za-z0-9_-]+)$"
+from .record_ids import (
+    RECORD_ID_RE,
+    TABLE_NAME_RE,
+    canonical_record_id,
+    split_record_id,
 )
+
+TABLE_PATTERN = TABLE_NAME_RE
+RECORD_PATTERN = RECORD_ID_RE
 
 
 @dataclass(frozen=True)
@@ -117,12 +121,21 @@ def _is_localized_text(value: Any) -> bool:
 
 
 def parse_record_id(value: str, *, source: Path) -> RecordID:
-    match = RECORD_PATTERN.fullmatch(value)
-    if match is None:
+    try:
+        table, record_id = split_record_id(value)
+    except ValueError as error:
         raise ValueError(
             f"Invalid record ID {value!r} in {source}; expected table:record_id"
-        )
-    return RecordID(match.group("table"), match.group("id"))
+        ) from error
+    return RecordID(table, record_id)
+
+
+def _implicit_edge_component(record_id: RecordID) -> str:
+    canonical = canonical_record_id(record_id)
+    if ":" not in str(record_id.id):
+        return canonical.replace(":", "_", 1)
+    encoded = base64.urlsafe_b64encode(canonical.encode()).decode().rstrip("=")
+    return f"b64_{encoded}"
 
 
 def _edge_record_id(
@@ -144,7 +157,7 @@ def _edge_record_id(
         return edge_id
 
     identifier = (
-        f"{source.table_name}_{source.id}__{target.table_name}_{target.id}"
+        f"{_implicit_edge_component(source)}__{_implicit_edge_component(target)}"
     )
     return RecordID(relation, identifier)
 
@@ -164,6 +177,16 @@ async def ingest_directory(
     registry = edge_registry or _default_edge_registry(data_dir)
     node_files = sorted(nodes_dir.glob("*.json"))
     edge_files = sorted(edges_dir.glob("*.json"))
+    source_relationships = {path.stem for path in edge_files}
+    missing_relationships = sorted(
+        set(registry.relationship_names) - source_relationships
+    )
+    if missing_relationships:
+        raise ValueError(
+            "Missing relationship data files for registered schemas: "
+            f"{', '.join(f'{name}.json' for name in missing_relationships)}; "
+            "use an empty JSON array when a relationship has no facts"
+        )
     prepared_nodes: dict[str, list[_PreparedNode]] = {}
     prepared_edges: dict[str, list[_PreparedEdge]] = {}
 
@@ -181,9 +204,10 @@ async def ingest_directory(
                 raise ValueError(
                     f"Node ID {raw_id!r} in {path} must use the {path.stem!r} table"
                 )
-            if str(record_id) in seen_node_ids:
+            canonical_id = canonical_record_id(record_id)
+            if canonical_id in seen_node_ids:
                 raise ValueError(f"Duplicate node ID {record_id} in {path}")
-            seen_node_ids.add(str(record_id))
+            seen_node_ids.add(canonical_id)
             _validate_address_as(record, path, record_id.table_name)
             _validate_person_relationship_status(
                 record,
@@ -193,6 +217,12 @@ async def ingest_directory(
             content = {key: value for key, value in record.items() if key != "id"}
             table_nodes.append(_PreparedNode(record_id, content))
         prepared_nodes[path.stem] = table_nodes
+
+    known_node_ids = {
+        canonical_record_id(node.record_id)
+        for nodes in prepared_nodes.values()
+        for node in nodes
+    }
 
     for path in edge_files:
         relation = path.stem
@@ -205,6 +235,7 @@ async def ingest_directory(
             raise ValueError(str(error)) from error
 
         seen_pairs: set[tuple[str, str]] = set()
+        seen_sources: set[str] = set()
         seen_ids: set[str] = set()
         table_edges: list[_PreparedEdge] = []
         for record in _records_from_file(path):
@@ -228,6 +259,13 @@ async def ingest_directory(
                 source.table_name,
                 target.table_name,
             )
+            for endpoint, role in ((source, "from"), (target, "to")):
+                canonical_endpoint = canonical_record_id(endpoint)
+                if canonical_endpoint not in known_node_ids:
+                    raise ValueError(
+                        f"Edge in {path} references unknown {role} node "
+                        f"{canonical_endpoint!r}"
+                    )
             _validate_temporal_fields(record, path, schema)
 
             pair = _edge_pair(schema, source, target)
@@ -237,12 +275,20 @@ async def ingest_directory(
                     f"Duplicate {qualifier}{relation} relationship in {path}: "
                     f"{source} -> {target}"
                 )
+            canonical_source = canonical_record_id(source)
+            if schema.unique_from and canonical_source in seen_sources:
+                raise ValueError(
+                    f"Relationship {relation!r} in {path} allows only one "
+                    f"target for source {canonical_source!r}"
+                )
             seen_pairs.add(pair)
+            seen_sources.add(canonical_source)
 
             edge = _edge_record_id(relation, record, source, target, path)
-            if str(edge) in seen_ids:
+            canonical_edge_id = canonical_record_id(edge)
+            if canonical_edge_id in seen_ids:
                 raise ValueError(f"Duplicate edge ID {edge} in {path}")
-            seen_ids.add(str(edge))
+            seen_ids.add(canonical_edge_id)
             content = {
                 key: value
                 for key, value in record.items()
@@ -329,7 +375,7 @@ def _edge_pair(
     source: RecordID,
     target: RecordID,
 ) -> tuple[str, str]:
-    pair = (str(source), str(target))
+    pair = (canonical_record_id(source), canonical_record_id(target))
     return tuple(sorted(pair)) if schema.symmetric else pair
 
 

@@ -20,6 +20,18 @@ def test_registry_loads_required_relationship_semantics() -> None:
     assert registry.get("contained_in").inverse_name == "contains"
     assert registry.get("contained_in").from_types == ("space",)
     assert registry.get("contained_in").to_types == ("location", "space")
+    hosted_by = registry.get("hosted_by")
+    assert hosted_by.symmetric is False
+    assert hosted_by.temporal is False
+    assert hosted_by.inverse_name == "hosts_space"
+    assert hosted_by.from_types == ("space",)
+    assert hosted_by.to_types == ("item",)
+    assert hosted_by.unique_from is True
+    assert registry.get("contained_in").unique_from is False
+    located_in = registry.get("located_in")
+    assert located_in.from_types == ("item",)
+    assert located_in.to_types == ("space",)
+    assert located_in.unique_from is True
 
 
 def test_registry_resolves_inverse_without_registering_duplicate_schema() -> None:
@@ -35,6 +47,11 @@ def test_registry_resolves_inverse_without_registering_duplicate_schema() -> Non
     assert contains.schema.id == "contained_in"
     assert contains.inverse is True
     assert "contains" not in registry.relationship_names
+
+    hosts_space = registry.resolve("hosts_space")
+    assert hosts_space.schema.id == "hosted_by"
+    assert hosts_space.inverse is True
+    assert "hosts_space" not in registry.relationship_names
 
 
 def test_unknown_relationship_fails_cleanly() -> None:
@@ -56,3 +73,6 @@ def test_registry_validates_endpoint_types() -> None:
         registry.validate_endpoints("contained_in", "location", "space")
     with pytest.raises(ValueError, match="Invalid contained_in endpoints"):
         registry.validate_endpoints("contained_in", "person", "location")
+    registry.validate_endpoints("hosted_by", "space", "item")
+    with pytest.raises(ValueError, match="Invalid hosted_by endpoints"):
+        registry.validate_endpoints("hosted_by", "item", "space")

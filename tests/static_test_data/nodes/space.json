@@ -1,8 +1,22 @@
-{
-  "id": "space:kitchen",
-  "space_type": "room",
-  "name": {
-    "en": "Kitchen",
-    "zh": "厨房"
+[
+  {
+    "id": "space:kitchen",
+    "space_type": "room",
+    "name": {"en": "Kitchen", "zh": "厨房"}
+  },
+  {
+    "id": "space:test_house:kitchen:fridge_01:interior",
+    "space_type": "storage",
+    "name": {"en": "Refrigerator interior", "zh": "冰箱内部"}
+  },
+  {
+    "id": "space:test_house:kitchen:fridge_01:freezer",
+    "space_type": "storage",
+    "name": {"en": "Freezer", "zh": "冷冻室"}
+  },
+  {
+    "id": "space:drawer_1:interior",
+    "space_type": "storage",
+    "name": {"en": "Drawer interior", "zh": "抽屉内部"}
   }
-}
+]

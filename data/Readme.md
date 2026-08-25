@@ -63,6 +63,9 @@ unrecognized roles resolve to the neutral `unknown` reception policy.
 Relationship files under `edges/` are named for a registered relationship in
 `schemas/edge/`. Schema files define endpoint types, direction, symmetry, and
 whether temporal fields are allowed. Data files contain facts only.
+Every registered canonical relationship must have a matching JSON file. Use
+`[]` when that relationship currently has no facts; deleting the file is an
+invalid source configuration.
 
 Optional `start` and `end` are the interval for a temporal relation only:
 
@@ -78,8 +81,8 @@ name and must not have its own data file.
 
 Named places inside a home are `space` nodes, not extra `location` records.
 A `location` is an addressable site such as the home. A `space` is a room or
-storage place inside a location, or nested inside another space. Attach each
-space with `contained_in`:
+storage place inside a location, nested inside another space, or provided by a
+tracked physical Item. Attach structural spaces with `contained_in`:
 
 ```json
 {
@@ -89,11 +92,21 @@ space with `contained_in`:
 ```
 
 `space_type` is `room` or `storage`. Nesting is allowed (`space` → `space`)
-when a storage place belongs inside a room. Do not add a reverse `contains`
-file; that name is a derived inverse query. Record IDs cannot contain extra
-colons, so use `space:kitchen`, not `space:home:kitchen`.
+when a storage place belongs inside a room. `contained_in` is the canonical
+structural relationship, with `contains` as its derived inverse query.
+
+An Item is a physical entity tracked as an independent identity unit. Its
+current position uses `located_in` (`item` → `space`). A Space provided or
+defined by an Item uses `hosted_by` (`space` → `item`). `hosts_space` is
+derived by reverse traversal and must not have its own JSON file. Hosted spaces
+are always explicit; never generate them from `item_type`. Items hosting zero,
+one, or many spaces are all valid.
+
+Record keys may contain non-empty colon-delimited segments, so a nested space
+may use `space:home:kitchen:fridge_01:interior`. Keep the table name before the
+first colon and use only letters, digits, `_`, or `-` within each segment.
 
 People live at a `location`. Do not attach `lives_in` to a space.
 
-Do not use separate records for translations of the same person's,
-location's, or space's name. Record IDs remain language-neutral and stable.
+Do not use separate records for translations of the same person's, location's,
+space's, or item's name. Record IDs remain language-neutral and stable.

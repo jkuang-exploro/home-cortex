@@ -1,0 +1,9 @@
+id: hosted_by
+symmetric: false
+from_types:
+  - space
+to_types:
+  - item
+inverse_name: hosts_space
+temporal: false
+unique_from: true

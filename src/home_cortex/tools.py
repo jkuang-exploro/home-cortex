@@ -14,9 +14,10 @@ from .calendar import (
     PERSON_ID_PATTERN,
 )
 from .retrieval import RetrievalService
+from .record_ids import RECORD_ID_PATTERN as CANONICAL_RECORD_ID_PATTERN
 
 TABLE_NAME_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
-RECORD_ID_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*:[A-Za-z0-9_-]+$"
+RECORD_ID_PATTERN = CANONICAL_RECORD_ID_PATTERN
 GRAPH_TOOL_NAMES = frozenset(
     {"get_entity", "get_relationships", "search_entities"}
 )
@@ -115,7 +116,8 @@ TOOLS: list[dict[str, Any]] = [
                         "type": "string",
                         "pattern": TABLE_NAME_PATTERN,
                         "description": (
-                            "Optional node table, such as person, location, or space."
+                            "Optional node table, such as person, location, space, "
+                            "or item."
                         ),
                     },
                     "limit": {
@@ -183,8 +185,9 @@ TOOLS: list[dict[str, Any]] = [
                         "pattern": TABLE_NAME_PATTERN,
                         "description": (
                             "Optional relationship table, such as spouse_of, "
-                            "lives_in, parent_of, contained_in, or a derived "
-                            "inverse such as child_of or contains."
+                            "lives_in, parent_of, contained_in, located_in, hosted_by, "
+                            "or a derived inverse such as child_of, contains, or "
+                            "hosts_space."
                         ),
                     },
                     "direction": {
