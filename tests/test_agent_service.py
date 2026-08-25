@@ -271,6 +271,62 @@ async def test_home_room_list_is_resolved_without_model_planning_text() -> None:
 
 
 @pytest.mark.asyncio
+async def test_item_location_is_resolved_without_model_hallucination() -> None:
+    class ItemLocationDispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: Any,
+            **_: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if tool_name == "search_entities":
+                result = [
+                    {
+                        "id": "item:fridge_01",
+                        "item_type": "refrigerator",
+                        "name": {"en": "Kitchen refrigerator", "zh": "厨房冰箱"},
+                    }
+                ]
+            else:
+                result = [
+                    {
+                        "relation": "located_in",
+                        "related_entity": {
+                            "id": "space:fort_cerritos_kitchen",
+                            "space_type": "room",
+                            "name": {"en": "Kitchen", "zh": "厨房"},
+                        },
+                    }
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = ItemLocationDispatcher()
+    ollama = FakeOllamaService([_chat_response("冰箱在储藏室。")])
+
+    result = await _agent(ollama, dispatcher).answer(
+        "冰箱在哪里？",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == "先生，厨房冰箱在厨房。"
+    assert result.tool_calls == 2
+    assert [call[0] for call in dispatcher.calls] == [
+        "search_entities",
+        "get_relationships",
+    ]
+    assert "储藏室" not in result.answer
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
 async def test_this_place_is_resolved_as_the_configured_home() -> None:
     dispatcher = FakeDispatcher(
         {

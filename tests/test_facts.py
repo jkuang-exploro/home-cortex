@@ -144,6 +144,30 @@ IDENTITY: dict[str, Any] = {
             ),
         ),
         (
+            "冰箱在哪里？",
+            FactRequest(
+                SubjectReference("item", "冰箱"),
+                "location",
+                relation="located_in",
+            ),
+        ),
+        (
+            "冰箱位于哪个房间？",
+            FactRequest(
+                SubjectReference("item", "冰箱"),
+                "location",
+                relation="located_in",
+            ),
+        ),
+        (
+            "Where is the refrigerator?",
+            FactRequest(
+                SubjectReference("item", "refrigerator"),
+                "location",
+                relation="located_in",
+            ),
+        ),
+        (
             "匡德伦和匡悠然是谁？",
             FactRequest(
                 SubjectReference("named", ("匡德伦", "匡悠然")),
@@ -408,6 +432,73 @@ async def test_home_rooms_follow_house_item_hosted_spaces(
             {
                 "entity_id": "item:fort_cerritos_house",
                 "relation": "hosts_space",
+                "limit": 25,
+            },
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("question", ["冰箱在哪里？", "冰箱位于哪个房间？"])
+async def test_item_location_uses_stored_located_in_relationship(
+    question: str,
+) -> None:
+    class Dispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, Any]]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: dict[str, Any],
+            **_: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if tool_name == "search_entities":
+                result = [
+                    {
+                        "id": "item:fridge_01",
+                        "item_type": "refrigerator",
+                        "name": {"en": "Kitchen refrigerator", "zh": "厨房冰箱"},
+                    }
+                ]
+            else:
+                result = [
+                    {
+                        "relation": "located_in",
+                        "related_entity": {
+                            "id": "space:fort_cerritos_kitchen",
+                            "space_type": "room",
+                            "name": {"en": "Kitchen", "zh": "厨房"},
+                        },
+                    }
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = Dispatcher()
+    answer = await FactService(
+        dispatcher,
+        home_entity_id="location:fort_cerritos",
+    ).try_answer(
+        [{"role": "user", "content": question}],
+        identity={**IDENTITY, "address_as": {"zh": "先生"}},
+        language="zh",
+        request_id="test-item-location",
+    )
+
+    assert answer is not None
+    assert answer.text == "先生，厨房冰箱在厨房。"
+    assert answer.tool_calls == 2
+    assert dispatcher.calls == [
+        (
+            "search_entities",
+            {"text": "冰箱", "entity_type": "item", "limit": 25},
+        ),
+        (
+            "get_relationships",
+            {
+                "entity_id": "item:fridge_01",
+                "relation": "located_in",
                 "limit": 25,
             },
         ),

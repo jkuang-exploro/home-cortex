@@ -1165,6 +1165,41 @@ def _is_household_space_request(
     return chinese is not None or english is not None
 
 
+def _is_item_location_request(
+    messages: Sequence[Mapping[str, Any]],
+) -> bool:
+    """Recognize named-entity location lookups for evidence enforcement."""
+    latest_user = next(
+        (
+            str(message.get("content", "")).casefold().strip()
+            for message in reversed(messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    if re.fullmatch(
+        r"(?:where is|where's)\s+(?:(?:my|our|the)\s+)?"
+        r"(?:home|house|household|here)[?]?",
+        latest_user,
+    ) or re.fullmatch(
+        r"(?:我家|家里|家中|这里|这儿)(?:在|位于)?"
+        r"(?:哪里|哪儿|什么地方)[?？。！!]?",
+        latest_user,
+    ):
+        return False
+    chinese = re.fullmatch(
+        r"(?:请问|麻烦告诉我)?\s*.+?\s*(?:现在)?(?:在|位于)"
+        r"(?:哪里|哪儿|什么地方|哪个房间|哪间房间?)[?？。！!]?",
+        latest_user,
+    )
+    english = re.fullmatch(
+        r"(?:(?:where is|where's)\s+.+?|"
+        r"(?:which|what) room is\s+.+?\s+in)[?]?",
+        latest_user,
+    )
+    return chinese is not None or english is not None
+
+
 def _requires_graph_evidence(
     messages: Sequence[Mapping[str, Any]],
     memorable_dates: MemorableDateRegistry,
@@ -1216,6 +1251,8 @@ def _required_evidence_tool(
     if _is_household_roster_request(messages, memorable_dates):
         return "get_relationships"
     if _is_household_space_request(messages):
+        return "get_relationships"
+    if _is_item_location_request(messages):
         return "get_relationships"
     latest_user = next(
         (
@@ -1274,6 +1311,8 @@ def _required_evidence_relation(
         return "lives_in"
     if _is_household_space_request(messages):
         return "hosts_space"
+    if _is_item_location_request(messages):
+        return "located_in"
     latest_user = next(
         (
             str(message.get("content", "")).casefold()

@@ -35,10 +35,11 @@ FactField = Literal[
     "relationship_exists",
     "count",
     "memorable_date",
+    "location",
     "residents",
     "spaces",
 ]
-SubjectKind = Literal["speaker", "home", "named", "relative"]
+SubjectKind = Literal["speaker", "home", "item", "named", "relative"]
 DateQuery = Literal["stored", "next"]
 StopReason = Literal["answer", "tool_error", "timeout"]
 
@@ -427,6 +428,16 @@ class FactService:
                 return _format_resident_count(residents, identity, language)
             return _format_residents(residents, identity, language)
 
+        if request.subject.kind == "item":
+            item_name = request.subject.value
+            assert isinstance(item_name, str)
+            return await self._answer_item_location(
+                item_name,
+                execution,
+                identity=identity,
+                language=language,
+            )
+
         if request.subject.kind == "named":
             names = request.subject.value
             assert isinstance(names, tuple)
@@ -724,6 +735,49 @@ class FactService:
             None,
         )
 
+    async def _answer_item_location(
+        self,
+        item_name: str,
+        execution: _Execution,
+        *,
+        identity: Mapping[str, Any] | None,
+        language: str,
+    ) -> str:
+        search_result = await execution.call(
+            "search_entities",
+            {
+                "text": item_name,
+                "entity_type": "item",
+                "limit": execution.max_records,
+            },
+        )
+        item = _exact_or_unique_entity(search_result, item_name, "item")
+        if item is None:
+            return _no_records_fallback(language)
+        item_id = item.get("id")
+        if not isinstance(item_id, str):
+            raise _FactFailure("tool_error")
+
+        location_result = await execution.call(
+            "get_relationships",
+            {
+                "entity_id": item_id,
+                "relation": "located_in",
+                "limit": execution.max_records,
+            },
+        )
+        locations: list[Mapping[str, Any]] = []
+        records = location_result.get("result")
+        if isinstance(records, list):
+            for record in records:
+                related = (
+                    record.get("related_entity")
+                    if isinstance(record, Mapping)
+                    else None
+                )
+                _append_unique_entity(locations, related)
+        return _format_item_location(item, locations, identity, language)
+
     async def _answer_named_relationships(
         self,
         names: Sequence[str],
@@ -925,6 +979,14 @@ def parse_fact_request(
     if _is_roster_request(normalized, registry.aliases):
         return FactRequest(SubjectReference("home"), "residents", "all")
 
+    item_name = _item_location_subject(normalized)
+    if item_name is not None:
+        return FactRequest(
+            SubjectReference("item", item_name),
+            "location",
+            relation="located_in",
+        )
+
     relative = _relative_kind(normalized)
     if relative is not None and identity is not None:
         if date_schema is not None:
@@ -1067,6 +1129,37 @@ def _is_elliptical_roster_count_request(text: str) -> bool:
             text,
         )
     )
+
+
+def _item_location_subject(text: str) -> str | None:
+    chinese = re.fullmatch(
+        r"(?:请问|麻烦告诉我)?\s*(?P<name>.+?)\s*"
+        r"(?:现在)?(?:在|位于)(?:哪里|哪儿|什么地方|哪个房间|哪间房间?)"
+        r"[?？。！!]?",
+        text,
+    )
+    if chinese is not None:
+        name = re.sub(
+            r"^(?:我家(?:的)?|家里(?:的)?|我的)",
+            "",
+            chinese.group("name").strip(),
+        )
+        return name or None
+
+    patterns = (
+        r"(?:where is|where's)\s+(?:the\s+|my\s+|our\s+)?"
+        r"(?P<name>.+?)[?]?",
+        r"(?:which|what) room is\s+(?:the\s+|my\s+|our\s+)?"
+        r"(?P<name>.+?)\s+in[?]?",
+    )
+    for pattern in patterns:
+        match = re.fullmatch(pattern, text)
+        if match is not None:
+            name = match.group("name").strip()
+            if name in {"home", "house", "household", "here"}:
+                return None
+            return name or None
+    return None
 
 
 def _previous_home_subject(
@@ -1290,6 +1383,32 @@ def _exact_named_person(
     return matches[0] if len(matches) == 1 else None
 
 
+def _exact_or_unique_entity(
+    result: Mapping[str, Any],
+    name: str,
+    entity_type: str,
+) -> Mapping[str, Any] | None:
+    records = result.get("result")
+    if not isinstance(records, list):
+        return None
+    typed = [
+        record
+        for record in records
+        if isinstance(record, Mapping)
+        and str(record.get("id", "")).startswith(f"{entity_type}:")
+    ]
+    normalized = name.strip().casefold()
+    exact = [
+        record
+        for record in typed
+        if normalized == str(record.get("id", "")).casefold()
+        or normalized in {alias.casefold() for alias in _entity_aliases(record)}
+    ]
+    if len(exact) == 1:
+        return exact[0]
+    return typed[0] if len(typed) == 1 else None
+
+
 def _direct_relationship_label(
     result: Mapping[str, Any],
     target_id: str,
@@ -1397,6 +1516,33 @@ def _format_resident_count(
     prefix = f"{address}, " if address else ""
     label = "resident" if len(residents) == 1 else "residents"
     answer = f"{prefix}the home currently has {len(residents)} {label}."
+    return answer if prefix else answer[0].upper() + answer[1:]
+
+
+def _format_item_location(
+    item: Mapping[str, Any],
+    locations: Sequence[Mapping[str, Any]],
+    identity: Mapping[str, Any] | None,
+    language: str,
+) -> str:
+    if not locations:
+        return _no_records_fallback(language)
+    item_name = resolve_display_name(item, language)
+    location_names = [
+        resolve_display_name(location, language) for location in locations
+    ]
+    address = _speaker_address(identity, language)
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        return (
+            f"{prefix}{item_name}在"
+            f"{_join_localized(location_names, language)}。"
+        )
+    prefix = f"{address}, " if address else ""
+    answer = (
+        f"{prefix}{item_name} is in "
+        f"{_join_localized(location_names, language)}."
+    )
     return answer if prefix else answer[0].upper() + answer[1:]
 
 
