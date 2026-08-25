@@ -184,6 +184,34 @@ IDENTITY: dict[str, Any] = {
             ),
         ),
         (
+            "厨房里有哪些物品？",
+            FactRequest(
+                SubjectReference("space", "厨房"),
+                "items",
+                "all",
+                relation="located_in",
+            ),
+        ),
+        (
+            "厨房里面又有哪些放东西的空间？",
+            FactRequest(
+                SubjectReference("space", "厨房"),
+                "spaces",
+                "all",
+                relation="hosts_space",
+                space_type="storage",
+            ),
+        ),
+        (
+            "厨房里面有哪些下属空间？",
+            FactRequest(
+                SubjectReference("space", "厨房"),
+                "spaces",
+                "all",
+                relation="hosts_space",
+            ),
+        ),
+        (
             "匡德伦和匡悠然是谁？",
             FactRequest(
                 SubjectReference("named", ("匡德伦", "匡悠然")),
@@ -583,6 +611,108 @@ async def test_scoped_item_location_is_not_misclassified_as_home_address(
         {"text": "牛奶", "entity_type": "item", "limit": 25},
     )
     assert dispatcher.calls[1][1]["relation"] == "located_in"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "expected", "tool_calls"),
+    [
+        (
+            "厨房里有哪些物品？",
+            "先生，厨房里的物品有：厨房冰箱。",
+            2,
+        ),
+        (
+            "厨房里面又有哪些放东西的空间？",
+            "先生，厨房内物品提供的储物空间有："
+            "冰箱内部、冰箱冷冻室和冰箱门架。",
+            3,
+        ),
+        (
+            "厨房里面有哪些下属空间？",
+            "先生，厨房内物品提供的空间有："
+            "冰箱内部、冰箱冷冻室和冰箱门架。",
+            3,
+        ),
+    ],
+)
+async def test_space_inventory_follows_located_items_and_their_hosted_spaces(
+    question: str,
+    expected: str,
+    tool_calls: int,
+) -> None:
+    class Dispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, Any]]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: dict[str, Any],
+            **_: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if tool_name == "search_entities":
+                result = [
+                    {
+                        "id": "space:fort_cerritos_kitchen",
+                        "space_type": "room",
+                        "name": {"en": "Kitchen", "zh": "厨房"},
+                    }
+                ]
+            elif arguments["relation"] == "located_in":
+                result = [
+                    {
+                        "relation": "located_in",
+                        "related_entity": {
+                            "id": "item:fridge_01",
+                            "item_type": "refrigerator",
+                            "name": {
+                                "en": "Kitchen refrigerator",
+                                "zh": "厨房冰箱",
+                            },
+                        },
+                    }
+                ]
+            else:
+                result = [
+                    {
+                        "relation": "hosted_by",
+                        "related_entity": {
+                            "id": f"space:fridge:{record_id}",
+                            "space_type": "storage",
+                            "name": {"en": english, "zh": chinese},
+                        },
+                    }
+                    for record_id, english, chinese in (
+                        ("interior", "Refrigerator interior", "冰箱内部"),
+                        ("freezer", "Refrigerator freezer", "冰箱冷冻室"),
+                        ("door_shelf", "Refrigerator door shelf", "冰箱门架"),
+                    )
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = Dispatcher()
+    answer = await FactService(
+        dispatcher,
+        home_entity_id="location:fort_cerritos",
+    ).try_answer(
+        [{"role": "user", "content": question}],
+        identity={**IDENTITY, "address_as": {"zh": "先生"}},
+        language="zh",
+        request_id="test-space-inventory",
+    )
+
+    assert answer is not None
+    assert answer.text == expected
+    assert answer.tool_calls == tool_calls
+    assert [call[0] for call in dispatcher.calls[:2]] == [
+        "search_entities",
+        "get_relationships",
+    ]
+    assert dispatcher.calls[1][1]["relation"] == "located_in"
+    if tool_calls == 3:
+        assert dispatcher.calls[2][1]["relation"] == "hosts_space"
 
 
 @pytest.mark.asyncio

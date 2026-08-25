@@ -396,6 +396,95 @@ async def test_scoped_milk_location_does_not_return_home_address_or_cabinet() ->
 
 
 @pytest.mark.asyncio
+async def test_kitchen_inventory_uses_graph_without_inventing_appliances() -> None:
+    class KitchenInventoryDispatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def dispatch(
+            self,
+            tool_name: str,
+            arguments: Any,
+            **_: Any,
+        ) -> dict[str, Any]:
+            self.calls.append((tool_name, arguments))
+            if tool_name == "search_entities":
+                result = [
+                    {
+                        "id": "space:fort_cerritos_kitchen",
+                        "space_type": "room",
+                        "name": {"en": "Kitchen", "zh": "厨房"},
+                    }
+                ]
+            elif arguments["relation"] == "located_in":
+                result = [
+                    {
+                        "relation": "located_in",
+                        "related_entity": {
+                            "id": "item:fridge_01",
+                            "item_type": "refrigerator",
+                            "name": {
+                                "en": "Kitchen refrigerator",
+                                "zh": "厨房冰箱",
+                            },
+                        },
+                    }
+                ]
+            else:
+                result = [
+                    {
+                        "relation": "hosted_by",
+                        "related_entity": {
+                            "id": f"space:fridge:{record_id}",
+                            "space_type": "storage",
+                            "name": {"en": english, "zh": chinese},
+                        },
+                    }
+                    for record_id, english, chinese in (
+                        ("interior", "Refrigerator interior", "冰箱内部"),
+                        ("freezer", "Refrigerator freezer", "冰箱冷冻室"),
+                        ("door_shelf", "Refrigerator door shelf", "冰箱门架"),
+                    )
+                ]
+            return {"ok": True, "tool": tool_name, "result": result}
+
+    dispatcher = KitchenInventoryDispatcher()
+    ollama = FakeOllamaService(
+        [
+            _chat_response("厨房里没有记录任何物品。"),
+            _chat_response("厨房里有微波炉、烤箱和咖啡机。"),
+        ]
+    )
+    agent = _agent(ollama, dispatcher)
+    identity = {
+        "id": "person:jian_kuang",
+        "name": ["Jian Kuang", "匡健"],
+        "address_as": {"zh": "先生"},
+    }
+
+    items = await agent.answer("厨房里有哪些物品？", user_entity=identity)
+    spaces = await agent.answer(
+        "厨房里面又有哪些放东西的空间？",
+        user_entity=identity,
+    )
+
+    assert items.answer == "先生，厨房里的物品有：厨房冰箱。"
+    assert spaces.answer == (
+        "先生，厨房内物品提供的储物空间有："
+        "冰箱内部、冰箱冷冻室和冰箱门架。"
+    )
+    assert "微波炉" not in items.answer + spaces.answer
+    assert "烤箱" not in items.answer + spaces.answer
+    assert "咖啡机" not in items.answer + spaces.answer
+    assert [
+        arguments["relation"]
+        for tool_name, arguments in dispatcher.calls
+        if tool_name == "get_relationships"
+    ] == ["located_in", "located_in", "hosts_space"]
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
 async def test_this_place_is_resolved_as_the_configured_home() -> None:
     dispatcher = FakeDispatcher(
         {

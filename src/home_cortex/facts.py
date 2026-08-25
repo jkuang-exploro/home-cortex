@@ -31,6 +31,7 @@ from .memorable_dates import (
 FactField = Literal[
     "address",
     "identity",
+    "items",
     "relationship_to_speaker",
     "relationship_exists",
     "count",
@@ -39,7 +40,7 @@ FactField = Literal[
     "residents",
     "spaces",
 ]
-SubjectKind = Literal["speaker", "home", "item", "named", "relative"]
+SubjectKind = Literal["speaker", "home", "item", "named", "relative", "space"]
 DateQuery = Literal["stored", "next"]
 StopReason = Literal["answer", "tool_error", "timeout"]
 
@@ -438,6 +439,17 @@ class FactService:
                 language=language,
             )
 
+        if request.subject.kind == "space":
+            space_name = request.subject.value
+            assert isinstance(space_name, str)
+            return await self._answer_space_inventory(
+                space_name,
+                request,
+                execution,
+                identity=identity,
+                language=language,
+            )
+
         if request.subject.kind == "named":
             names = request.subject.value
             assert isinstance(names, tuple)
@@ -778,6 +790,94 @@ class FactService:
                 _append_unique_entity(locations, related)
         return _format_item_location(item, locations, identity, language)
 
+    async def _answer_space_inventory(
+        self,
+        space_name: str,
+        request: FactRequest,
+        execution: _Execution,
+        *,
+        identity: Mapping[str, Any] | None,
+        language: str,
+    ) -> str:
+        search_result = await execution.call(
+            "search_entities",
+            {
+                "text": space_name,
+                "entity_type": "space",
+                "limit": execution.max_records,
+            },
+        )
+        space = _exact_or_unique_entity(search_result, space_name, "space")
+        if space is None:
+            return _no_records_fallback(language)
+        space_id = space.get("id")
+        if not isinstance(space_id, str):
+            raise _FactFailure("tool_error")
+
+        items_result = await execution.call(
+            "get_relationships",
+            {
+                "entity_id": space_id,
+                "relation": "located_in",
+                "limit": execution.max_records,
+            },
+        )
+        items: list[Mapping[str, Any]] = []
+        item_records = items_result.get("result")
+        if isinstance(item_records, list):
+            for record in item_records:
+                related = (
+                    record.get("related_entity")
+                    if isinstance(record, Mapping)
+                    else None
+                )
+                if (
+                    isinstance(related, Mapping)
+                    and str(related.get("id", "")).startswith("item:")
+                ):
+                    _append_unique_entity(items, related)
+
+        if request.field == "items":
+            return _format_space_items(space, items, identity, language)
+
+        hosted_spaces: list[Mapping[str, Any]] = []
+        for item in items:
+            item_id = item.get("id")
+            if not isinstance(item_id, str):
+                continue
+            hosted_result = await execution.call(
+                "get_relationships",
+                {
+                    "entity_id": item_id,
+                    "relation": "hosts_space",
+                    "limit": execution.max_records,
+                },
+            )
+            hosted_records = hosted_result.get("result")
+            if not isinstance(hosted_records, list):
+                continue
+            for record in hosted_records:
+                related = (
+                    record.get("related_entity")
+                    if isinstance(record, Mapping)
+                    else None
+                )
+                if not isinstance(related, Mapping):
+                    continue
+                if (
+                    request.space_type is not None
+                    and related.get("space_type") != request.space_type
+                ):
+                    continue
+                _append_unique_entity(hosted_spaces, related)
+        return _format_item_hosted_spaces(
+            space,
+            hosted_spaces,
+            request.space_type,
+            identity,
+            language,
+        )
+
     async def _answer_named_relationships(
         self,
         names: Sequence[str],
@@ -949,6 +1049,17 @@ def parse_fact_request(
             SubjectReference("item", item_name),
             "location",
             relation="located_in",
+        )
+
+    space_inventory = _space_inventory_request(normalized)
+    if space_inventory is not None:
+        space_name, field, space_type = space_inventory
+        return FactRequest(
+            SubjectReference("space", space_name),
+            field,
+            "all",
+            relation="located_in" if field == "items" else "hosts_space",
+            space_type=space_type,
         )
 
     if _is_home_address_request(normalized) or (
@@ -1177,6 +1288,44 @@ def _item_location_subject(text: str) -> str | None:
                 return None
             return name or None
     return None
+
+
+def _space_inventory_request(
+    text: str,
+) -> tuple[str, Literal["items", "spaces"], str | None] | None:
+    chinese = re.fullmatch(
+        r"(?:请问)?\s*(?:家里(?:的)?)?(?P<name>.+?)"
+        r"(?:里面|里|内)\s*(?:又)?(?P<query>.+?)[?？。！!]?",
+        text,
+    )
+    if chinese is not None:
+        name = chinese.group("name").strip()
+        query = chinese.group("query").strip()
+        if _contains_any(query, ("空间", "区域", "地方")):
+            space_type = (
+                "storage"
+                if _contains_any(query, ("放东西", "储物", "存储", "收纳"))
+                else None
+            )
+            return name, "spaces", space_type
+        if _contains_any(query, ("物品", "东西", "设备", "家电")):
+            return name, "items", None
+        return None
+
+    english = re.fullmatch(
+        r"(?:what|which)\s+(?P<kind>items|things|appliances|"
+        r"storage spaces|spaces)\s+(?:are\s+)?(?:in|inside)\s+"
+        r"(?:the\s+)?(?P<name>.+?)[?]?",
+        text,
+    )
+    if english is None:
+        return None
+    kind = english.group("kind")
+    field: Literal["items", "spaces"] = (
+        "spaces" if "spaces" in kind else "items"
+    )
+    space_type = "storage" if kind == "storage spaces" else None
+    return english.group("name").strip(), field, space_type
 
 
 def _previous_home_subject(
@@ -1559,6 +1708,76 @@ def _format_item_location(
     answer = (
         f"{prefix}{item_name} is in "
         f"{_join_localized(location_names, language)}."
+    )
+    return answer if prefix else answer[0].upper() + answer[1:]
+
+
+def _format_space_items(
+    space: Mapping[str, Any],
+    items: Sequence[Mapping[str, Any]],
+    identity: Mapping[str, Any] | None,
+    language: str,
+) -> str:
+    space_name = resolve_display_name(space, language)
+    address = _speaker_address(identity, language)
+    if not items:
+        if language == "zh":
+            prefix = f"{address}，" if address else ""
+            return f"{prefix}家庭资料中没有记录位于{space_name}的物品。"
+        prefix = f"{address}, " if address else ""
+        answer = f"{prefix}no items are recorded in {space_name}."
+        return answer if prefix else answer[0].upper() + answer[1:]
+
+    names = [resolve_display_name(item, language) for item in items]
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        return (
+            f"{prefix}{space_name}里的物品有："
+            f"{_join_localized(names, language)}。"
+        )
+    prefix = f"{address}, " if address else ""
+    answer = (
+        f"{prefix}the items in {space_name} are "
+        f"{_join_localized(names, language)}."
+    )
+    return answer if prefix else answer[0].upper() + answer[1:]
+
+
+def _format_item_hosted_spaces(
+    parent_space: Mapping[str, Any],
+    hosted_spaces: Sequence[Mapping[str, Any]],
+    space_type: str | None,
+    identity: Mapping[str, Any] | None,
+    language: str,
+) -> str:
+    parent_name = resolve_display_name(parent_space, language)
+    address = _speaker_address(identity, language)
+    label = "储物空间" if space_type == "storage" else "空间"
+    if not hosted_spaces:
+        if language == "zh":
+            prefix = f"{address}，" if address else ""
+            return (
+                f"{prefix}家庭资料中没有记录由{parent_name}内物品提供的"
+                f"{label}。"
+            )
+        prefix = f"{address}, " if address else ""
+        answer = (
+            f"{prefix}no hosted spaces are recorded for items in "
+            f"{parent_name}."
+        )
+        return answer if prefix else answer[0].upper() + answer[1:]
+
+    names = [resolve_display_name(space, language) for space in hosted_spaces]
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        return (
+            f"{prefix}{parent_name}内物品提供的{label}有："
+            f"{_join_localized(names, language)}。"
+        )
+    prefix = f"{address}, " if address else ""
+    answer = (
+        f"{prefix}the spaces hosted by items in {parent_name} are "
+        f"{_join_localized(names, language)}."
     )
     return answer if prefix else answer[0].upper() + answer[1:]
 
