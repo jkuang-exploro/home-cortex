@@ -10,14 +10,12 @@ from surrealdb import RecordID
 from .db import Database
 from .edge_schema import EdgeSchema, EdgeSchemaRegistry, UnknownEdgeSchemaError
 from .record_ids import (
-    RECORD_ID_RE,
     TABLE_NAME_RE,
     canonical_record_id,
     split_record_id,
 )
 
 TABLE_PATTERN = TABLE_NAME_RE
-RECORD_PATTERN = RECORD_ID_RE
 _RETIRED_EDGE_TABLES = ("contained_in",)
 _RETIRED_NODE_TABLES = ("location",)
 
@@ -176,7 +174,7 @@ async def ingest_directory(
             f"Expected {nodes_dir} and {edges_dir} to both be directories"
         )
 
-    registry = edge_registry or _default_edge_registry(data_dir)
+    registry = edge_registry or EdgeSchemaRegistry.load_default(data_dir)
     node_files = sorted(nodes_dir.glob("*.json"))
     edge_files = sorted(edges_dir.glob("*.json"))
     source_relationships = {path.stem for path in edge_files}
@@ -345,18 +343,6 @@ async def ingest_directory(
         nodes_upserted=nodes_upserted,
         edges_upserted=edges_upserted,
     )
-
-
-def _default_edge_registry(data_dir: Path) -> EdgeSchemaRegistry:
-    candidates = (
-        data_dir.parent / "schemas" / "edge",
-        Path(__file__).resolve().parents[2] / "schemas" / "edge",
-        Path("/app/schemas/edge"),
-    )
-    for candidate in candidates:
-        if candidate.is_dir():
-            return EdgeSchemaRegistry.from_directory(candidate)
-    raise FileNotFoundError("Could not locate schemas/edge")
 
 
 def _validate_temporal_fields(

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -19,7 +20,7 @@ from .display import (
     internal_ids_requested,
     resolve_person_reference,
 )
-from .facts import FactService
+from .facts import FactAnswer, FactContext, FactService
 from .memorable_dates import MemorableDateRegistry
 from .model_loop import (
     MAX_AGENT_STEPS,
@@ -33,7 +34,21 @@ from .model_loop import (
     ModelLoop,
 )
 from .ollama import OllamaService
+from .request_analysis import RequestAnalysis, analyze_household_request
+from .text import latest_user_message
 from .tools import ToolDispatcher
+
+
+@dataclass
+class _PreparedRequest:
+    language: str
+    identity: dict[str, Any] | None
+    analysis: RequestAnalysis
+    fact_answer: FactAnswer | None
+    fact_context: FactContext | None
+    identity_answer: str | None
+    trusted: list[dict[str, Any]]
+    expose_internal_ids: bool
 
 
 class AgentService:
@@ -107,65 +122,45 @@ class AgentService:
         user_entity_id: str | None = None,
         user_entity: Mapping[str, Any] | None = None,
     ) -> AgentResult:
-        safe_messages = _conversation_messages(messages)
-        language = conversation_language(safe_messages)
-        identity = _normalized_identity(user_entity_id, user_entity)
-        now = self._now()
-        fact_answer = await self.facts.try_answer(
-            safe_messages,
-            identity=identity,
-            language=language,
+        prepared = await self._prepare_request(
+            messages,
             request_id=request_id,
-            current_date=_household_date(self.household_timezone, now),
+            user_entity_id=user_entity_id,
+            user_entity=user_entity,
         )
-        if fact_answer is not None:
-            trusted = self._trusted_conversation(safe_messages, identity, now=now)
+        if prepared.fact_answer is not None:
             return AgentResult(
-                answer=fact_answer.text,
+                answer=prepared.fact_answer.text,
                 steps=1,
-                tool_calls=fact_answer.tool_calls,
-                stop_reason=fact_answer.stop_reason,
-                messages=tuple(trusted),
+                tool_calls=prepared.fact_answer.tool_calls,
+                stop_reason=prepared.fact_answer.stop_reason,
+                messages=tuple(prepared.trusted),
             )
-        fact_context = await self.facts.try_context(
-            safe_messages,
-            language=language,
-            request_id=request_id,
-        )
-        trusted = self._trusted_conversation(
-            safe_messages,
-            identity,
-            now=now,
-            fact_context=fact_context.text if fact_context else None,
-        )
-        identity_answer = _agent_identity_answer(
-            safe_messages,
-            localized_identity=self.model_loop.localized_identity,
-            speaker=identity,
-            language=language,
-        )
-        if identity_answer is not None:
+        if prepared.identity_answer is not None:
             return AgentResult(
-                answer=identity_answer,
+                answer=prepared.identity_answer,
                 steps=1,
                 tool_calls=0,
                 stop_reason="answer",
-                messages=tuple(trusted),
+                messages=tuple(prepared.trusted),
             )
         result = await self.model_loop.run(
-            trusted,
+            prepared.trusted,
             request_id=request_id,
-            presentation_language=language,
-            expose_internal_ids=internal_ids_requested(safe_messages),
-            presentation_values=(identity,) if identity else (),
-            trusted_user_entity_id=str(identity["id"]) if identity else None,
+            presentation_language=prepared.language,
+            expose_internal_ids=prepared.expose_internal_ids,
+            presentation_values=(prepared.identity,) if prepared.identity else (),
+            trusted_user_entity_id=(
+                str(prepared.identity["id"]) if prepared.identity else None
+            ),
+            analysis=prepared.analysis,
         )
-        if fact_context is None or fact_context.tool_calls == 0:
+        if prepared.fact_context is None or prepared.fact_context.tool_calls == 0:
             return result
         return AgentResult(
             answer=result.answer,
             steps=result.steps,
-            tool_calls=result.tool_calls + fact_context.tool_calls,
+            tool_calls=result.tool_calls + prepared.fact_context.tool_calls,
             stop_reason=result.stop_reason,
             messages=result.messages,
         )
@@ -178,48 +173,86 @@ class AgentService:
         user_entity_id: str | None = None,
         user_entity: Mapping[str, Any] | None = None,
     ) -> AsyncIterator[str]:
+        prepared = await self._prepare_request(
+            messages,
+            request_id=request_id,
+            user_entity_id=user_entity_id,
+            user_entity=user_entity,
+        )
+        if prepared.fact_answer is not None:
+            yield prepared.fact_answer.text
+            return
+        if prepared.identity_answer is not None:
+            yield prepared.identity_answer
+            return
+        async for token in self.model_loop.stream(
+            prepared.trusted,
+            request_id=request_id,
+            presentation_language=prepared.language,
+            expose_internal_ids=prepared.expose_internal_ids,
+            presentation_values=(prepared.identity,) if prepared.identity else (),
+            trusted_user_entity_id=(
+                str(prepared.identity["id"]) if prepared.identity else None
+            ),
+            analysis=prepared.analysis,
+        ):
+            yield token
+
+    async def _prepare_request(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        *,
+        request_id: str,
+        user_entity_id: str | None,
+        user_entity: Mapping[str, Any] | None,
+    ) -> _PreparedRequest:
         safe_messages = _conversation_messages(messages)
         language = conversation_language(safe_messages)
         identity = _normalized_identity(user_entity_id, user_entity)
         now = self._now()
+        analysis = analyze_household_request(
+            safe_messages,
+            identity=identity,
+            memorable_dates=self.model_loop.memorable_dates,
+        )
         fact_answer = await self.facts.try_answer(
             safe_messages,
             identity=identity,
             language=language,
             request_id=request_id,
             current_date=_household_date(self.household_timezone, now),
+            analysis=analysis,
         )
-        if fact_answer is not None:
-            yield fact_answer.text
-            return
-        fact_context = await self.facts.try_context(
-            safe_messages,
-            language=language,
-            request_id=request_id,
-        )
-        identity_answer = _agent_identity_answer(
-            safe_messages,
-            localized_identity=self.model_loop.localized_identity,
-            speaker=identity,
-            language=language,
-        )
-        if identity_answer is not None:
-            yield identity_answer
-            return
-        async for token in self.model_loop.stream(
-            self._trusted_conversation(
+        fact_context = None
+        identity_answer = None
+        if fact_answer is None:
+            fact_context = await self.facts.try_context(
                 safe_messages,
-                identity,
-                now=now,
-                fact_context=fact_context.text if fact_context else None,
-            ),
-            request_id=request_id,
-            presentation_language=language,
+                language=language,
+                request_id=request_id,
+            )
+            identity_answer = _agent_identity_answer(
+                safe_messages,
+                localized_identity=self.model_loop.localized_identity,
+                speaker=identity,
+                language=language,
+            )
+        trusted = self._trusted_conversation(
+            safe_messages,
+            identity,
+            now=now,
+            fact_context=fact_context.text if fact_context else None,
+        )
+        return _PreparedRequest(
+            language=language,
+            identity=identity,
+            analysis=analysis,
+            fact_answer=fact_answer,
+            fact_context=fact_context,
+            identity_answer=identity_answer,
+            trusted=trusted,
             expose_internal_ids=internal_ids_requested(safe_messages),
-            presentation_values=(identity,) if identity else (),
-            trusted_user_entity_id=str(identity["id"]) if identity else None,
-        ):
-            yield token
+        )
 
     def _trusted_conversation(
         self,
@@ -301,14 +334,7 @@ def _agent_identity_answer(
     speaker: Mapping[str, Any] | None,
     language: str,
 ) -> str | None:
-    latest = next(
-        (
-            str(message.get("content", "")).strip()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
+    latest = latest_user_message(messages).strip()
     normalized = latest.casefold().strip(" \t\r\n?!？。！")
     asks_identity = bool(
         re.fullmatch(r"(?:你|您)(?:是)?谁", normalized)

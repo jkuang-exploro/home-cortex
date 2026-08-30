@@ -33,11 +33,6 @@ class Database:
         self._require_connection()
         return str(await self.client.version())
 
-    async def select(self, table: str) -> list[dict[str, Any]]:
-        self._require_connection()
-        result = await self.client.select(table)
-        return list(result or [])
-
     async def query(
         self,
         statement: str,

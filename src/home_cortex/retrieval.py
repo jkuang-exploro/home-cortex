@@ -13,9 +13,8 @@ from .edge_schema import (
     ResolvedEdgeSchema,
     UnknownEdgeSchemaError,
 )
-from .record_ids import RECORD_ID_RE, canonical_record_id, split_record_id
+from .record_ids import canonical_record_id, split_record_id
 
-RECORD_PATTERN = RECORD_ID_RE
 ENTITY_SUMMARY_FIELDS = frozenset(
     {
         "id",
@@ -59,7 +58,7 @@ class RetrievalService:
             "person",
             "space",
         )
-        self.edge_registry = edge_registry or _default_edge_registry(data_dir)
+        self.edge_registry = edge_registry or EdgeSchemaRegistry.load_default(data_dir)
         self.edge_tables = self.edge_registry.relationship_names
 
     async def search_entities(
@@ -372,22 +371,6 @@ def _relationship_direction(edge: dict[str, Any], entity_id: str) -> str:
     if is_source:
         return "outgoing"
     return "incoming"
-
-
-def _default_edge_registry(data_dir: Path | None) -> EdgeSchemaRegistry:
-    candidates = []
-    if data_dir is not None:
-        candidates.append(data_dir.parent / "schemas" / "edge")
-    candidates.extend(
-        (
-            Path(__file__).resolve().parents[2] / "schemas" / "edge",
-            Path("/app/schemas/edge"),
-        )
-    )
-    for candidate in candidates:
-        if candidate.is_dir():
-            return EdgeSchemaRegistry.from_directory(candidate)
-    raise FileNotFoundError("Could not locate schemas/edge")
 
 
 def _stored_direction(

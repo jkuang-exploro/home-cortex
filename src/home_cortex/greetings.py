@@ -4,6 +4,7 @@ from typing import Any, Literal, Protocol
 
 from .agents import AgentDefinition
 from .display import resolve_display_name, resolve_person_reference
+from .text import normalize_language_code
 
 ReceptionCategory = Literal[
     "owner",
@@ -228,7 +229,7 @@ def _record_id(value: Mapping[str, Any] | None) -> str | None:
 def _language_code(language: str) -> str:
     if not isinstance(language, str) or not language.strip():
         raise ValueError("language must be a non-empty string")
-    return language.casefold().split("-", 1)[0]
+    return normalize_language_code(language)
 
 
 def _language_fallbacks(language: str, default: str) -> tuple[str, ...]:

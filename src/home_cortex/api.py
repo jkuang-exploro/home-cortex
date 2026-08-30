@@ -30,6 +30,7 @@ from .db import Database
 from .edge_schema import EdgeSchemaRegistry
 from .memorable_dates import MemorableDateRegistry
 from .display import conversation_language
+from .text import latest_user_message
 from .greetings import GreetingService
 from .ingestion import ingest_directory
 from .identity import resolve_user_entity_id
@@ -579,15 +580,7 @@ def _is_new_conversation(messages: list[dict[str, Any]]) -> bool:
 
 
 def _is_standalone_greeting(messages: list[dict[str, Any]]) -> bool:
-    user_content = next(
-        (
-            str(message.get("content", "")).strip().casefold()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
-    normalized = user_content.rstrip("!！.。?？,， ")
+    normalized = latest_user_message(messages).strip().casefold().rstrip("!！.。?？,， ")
     return normalized in {"hello", "hi", "hey", "你好", "您好", "嗨"}
 
 

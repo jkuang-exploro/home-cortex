@@ -22,11 +22,14 @@ from .display import (
     resolve_display_name,
     resolve_person_reference,
 )
+from .fallbacks import grounding_fallback, no_records_fallback
 from .memorable_dates import (
     MemorableDateRegistry,
     MemorableDateSchema,
     default_memorable_date_registry,
 )
+from .request_analysis import RequestAnalysis, analyze_household_request
+from .text import latest_user_message, safe_log_token
 
 FactField = Literal[
     "address",
@@ -305,14 +308,14 @@ class _Execution:
             "tool_execution request_id=%s step=0 tool=%s success=%s "
             "relation=%s direction=%s record_count=%d duration_ms=%.2f "
             "error_code=%s planned=true",
-            _safe_log_token(self.request_id),
-            _safe_log_token(tool_name),
+            safe_log_token(self.request_id),
+            safe_log_token(tool_name),
             str(success).lower(),
-            _safe_log_token(str(arguments.get("relation") or "none")),
-            _safe_log_token(str(arguments.get("direction") or "none")),
+            safe_log_token(str(arguments.get("relation") or "none")),
+            safe_log_token(str(arguments.get("direction") or "none")),
             record_count,
             (perf_counter() - started) * 1_000,
-            _safe_log_token(error_code),
+            safe_log_token(error_code),
         )
 
 
@@ -349,18 +352,21 @@ class FactService:
         language: str,
         request_id: str,
         current_date: date | None = None,
+        analysis: RequestAnalysis | None = None,
     ) -> FactAnswer | None:
         # A request may contain a retrievable sub-fact without being answerable
         # by that fact alone (for example, "How many rooms do we have, and is
         # that enough?"). Preserve the whole intent for fact-assisted model
         # reasoning instead of returning only the parsed sub-fact.
-        if _is_home_adequacy_request(_latest_user_text(messages).casefold()):
+        if analysis is None:
+            analysis = analyze_household_request(
+                messages,
+                identity=identity,
+                memorable_dates=self.memorable_dates,
+            )
+        if _is_home_adequacy_request(analysis.text.strip().casefold()):
             return None
-        request = parse_fact_request(
-            messages,
-            identity=identity,
-            memorable_dates=self.memorable_dates,
-        )
+        request = analysis.fact_request
         if request is None:
             return None
 
@@ -381,12 +387,12 @@ class FactService:
             )
             reason: StopReason = "answer"
         except _FactFailure as error:
-            text = _grounding_fallback(language)
+            text = grounding_fallback(language)
             reason = error.reason
 
         logger.info(
             "agent_stop request_id=%s reason=%s steps=1 tool_calls=%d",
-            _safe_log_token(request_id),
+            safe_log_token(request_id),
             reason,
             execution.tool_calls,
         )
@@ -400,7 +406,9 @@ class FactService:
         request_id: str,
     ) -> FactContext | None:
         """Retrieve facts that inform, but do not determine, a judgment."""
-        if not _is_home_adequacy_request(_latest_user_text(messages).casefold()):
+        if not _is_home_adequacy_request(
+            latest_user_message(messages).strip().casefold()
+        ):
             return None
         if self.home_entity_id is None:
             return FactContext(
@@ -479,12 +487,12 @@ class FactService:
     ) -> str:
         if request.subject.kind == "speaker":
             if identity is None:
-                return _no_records_fallback(language)
+                return no_records_fallback(language)
             return _format_speaker_identity(identity, language)
 
         if request.subject.kind == "home":
             if self.home_entity_id is None:
-                return _no_records_fallback(language)
+                return no_records_fallback(language)
             if request.field in {"address", "identity"}:
                 home = await self._home_entity(execution)
                 if request.field == "identity":
@@ -546,7 +554,7 @@ class FactService:
             if request.field == "memorable_date":
                 schema = self._request_date_schema(request)
                 if schema.source_kind != "node" or schema.source_type != "person":
-                    return _no_records_fallback(language)
+                    return no_records_fallback(language)
                 return await self._answer_named_memorable_dates(
                     names,
                     execution,
@@ -566,7 +574,7 @@ class FactService:
         relative = request.subject.value
         assert isinstance(relative, str)
         if identity is None:
-            return _no_records_fallback(language)
+            return no_records_fallback(language)
         schema = (
             self._request_date_schema(request)
             if request.field == "memorable_date"
@@ -595,7 +603,7 @@ class FactService:
                     current_date,
                 )
             if schema.source_kind != "node" or schema.source_type != "person":
-                return _no_records_fallback(language)
+                return no_records_fallback(language)
             people = await self._load_entities(traversal.entities, execution)
             return _format_relative_memorable_dates(
                 people,
@@ -614,7 +622,7 @@ class FactService:
                 or request.target.kind != "home"
                 or self.home_entity_id is None
             ):
-                return _no_records_fallback(language)
+                return no_records_fallback(language)
             matches = await self._relationship_matches(
                 traversal.entities,
                 request.relation,
@@ -855,7 +863,7 @@ class FactService:
         )
         item = _exact_or_unique_entity(search_result, item_name, "item")
         if item is None:
-            return _no_records_fallback(language)
+            return no_records_fallback(language)
         item_id = item.get("id")
         if not isinstance(item_id, str):
             raise _FactFailure("tool_error")
@@ -899,7 +907,7 @@ class FactService:
         )
         space = _exact_or_unique_entity(search_result, space_name, "space")
         if space is None:
-            return _no_records_fallback(language)
+            return no_records_fallback(language)
         space_id = space.get("id")
         if not isinstance(space_id, str):
             raise _FactFailure("tool_error")
@@ -994,7 +1002,7 @@ class FactService:
                 people.append(person)
 
         if not people:
-            return _no_records_fallback(language)
+            return no_records_fallback(language)
         labels: dict[str, str] = {}
         if identity is not None:
             identity_id = str(identity["id"])
@@ -1123,7 +1131,7 @@ def parse_fact_request(
 ) -> FactRequest | None:
     """Reduce common fact language to semantics without memorizing sentences."""
     registry = memorable_dates or default_memorable_date_registry()
-    text = _latest_user_text(messages)
+    text = latest_user_message(messages).strip()
     normalized = text.casefold()
     date_schema = registry.match(normalized)
     date_query: DateQuery = (
@@ -1261,17 +1269,6 @@ def parse_fact_request(
                 date_query=date_query,
             )
     return None
-
-
-def _latest_user_text(messages: Sequence[Mapping[str, Any]]) -> str:
-    return next(
-        (
-            str(message.get("content", "")).strip()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
 
 
 def _is_next_occurrence(text: str) -> bool:
@@ -1808,7 +1805,7 @@ def _format_residents(
     language: str,
 ) -> str:
     if not residents:
-        return _no_records_fallback(language)
+        return no_records_fallback(language)
     names = [resolve_display_name(person, language) for person in residents]
     address = _speaker_address(identity, language)
     if language == "zh":
@@ -1845,7 +1842,7 @@ def _format_item_location(
     language: str,
 ) -> str:
     if not locations:
-        return _no_records_fallback(language)
+        return no_records_fallback(language)
     item_name = resolve_display_name(item, language)
     location_names = [
         resolve_display_name(location, language) for location in locations
@@ -1961,7 +1958,7 @@ def _format_home_spaces(
     language: str,
 ) -> str:
     if not spaces:
-        return _no_records_fallback(language)
+        return no_records_fallback(language)
     names = [resolve_display_name(space, language) for space in spaces]
     address = _speaker_address(identity, language)
     if language == "zh":
@@ -2008,10 +2005,10 @@ def _format_home_identity(
     language: str,
 ) -> str:
     if home is None:
-        return _no_records_fallback(language)
+        return no_records_fallback(language)
     name = resolve_display_name(home, language)
     if INTERNAL_ID_PATTERN.fullmatch(name):
-        return _no_records_fallback(language)
+        return no_records_fallback(language)
     speaker_address = _speaker_address(identity, language)
     if language == "zh":
         prefix = f"{speaker_address}，" if speaker_address else ""
@@ -2086,7 +2083,7 @@ def _format_relatives(
     language: str,
 ) -> str:
     if not people:
-        return _no_records_fallback(language)
+        return no_records_fallback(language)
     names = [resolve_display_name(person, language) for person in people]
     address = _speaker_address(identity, language)
     if language == "zh":
@@ -2141,7 +2138,7 @@ def _format_relative_memorable_dates(
     current_date: date,
 ) -> str:
     if not people:
-        return _no_records_fallback(language)
+        return no_records_fallback(language)
     address = _speaker_address(identity, language)
     multiple = len(people) > 1
     clauses: list[str] = []
@@ -2185,7 +2182,7 @@ def _format_named_memorable_dates(
     current_date: date,
 ) -> str:
     if not people and not missing:
-        return _no_records_fallback(language)
+        return no_records_fallback(language)
     clauses: list[str] = []
     for person in people:
         owner = resolve_display_name(person, language)
@@ -2225,7 +2222,7 @@ def _format_edge_memorable_date(
         and isinstance(edge.get(schema.source_field), str)
     ]
     if not matching:
-        return _no_records_fallback(language)
+        return no_records_fallback(language)
     if len(matching) > 1:
         return _ambiguous_fallback(language)
     edge = matching[0]
@@ -2476,24 +2473,8 @@ def _contains_any(text: str, terms: Sequence[str]) -> bool:
     return any(term in text for term in terms)
 
 
-def _grounding_fallback(language: str) -> str:
-    if language == "zh":
-        return "老管家目前无法从家庭资料中核实这项信息。"
-    return "The butler could not verify that from the household graph."
-
-
-def _no_records_fallback(language: str) -> str:
-    if language == "zh":
-        return "家庭资料中没有找到与这个问题匹配的信息。"
-    return "No matching information was found in the household graph."
-
-
 def _ambiguous_fallback(language: str) -> str:
     if language == "zh":
         return "家庭资料中有多个可能的结果，请说明您指的是哪一位。"
     return "Multiple household records match; please clarify which one you mean."
 
-
-def _safe_log_token(value: str, maximum_length: int = 128) -> str:
-    sanitized = re.sub(r"[^A-Za-z0-9_.:-]", "_", value)
-    return sanitized[:maximum_length]

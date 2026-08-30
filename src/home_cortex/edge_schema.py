@@ -77,6 +77,23 @@ class EdgeSchemaRegistry:
     def public_names(self) -> tuple[str, ...]:
         return tuple(sorted((*self._schemas, *self._inverse_names)))
 
+    @classmethod
+    def load_default(cls, data_dir: Path | None = None) -> "EdgeSchemaRegistry":
+        """Load edge schemas from the deployment, package, or container path."""
+        candidates: list[Path] = []
+        if data_dir is not None:
+            candidates.append(data_dir.parent / "schemas" / "edge")
+        candidates.extend(
+            (
+                Path(__file__).resolve().parents[2] / "schemas" / "edge",
+                Path("/app/schemas/edge"),
+            )
+        )
+        for candidate in candidates:
+            if candidate.is_dir():
+                return cls.from_directory(candidate)
+        raise FileNotFoundError("Could not locate schemas/edge")
+
     def get(self, relationship: str) -> EdgeSchema:
         try:
             return self._schemas[relationship]

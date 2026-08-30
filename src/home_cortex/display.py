@@ -3,6 +3,8 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
+from .text import latest_user_message, normalize_language_code
+
 INTERNAL_ID_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_])"
     r"[A-Za-z_][A-Za-z0-9_]*(?::[A-Za-z0-9_-]+)+"
@@ -177,7 +179,7 @@ def resolve_person_reference(
 
 
 def conversation_language(messages: Sequence[Mapping[str, Any]]) -> str:
-    content = _latest_user_content(messages)
+    content = latest_user_message(messages)
     lowered = content.casefold()
     if (
         "in english" in lowered
@@ -195,12 +197,12 @@ def conversation_language(messages: Sequence[Mapping[str, Any]]) -> str:
 
 
 def internal_ids_requested(messages: Sequence[Mapping[str, Any]]) -> bool:
-    content = _latest_user_content(messages)
+    content = latest_user_message(messages)
     return any(pattern.search(content) for pattern in _INTERNAL_ID_REQUEST_PATTERNS)
 
 
 def _select_display_name(entity: Mapping[str, Any], language: str) -> str | None:
-    language = language.casefold().split("-", 1)[0]
+    language = normalize_language_code(language)
     name = entity.get("name")
     display_name = entity.get("display_name")
 
@@ -222,7 +224,7 @@ def _select_display_name(entity: Mapping[str, Any], language: str) -> str | None
 
 
 def _select_address_as(entity: Mapping[str, Any], language: str) -> str | None:
-    language = language.casefold().split("-", 1)[0]
+    language = normalize_language_code(language)
     address_as = entity.get("address_as")
     localized = _localized_value(address_as, language)
     if localized:
@@ -241,7 +243,7 @@ def _select_address_as(entity: Mapping[str, Any], language: str) -> str | None:
 def _localized_value(value: Any, language: str) -> str | None:
     if isinstance(value, Mapping):
         for key, item in value.items():
-            if str(key).casefold().split("-", 1)[0] == language:
+            if normalize_language_code(str(key)) == language:
                 if isinstance(item, str) and item.strip():
                     return item.strip()
         return None
@@ -314,8 +316,4 @@ def _another_value(value: Any) -> str | None:
     return None
 
 
-def _latest_user_content(messages: Sequence[Mapping[str, Any]]) -> str:
-    for message in reversed(messages):
-        if message.get("role") == "user" and isinstance(message.get("content"), str):
-            return str(message["content"])
-    return ""
+

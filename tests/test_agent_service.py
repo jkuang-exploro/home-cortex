@@ -57,6 +57,7 @@ class FakeStreamingOllamaService:
     def __init__(self, response_streams: list[list[ChatResponse]]) -> None:
         self.response_streams = response_streams
         self.calls: list[list[dict[str, Any]]] = []
+        self.tool_names: list[tuple[str, ...]] = []
 
     async def stream_chat_with_tools(
         self,
@@ -64,6 +65,9 @@ class FakeStreamingOllamaService:
         tools: Any,
     ) -> AsyncIterator[ChatResponse]:
         self.calls.append([dict(message) for message in messages])
+        self.tool_names.append(
+            tuple(tool["function"]["name"] for tool in tools)
+        )
         for response in self.response_streams.pop(0):
             await asyncio.sleep(0)
             yield response
@@ -834,6 +838,271 @@ async def test_stream_withholds_answer_when_requested_field_is_missing() -> None
     assert chunks == [
         "The home graph does not contain matching information for that request."
     ]
+
+
+def _fixed_clock() -> datetime:
+    return datetime.fromisoformat("2026-08-22T16:30:00-07:00")
+
+
+def _paired_agents(
+    responses: list[ChatResponse],
+    dispatcher_result: dict[str, Any] | None = None,
+    *,
+    delay: float = 0,
+    **settings: Any,
+) -> tuple[
+    AgentService,
+    AgentService,
+    FakeOllamaService,
+    FakeStreamingOllamaService,
+    FakeDispatcher,
+    FakeDispatcher,
+]:
+    settings.setdefault("clock", _fixed_clock)
+    run_ollama = FakeOllamaService(list(responses))
+    stream_ollama = FakeStreamingOllamaService(
+        [[response] for response in responses]
+    )
+    run_dispatcher = FakeDispatcher(dispatcher_result, delay=delay)
+    stream_dispatcher = FakeDispatcher(dispatcher_result, delay=delay)
+    return (
+        _agent(run_ollama, run_dispatcher, **settings),
+        _agent(stream_ollama, stream_dispatcher, **settings),
+        run_ollama,
+        stream_ollama,
+        run_dispatcher,
+        stream_dispatcher,
+    )
+
+
+async def _stream_text(agent: AgentService, question: str) -> str:
+    chunks = [
+        chunk
+        async for chunk in agent.stream_answer_messages(
+            [{"role": "user", "content": question}]
+        )
+    ]
+    return "".join(chunks)
+
+
+def _assert_shared_loop(
+    run_result: Any,
+    stream_text: str,
+    run_ollama: FakeOllamaService,
+    stream_ollama: FakeStreamingOllamaService,
+    run_dispatcher: FakeDispatcher,
+    stream_dispatcher: FakeDispatcher,
+) -> None:
+    assert stream_text == run_result.answer
+    assert run_dispatcher.calls == stream_dispatcher.calls
+    assert run_ollama.tool_names == stream_ollama.tool_names
+    assert run_ollama.calls == stream_ollama.calls
+
+
+@pytest.mark.asyncio
+async def test_streaming_and_nonstreaming_share_empty_relationship_fallback() -> None:
+    responses = [
+        _chat_response(
+            tool_calls=[
+                _tool_call(
+                    "get_relationships",
+                    {"entity_id": "person:alex", "relation": "spouse_of"},
+                )
+            ]
+        ),
+        _chat_response("Alex is married to an invented person."),
+    ]
+    (
+        run_agent,
+        stream_agent,
+        run_ollama,
+        stream_ollama,
+        run_dispatcher,
+        stream_dispatcher,
+    ) = _paired_agents(
+        responses,
+        {"ok": True, "tool": "get_relationships", "result": []},
+    )
+
+    run_result = await run_agent.answer("Who is Alex's spouse?")
+    stream_text = await _stream_text(stream_agent, "Who is Alex's spouse?")
+
+    _assert_shared_loop(
+        run_result,
+        stream_text,
+        run_ollama,
+        stream_ollama,
+        run_dispatcher,
+        stream_dispatcher,
+    )
+    assert run_result.answer == (
+        "The home graph does not contain matching information for that request."
+    )
+    assert run_dispatcher.calls == [
+        (
+            "get_relationships",
+            {
+                "entity_id": "person:alex",
+                "relation": "spouse_of",
+                "limit": 25,
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_streaming_and_nonstreaming_share_missing_field_fallback() -> None:
+    responses = [
+        _chat_response(
+            tool_calls=[_tool_call("get_entity", {"entity_id": "person:alex"})]
+        ),
+        _chat_response("Alex's birthday is January 1."),
+    ]
+    (
+        run_agent,
+        stream_agent,
+        run_ollama,
+        stream_ollama,
+        run_dispatcher,
+        stream_dispatcher,
+    ) = _paired_agents(
+        responses,
+        {
+            "ok": True,
+            "tool": "get_entity",
+            "result": [{"id": "person:alex", "name": ["Alex"]}],
+        },
+    )
+
+    run_result = await run_agent.answer("When is Alex's birthday?")
+    stream_text = await _stream_text(stream_agent, "When is Alex's birthday?")
+
+    _assert_shared_loop(
+        run_result,
+        stream_text,
+        run_ollama,
+        stream_ollama,
+        run_dispatcher,
+        stream_dispatcher,
+    )
+    assert run_result.answer == (
+        "The home graph does not contain matching information for that request."
+    )
+
+
+@pytest.mark.asyncio
+async def test_streaming_and_nonstreaming_share_private_field_filtering() -> None:
+    responses = [
+        _chat_response(
+            tool_calls=[
+                _tool_call("get_entity", {"entity_id": "person:jian_kuang"})
+            ]
+        ),
+        _chat_response("匡健的生日是1988年11月11日。"),
+    ]
+    (
+        run_agent,
+        stream_agent,
+        run_ollama,
+        stream_ollama,
+        run_dispatcher,
+        stream_dispatcher,
+    ) = _paired_agents(
+        responses,
+        {
+            "ok": True,
+            "tool": "get_entity",
+            "result": [
+                {
+                    "id": "person:jian_kuang",
+                    "name": ["Jian Kuang", "匡健"],
+                    "first_name": "Jian",
+                    "last_name": "Kuang",
+                    "dob": "1988-11-11",
+                    "address": {"street": "123 Private Street"},
+                }
+            ],
+        },
+    )
+
+    run_result = await run_agent.answer("匡健的生日是什么时候？")
+    stream_text = await _stream_text(stream_agent, "匡健的生日是什么时候？")
+
+    _assert_shared_loop(
+        run_result,
+        stream_text,
+        run_ollama,
+        stream_ollama,
+        run_dispatcher,
+        stream_dispatcher,
+    )
+    tool_result = json.loads(run_ollama.calls[1][-1]["content"])
+    serialized = json.dumps(tool_result, ensure_ascii=False)
+    assert tool_result["result"][0]["dob"] == "1988-11-11"
+    assert "address" not in serialized
+    assert "123 Private Street" not in serialized
+    assert "first_name" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_streaming_and_nonstreaming_share_tool_timeout_stop() -> None:
+    responses = [
+        _chat_response(tool_calls=[_tool_call()]),
+        _chat_response("I could not retrieve the data in time."),
+    ]
+    (
+        run_agent,
+        stream_agent,
+        run_ollama,
+        stream_ollama,
+        run_dispatcher,
+        stream_dispatcher,
+    ) = _paired_agents(
+        responses,
+        delay=0.05,
+        tool_timeout_seconds=0.001,
+    )
+
+    run_result = await run_agent.answer("Find the home")
+    stream_text = await _stream_text(stream_agent, "Find the home")
+
+    _assert_shared_loop(
+        run_result,
+        stream_text,
+        run_ollama,
+        stream_ollama,
+        run_dispatcher,
+        stream_dispatcher,
+    )
+    assert run_result.stop_reason == "timeout"
+    assert json.loads(run_ollama.calls[1][-1]["content"])["error"]["code"] == (
+        "tool_timeout"
+    )
+
+
+@pytest.mark.asyncio
+async def test_streaming_and_nonstreaming_share_step_limit() -> None:
+    responses = [
+        _chat_response(tool_calls=[_tool_call()]) for _ in range(MAX_AGENT_STEPS)
+    ]
+    (
+        run_agent,
+        stream_agent,
+        run_ollama,
+        stream_ollama,
+        run_dispatcher,
+        stream_dispatcher,
+    ) = _paired_agents(responses)
+
+    with pytest.raises(AgentLimitError, match="within 4 steps") as run_error:
+        await run_agent.answer("Never-ending lookup")
+    with pytest.raises(AgentLimitError, match="within 4 steps") as stream_error:
+        await _stream_text(stream_agent, "Never-ending lookup")
+
+    assert run_error.value.stop_reason == stream_error.value.stop_reason == "step_limit"
+    assert run_dispatcher.calls == stream_dispatcher.calls
+    assert run_ollama.tool_names == stream_ollama.tool_names
+    assert len(run_ollama.calls) == len(stream_ollama.calls) == MAX_AGENT_STEPS
 
 
 @pytest.mark.asyncio

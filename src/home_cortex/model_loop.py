@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 from collections.abc import AsyncIterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any, Literal
 
@@ -17,11 +16,19 @@ from .display import (
     resolve_display_name,
     resolve_person_reference,
 )
+from .fallbacks import grounding_fallback, no_records_fallback
 from .memorable_dates import (
     MemorableDateRegistry,
     default_memorable_date_registry,
 )
 from .ollama import OllamaService
+from .request_analysis import (
+    EvidenceRequirements,
+    PRIVATE_TOOL_FIELDS,
+    RequestAnalysis,
+    analyze_household_request,
+)
+from .text import normalize_language_code, safe_log_token
 from .tools import GRAPH_TOOL_NAMES, ToolDispatcher
 
 MAX_AGENT_STEPS = 4
@@ -29,33 +36,12 @@ MAX_TOOL_CALLS_PER_STEP = 4
 MAX_TOOL_RECORDS = 25
 MAX_TOOL_RESULT_BYTES = 16_384
 TOOL_EXECUTION_TIMEOUT_SECONDS = 5.0
-PRIVATE_TOOL_FIELDS = {
-    "dob": "dob",
-    "address": "address",
-    "start": "relationship_dates",
-    "end": "relationship_dates",
-    "email": "contact",
-    "phone": "contact",
-    "phone_number": "contact",
-}
 MODEL_HIDDEN_FIELDS = frozenset(
     {"address_as", "first_name", "gender", "last_name"}
 )
 
 logger = logging.getLogger("uvicorn.error.home_cortex.agent_service")
 StopReason = Literal["answer", "step_limit", "tool_error", "timeout"]
-
-
-@dataclass(frozen=True)
-class EvidenceRequirements:
-    """Independent tool, relationship, and field evidence needed for an answer."""
-
-    tools: frozenset[str] = frozenset()
-    relations: frozenset[str] = frozenset()
-    fields: frozenset[tuple[str, str]] = frozenset()
-    related_gender: str | None = None
-    relationship_direction: Literal["out", "in"] | None = None
-    minimum_entity_records: int = 1
 
 
 class AgentLimitError(RuntimeError):
@@ -77,6 +63,49 @@ class AgentResult:
     tool_calls: int
     stop_reason: StopReason
     messages: tuple[dict[str, Any], ...]
+
+
+@dataclass
+class _LoopState:
+    conversation: list[dict[str, Any]]
+    request_id: str
+    presentation_language: str
+    expose_internal_ids: bool
+    presentation_values: Sequence[Any]
+    trusted_user_entity_id: str | None
+    analysis: RequestAnalysis
+    successful_tools: set[str] = field(default_factory=set)
+    nonempty_tools: set[str] = field(default_factory=set)
+    evidence_fields: set[str] = field(default_factory=set)
+    total_tool_calls: int = 0
+    failure_reason: StopReason | None = None
+    grounding_retry: bool = False
+
+    @property
+    def evidence_required(self) -> bool:
+        return self.analysis.evidence_required
+
+    @property
+    def requirements(self) -> EvidenceRequirements:
+        return self.analysis.evidence
+
+    @property
+    def allowed_private_fields(self) -> frozenset[str]:
+        return self.analysis.private_fields
+
+    def graph_evidence_complete(self) -> bool:
+        return _has_required_evidence(
+            self.evidence_required,
+            self.requirements,
+            self.successful_tools,
+        ) and (
+            not self.evidence_required
+            or _has_nonempty_evidence(
+                self.requirements,
+                self.nonempty_tools,
+                self.evidence_fields,
+            )
+        )
 
 
 class _SelfVocativeStream:
@@ -159,7 +188,7 @@ class ModelLoop:
             if tool["function"]["name"] not in GRAPH_TOOL_NAMES
         )
         self.localized_identity = {
-            str(language).casefold().split("-", 1)[0]: name.strip()
+            normalize_language_code(str(language)): name.strip()
             for language, name in (localized_identity or {}).items()
             if isinstance(name, str) and name.strip()
         }
@@ -209,85 +238,46 @@ class ModelLoop:
         expose_internal_ids: bool = False,
         presentation_values: Sequence[Any] = (),
         trusted_user_entity_id: str | None = None,
+        analysis: RequestAnalysis | None = None,
     ) -> AsyncIterator[str]:
         """Run the tool loop and stream chunks from the final Ollama answer."""
-        conversation = [dict(message) for message in messages]
-        if not conversation:
-            raise ValueError("At least one message is required")
-
-        total_tool_calls = 0
-        successful_tools: set[str] = set()
-        nonempty_tools: set[str] = set()
-        evidence_fields: set[str] = set()
-        failure_reason: StopReason | None = None
-        grounding_retry = False
-        evidence_required = _requires_graph_evidence(
-            conversation,
-            self.memorable_dates,
-        )
-        requirements = _evidence_requirements(
-            conversation,
-            evidence_required,
-            self.memorable_dates,
-        )
-        allowed_private_fields = _requested_private_fields(
-            conversation,
-            self.memorable_dates,
-        )
-        (
-            failure_reason,
-            prefetched_successful,
-            prefetched_nonempty,
-            prefetched_fields,
-            prefetched_tool_calls,
-        ) = await self._prefetch_related_entity_facts(
-            conversation,
-            requirements=requirements,
-            trusted_user_entity_id=trusted_user_entity_id,
+        state = await self._begin_loop(
+            messages,
             request_id=request_id,
             presentation_language=presentation_language,
-            allowed_private_fields=allowed_private_fields,
+            expose_internal_ids=expose_internal_ids,
+            presentation_values=presentation_values,
+            trusted_user_entity_id=trusted_user_entity_id,
+            analysis=analysis,
         )
-        successful_tools.update(prefetched_successful)
-        nonempty_tools.update(prefetched_nonempty)
-        evidence_fields.update(prefetched_fields)
-        total_tool_calls += prefetched_tool_calls
         for step in range(1, self.max_steps + 1):
             display_stream = DisplayTextStream(
                 DisplayNameResolver.from_messages(
-                    conversation,
-                    presentation_values,
+                    state.conversation,
+                    state.presentation_values,
                 ),
-                presentation_language,
-                expose_internal_ids=expose_internal_ids,
+                state.presentation_language,
+                expose_internal_ids=state.expose_internal_ids,
             )
             vocative_stream = _SelfVocativeStream(
-                self.localized_identity.get(presentation_language),
-                _speaker_address(presentation_values, presentation_language),
-                presentation_language,
+                self.localized_identity.get(state.presentation_language),
+                _speaker_address(
+                    state.presentation_values,
+                    state.presentation_language,
+                ),
+                state.presentation_language,
             )
             content_parts: list[str] = []
             tool_calls: list[Any] = []
             emitted_content = False
-            can_emit = _has_required_evidence(
-                evidence_required,
-                requirements,
-                successful_tools,
-            ) and (
-                not evidence_required
-                or _has_nonempty_evidence(
-                    requirements,
-                    nonempty_tools,
-                    evidence_fields,
-                )
-            )
+            can_emit = state.graph_evidence_complete()
             available_tools = self._available_tools(
-                evidence_required,
+                state.evidence_required,
                 can_emit,
             )
 
             async for response in self.ollama.stream_chat_with_tools(
-                conversation,
+                state.conversation,
                 available_tools,
             ):
                 chunk_tool_calls = list(response.message.tool_calls or [])
@@ -295,9 +285,9 @@ class ModelLoop:
                     logger.info(
                         "agent_stop request_id=%s reason=tool_error steps=%d "
                         "tool_calls=%d",
-                        _safe_log_token(request_id),
+                        safe_log_token(state.request_id),
                         step,
-                        total_tool_calls,
+                        state.total_tool_calls,
                     )
                     raise AgentStreamingError(
                         "Ollama emitted tool calls after final-answer content"
@@ -325,57 +315,24 @@ class ModelLoop:
                     tool_call.model_dump(exclude_none=True)
                     for tool_call in tool_calls
                 ]
-            conversation.append(assistant_message)
-            logger.info(
-                "agent_step request_id=%s step=%d tool_calls=%d",
-                _safe_log_token(request_id),
-                step,
-                len(tool_calls),
-            )
+            state.conversation.append(assistant_message)
+            self._log_step(state, step, len(tool_calls))
 
             if not tool_calls:
-                if not _has_required_evidence(
-                    evidence_required,
-                    requirements,
-                    successful_tools,
-                ):
-                    if failure_reason is None and not grounding_retry and step < self.max_steps:
-                        conversation.append(
-                            _grounding_retry_message(
-                                requirements,
-                            )
-                        )
-                        grounding_retry = True
-                        continue
-                    fallback = _grounding_fallback(presentation_language)
-                    yield fallback
-                    stop_reason = failure_reason or "tool_error"
-                    logger.info(
-                        "agent_stop request_id=%s reason=%s steps=%d tool_calls=%d",
-                        _safe_log_token(request_id),
-                        stop_reason,
+                decision = self._decide_empty_tools(state, step)
+                if decision == "retry":
+                    continue
+                if decision == "grounding_fallback":
+                    yield grounding_fallback(state.presentation_language)
+                    self._log_stop(
+                        state,
+                        state.failure_reason or "tool_error",
                         step,
-                        total_tool_calls,
                     )
                     return
-                if evidence_required and not _has_nonempty_evidence(
-                    requirements,
-                    nonempty_tools,
-                    evidence_fields,
-                ):
-                    if step < self.max_steps and _should_retry_incomplete_evidence(
-                        requirements,
-                        evidence_fields,
-                    ):
-                        conversation.append(_grounding_retry_message(requirements))
-                        continue
-                    yield _no_records_fallback(presentation_language)
-                    logger.info(
-                        "agent_stop request_id=%s reason=answer steps=%d tool_calls=%d",
-                        _safe_log_token(request_id),
-                        step,
-                        total_tool_calls,
-                    )
+                if decision == "no_records":
+                    yield no_records_fallback(state.presentation_language)
+                    self._log_stop(state, "answer", step)
                     return
                 rendered = display_stream.finish()
                 if rendered:
@@ -385,34 +342,18 @@ class ModelLoop:
                 trailing = vocative_stream.finish()
                 if trailing:
                     yield trailing
-                stop_reason = failure_reason or "answer"
-                logger.info(
-                    "agent_stop request_id=%s reason=%s steps=%d tool_calls=%d",
-                    _safe_log_token(request_id),
-                    stop_reason,
-                    step,
-                    total_tool_calls,
-                )
+                self._log_stop(state, state.failure_reason or "answer", step)
                 return
 
-            self._check_tool_call_limits(tool_calls, step, total_tool_calls, request_id)
-            failure_reason, successful, nonempty, fields = await self._append_tool_results(
-                conversation,
+            self._check_tool_call_limits(
                 tool_calls,
-                step=step,
-                request_id=request_id,
-                failure_reason=failure_reason,
-                presentation_language=presentation_language,
-                allowed_private_fields=allowed_private_fields,
-                requirements=requirements,
-                caller_entity_id=trusted_user_entity_id,
+                step,
+                state.total_tool_calls,
+                state.request_id,
             )
-            successful_tools.update(successful)
-            nonempty_tools.update(nonempty)
-            evidence_fields.update(fields)
-            total_tool_calls += len(tool_calls)
+            await self._apply_tool_calls(state, tool_calls, step)
 
-        self._raise_step_limit(request_id, total_tool_calls)
+        self._raise_step_limit(state.request_id, state.total_tool_calls)
 
     async def run(
         self,
@@ -423,29 +364,103 @@ class ModelLoop:
         expose_internal_ids: bool = False,
         presentation_values: Sequence[Any] = (),
         trusted_user_entity_id: str | None = None,
+        analysis: RequestAnalysis | None = None,
     ) -> AgentResult:
+        state = await self._begin_loop(
+            messages,
+            request_id=request_id,
+            presentation_language=presentation_language,
+            expose_internal_ids=expose_internal_ids,
+            presentation_values=presentation_values,
+            trusted_user_entity_id=trusted_user_entity_id,
+            analysis=analysis,
+        )
+        for step in range(1, self.max_steps + 1):
+            available_tools = self._available_tools(
+                state.evidence_required,
+                state.graph_evidence_complete(),
+            )
+            response = await self.ollama.chat_with_tools(
+                state.conversation,
+                available_tools,
+            )
+            assistant_message = response.message.model_dump(exclude_none=True)
+            state.conversation.append(assistant_message)
+            tool_calls = list(response.message.tool_calls or [])
+            self._log_step(state, step, len(tool_calls))
+
+            if not tool_calls:
+                decision = self._decide_empty_tools(state, step)
+                if decision == "retry":
+                    continue
+                if decision == "grounding_fallback":
+                    answer = grounding_fallback(state.presentation_language)
+                    stop_reason = state.failure_reason or "tool_error"
+                    self._log_stop(state, stop_reason, step)
+                    return self._agent_result(state, answer, step, stop_reason)
+                if decision == "no_records":
+                    answer = no_records_fallback(state.presentation_language)
+                    self._log_stop(state, "answer", step)
+                    return self._agent_result(state, answer, step, "answer")
+                resolver = DisplayNameResolver.from_messages(
+                    state.conversation,
+                    state.presentation_values,
+                )
+                answer = resolver.render(
+                    response.message.content or "",
+                    state.presentation_language,
+                    expose_internal_ids=state.expose_internal_ids,
+                )
+                answer = _repair_self_vocative(
+                    answer,
+                    self.localized_identity.get(state.presentation_language),
+                    _speaker_address(
+                        state.presentation_values,
+                        state.presentation_language,
+                    ),
+                    state.presentation_language,
+                )
+                stop_reason = state.failure_reason or "answer"
+                self._log_stop(state, stop_reason, step)
+                return self._agent_result(state, answer, step, stop_reason)
+
+            self._check_tool_call_limits(
+                tool_calls,
+                step,
+                state.total_tool_calls,
+                state.request_id,
+            )
+            await self._apply_tool_calls(state, tool_calls, step)
+
+        self._raise_step_limit(state.request_id, state.total_tool_calls)
+
+    async def _begin_loop(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        *,
+        request_id: str,
+        presentation_language: str,
+        expose_internal_ids: bool,
+        presentation_values: Sequence[Any],
+        trusted_user_entity_id: str | None,
+        analysis: RequestAnalysis | None,
+    ) -> _LoopState:
         conversation = [dict(message) for message in messages]
         if not conversation:
             raise ValueError("At least one message is required")
-
-        total_tool_calls = 0
-        successful_tools: set[str] = set()
-        nonempty_tools: set[str] = set()
-        evidence_fields: set[str] = set()
-        failure_reason: StopReason | None = None
-        grounding_retry = False
-        evidence_required = _requires_graph_evidence(
-            conversation,
-            self.memorable_dates,
-        )
-        requirements = _evidence_requirements(
-            conversation,
-            evidence_required,
-            self.memorable_dates,
-        )
-        allowed_private_fields = _requested_private_fields(
-            conversation,
-            self.memorable_dates,
+        if analysis is None:
+            analysis = analyze_household_request(
+                conversation,
+                memorable_dates=self.memorable_dates,
+            )
+        state = _LoopState(
+            conversation=conversation,
+            request_id=request_id,
+            presentation_language=presentation_language,
+            expose_internal_ids=expose_internal_ids,
+            presentation_values=presentation_values,
+            trusted_user_entity_id=trusted_user_entity_id,
+            analysis=analysis,
         )
         (
             failure_reason,
@@ -454,155 +469,107 @@ class ModelLoop:
             prefetched_fields,
             prefetched_tool_calls,
         ) = await self._prefetch_related_entity_facts(
-            conversation,
-            requirements=requirements,
-            trusted_user_entity_id=trusted_user_entity_id,
-            request_id=request_id,
-            presentation_language=presentation_language,
-            allowed_private_fields=allowed_private_fields,
+            state.conversation,
+            requirements=state.requirements,
+            trusted_user_entity_id=state.trusted_user_entity_id,
+            request_id=state.request_id,
+            presentation_language=state.presentation_language,
+            allowed_private_fields=state.allowed_private_fields,
         )
-        successful_tools.update(prefetched_successful)
-        nonempty_tools.update(prefetched_nonempty)
-        evidence_fields.update(prefetched_fields)
-        total_tool_calls += prefetched_tool_calls
-        for step in range(1, self.max_steps + 1):
-            evidence_complete = _has_required_evidence(
-                evidence_required,
-                requirements,
-                successful_tools,
-            ) and (
-                not evidence_required
-                or _has_nonempty_evidence(
-                    requirements,
-                    nonempty_tools,
-                    evidence_fields,
-                )
-            )
-            available_tools = self._available_tools(
-                evidence_required,
-                evidence_complete,
-            )
-            response = await self.ollama.chat_with_tools(
-                conversation,
-                available_tools,
-            )
-            assistant_message = response.message.model_dump(exclude_none=True)
-            conversation.append(assistant_message)
-            tool_calls = list(response.message.tool_calls or [])
-            logger.info(
-                "agent_step request_id=%s step=%d tool_calls=%d",
-                _safe_log_token(request_id),
-                step,
-                len(tool_calls),
-            )
+        state.failure_reason = failure_reason
+        state.successful_tools.update(prefetched_successful)
+        state.nonempty_tools.update(prefetched_nonempty)
+        state.evidence_fields.update(prefetched_fields)
+        state.total_tool_calls += prefetched_tool_calls
+        return state
 
-            if not tool_calls:
-                if not _has_required_evidence(
-                    evidence_required,
-                    requirements,
-                    successful_tools,
-                ):
-                    if failure_reason is None and not grounding_retry and step < self.max_steps:
-                        conversation.append(
-                            _grounding_retry_message(
-                                requirements,
-                            )
-                        )
-                        grounding_retry = True
-                        continue
-                    answer = _grounding_fallback(presentation_language)
-                    stop_reason = failure_reason or "tool_error"
-                    logger.info(
-                        "agent_stop request_id=%s reason=%s steps=%d tool_calls=%d",
-                        _safe_log_token(request_id),
-                        stop_reason,
-                        step,
-                        total_tool_calls,
-                    )
-                    return AgentResult(
-                        answer=answer,
-                        steps=step,
-                        tool_calls=total_tool_calls,
-                        stop_reason=stop_reason,
-                        messages=tuple(conversation),
-                    )
-                if evidence_required and not _has_nonempty_evidence(
-                    requirements,
-                    nonempty_tools,
-                    evidence_fields,
-                ):
-                    if step < self.max_steps and _should_retry_incomplete_evidence(
-                        requirements,
-                        evidence_fields,
-                    ):
-                        conversation.append(_grounding_retry_message(requirements))
-                        continue
-                    answer = _no_records_fallback(presentation_language)
-                    logger.info(
-                        "agent_stop request_id=%s reason=answer steps=%d tool_calls=%d",
-                        _safe_log_token(request_id),
-                        step,
-                        total_tool_calls,
-                    )
-                    return AgentResult(
-                        answer=answer,
-                        steps=step,
-                        tool_calls=total_tool_calls,
-                        stop_reason="answer",
-                        messages=tuple(conversation),
-                    )
-                resolver = DisplayNameResolver.from_messages(
-                    conversation,
-                    presentation_values,
+    def _decide_empty_tools(self, state: _LoopState, step: int) -> str:
+        if not _has_required_evidence(
+            state.evidence_required,
+            state.requirements,
+            state.successful_tools,
+        ):
+            if (
+                state.failure_reason is None
+                and not state.grounding_retry
+                and step < self.max_steps
+            ):
+                state.conversation.append(
+                    _grounding_retry_message(state.requirements)
                 )
-                answer = resolver.render(
-                    response.message.content or "",
-                    presentation_language,
-                    expose_internal_ids=expose_internal_ids,
+                state.grounding_retry = True
+                return "retry"
+            return "grounding_fallback"
+        if state.evidence_required and not _has_nonempty_evidence(
+            state.requirements,
+            state.nonempty_tools,
+            state.evidence_fields,
+        ):
+            if step < self.max_steps and _should_retry_incomplete_evidence(
+                state.requirements,
+                state.evidence_fields,
+            ):
+                state.conversation.append(
+                    _grounding_retry_message(state.requirements)
                 )
-                answer = _repair_self_vocative(
-                    answer,
-                    self.localized_identity.get(presentation_language),
-                    _speaker_address(
-                        presentation_values,
-                        presentation_language,
-                    ),
-                    presentation_language,
-                )
-                stop_reason = failure_reason or "answer"
-                logger.info(
-                    "agent_stop request_id=%s reason=%s steps=%d tool_calls=%d",
-                    _safe_log_token(request_id),
-                    stop_reason,
-                    step,
-                    total_tool_calls,
-                )
-                return AgentResult(
-                    answer=answer,
-                    steps=step,
-                    tool_calls=total_tool_calls,
-                    stop_reason=stop_reason,
-                    messages=tuple(conversation),
-                )
+                return "retry"
+            return "no_records"
+        return "answer"
 
-            self._check_tool_call_limits(tool_calls, step, total_tool_calls, request_id)
-            failure_reason, successful, nonempty, fields = await self._append_tool_results(
-                conversation,
-                tool_calls,
-                step=step,
-                request_id=request_id,
-                failure_reason=failure_reason,
-                presentation_language=presentation_language,
-                allowed_private_fields=allowed_private_fields,
-                requirements=requirements,
-                caller_entity_id=trusted_user_entity_id,
-            )
-            successful_tools.update(successful)
-            nonempty_tools.update(nonempty)
-            evidence_fields.update(fields)
-            total_tool_calls += len(tool_calls)
+    async def _apply_tool_calls(
+        self,
+        state: _LoopState,
+        tool_calls: Sequence[Any],
+        step: int,
+    ) -> None:
+        failure_reason, successful, nonempty, fields = await self._append_tool_results(
+            state.conversation,
+            tool_calls,
+            step=step,
+            request_id=state.request_id,
+            failure_reason=state.failure_reason,
+            presentation_language=state.presentation_language,
+            allowed_private_fields=state.allowed_private_fields,
+            requirements=state.requirements,
+            caller_entity_id=state.trusted_user_entity_id,
+        )
+        state.failure_reason = failure_reason
+        state.successful_tools.update(successful)
+        state.nonempty_tools.update(nonempty)
+        state.evidence_fields.update(fields)
+        state.total_tool_calls += len(tool_calls)
 
-        self._raise_step_limit(request_id, total_tool_calls)
+    def _log_step(self, state: _LoopState, step: int, tool_calls: int) -> None:
+        logger.info(
+            "agent_step request_id=%s step=%d tool_calls=%d",
+            safe_log_token(state.request_id),
+            step,
+            tool_calls,
+        )
+
+    def _log_stop(self, state: _LoopState, reason: str, step: int) -> None:
+        logger.info(
+            "agent_stop request_id=%s reason=%s steps=%d tool_calls=%d",
+            safe_log_token(state.request_id),
+            reason,
+            step,
+            state.total_tool_calls,
+        )
+
+    def _agent_result(
+        self,
+        state: _LoopState,
+        answer: str,
+        step: int,
+        stop_reason: StopReason,
+    ) -> AgentResult:
+        return AgentResult(
+            answer=answer,
+            steps=step,
+            tool_calls=state.total_tool_calls,
+            stop_reason=stop_reason,
+            messages=tuple(state.conversation),
+        )
 
     def _check_tool_call_limits(
         self,
@@ -614,7 +581,7 @@ class ModelLoop:
         if len(tool_calls) > self.max_tool_calls_per_step:
             logger.info(
                 "agent_stop request_id=%s reason=step_limit steps=%d tool_calls=%d",
-                _safe_log_token(request_id),
+                safe_log_token(request_id),
                 step,
                 total_tool_calls,
             )
@@ -626,7 +593,7 @@ class ModelLoop:
         if step == self.max_steps:
             logger.info(
                 "agent_stop request_id=%s reason=step_limit steps=%d tool_calls=%d",
-                _safe_log_token(request_id),
+                safe_log_token(request_id),
                 step,
                 total_tool_calls,
             )
@@ -801,14 +768,14 @@ class ModelLoop:
             "tool_execution request_id=%s step=0 tool=%s success=%s "
             "relation=%s direction=%s record_count=%d duration_ms=%.2f "
             "error_code=%s planned=true",
-            _safe_log_token(request_id),
-            _safe_log_token(tool_name),
+            safe_log_token(request_id),
+            safe_log_token(tool_name),
             str(tool_result.get("ok") is True).lower(),
-            _safe_log_token(str(arguments.get("relation") or "none")),
-            _safe_log_token(str(arguments.get("direction") or "none")),
+            safe_log_token(str(arguments.get("relation") or "none")),
+            safe_log_token(str(arguments.get("direction") or "none")),
             record_count,
             duration_ms,
-            _safe_log_token(str(error_code)),
+            safe_log_token(str(error_code)),
         )
         return tool_result
 
@@ -881,15 +848,15 @@ class ModelLoop:
                 "tool_execution request_id=%s step=%d tool=%s success=%s "
                 "relation=%s direction=%s record_count=%d duration_ms=%.2f "
                 "error_code=%s",
-                _safe_log_token(request_id),
+                safe_log_token(request_id),
                 step,
-                _safe_log_token(tool_name),
+                safe_log_token(tool_name),
                 str(success).lower(),
-                _safe_log_token(str(relation or "none")),
-                _safe_log_token(str(direction or "none")),
+                safe_log_token(str(relation or "none")),
+                safe_log_token(str(direction or "none")),
                 record_count,
                 duration_ms,
-                _safe_log_token(str(error_code)),
+                safe_log_token(str(error_code)),
             )
             conversation.append(
                 {
@@ -909,7 +876,7 @@ class ModelLoop:
     def _raise_step_limit(self, request_id: str, total_tool_calls: int) -> None:
         logger.info(
             "agent_stop request_id=%s reason=step_limit steps=%d tool_calls=%d",
-            _safe_log_token(request_id),
+            safe_log_token(request_id),
             self.max_steps,
             total_tool_calls,
         )
@@ -1076,340 +1043,6 @@ def _repair_self_vocative(
     return stream.feed(text) + stream.finish()
 
 
-def _is_household_roster_request(
-    messages: Sequence[Mapping[str, Any]],
-    memorable_dates: MemorableDateRegistry,
-) -> bool:
-    """Recognize resident-roster requests for generic evidence enforcement."""
-    latest_user = next(
-        (
-            str(message.get("content", "")).casefold()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
-    if _contains_any(
-        latest_user,
-        memorable_dates.aliases
-        + (
-            "parent",
-            "child",
-            "daughter",
-            "son",
-            "spouse",
-            "wife",
-            "husband",
-            "父母",
-            "父亲",
-            "母亲",
-            "孩子",
-            "儿子",
-            "女儿",
-            "配偶",
-            "妻子",
-            "丈夫",
-        ),
-    ):
-        return False
-
-    chinese_home = r"(?:家里|家中|家里面|家里边|这个家|这里)"
-    chinese_people = r"(?:谁|哪些人|什么人|成员|住户)"
-    if re.search(
-        rf"(?:{chinese_home}.*{chinese_people}|"
-        rf"{chinese_people}.*(?:住|居住|待在).*{chinese_home})",
-        latest_user,
-    ):
-        return True
-    if re.search(
-        rf"{chinese_home}.*(?:多少|几)(?:个|位)?(?:人|住户|居民)",
-        latest_user,
-    ):
-        return True
-
-    patterns = (
-        r"\bwho\b.*\b(?:live|lives|living|reside|resides|stays?)\b.*"
-        r"\b(?:home|house|household|here)\b",
-        r"\b(?:household|home|house)\s+(?:members|residents|occupants)\b",
-        r"\bwho\b.*\b(?:in|at)\b.*\b(?:my|our|the)\s+household\b",
-        r"\bhow many\b.*\b(?:people|residents|occupants)\b.*"
-        r"\b(?:my|our|the)\s+(?:home|house|household)\b",
-    )
-    return any(re.search(pattern, latest_user) for pattern in patterns)
-
-
-def _is_household_space_request(
-    messages: Sequence[Mapping[str, Any]],
-) -> bool:
-    """Recognize home room/space lookups for generic evidence enforcement."""
-    latest_user = next(
-        (
-            str(message.get("content", "")).casefold()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
-    chinese = re.search(
-        r"(?:家里|家中|家里面|家里边|这个家).*(?:房间|空间|区域)|"
-        r"(?:房间|空间|区域).*(?:家里|家中|这个家)",
-        latest_user,
-    )
-    english = re.search(
-        r"\b(?:room|rooms|space|spaces)\b.*\b(?:my|our|the)\s+"
-        r"(?:home|house)\b|"
-        r"\b(?:my|our|the)\s+(?:home|house)\b.*"
-        r"\b(?:room|rooms|space|spaces)\b",
-        latest_user,
-    )
-    return chinese is not None or english is not None
-
-
-def _is_item_location_request(
-    messages: Sequence[Mapping[str, Any]],
-) -> bool:
-    """Recognize named-entity location lookups for evidence enforcement."""
-    latest_user = next(
-        (
-            str(message.get("content", "")).casefold().strip()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
-    if re.fullmatch(
-        r"(?:where is|where's)\s+(?:(?:my|our|the)\s+)?"
-        r"(?:home|house|household|here)[?]?",
-        latest_user,
-    ) or re.fullmatch(
-        r"(?:我家|家里|家中|这里|这儿)(?:在|位于)?"
-        r"(?:哪里|哪儿|什么地方)[?？。！!]?",
-        latest_user,
-    ):
-        return False
-    chinese = re.fullmatch(
-        r"(?:请问|麻烦告诉我)?\s*.+?\s*(?:现在)?(?:在|位于)"
-        r"(?:哪里|哪儿|什么地方|哪个房间|哪间房间?)[?？。！!]?",
-        latest_user,
-    )
-    english = re.fullmatch(
-        r"(?:(?:where is|where's)\s+.+?|"
-        r"(?:which|what) room is\s+.+?\s+in)[?]?",
-        latest_user,
-    )
-    return chinese is not None or english is not None
-
-
-def _requires_graph_evidence(
-    messages: Sequence[Mapping[str, Any]],
-    memorable_dates: MemorableDateRegistry,
-) -> bool:
-    latest_user = next(
-        (
-            str(message.get("content", ""))
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
-    normalized = latest_user.casefold()
-    if _required_evidence_tool(messages, memorable_dates) is None:
-        return False
-
-    # Relationship words can appear in ordinary conversation without asking
-    # for a stored household fact. Require graph evidence only for lookup intent.
-    non_lookup_intent = (
-        r"\b(?:advice|chat|feel|feeling|gift|joke|opinion|recommend|story|"
-        r"suggest|talk|think|add|decorate|design|remodel|should|enough|"
-        r"adequate|comfortable|crowded|spacious|suitable|fit)\b|"
-        r"建议|推荐|礼物|聊|笑话|故事|觉得|认为|心情|装修|设计|改造|增加|"
-        r"够|合适|适合|舒服|舒适|拥挤|宽敞|住得下|住不下|住得开|"
-        r"住不开|好不好|怎么样|如何"
-    )
-    if re.search(non_lookup_intent, normalized):
-        return False
-
-    lookup_intent = (
-        r"\b(?:find|identify|list|search|show|tell me|what|when|where|which|"
-        r"who|whose|how many|how old)\b|谁|什么|哪|何时|什么时候|多少|几岁|"
-        r"几个|几间|是否|查|找|告诉我|列出|显示"
-    )
-    if re.search(lookup_intent, normalized):
-        return True
-
-    # Direct yes/no requests for stored relationship predicates also need
-    # evidence, while plain statements mentioning those predicates do not.
-    yes_no_predicate = (
-        r"(?:\b(?:is|are|was|were|do|does|did)\b.*\b(?:live|lives|living|"
-        r"reside|resides|married)\b)|(?:住|居住|结婚|已婚).*吗[？?]?$|"
-        r"是否.*(?:住|居住|结婚|已婚)"
-    )
-    return re.search(yes_no_predicate, normalized.strip()) is not None
-
-
-def _required_evidence_tool(
-    messages: Sequence[Mapping[str, Any]],
-    memorable_dates: MemorableDateRegistry,
-) -> str | None:
-    if _is_household_roster_request(messages, memorable_dates):
-        return "get_relationships"
-    if _is_household_space_request(messages):
-        return "get_relationships"
-    if _is_item_location_request(messages):
-        return "get_relationships"
-    latest_user = next(
-        (
-            str(message.get("content", "")).casefold()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
-    date_schema = memorable_dates.match(latest_user)
-    if date_schema is not None:
-        return (
-            "get_entity"
-            if date_schema.source_kind == "node"
-            else "get_relationships"
-        )
-    relationship_fields = (
-        "live",
-        "lives",
-        "living",
-        "reside",
-        "resides",
-        "spouse",
-        "wife",
-        "husband",
-        "married",
-        "parent",
-        "child",
-        "daughter",
-        "son",
-        "household",
-        "住",
-        "家里有谁",
-        "家中有谁",
-        "配偶",
-        "妻子",
-        "丈夫",
-        "老婆",
-        "老公",
-        "父母",
-        "孩子",
-        "女儿",
-        "儿子",
-        "结婚",
-    )
-    if _contains_any(latest_user, relationship_fields):
-        return "get_relationships"
-    return None
-
-
-def _required_evidence_relation(
-    messages: Sequence[Mapping[str, Any]],
-    memorable_dates: MemorableDateRegistry,
-) -> str | None:
-    if _is_household_roster_request(messages, memorable_dates):
-        return "lives_in"
-    if _is_household_space_request(messages):
-        return "hosts_space"
-    if _is_item_location_request(messages):
-        return "located_in"
-    latest_user = next(
-        (
-            str(message.get("content", "")).casefold()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
-    date_schema = memorable_dates.match(latest_user)
-    if date_schema is not None and date_schema.source_kind == "edge":
-        return date_schema.source_type
-    parent_terms = (
-        "parent",
-        "child",
-        "daughter",
-        "son",
-        "父母",
-        "父亲",
-        "母亲",
-        "爸爸",
-        "妈妈",
-        "孩子",
-        "女儿",
-        "儿子",
-    )
-    spouse_terms = (
-        "spouse",
-        "wife",
-        "husband",
-        "married",
-        "anniversary",
-        "配偶",
-        "妻子",
-        "丈夫",
-        "太太",
-        "老婆",
-        "老公",
-        "结婚",
-        "纪念日",
-    )
-    residence_terms = (
-        "live",
-        "lives",
-        "living",
-        "reside",
-        "resides",
-        "household",
-        "住",
-        "家里有谁",
-        "家中有谁",
-    )
-    if _contains_any(latest_user, parent_terms):
-        return "parent_of"
-    if _contains_any(latest_user, spouse_terms):
-        return "spouse_of"
-    if _contains_any(latest_user, residence_terms):
-        return "lives_in"
-    return None
-
-
-def _evidence_requirements(
-    messages: Sequence[Mapping[str, Any]],
-    evidence_required: bool,
-    memorable_dates: MemorableDateRegistry,
-) -> EvidenceRequirements:
-    if not evidence_required:
-        return EvidenceRequirements()
-
-    primary_tool = _required_evidence_tool(messages, memorable_dates)
-    relation = _required_evidence_relation(messages, memorable_dates)
-    field = _required_evidence_field(messages, memorable_dates)
-    tools: set[str] = set()
-    relations: set[str] = set()
-    fields: set[tuple[str, str]] = set()
-
-    if relation is not None:
-        tools.add("get_relationships")
-        relations.add(relation)
-    if field is not None and primary_tool is not None:
-        tools.add(primary_tool)
-        fields.add((primary_tool, field))
-    if not tools and primary_tool is not None:
-        tools.add(primary_tool)
-
-    return EvidenceRequirements(
-        tools=frozenset(tools),
-        relations=frozenset(relations),
-        fields=frozenset(fields),
-        related_gender=_required_related_gender(messages),
-        relationship_direction=_required_relationship_direction(messages),
-        minimum_entity_records=_required_entity_record_count(messages),
-    )
-
-
 def _has_required_evidence(
     evidence_required: bool,
     requirements: EvidenceRequirements,
@@ -1477,89 +1110,6 @@ def _has_nonempty_evidence(
     return True
 
 
-def _required_related_gender(
-    messages: Sequence[Mapping[str, Any]],
-) -> str | None:
-    latest_user = next(
-        (
-            str(message.get("content", "")).casefold()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
-    if _contains_any(
-        latest_user,
-        (
-            "daughter",
-            "mother",
-            "wife",
-            "女儿",
-            "母亲",
-            "妈妈",
-            "妻子",
-            "太太",
-            "老婆",
-        ),
-    ):
-        return "female"
-    if _contains_any(
-        latest_user,
-        (
-            "son",
-            "father",
-            "husband",
-            "儿子",
-            "父亲",
-            "爸爸",
-            "丈夫",
-            "老公",
-        ),
-    ):
-        return "male"
-    return None
-
-
-def _required_relationship_direction(
-    messages: Sequence[Mapping[str, Any]],
-) -> Literal["out", "in"] | None:
-    latest_user = next(
-        (
-            str(message.get("content", "")).casefold()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
-    if _contains_any(latest_user, ("child", "daughter", "son", "孩子", "女儿", "儿子")):
-        return "out"
-    if _contains_any(
-        latest_user,
-        ("parent", "father", "mother", "父母", "父亲", "母亲", "爸爸", "妈妈"),
-    ):
-        return "in"
-    return None
-
-
-def _required_entity_record_count(
-    messages: Sequence[Mapping[str, Any]],
-) -> int:
-    latest_user = next(
-        (
-            str(message.get("content", "")).casefold()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
-    if _contains_any(
-        latest_user,
-        ("both", "children", "their", "them", "they", "他们", "她们", "孩子们"),
-    ):
-        return 2
-    return 1
-
-
 def _should_retry_incomplete_evidence(
     requirements: EvidenceRequirements,
     evidence_fields: set[str],
@@ -1590,58 +1140,6 @@ def _should_retry_incomplete_evidence(
         }
         return bool(entity_ids and related_ids and not entity_ids.intersection(related_ids))
     return False
-
-
-def _required_evidence_field(
-    messages: Sequence[Mapping[str, Any]],
-    memorable_dates: MemorableDateRegistry,
-) -> str | None:
-    latest_user = next(
-        (
-            str(message.get("content", "")).casefold()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
-    schema = memorable_dates.match(latest_user)
-    return schema.source_field if schema is not None else None
-
-
-def _requested_private_fields(
-    messages: Sequence[Mapping[str, Any]],
-    memorable_dates: MemorableDateRegistry,
-) -> frozenset[str]:
-    latest_user = next(
-        (
-            str(message.get("content", "")).casefold()
-            for message in reversed(messages)
-            if message.get("role") == "user"
-        ),
-        "",
-    )
-    allowed: set[str] = set()
-    schema = memorable_dates.match(latest_user)
-    if schema is not None:
-        private_field = PRIVATE_TOOL_FIELDS.get(schema.source_field)
-        if private_field is not None:
-            allowed.add(private_field)
-    if _contains_any(
-        latest_user,
-        ("address", "street address", "地址", "住址"),
-    ):
-        allowed.add("address")
-    if _contains_any(
-        latest_user,
-        ("move-in date", "when did", "什么时候搬"),
-    ):
-        allowed.add("relationship_dates")
-    if _contains_any(
-        latest_user,
-        ("email", "phone", "telephone", "邮箱", "电话"),
-    ):
-        allowed.add("contact")
-    return frozenset(allowed)
 
 
 def _constrain_tool_arguments(
@@ -1841,16 +1339,6 @@ def _prepare_tool_value(
     return value
 
 
-def _contains_any(text: str, terms: Sequence[str]) -> bool:
-    for term in terms:
-        if term.isascii():
-            if re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text):
-                return True
-        elif term in text:
-            return True
-    return False
-
-
 def _grounding_retry_message(
     requirements: EvidenceRequirements,
 ) -> dict[str, str]:
@@ -1896,18 +1384,6 @@ def _grounding_retry_message(
     }
 
 
-def _grounding_fallback(language: str) -> str:
-    if language == "zh":
-        return "老管家目前无法从家庭资料中核实这项信息。"
-    return "I could not verify that information from the home graph."
-
-
-def _no_records_fallback(language: str) -> str:
-    if language == "zh":
-        return "家庭资料中没有找到与这个问题匹配的信息。"
-    return "The home graph does not contain matching information for that request."
-
-
 def _bounded_limit(
     name: str,
     value: int,
@@ -1935,12 +1411,3 @@ def _byte_length(value: str) -> int:
     return len(value.encode("utf-8"))
 
 
-def _safe_log_token(value: str, maximum_length: int = 128) -> str:
-    """Keep model- or client-supplied identifiers on one safe log line."""
-    sanitized = "".join(
-        character
-        if character.isascii() and (character.isalnum() or character in "._-")
-        else "_"
-        for character in value
-    )
-    return sanitized[:maximum_length] or "-"
