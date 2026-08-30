@@ -5,9 +5,9 @@ from typing import Any
 
 import pytest
 
-from home_cortex.facts import (
+from home_cortex.facts import FactService
+from home_cortex.request_analysis import (
     FactRequest,
-    FactService,
     SubjectReference,
     parse_fact_request,
 )

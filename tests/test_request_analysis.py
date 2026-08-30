@@ -4,9 +4,8 @@ from typing import Any
 
 import pytest
 
-from home_cortex.facts import parse_fact_request
 from home_cortex.memorable_dates import default_memorable_date_registry
-from home_cortex.request_analysis import analyze_household_request
+from home_cortex.request_analysis import analyze_household_request, parse_fact_request
 
 IDENTITY: dict[str, Any] = {
     "id": "person:jian_kuang",
@@ -41,11 +40,11 @@ def _analyze(text: str, *, identity: dict[str, Any] | None = IDENTITY):
         (
             "Who are my children?",
             "identity",
-            frozenset(),
+            frozenset({"parent_of"}),
+            "out",
             None,
-            None,
             frozenset(),
-            False,
+            True,
         ),
         (
             "我有几个孩子？",
@@ -68,9 +67,9 @@ def _analyze(text: str, *, identity: dict[str, Any] | None = IDENTITY):
         (
             "我岳父生日是哪天？",
             "memorable_date",
-            frozenset(),
-            None,
-            None,
+            frozenset({"spouse_of", "parent_of"}),
+            "in",
+            "male",
             frozenset({"dob"}),
             True,
         ),
@@ -173,3 +172,73 @@ def test_named_birthday_without_identity_still_requires_entity_evidence() -> Non
     assert analysis.evidence_required is True
     assert ("get_entity", "dob") in analysis.evidence.fields
     assert "dob" in analysis.private_fields
+
+
+def test_person_does_not_parse_as_son_with_trusted_identity() -> None:
+    request = parse_fact_request(
+        _messages("Who is this person?"),
+        identity=IDENTITY,
+        memorable_dates=REGISTRY,
+    )
+    analysis = _analyze("Who is this person?")
+
+    assert request is None or (
+        request.subject.kind != "relative" and request.subject.value != "son"
+    )
+    assert "parent_of" not in analysis.evidence.relations
+
+
+def test_whose_does_not_count_as_who_lookup_for_a_son_request() -> None:
+    request = parse_fact_request(
+        _messages("Whose son is that?"),
+        identity=IDENTITY,
+        memorable_dates=REGISTRY,
+    )
+    analysis = _analyze("Whose son is that?")
+
+    assert request is None or request.field != "identity"
+    assert "parent_of" not in analysis.evidence.relations
+
+
+def test_english_plural_sons_are_relative_requests() -> None:
+    count = _analyze("How many sons do I have?")
+    assert count.fact_request is not None
+    assert count.fact_request.field == "count"
+    assert count.fact_request.subject.value == "son"
+    assert count.evidence_required is True
+    assert "parent_of" in count.evidence.relations
+    assert count.evidence.relationship_direction == "out"
+
+    who = _analyze("Who are my sons?")
+    assert who.fact_request is not None
+    assert who.fact_request.field == "identity"
+    assert who.fact_request.subject.value == "son"
+    assert who.fact_request.cardinality == "all"
+    assert "parent_of" in who.evidence.relations
+
+
+def test_english_relative_location_is_not_an_item_lookup() -> None:
+    for text in (
+        "Where is my son?",
+        "Where is my wife?",
+        "Where is my father?",
+        "Which room is my son in?",
+    ):
+        request = parse_fact_request(
+            _messages(text),
+            identity=IDENTITY,
+            memorable_dates=REGISTRY,
+        )
+        assert request is None or request.subject.kind != "item"
+
+
+def test_phone_number_is_not_a_relative_count() -> None:
+    request = parse_fact_request(
+        _messages("What is my son's phone number?"),
+        identity=IDENTITY,
+        memorable_dates=REGISTRY,
+    )
+    analysis = _analyze("What is my son's phone number?")
+
+    assert request is None or request.field != "count"
+    assert "contact" in analysis.private_fields

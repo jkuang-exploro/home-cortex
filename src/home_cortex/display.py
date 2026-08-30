@@ -314,6 +314,3 @@ def _another_value(value: Any) -> str | None:
             None,
         )
     return None
-
-
-

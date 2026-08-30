@@ -1409,5 +1409,3 @@ def _json(value: Any) -> str:
 
 def _byte_length(value: str) -> int:
     return len(value.encode("utf-8"))
-
-
