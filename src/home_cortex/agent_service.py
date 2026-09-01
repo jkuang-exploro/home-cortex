@@ -203,21 +203,23 @@ class AgentService:
         identity = _normalized_identity(user_entity_id, user_entity)
         now = self._now()
         household_now = now.astimezone(ZoneInfo(self.household_timezone))
-        grounded_answer = await self.grounding.try_answer(
+        identity_answer = _identity_answer(
             safe_messages,
-            caller_entity_id=(str(identity["id"]) if identity else None),
-            household_now=household_now,
+            localized_identity=self.model_loop.localized_identity,
+            speaker=identity,
             language=language,
-            request_id=request_id,
         )
-        identity_answer = None
-        if grounded_answer is None:
-            identity_answer = _agent_identity_answer(
+        grounded_answer = (
+            None
+            if identity_answer is not None
+            else await self.grounding.try_answer(
                 safe_messages,
-                localized_identity=self.model_loop.localized_identity,
-                speaker=identity,
+                caller_entity_id=(str(identity["id"]) if identity else None),
+                household_now=household_now,
                 language=language,
+                request_id=request_id,
             )
+        )
         trusted = self._trusted_conversation(
             safe_messages,
             identity,
@@ -299,7 +301,7 @@ def _household_datetime(zone: ZoneInfo, now: datetime) -> datetime:
     return now.astimezone(zone) if now.tzinfo is not None else now.replace(tzinfo=zone)
 
 
-def _agent_identity_answer(
+def _identity_answer(
     messages: Sequence[Mapping[str, Any]],
     *,
     localized_identity: Mapping[str, str],
@@ -308,7 +310,7 @@ def _agent_identity_answer(
 ) -> str | None:
     latest = latest_user_message(messages).strip()
     normalized = latest.casefold().strip(" \t\r\n?!？。！")
-    asks_identity = bool(
+    asks_agent_identity = bool(
         re.fullmatch(r"(?:你|您)(?:是)?谁", normalized)
         or re.fullmatch(r"(?:你|您)(?:叫)?什么(?:名字)?", normalized)
         or re.fullmatch(
@@ -316,8 +318,51 @@ def _agent_identity_answer(
             normalized,
         )
     )
-    if not asks_identity:
+    if asks_agent_identity:
+        return _agent_identity_response(
+            localized_identity,
+            speaker,
+            language,
+        )
+    asks_speaker_identity = bool(
+        re.fullmatch(r"我是谁|我叫什么(?:名字)?|我的名字是什么", normalized)
+        or re.fullmatch(
+            r"who am i|what(?:'s| is) my name",
+            normalized,
+        )
+    )
+    if not asks_speaker_identity:
         return None
+    if speaker is None:
+        return (
+            "我无法确认当前登录者的身份。"
+            if language == "zh"
+            else "I cannot verify the identity of the current signed-in user."
+        )
+    name = resolve_person_reference(speaker, language, mode="name")
+    if not name:
+        return (
+            "当前登录者没有可用的姓名记录。"
+            if language == "zh"
+            else "The current signed-in user has no available name record."
+        )
+    address = (
+        resolve_person_reference(speaker, language, mode="address")
+        if speaker.get("address_as")
+        else None
+    )
+    if language == "zh":
+        prefix = f"{address}，" if address else ""
+        return f"{prefix}您是{name}。"
+    prefix = f"{address}, " if address else ""
+    return f"{prefix}you are {name}."
+
+
+def _agent_identity_response(
+    localized_identity: Mapping[str, str],
+    speaker: Mapping[str, Any] | None,
+    language: str,
+) -> str | None:
     agent_name = (
         localized_identity.get(language)
         or localized_identity.get("en")

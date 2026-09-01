@@ -196,6 +196,38 @@ def test_planner_compiler_adds_declared_query_dependencies_to_evidence() -> None
     }
 
 
+@pytest.mark.parametrize(
+    ("reference", "anchor", "expected_type"),
+    (
+        ("I", "authenticated_user", "person"),
+        ("我", "authenticated_user", "person"),
+        ("家里", "configured_home", "address"),
+    ),
+)
+def test_planner_compiler_normalizes_trusted_subject_anchors(
+    reference: str,
+    anchor: str,
+    expected_type: str,
+) -> None:
+    payload = {
+        "requires_grounding": True,
+        "grounding_domain": "household",
+        "goal": "lookup",
+        "subject": {
+            "anchor": "named_entity",
+            "reference": reference,
+            "expected_type": "measurement",
+        },
+        "fields": ["name"],
+        "required_evidence": [],
+    }
+
+    completed = _complete_evidence_requirements(payload)
+
+    assert completed["subject"]["anchor"] == anchor
+    assert completed["subject"]["expected_type"] == expected_type
+
+
 @pytest.mark.asyncio
 async def test_arbitrary_new_entity_property_needs_no_code_change() -> None:
     dispatcher = Dispatcher(
@@ -990,9 +1022,9 @@ async def test_structured_llm_plan_drives_open_world_service() -> None:
                 grounding_domain="household",
                 goal="authenticated speaker identity",
                 subject=GroundingSubject(
-                    anchor="authenticated_user",
-                    reference="我",
-                    expected_type="person",
+                    anchor="named_entity",
+                    reference="I",
+                    expected_type="measurement",
                 ),
                 fields=("name",),
                 required_evidence=(RequiredEvidence(field="name"),),

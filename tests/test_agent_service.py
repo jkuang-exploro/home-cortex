@@ -33,8 +33,10 @@ class FakeOllamaService:
         self.responses = responses
         self.calls: list[list[dict[str, Any]]] = []
         self.tool_names: list[tuple[str, ...]] = []
+        self.plan_calls = 0
 
     async def plan_grounding(self, *_: Any, **__: Any) -> dict[str, Any]:
+        self.plan_calls += 1
         return GroundingPlan(
             requires_grounding=False,
             grounding_domain="external_tool",
@@ -256,6 +258,35 @@ async def test_agent_identity_answer_uses_configured_role_and_speaker_address() 
 
     assert result.answer == "先生，我是老管家。"
     assert ollama.calls == []
+    assert ollama.plan_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_speaker_identity_uses_authenticated_context_before_planner() -> None:
+    ollama = FakeOllamaService([])
+
+    result = await _agent(ollama, FakeDispatcher()).answer(
+        "我是谁？",
+        user_entity={
+            "id": "person:jian_kuang",
+            "name": ["Jian Kuang", "匡健"],
+            "address_as": {"zh": "先生"},
+        },
+    )
+
+    assert result.answer == "先生，您是匡健。"
+    assert ollama.calls == []
+    assert ollama.plan_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_speaker_identity_without_authentication_fails_clearly() -> None:
+    ollama = FakeOllamaService([])
+
+    result = await _agent(ollama, FakeDispatcher()).answer("我是谁？")
+
+    assert result.answer == "我无法确认当前登录者的身份。"
+    assert ollama.plan_calls == 0
 
 
 def _fixed_clock() -> datetime:

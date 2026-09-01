@@ -397,6 +397,41 @@ def _complete_evidence_requirements(
     completed = dict(payload)
     if completed.get("requires_grounding") is not True:
         return completed
+    subject = completed.get("subject")
+    if isinstance(subject, Mapping):
+        normalized_subject = dict(subject)
+        reference = normalized_subject.get("reference")
+        normalized_reference = (
+            reference.casefold().strip(" \t\r\n?!？。！")
+            if isinstance(reference, str)
+            else ""
+        )
+        if normalized_reference in {
+            "i",
+            "me",
+            "myself",
+            "authenticated user",
+            "current user",
+            "我",
+            "本人",
+            "当前用户",
+        }:
+            normalized_subject["anchor"] = "authenticated_user"
+            normalized_subject["expected_type"] = "person"
+        elif normalized_reference in {
+            "home",
+            "my home",
+            "our home",
+            "the home",
+            "家",
+            "家里",
+            "家中",
+            "我家",
+            "我们家",
+        }:
+            normalized_subject["anchor"] = "configured_home"
+            normalized_subject["expected_type"] = "address"
+        completed["subject"] = normalized_subject
     raw_requirements = completed.get("required_evidence", [])
     if not isinstance(raw_requirements, list):
         return completed
