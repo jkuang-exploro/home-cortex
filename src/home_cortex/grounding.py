@@ -333,7 +333,11 @@ class GroundingPlanner:
                 output_schema,
                 household_now=household_now.isoformat(),
             )
-            return _validate_planner_payload(payload)
+            return _validate_planner_payload(
+                payload,
+                messages=messages,
+                catalog=self.catalog,
+            )
         except (ValidationError, ValueError, TypeError) as error:
             validation_errors = (
                 error.errors(include_input=False)
@@ -363,7 +367,11 @@ class GroundingPlanner:
                 output_schema,
                 household_now=household_now.isoformat(),
             )
-            return _validate_planner_payload(repaired)
+            return _validate_planner_payload(
+                repaired,
+                messages=messages,
+                catalog=self.catalog,
+            )
 
 
 def _planner_output_schema() -> dict[str, Any]:
@@ -380,9 +388,116 @@ def _planner_output_schema() -> dict[str, Any]:
     return schema
 
 
-def _validate_planner_payload(payload: Mapping[str, Any]) -> GroundingPlan:
+def _validate_planner_payload(
+    payload: Mapping[str, Any],
+    *,
+    messages: Sequence[Mapping[str, Any]] = (),
+    catalog: RuntimeSchemaCatalog | None = None,
+) -> GroundingPlan:
     completed = _complete_evidence_requirements(payload)
+    completed = _normalize_trusted_plan_roots(completed, messages, catalog)
     return GroundingPlan.model_validate_json(json.dumps(completed))
+
+
+def _normalize_trusted_plan_roots(
+    payload: Mapping[str, Any],
+    messages: Sequence[Mapping[str, Any]],
+    catalog: RuntimeSchemaCatalog | None,
+) -> dict[str, Any]:
+    """Keep conversational history from changing trusted graph roots."""
+    completed = dict(payload)
+    if completed.get("requires_grounding") is not True:
+        return completed
+    latest = next(
+        (
+            message.get("content")
+            for message in reversed(messages)
+            if message.get("role") == "user"
+            and isinstance(message.get("content"), str)
+        ),
+        "",
+    )
+    if not _references_configured_home(str(latest)):
+        return completed
+    subject = completed.get("subject")
+    if not isinstance(subject, Mapping):
+        return completed
+    normalized_subject = dict(subject)
+    normalized_subject.update(
+        {
+            "anchor": "configured_home",
+            "reference": "home",
+            "expected_type": "address",
+        }
+    )
+    completed["subject"] = normalized_subject
+    if catalog is not None:
+        completed["traversal"] = _normalize_traversal_directions(
+            completed.get("traversal"),
+            root_type="address",
+            catalog=catalog,
+        )
+    return completed
+
+
+def _references_configured_home(text: str) -> bool:
+    normalized = text.casefold()
+    return bool(
+        re.search(r"\b(?:(?:my|our|the)\s+)?(?:home|household)\b", normalized)
+        or re.search(r"(?:我家|我们家|咱们家|家里|家中|家里的|家中的)", normalized)
+    )
+
+
+def _normalize_traversal_directions(
+    raw_traversal: Any,
+    *,
+    root_type: str,
+    catalog: RuntimeSchemaCatalog,
+) -> Any:
+    if not isinstance(raw_traversal, list):
+        return raw_traversal
+    current_type = root_type
+    normalized: list[Any] = []
+    for raw_step in raw_traversal:
+        if not isinstance(raw_step, Mapping):
+            normalized.append(raw_step)
+            continue
+        step = dict(raw_step)
+        relation = step.get("relation")
+        schema = catalog.relations.get(relation) if isinstance(relation, str) else None
+        inverse = False
+        if schema is None and isinstance(relation, str):
+            schema = next(
+                (
+                    candidate
+                    for candidate in catalog.relations.values()
+                    if candidate.inverse_name == relation
+                ),
+                None,
+            )
+            inverse = schema is not None
+        if schema is None:
+            normalized.append(step)
+            continue
+        from_types = schema.to_types if inverse else schema.from_types
+        to_types = schema.from_types if inverse else schema.to_types
+        related_type = step.get("related_type")
+        if schema.symmetric:
+            step["direction"] = None
+        elif current_type in from_types and current_type not in to_types:
+            step["direction"] = "out"
+            if len(to_types) == 1:
+                related_type = to_types[0]
+                step["related_type"] = related_type
+        elif current_type in to_types and current_type not in from_types:
+            step["direction"] = "in"
+            if len(from_types) == 1:
+                related_type = from_types[0]
+                step["related_type"] = related_type
+        if isinstance(related_type, str):
+            current_type = related_type
+        normalized.append(step)
+    return normalized
 
 
 def _complete_evidence_requirements(
@@ -1486,6 +1601,7 @@ def _log_grounding_plan(
     status: str,
 ) -> None:
     subject_type = plan.subject.expected_type if plan.subject is not None else "none"
+    subject_anchor = plan.subject.anchor if plan.subject is not None else "none"
     operator = plan.transform.operator if plan.transform is not None else "none"
     fields = sorted(
         item.field for item in plan.required_evidence if item.field is not None
@@ -1496,9 +1612,11 @@ def _log_grounding_plan(
         if item.relation is not None
     )
     logger.info(
-        "grounding_plan request_id=%s grounding_required=true subject_type=%s "
+        "grounding_plan request_id=%s grounding_required=true subject_anchor=%s "
+        "subject_type=%s "
         "fields=%s relations=%s operator=%s evidence_status=%s",
         safe_log_token(request_id),
+        safe_log_token(subject_anchor),
         safe_log_token(subject_type),
         safe_log_token(",".join(fields) or "none"),
         safe_log_token(",".join(relations) or "none"),

@@ -1038,15 +1038,15 @@ async def test_structured_llm_plan_drives_open_world_service() -> None:
                 grounding_domain="household",
                 goal="current home residents",
                 subject=GroundingSubject(
-                    anchor="configured_home",
-                    reference="家里",
-                    expected_type="address",
+                    anchor="named_entity",
+                    reference="匡健",
+                    expected_type="person",
                 ),
                 traversal=(
                     TraversalStep(
                         relation="lives_in",
-                        direction="in",
-                        related_type="person",
+                        direction="out",
+                        related_type="address",
                     ),
                 ),
                 fields=("name",),
@@ -1143,6 +1143,13 @@ async def test_reported_chinese_household_queries_use_grounding_pipeline(
             payload["required_evidence"] = []
             return payload
 
+    messages = [{"role": "user", "content": question}]
+    if question == "家里都有谁":
+        messages = [
+            {"role": "user", "content": "我是谁"},
+            {"role": "assistant", "content": "先生，您是匡健。"},
+            {"role": "user", "content": question},
+        ]
     answer = await OpenWorldGroundingService(
         GroundingPlanner(Ollama(), catalog),
         GroundingExecutor(
@@ -1151,7 +1158,7 @@ async def test_reported_chinese_household_queries_use_grounding_pipeline(
             home_entity_id="address:home",
         ),
     ).try_answer(
-        [{"role": "user", "content": question}],
+        messages,
         caller_entity_id="person:jian",
         household_now=datetime.fromisoformat("2026-09-01T12:00:00-07:00"),
         language="zh",
