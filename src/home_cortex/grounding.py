@@ -12,8 +12,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from .display import resolve_display_name
 from .schema_catalog import RuntimeSchemaCatalog, record_aliases
 from .text import safe_log_token
 
@@ -324,13 +325,144 @@ class GroundingPlanner:
         *,
         household_now: datetime,
     ) -> GroundingPlan:
-        payload = await self.ollama.plan_grounding(
-            messages,
-            self.catalog.prompt_payload(),
-            GroundingPlan.model_json_schema(),
-            household_now=household_now.isoformat(),
-        )
-        return GroundingPlan.model_validate_json(json.dumps(payload))
+        output_schema = _planner_output_schema()
+        try:
+            payload = await self.ollama.plan_grounding(
+                messages,
+                self.catalog.prompt_payload(),
+                output_schema,
+                household_now=household_now.isoformat(),
+            )
+            return _validate_planner_payload(payload)
+        except (ValidationError, ValueError, TypeError) as error:
+            validation_errors = (
+                error.errors(include_input=False)
+                if isinstance(error, ValidationError)
+                else [{"type": type(error).__name__}]
+            )
+            repair_instruction = {
+                "role": "system",
+                "content": (
+                    "The previous grounding plan failed structural validation. "
+                    "Return a corrected complete plan. Every top-level property "
+                    "must be present. Grounded plans need a subject and at least "
+                    "one field or relation in required_evidence. Every traversal "
+                    "relation and every field used by selection, filtering, "
+                    "sorting, or transformation must be covered by "
+                    "required_evidence. Validation errors: "
+                    + json.dumps(
+                        validation_errors,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                ),
+            }
+            repaired = await self.ollama.plan_grounding(
+                [*messages, repair_instruction],
+                self.catalog.prompt_payload(),
+                output_schema,
+                household_now=household_now.isoformat(),
+            )
+            return _validate_planner_payload(repaired)
+
+
+def _planner_output_schema() -> dict[str, Any]:
+    """Expose every top-level plan slot to constrained model generation.
+
+    Pydantic defaults are useful for trusted Python callers, but JSON-schema
+    generators otherwise let a model omit the very fields on which the
+    grounded/non-grounded invariant depends.
+    """
+    schema = GroundingPlan.model_json_schema()
+    properties = schema.get("properties")
+    if isinstance(properties, Mapping):
+        schema["required"] = list(properties)
+    return schema
+
+
+def _validate_planner_payload(payload: Mapping[str, Any]) -> GroundingPlan:
+    completed = _complete_evidence_requirements(payload)
+    return GroundingPlan.model_validate_json(json.dumps(completed))
+
+
+def _complete_evidence_requirements(
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Compile structural query dependencies into evidence requirements.
+
+    The planner chooses semantic operations. This compiler only makes their
+    already-declared field and relation dependencies explicit, so an omitted
+    bookkeeping entry cannot disable the evidence gate.
+    """
+    completed = dict(payload)
+    if completed.get("requires_grounding") is not True:
+        return completed
+    raw_requirements = completed.get("required_evidence", [])
+    if not isinstance(raw_requirements, list):
+        return completed
+    requirements = [
+        dict(item) if isinstance(item, Mapping) else item
+        for item in raw_requirements
+    ]
+    covered_fields = {
+        (item.get("source", "entity"), item.get("field"))
+        for item in requirements
+        if isinstance(item, Mapping) and item.get("field") is not None
+    }
+    covered_relations = {
+        item.get("relation")
+        for item in requirements
+        if isinstance(item, Mapping) and item.get("relation") is not None
+    }
+
+    def require_field(source: str, field: Any) -> None:
+        if not isinstance(field, str) or not field:
+            return
+        marker = (source, field)
+        if marker not in covered_fields:
+            requirements.append({"source": source, "field": field})
+            covered_fields.add(marker)
+
+    def require_relation(relation: Any) -> None:
+        if not isinstance(relation, str) or not relation:
+            return
+        if relation not in covered_relations:
+            requirements.append({"source": "edge", "relation": relation})
+            covered_relations.add(relation)
+
+    entity_fields = completed.get("fields", [])
+    if isinstance(entity_fields, list):
+        for field in entity_fields:
+            require_field("entity", field)
+    edge_fields = completed.get("edge_fields", [])
+    if isinstance(edge_fields, list):
+        for field in edge_fields:
+            require_field("edge", field)
+    traversal = completed.get("traversal", [])
+    for step in traversal if isinstance(traversal, list) else []:
+        if not isinstance(step, Mapping):
+            continue
+        require_relation(step.get("relation"))
+        field_equals = step.get("field_equals", {})
+        if isinstance(field_equals, Mapping):
+            for field in field_equals:
+                require_field("entity", field)
+    for operation_key in ("filters", "sort"):
+        operations = completed.get(operation_key, [])
+        for operation in operations if isinstance(operations, list) else []:
+            if isinstance(operation, Mapping):
+                require_field(
+                    str(operation.get("source", "entity")),
+                    operation.get("field"),
+                )
+    transform = completed.get("transform")
+    if isinstance(transform, Mapping):
+        source = str(transform.get("source", "entity"))
+        for key in ("field", "other_field", "order_by"):
+            require_field(source, transform.get(key))
+    completed["required_evidence"] = requirements
+    return completed
+
 
 class GroundingExecutor:
     """Execute a validated plan through bounded read-only graph tools."""
@@ -609,7 +741,23 @@ class OpenWorldGroundingService:
                 messages,
                 household_now=household_now,
             )
-        except Exception:
+        except Exception as error:
+            validation = (
+                ";".join(
+                    f"{'.'.join(str(item) for item in detail.get('loc', ()))}:"
+                    f"{detail.get('type', 'unknown')}"
+                    for detail in error.errors(include_input=False)
+                )
+                if isinstance(error, ValidationError)
+                else "none"
+            )
+            logger.warning(
+                "grounding_planner_failure request_id=%s error_type=%s "
+                "validation=%s",
+                safe_log_token(request_id),
+                safe_log_token(type(error).__name__),
+                safe_log_token(validation),
+            )
             _log_grounding(
                 request_id,
                 required="unknown",
@@ -1196,6 +1344,7 @@ def _deterministic_evidence_answer(
             _requested_values(
                 record,
                 record_fields,
+                language=language,
                 include_name=len(evidence.records) > 1,
             )
             for record in evidence.records
@@ -1214,7 +1363,7 @@ def _deterministic_evidence_answer(
         if not edge_fields:
             edge_fields = ("semantic_relation", "relation")
         rendered_edges = [
-            _requested_values(edge, edge_fields)
+            _requested_values(edge, edge_fields, language=language)
             for edge in evidence.edges
         ]
         value = rendered_edges[0] if len(rendered_edges) == 1 else rendered_edges
@@ -1282,12 +1431,18 @@ def _requested_values(
     record: Mapping[str, Any],
     requested_fields: Sequence[str],
     *,
+    language: str,
     include_name: bool = False,
 ) -> dict[str, Any]:
     fields = list(requested_fields)
     if include_name and "name" in record and "name" not in fields:
         fields.insert(0, "name")
-    return {field: record[field] for field in fields if field in record}
+    values = {field: record[field] for field in fields if field in record}
+    if "name" in values:
+        display_name = resolve_display_name(record, language)
+        if display_name is not None:
+            values["name"] = display_name
+    return values
 
 
 def _log_grounding_plan(

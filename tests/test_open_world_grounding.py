@@ -27,7 +27,9 @@ from home_cortex.grounding import (
     TraversalStep,
     _apply_sort,
     _apply_transform,
+    _complete_evidence_requirements,
     _deterministic_evidence_answer,
+    _planner_output_schema,
 )
 from home_cortex.schema_catalog import (
     EntityTypeSchema,
@@ -159,6 +161,39 @@ def _named_property_plan(field: str) -> GroundingPlan:
         fields=(field,),
         required_evidence=(RequiredEvidence(field=field),),
     )
+
+
+def test_planner_schema_requires_every_top_level_plan_slot() -> None:
+    schema = _planner_output_schema()
+
+    assert set(schema["required"]) == set(schema["properties"])
+
+
+def test_planner_compiler_adds_declared_query_dependencies_to_evidence() -> None:
+    payload = {
+        "requires_grounding": True,
+        "grounding_domain": "household",
+        "goal": "my parent's date of birth",
+        "subject": {
+            "anchor": "authenticated_user",
+            "reference": "me",
+            "expected_type": "person",
+        },
+        "traversal": [{"relation": "parent_of", "direction": "in"}],
+        "fields": ["dob"],
+        "required_evidence": [],
+    }
+
+    completed = _complete_evidence_requirements(payload)
+
+    assert {item.get("field") for item in completed["required_evidence"]} == {
+        None,
+        "dob",
+    }
+    assert {item.get("relation") for item in completed["required_evidence"]} == {
+        None,
+        "parent_of",
+    }
 
 
 @pytest.mark.asyncio
@@ -945,6 +980,157 @@ async def test_structured_llm_plan_drives_open_world_service() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "plan", "expected"),
+    (
+        (
+            "我是谁",
+            GroundingPlan(
+                requires_grounding=True,
+                grounding_domain="household",
+                goal="authenticated speaker identity",
+                subject=GroundingSubject(
+                    anchor="authenticated_user",
+                    reference="我",
+                    expected_type="person",
+                ),
+                fields=("name",),
+                required_evidence=(RequiredEvidence(field="name"),),
+            ),
+            '"name": "匡健"',
+        ),
+        (
+            "家里都有谁",
+            GroundingPlan(
+                requires_grounding=True,
+                grounding_domain="household",
+                goal="current home residents",
+                subject=GroundingSubject(
+                    anchor="configured_home",
+                    reference="家里",
+                    expected_type="address",
+                ),
+                traversal=(
+                    TraversalStep(
+                        relation="lives_in",
+                        direction="in",
+                        related_type="person",
+                    ),
+                ),
+                fields=("name",),
+                required_evidence=(
+                    RequiredEvidence(relation="lives_in"),
+                    RequiredEvidence(field="name", minimum_records=2),
+                ),
+            ),
+            "匡健",
+        ),
+        (
+            "家里地址是哪里",
+            GroundingPlan(
+                requires_grounding=True,
+                grounding_domain="household",
+                goal="home address",
+                subject=GroundingSubject(
+                    anchor="configured_home",
+                    reference="家里",
+                    expected_type="address",
+                ),
+                fields=("address",),
+                required_evidence=(RequiredEvidence(field="address"),),
+            ),
+            "12745 Droxford St",
+        ),
+        (
+            "我的出生日期是什么时候？",
+            GroundingPlan(
+                requires_grounding=True,
+                grounding_domain="household",
+                goal="authenticated speaker date of birth",
+                subject=GroundingSubject(
+                    anchor="authenticated_user",
+                    reference="我",
+                    expected_type="person",
+                ),
+                fields=("dob",),
+                required_evidence=(RequiredEvidence(field="dob"),),
+            ),
+            "1988-11-11",
+        ),
+    ),
+)
+async def test_reported_chinese_household_queries_use_grounding_pipeline(
+    question: str,
+    plan: GroundingPlan,
+    expected: str,
+) -> None:
+    catalog = RuntimeSchemaCatalog(
+        {
+            "person": EntityTypeSchema("person", ("id", "name", "dob")),
+            "address": EntityTypeSchema("address", ("id", "name", "address")),
+        },
+        {
+            "lives_in": RelationTypeSchema(
+                "lives_in",
+                ("person",),
+                ("address",),
+                ("start", "end"),
+                False,
+                True,
+                None,
+            )
+        },
+    )
+    people = {
+        "person:jian": {
+            "id": "person:jian",
+            "name": ["Jian Kuang", "匡健"],
+            "dob": "1988-11-11",
+        },
+        "person:pu": {
+            "id": "person:pu",
+            "name": ["Pu Ba", "巴璞"],
+            "dob": "1988-02-26",
+        },
+        "address:home": {
+            "id": "address:home",
+            "name": ["Test Home", "测试之家"],
+            "address": {"street": "12745 Droxford St"},
+        },
+    }
+    relationships = {
+        ("address:home", "lives_in"): [
+            {"relation": "lives_in", "related_entity": people["person:jian"]},
+            {"relation": "lives_in", "related_entity": people["person:pu"]},
+        ]
+    }
+
+    class Ollama:
+        async def plan_grounding(self, *_: Any, **__: Any) -> dict[str, Any]:
+            payload = plan.model_dump(mode="json")
+            payload["required_evidence"] = []
+            return payload
+
+    answer = await OpenWorldGroundingService(
+        GroundingPlanner(Ollama(), catalog),
+        GroundingExecutor(
+            Dispatcher(people, relationships),
+            catalog,
+            home_entity_id="address:home",
+        ),
+    ).try_answer(
+        [{"role": "user", "content": question}],
+        caller_entity_id="person:jian",
+        household_now=datetime.fromisoformat("2026-09-01T12:00:00-07:00"),
+        language="zh",
+    )
+
+    assert answer is not None
+    assert answer.stop_reason == "answer"
+    assert expected in answer.text
+
+
+@pytest.mark.asyncio
 async def test_agent_service_uses_open_world_grounding_as_authoritative_path() -> None:
     plan = _named_property_plan("shoe_size_us")
 
@@ -1550,6 +1736,51 @@ async def test_malformed_planner_output_fails_closed() -> None:
     assert answer is not None
     assert answer.stop_reason == "tool_error"
     assert "could not determine" in answer.text
+
+
+@pytest.mark.asyncio
+async def test_planner_retries_once_after_invalid_structured_output() -> None:
+    class Ollama:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def plan_grounding(self, *_: Any, **__: Any) -> dict[str, Any]:
+            self.calls += 1
+            if self.calls == 1:
+                return {"requires_grounding": True}
+            return _named_property_plan("occupation").model_dump(mode="json")
+
+    ollama = Ollama()
+    plan = await GroundingPlanner(ollama, CATALOG).plan(
+        [{"role": "user", "content": "What does Test Person do for work?"}],
+        household_now=datetime.fromisoformat("2026-08-31T12:00:00-07:00"),
+    )
+
+    assert ollama.calls == 2
+    assert plan.fields == ("occupation",)
+
+
+@pytest.mark.asyncio
+async def test_planner_compiles_omitted_evidence_bookkeeping_without_retry() -> None:
+    payload = _named_property_plan("occupation").model_dump(mode="json")
+    payload["required_evidence"] = []
+
+    class Ollama:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def plan_grounding(self, *_: Any, **__: Any) -> dict[str, Any]:
+            self.calls += 1
+            return payload
+
+    ollama = Ollama()
+    plan = await GroundingPlanner(ollama, CATALOG).plan(
+        [{"role": "user", "content": "What does Test Person do for work?"}],
+        household_now=datetime.fromisoformat("2026-08-31T12:00:00-07:00"),
+    )
+
+    assert ollama.calls == 1
+    assert plan.required_evidence == (RequiredEvidence(field="occupation"),)
 
 
 @pytest.mark.asyncio
