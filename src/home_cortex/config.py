@@ -53,7 +53,6 @@ class Settings(BaseSettings):
     ollama_model: str
     data_dir: Path = Path("/app/data")
     edge_schema_dir: Path = Path("/app/schemas/edge")
-    memorable_date_schema_path: Path = Path("/app/schemas/memorable_dates.yaml")
     retrieval_limit: int = Field(default=100, ge=1, le=1000)
     cortex_api_key: str | None = None
     cortex_identity_map: dict[str, str] = Field(default_factory=dict)

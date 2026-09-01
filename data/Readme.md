@@ -33,15 +33,14 @@ person. `address_as` is a presentation preference, not another name or alias:
 Never infer `address_as` from age, gender, or relationships. Store it only when
 the household has explicitly chosen the preference.
 
-Person records may store `dob` as an ISO date. That field is the date of
-birth. Do not invent a birthday when `dob` is absent.
+Person records may store `dob` as an ISO date. That field is the date of birth.
+The runtime schema exposes it to the semantic planner, which can apply generic
+date operators. Do not invent a birthday when `dob` is absent and do not copy
+dates into a second fact registry.
 
-Recurring date semantics live in `schemas/memorable_dates.yaml`. The registry
-maps a localized concept such as `birthday` or `wedding_anniversary` to its
-authoritative node/edge field and recurrence rule. Keep the actual date only in
-that source field: do not copy `person.dob` or `spouse_of.start` into a second
-"memorable dates" data file. To introduce another recurring date, add its
-aliases, localized label, recurrence, and source mapping to the registry.
+Dates on relationships remain properties of those relationships. For example,
+`spouse_of.start` is the marriage date; the schema-aware planner can retrieve
+that edge property without a dedicated anniversary handler.
 
 Household status is contextual and belongs on the edge connecting a Person to
 a household. For a resident, add `household_role` to `lives_in`:

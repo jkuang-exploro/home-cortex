@@ -640,7 +640,11 @@ async def test_butler_answers_tomorrow_from_calendar() -> None:
     assert tool_result["ok"] is True
     assert tool_result["result"]["events"][0]["title"] == "Dentist"
     assert tool_result["result"]["events"][0]["start"] == "2026-08-23T09:00:00-07:00"
-    assert ollama.tool_names[0] == STEWARD.allowed_tools
+    assert ollama.tool_names[0] == (
+        "calculate",
+        "calendar.list_events",
+        "calendar.check_availability",
+    )
 
 
 @pytest.mark.asyncio
@@ -1139,7 +1143,7 @@ async def test_truncated_conflicts_fail_closed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_relationship_lookup_can_continue_into_calendar_tool() -> None:
+async def test_unplanned_relationship_lookup_cannot_bypass_grounding() -> None:
     class ChainedDispatcher:
         def __init__(self) -> None:
             self.calls: list[tuple[str, Any, str | None]] = []
@@ -1214,19 +1218,7 @@ async def test_relationship_lookup_can_continue_into_calendar_tool() -> None:
                     )
                 ]
             ),
-            _chat_response(
-                tool_calls=[
-                    _tool_call(
-                        "calendar.list_events",
-                        {
-                            "start": "2026-08-23",
-                            "end": "2026-08-24",
-                            "person": "person:evelyn_kuang",
-                        },
-                    )
-                ]
-            ),
-            _chat_response("Evelyn has school tomorrow."),
+            _chat_response("I need a verified relationship before I can do that."),
         ]
     )
 
@@ -1235,16 +1227,16 @@ async def test_relationship_lookup_can_continue_into_calendar_tool() -> None:
         user_entity_id="person:jian_kuang",
     )
 
-    assert result.answer == "Evelyn has school tomorrow."
+    assert result.answer == "I need a verified relationship before I can do that."
+    assert result.stop_reason == "tool_error"
     assert ollama.tool_names[1] == (
         "calculate",
         "calendar.list_events",
         "calendar.check_availability",
     )
-    assert [name for name, _, _ in dispatcher.calls] == [
-        "get_relationships",
-        "calendar.list_events",
-    ]
+    assert dispatcher.calls == []
+    blocked = json.loads(ollama.calls[1][-1]["content"])
+    assert blocked["error"]["code"] == "tool_not_available"
     assert all(
         caller == "person:jian_kuang" for _, _, caller in dispatcher.calls
     )

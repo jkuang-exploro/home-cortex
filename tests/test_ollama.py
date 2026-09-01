@@ -1,3 +1,4 @@
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -119,6 +120,59 @@ async def test_tool_call_response() -> None:
     assert client.calls[0]["tools"] == TOOLS
     assert client.calls[0]["stream"] is False
     assert client.calls[0]["think"] is False
+
+
+@pytest.mark.asyncio
+async def test_grounding_planner_uses_runtime_schema_and_strict_output() -> None:
+    planned = {
+        "requires_grounding": True,
+        "grounding_domain": "household",
+        "goal": "Test Person's occupation",
+        "subject": {
+            "anchor": "named_entity",
+            "reference": "Test Person",
+            "expected_type": "person",
+        },
+        "traversal": [],
+        "fields": ["occupation"],
+        "filters": [],
+        "sort": [],
+        "transform": None,
+        "required_evidence": [{"field": "occupation"}],
+    }
+    client = FakeOllamaClient(
+        [
+            _chat_response(
+                {
+                    "role": "assistant",
+                    "content": json.dumps(planned),
+                }
+            )
+        ]
+    )
+    service = OllamaService(
+        "http://ollama:11434",
+        "qwen3:8b",
+        client=client,  # type: ignore[arg-type]
+    )
+    output_schema = {
+        "type": "object",
+        "properties": {"requires_grounding": {"type": "boolean"}},
+    }
+
+    result = await service.plan_grounding(
+        [{"role": "user", "content": "What does Test Person do?"}],
+        {"entities": {"person": {"properties": ["occupation"]}}},
+        output_schema,
+        household_now="2026-08-31T12:00:00-07:00",
+    )
+
+    assert result == planned
+    request = client.calls[0]
+    assert request["format"] == output_schema
+    assert request["stream"] is False
+    assert "occupation" in request["messages"][0]["content"]
+    assert request["messages"][-1]["content"] == "What does Test Person do?"
 
 
 @pytest.mark.asyncio

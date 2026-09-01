@@ -130,11 +130,13 @@ Remove `start` and `end` from `parent_of.json`; `parent_of` is non-temporal in
 the V1 schema. The old SurrealDB `resides_in` table is no longer queried, so it
 cannot contribute facts after the application is redeployed.
 
-The agent also applies a deterministic grounding gate. Household answers
-cannot complete without a successful tool call in the current turn; birthday
-questions require `get_entity` data containing `dob`, and relationship
-questions require `get_relationships`. Empty results produce a fixed
-no-matching-data response rather than model-authored facts. Caller-supplied
+The agent also applies a deterministic grounding gate. A structured LLM planner
+decides whether a request depends on household world state and plans only
+against entity fields and relations discovered from the runtime data/schema.
+The bounded executor then validates every required field, relation, record
+count, and optional freshness constraint before answer generation. Missing
+entities, missing fields, incomplete evidence, and stale evidence produce
+different fixed responses rather than model-authored facts. Caller-supplied
 system messages are discarded before the trusted Cortex policy is applied.
 
 ## First run
@@ -218,27 +220,29 @@ instead of being treated as somebody else.
 
 ## Agent runtime architecture
 
-The runtime is intentionally split into four flat layers:
+The runtime is intentionally split into focused layers:
 
 - `agent_service.py` is the public coordinator. It normalizes trusted identity and
   conversation input, then selects the appropriate execution path.
-- `request_analysis.py` converts supported household-fact language into a small
-  `FactRequest` (`subject`, `field`, and `cardinality`) and derives the privacy
-  and ordered graph-evidence requirements shared by both execution paths. A
-  relationship registry supplies graph paths such as spouse, child, parent, and
-  parent-in-law. Elliptical follow-ups inherit the last explicit structured
-  subject, so a request such as `他们的生日分别是哪天？` can reuse the people
-  established by the preceding turn.
-- `facts.py` traverses the analyzed graph paths and renders verified structured
-  facts deterministically.
-- `model_loop.py` owns the bounded Ollama loop, tool limits, evidence gate,
-  privacy filtering, display-name repair, and streaming. It handles informal or
-  open-ended conversation and has no household-specific answer renderer.
+- `schema_catalog.py` discovers queryable node properties, edge properties, and
+  relationship semantics from the deployed data and edge registry. Adding a
+  field to a node JSON file makes it available to planning without changing
+  factual-grounding code.
+- `grounding.py` validates strict LLM query plans and executes only bounded
+  entity resolution, traversal, filtering, sorting, aggregation, date/duration,
+  unit conversion, and freshness operations. Its shared evidence gate validates
+  every required field, relation, observation count, and freshness constraint
+  before the deterministic renderer sees a value.
+- `model_loop.py` owns the bounded Ollama loop, tool limits, display-name repair,
+  and streaming for ordinary conversation and non-graph tools. Graph tools are
+  deliberately not exposed through this path, so household facts cannot bypass
+  schema-aware planning and evidence validation.
 
-This keeps natural-language aliases at the semantic boundary rather than
-adding a new `if question == ...` method for each phrasing. Verified structured
-facts do not pass through Ollama again, so the model cannot alter a birthday,
-relationship, count, or anniversary after retrieval.
+The factual domain is determined by deployed schema and data. The LLM interprets
+meaning but never executes SQL or Python. After the deterministic gate establishes
+that every declared requirement is present and fresh enough, a deterministic
+renderer formats the validated value. Household evidence is not sent through a
+second model call, so missing values cannot be replaced with model knowledge.
 
 ## Named agents
 
@@ -257,8 +261,9 @@ define `账房` and finance-only tools; those tools will not be granted to
 ## Shared Cortex tools
 
 Tools are registered centrally in `home_cortex.tools` and granted per agent
-through that agent's `ALLOWED_TOOLS`. The steward currently receives graph
-lookup, `calculate`, `calendar.list_events`, and `calendar.check_availability`.
+through that agent's `ALLOWED_TOOLS`. The grounding executor exclusively uses
+the steward's graph lookup grants. The ordinary model loop receives only
+`calculate`, `calendar.list_events`, and `calendar.check_availability`.
 
 `calculate` evaluates arithmetic with an allowlisted AST parser. It does not
 use Python `eval()`, has no network dependency, and returns a structured
@@ -326,10 +331,13 @@ failures:
 }
 ```
 
-The agent logs each model step, tool name, success status, record count,
-execution time, and final stop reason. Stop reasons are `answer`, `step_limit`,
-`tool_error`, or `timeout`. Logs intentionally omit prompts, tool arguments,
-tool results, and private record fields. View them with:
+Grounding logs record whether grounding was required, the schema-level subject
+type, requested field and relation names, deterministic operator, and evidence
+status. The ordinary agent loop logs each model step, tool name, success status,
+record count, execution time, and final stop reason. Stop reasons are `answer`,
+`step_limit`, `tool_error`, or `timeout`. Logs intentionally omit prompts, tool
+arguments, tool results, entity references, and private record values. View them
+with:
 
 ```sh
 docker compose logs -f cortex-api
