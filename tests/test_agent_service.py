@@ -97,6 +97,76 @@ class FakeDispatcher:
         return self.result
 
 
+class ContactDispatcher:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, Any]] = []
+
+    async def dispatch(
+        self,
+        tool_name: str,
+        arguments: Any,
+        **_: Any,
+    ) -> dict[str, Any]:
+        self.calls.append((tool_name, arguments))
+        if tool_name == "get_relationships":
+            result = [
+                {
+                    "relation": "parent_of",
+                    "related_entity": {
+                        "id": "person:dylan_kuang",
+                        "name": ["Dylan Kuang", "匡德伦"],
+                        "gender": "male",
+                    },
+                }
+            ]
+        else:
+            result = [
+                {
+                    "id": "person:dylan_kuang",
+                    "name": ["Dylan Kuang", "匡德伦"],
+                    "phone_number": "555-0100",
+                }
+            ]
+        return {"ok": True, "tool": tool_name, "result": result}
+
+
+class EntityDispatcher:
+    def __init__(self, records: dict[str, dict[str, Any]]) -> None:
+        self.records = records
+        self.calls: list[tuple[str, Any]] = []
+
+    async def dispatch(
+        self,
+        tool_name: str,
+        arguments: Any,
+        **_: Any,
+    ) -> dict[str, Any]:
+        self.calls.append((tool_name, arguments))
+        if tool_name == "search_entities":
+            query = str(arguments.get("text", "")).casefold()
+            matches = [
+                {key: record[key] for key in ("id", "name") if key in record}
+                for record in self.records.values()
+                if any(
+                    query in alias.casefold()
+                    for alias in (
+                        record.get("name")
+                        if isinstance(record.get("name"), list)
+                        else [record.get("name")]
+                    )
+                    if isinstance(alias, str)
+                )
+            ]
+            return {"ok": True, "tool": tool_name, "result": matches}
+        entity_id = arguments.get("entity_id")
+        record = self.records.get(entity_id)
+        return {
+            "ok": True,
+            "tool": tool_name,
+            "result": [record] if record is not None else [],
+        }
+
+
 def _chat_response(
     content: str = "",
     *,
@@ -739,6 +809,313 @@ async def test_factual_answer_without_evidence_is_retried_with_tools() -> None:
 
 
 @pytest.mark.asyncio
+async def test_relative_contact_answer_requires_terminal_entity_field() -> None:
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_relationships",
+                        {
+                            "entity_id": "person:jian_kuang",
+                            "relation": "parent_of",
+                        },
+                    )
+                ]
+            ),
+            _chat_response("The unverified number is 555-9999."),
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_entity",
+                        {"entity_id": "person:dylan_kuang"},
+                    )
+                ]
+            ),
+            _chat_response("Dylan's phone number is 555-0100."),
+        ]
+    )
+    dispatcher = ContactDispatcher()
+
+    result = await _agent(ollama, dispatcher).answer(
+        "What is my son's phone number?",
+        user_entity={"id": "person:jian_kuang", "name": "Jian Kuang"},
+    )
+
+    assert result.answer == "Dylan's phone number is 555-0100."
+    assert result.steps == 4
+    assert result.tool_calls == 2
+    assert [tool_name for tool_name, _ in dispatcher.calls] == [
+        "get_relationships",
+        "get_entity",
+    ]
+    assert "retrieve phone with get_entity" in ollama.calls[2][-1]["content"]
+    entity_payload = json.loads(ollama.calls[3][-1]["content"])
+    assert entity_payload["result"][0]["phone_number"] == "555-0100"
+    assert "555-9999" not in result.answer
+
+
+@pytest.mark.asyncio
+async def test_stream_hides_contact_answer_until_entity_field_is_verified() -> None:
+    ollama = FakeStreamingOllamaService(
+        [
+            [
+                _chat_response(
+                    tool_calls=[
+                        _tool_call(
+                            "get_relationships",
+                            {
+                                "entity_id": "person:jian_kuang",
+                                "relation": "parent_of",
+                            },
+                        )
+                    ]
+                )
+            ],
+            [_chat_response("The unverified number is 555-9999.")],
+            [
+                _chat_response(
+                    tool_calls=[
+                        _tool_call(
+                            "get_entity",
+                            {"entity_id": "person:dylan_kuang"},
+                        )
+                    ]
+                )
+            ],
+            [_chat_response("Dylan's phone "), _chat_response("number is 555-0100.")],
+        ]
+    )
+    dispatcher = ContactDispatcher()
+
+    chunks = [
+        chunk
+        async for chunk in _agent(ollama, dispatcher).stream_answer_messages(
+            [{"role": "user", "content": "What is my son's phone number?"}],
+            user_entity={"id": "person:jian_kuang", "name": "Jian Kuang"},
+        )
+    ]
+
+    assert chunks == ["Dylan's phone ", "number is 555-0100."]
+    assert [tool_name for tool_name, _ in dispatcher.calls] == [
+        "get_relationships",
+        "get_entity",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_private_payload_uses_evidence_from_entire_tool_call_batch() -> None:
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_entity",
+                        {"entity_id": "person:dylan_kuang"},
+                    ),
+                    _tool_call(
+                        "get_relationships",
+                        {
+                            "entity_id": "person:jian_kuang",
+                            "relation": "parent_of",
+                        },
+                    ),
+                ]
+            ),
+            _chat_response("Dylan's phone number is 555-0100."),
+        ]
+    )
+    dispatcher = ContactDispatcher()
+
+    result = await _agent(ollama, dispatcher).answer(
+        "What is my son's phone number?",
+        user_entity={"id": "person:jian_kuang", "name": "Jian Kuang"},
+    )
+
+    assert result.answer == "Dylan's phone number is 555-0100."
+    assert result.steps == 2
+    assert result.tool_calls == 2
+    entity_payload = json.loads(
+        next(
+            message["content"]
+            for message in ollama.calls[1]
+            if message.get("role") == "tool"
+            and message.get("tool_name") == "get_entity"
+        )
+    )
+    assert entity_payload["result"][0]["phone_number"] == "555-0100"
+
+
+@pytest.mark.asyncio
+async def test_named_private_answer_retries_when_tool_returns_wrong_person() -> None:
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_entity",
+                        {"entity_id": "person:someone_else"},
+                    )
+                ]
+            ),
+            _chat_response("Someone Else's email is wrong@example.com."),
+            _chat_response(
+                tool_calls=[
+                    _tool_call("get_entity", {"entity_id": "person:alex"})
+                ]
+            ),
+            _chat_response("Alex's email is alex@example.com."),
+        ]
+    )
+    dispatcher = EntityDispatcher(
+        {
+            "person:someone_else": {
+                "id": "person:someone_else",
+                "name": ["Someone Else"],
+                "email": "wrong@example.com",
+            },
+            "person:alex": {
+                "id": "person:alex",
+                "name": ["Alex"],
+                "email": "alex@example.com",
+            },
+        }
+    )
+
+    result = await _agent(ollama, dispatcher).answer(
+        "What is Alex's email address?"
+    )
+
+    assert result.answer == "Alex's email is alex@example.com."
+    assert result.steps == 4
+    assert result.tool_calls == 3
+    assert [
+        arguments["entity_id"]
+        for tool_name, arguments in dispatcher.calls
+        if tool_name == "get_entity"
+    ] == [
+        "person:someone_else",
+        "person:alex",
+    ]
+    assert "Grounding check failed" in ollama.calls[2][-1]["content"]
+    wrong_tool_payload = json.loads(
+        next(
+            message["content"]
+            for message in ollama.calls[1]
+            if message.get("role") == "tool"
+            and message.get("tool_name") == "get_entity"
+        )
+    )
+    assert wrong_tool_payload["result"] == [
+        {"id": "person:someone_else", "name": "Someone Else"}
+    ]
+    assert "wrong@example.com" not in json.dumps(ollama.calls[2])
+    assert "alex@example.com" in json.dumps(ollama.calls[3])
+    assert "wrong@example.com" not in result.answer
+
+
+@pytest.mark.asyncio
+async def test_duplicate_named_matches_never_expose_private_values() -> None:
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call("get_entity", {"entity_id": "person:alex_one"})
+                ]
+            ),
+            _chat_response("Alex's email is one@example.com."),
+            _chat_response(
+                tool_calls=[
+                    _tool_call("get_entity", {"entity_id": "person:alex_two"})
+                ]
+            ),
+            _chat_response("Alex's email is two@example.com."),
+        ]
+    )
+    dispatcher = EntityDispatcher(
+        {
+            "person:alex_one": {
+                "id": "person:alex_one",
+                "name": ["Alex"],
+                "email": "one@example.com",
+            },
+            "person:alex_two": {
+                "id": "person:alex_two",
+                "name": ["Alex"],
+                "email": "two@example.com",
+            },
+        }
+    )
+
+    result = await _agent(ollama, dispatcher).answer(
+        "What is Alex's email address?"
+    )
+
+    assert result.answer == (
+        "The home graph does not contain matching information for that request."
+    )
+    assert result.tool_calls == 3
+    for call in ollama.calls[1:]:
+        for message in call:
+            if message.get("role") != "tool":
+                continue
+            payload = json.loads(message["content"])
+            assert all("email" not in record for record in payload["result"])
+    assert "one@example.com" not in result.answer
+    assert "two@example.com" not in result.answer
+
+
+@pytest.mark.asyncio
+async def test_relative_private_answer_fails_closed_without_trusted_identity() -> None:
+    ollama = FakeOllamaService(
+        [
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_relationships",
+                        {
+                            "entity_id": "person:arbitrary_parent",
+                            "relation": "parent_of",
+                        },
+                    )
+                ]
+            ),
+            _chat_response(
+                tool_calls=[
+                    _tool_call(
+                        "get_entity",
+                        {"entity_id": "person:dylan_kuang"},
+                    )
+                ]
+            ),
+            _chat_response("The phone number is 555-0100."),
+        ]
+    )
+    dispatcher = ContactDispatcher()
+
+    result = await _agent(ollama, dispatcher).answer(
+        "What is my son's phone number?"
+    )
+
+    assert result.answer == (
+        "The home graph does not contain matching information for that request."
+    )
+    entity_payload = json.loads(
+        next(
+            message["content"]
+            for message in ollama.calls[2]
+            if message.get("role") == "tool"
+            and message.get("tool_name") == "get_entity"
+        )
+    )
+    assert entity_payload["result"] == [
+        {"id": "person:dylan_kuang", "name": "Dylan Kuang"}
+    ]
+    assert "555-0100" not in json.dumps(ollama.calls[2])
+    assert "555-0100" not in result.answer
+
+
+@pytest.mark.asyncio
 async def test_repeated_unsupported_answer_returns_safe_fallback() -> None:
     ollama = FakeOllamaService(
         [_chat_response("Invented fact one."), _chat_response("Invented fact two.")]
@@ -954,7 +1331,9 @@ async def test_streaming_and_nonstreaming_share_empty_relationship_fallback() ->
 async def test_streaming_and_nonstreaming_share_missing_field_fallback() -> None:
     responses = [
         _chat_response(
-            tool_calls=[_tool_call("get_entity", {"entity_id": "person:alex"})]
+            tool_calls=[
+                _tool_call("get_entity", {"entity_id": "person:alex"}),
+            ]
         ),
         _chat_response("Alex's birthday is January 1."),
     ]
@@ -1901,7 +2280,11 @@ async def test_returned_canonical_relation_satisfies_evidence_requirement() -> N
         ]
     )
 
-    result = await _agent(ollama, dispatcher).answer("我儿子是谁？")
+    result = await _agent(ollama, dispatcher).model_loop.run(
+        [{"role": "user", "content": "我儿子是谁？"}],
+        presentation_language="zh",
+        trusted_user_entity_id="person:jian_kuang",
+    )
 
     assert result.answer == "您的儿子是匡德伦。"
     assert result.steps == 2

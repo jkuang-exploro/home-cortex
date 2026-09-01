@@ -218,17 +218,19 @@ instead of being treated as somebody else.
 
 ## Agent runtime architecture
 
-The runtime is intentionally split into three flat layers:
+The runtime is intentionally split into four flat layers:
 
 - `agent_service.py` is the public coordinator. It normalizes trusted identity and
   conversation input, then selects the appropriate execution path.
-- `facts.py` converts supported household-fact language into a small
-  `FactRequest` (`subject`, `field`, and `cardinality`). A relationship registry
-  supplies graph paths such as spouse, child, parent, and parent-in-law. The
-  service traverses those paths and renders verified facts deterministically.
-  Elliptical follow-ups inherit the last explicit structured subject, so a
-  request such as `他们的生日分别是哪天？` can reuse the people established by
-  the preceding turn.
+- `request_analysis.py` converts supported household-fact language into a small
+  `FactRequest` (`subject`, `field`, and `cardinality`) and derives the privacy
+  and ordered graph-evidence requirements shared by both execution paths. A
+  relationship registry supplies graph paths such as spouse, child, parent, and
+  parent-in-law. Elliptical follow-ups inherit the last explicit structured
+  subject, so a request such as `他们的生日分别是哪天？` can reuse the people
+  established by the preceding turn.
+- `facts.py` traverses the analyzed graph paths and renders verified structured
+  facts deterministically.
 - `model_loop.py` owns the bounded Ollama loop, tool limits, evidence gate,
   privacy filtering, display-name repair, and streaming. It handles informal or
   open-ended conversation and has no household-specific answer renderer.

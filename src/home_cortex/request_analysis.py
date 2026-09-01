@@ -15,9 +15,9 @@ PRIVATE_TOOL_FIELDS = {
     "address": "address",
     "start": "relationship_dates",
     "end": "relationship_dates",
-    "email": "contact",
-    "phone": "contact",
-    "phone_number": "contact",
+    "email": "email",
+    "phone": "phone",
+    "phone_number": "phone",
 }
 
 FactField = Literal[
@@ -777,6 +777,10 @@ class EvidenceRequirements:
     related_gender: str | None = None
     relationship_direction: Literal["out", "in"] | None = None
     minimum_entity_records: int = 1
+    relationship_path: tuple[RelationshipStep, ...] = ()
+    entity_binding_required: bool = False
+    required_entity_ids: frozenset[str] = frozenset()
+    required_entity_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -884,6 +888,7 @@ def evidence_requirements(
         messages,
         memorable_dates,
         allow_relative=allow_relative,
+        identity=identity,
     )
 
 
@@ -906,14 +911,13 @@ def requested_private_fields(
         if private_field is not None:
             allowed.add(private_field)
     latest_user = latest_user_message(messages).casefold()
+    private_entity_field = required_private_entity_field(messages)
     if fact_request is not None and fact_request.field == "address":
-        allowed.add("address")
-    if _contains_word(latest_user, ("address", "street address", "地址", "住址")):
-        allowed.add("address")
+        private_entity_field = "address"
+    if private_entity_field is not None:
+        allowed.add(private_entity_field)
     if _contains_word(latest_user, ("move-in date", "when did", "什么时候搬")):
         allowed.add("relationship_dates")
-    if _contains_word(latest_user, ("email", "phone", "telephone", "邮箱", "电话")):
-        allowed.add("contact")
     return frozenset(allowed)
 
 
@@ -935,6 +939,7 @@ def _evidence_from_fact_request(
     tools: set[str] = set()
     relations: set[str] = set()
     fields: set[tuple[str, str]] = set()
+    relationship_path: tuple[RelationshipStep, ...] = ()
     related_gender: str | None = None
     direction: Literal["out", "in"] | None = None
 
@@ -949,12 +954,17 @@ def _evidence_from_fact_request(
             tools.update(relative_evidence.tools)
             relations.update(relative_evidence.relations)
             fields.update(relative_evidence.fields)
+            relationship_path = relative_evidence.relationship_path
             related_gender = relative_evidence.related_gender
             direction = relative_evidence.relationship_direction
 
     if request.relation:
         tools.add("get_relationships")
         relations.add(request.relation)
+        if relationship_path and request.relation not in {
+            step.relation for step in relationship_path
+        }:
+            relationship_path += (RelationshipStep(request.relation),)
 
     if request.field == "residents":
         tools.add("get_relationships")
@@ -991,6 +1001,7 @@ def _evidence_from_fact_request(
         tools=frozenset(tools),
         relations=frozenset(relations),
         fields=frozenset(fields),
+        relationship_path=relationship_path,
         related_gender=related_gender,
         relationship_direction=direction,
         minimum_entity_records=required_entity_record_count(messages),
@@ -1040,10 +1051,15 @@ def _evidence_from_relative(
         fields.add((tool_name, date_schema.source_field))
         if date_schema.source_kind == "edge":
             relations.add(date_schema.source_type)
+    private_entity_field = required_private_entity_field(messages)
+    if private_entity_field is not None:
+        tools.add("get_entity")
+        fields.add(("get_entity", private_entity_field))
     return EvidenceRequirements(
         tools=frozenset(tools),
         relations=frozenset(relations),
         fields=frozenset(fields),
+        relationship_path=definition.steps,
         related_gender=related_gender,
         relationship_direction=direction,
         minimum_entity_records=required_entity_record_count(messages),
@@ -1055,6 +1071,7 @@ def _heuristic_evidence(
     memorable_dates: MemorableDateRegistry,
     *,
     allow_relative: bool = True,
+    identity: Mapping[str, Any] | None = None,
 ) -> EvidenceRequirements:
     primary_tool = required_evidence_tool(
         messages,
@@ -1067,15 +1084,45 @@ def _heuristic_evidence(
         allow_relative=allow_relative,
     )
     field = required_evidence_field(messages, memorable_dates)
+    private_entity_field = required_private_entity_field(messages)
     tools: set[str] = set()
     relations: set[str] = set()
     fields: set[tuple[str, str]] = set()
+    entity_binding_required = False
+    required_entity_ids: frozenset[str] = frozenset()
+    required_entity_names: tuple[str, ...] = ()
     if relation is not None:
         tools.add("get_relationships")
         relations.add(relation)
     if field is not None and primary_tool is not None:
         tools.add(primary_tool)
         fields.add((primary_tool, field))
+    binding_terms: tuple[str, ...] = ()
+    if private_entity_field is not None:
+        tools.add("get_entity")
+        fields.add(("get_entity", private_entity_field))
+        binding_terms = {
+            "address": ("street address", "address", "地址", "住址"),
+            "email": ("email address", "email", "电子邮箱", "邮箱"),
+            "phone": (
+                "telephone number",
+                "phone number",
+                "telephone",
+                "phone",
+                "电话号码",
+                "电话",
+            ),
+        }[private_entity_field]
+    elif primary_tool == "get_entity" and field is not None:
+        binding_terms = tuple(memorable_dates.aliases)
+    if binding_terms:
+        (
+            entity_binding_required,
+            required_entity_ids,
+            required_entity_names,
+        ) = _private_entity_binding(messages, identity, binding_terms)
+        if required_entity_names:
+            tools.add("search_entities")
     if not tools and primary_tool is not None:
         tools.add(primary_tool)
     return EvidenceRequirements(
@@ -1085,6 +1132,9 @@ def _heuristic_evidence(
         related_gender=None,
         relationship_direction=None,
         minimum_entity_records=required_entity_record_count(messages),
+        entity_binding_required=entity_binding_required,
+        required_entity_ids=required_entity_ids,
+        required_entity_names=required_entity_names,
     )
 
 
@@ -1100,6 +1150,8 @@ def required_evidence_tool(
         return "get_relationships"
     if is_item_location_request(messages):
         return "get_relationships"
+    if required_private_entity_field(messages) is not None:
+        return "get_entity"
     latest_user = latest_user_message(messages).casefold()
     date_schema = memorable_dates.match(latest_user)
     if date_schema is not None:
@@ -1157,6 +1209,117 @@ def required_evidence_field(
     latest_user = latest_user_message(messages).casefold()
     schema = memorable_dates.match(latest_user)
     return schema.source_field if schema is not None else None
+
+
+def required_private_entity_field(
+    messages: Sequence[Mapping[str, Any]],
+) -> Literal["address", "email", "phone"] | None:
+    if is_item_location_request(messages):
+        return None
+    latest_user = latest_user_message(messages).casefold()
+    if _contains_word(latest_user, ("email", "邮箱")):
+        return "email"
+    if _contains_word(
+        latest_user,
+        ("phone", "phone number", "telephone", "电话"),
+    ):
+        return "phone"
+    if _contains_word(latest_user, ("address", "street address", "地址", "住址")):
+        return "address"
+    return None
+
+
+def _private_entity_binding(
+    messages: Sequence[Mapping[str, Any]],
+    identity: Mapping[str, Any] | None,
+    subject_terms: Sequence[str],
+) -> tuple[bool, frozenset[str], tuple[str, ...]]:
+    text = latest_user_message(messages).strip()
+    normalized = text.casefold()
+    if _relative_kind(normalized) is not None:
+        return False, frozenset(), ()
+    names = _private_named_subjects(text, subject_terms)
+    if names:
+        return True, frozenset(), tuple(name.casefold() for name in names)
+    term_pattern = "|".join(
+        re.escape(term)
+        for term in sorted(subject_terms, key=len, reverse=True)
+        if term
+    )
+    chinese_self = bool(
+        term_pattern
+        and re.search(
+            rf"(?:^|[\s，,])(?:我(?:的)?|本人(?:的)?|自己的)\s*"
+            rf"(?:{term_pattern})",
+            normalized,
+        )
+    )
+    if re.search(r"(?:^|\W)(?:my|mine)(?:$|\W)", normalized) or chinese_self:
+        identity_id = identity.get("id") if identity is not None else None
+        required_ids = (
+            frozenset({identity_id}) if isinstance(identity_id, str) else frozenset()
+        )
+        return True, required_ids, ()
+    return False, frozenset(), ()
+
+
+def _private_named_subjects(
+    text: str,
+    subject_terms: Sequence[str],
+) -> tuple[str, ...]:
+    term_pattern = "|".join(
+        re.escape(term)
+        for term in sorted(subject_terms, key=len, reverse=True)
+        if term
+    )
+    if not term_pattern:
+        return ()
+    candidate = re.sub(
+        r"^(?:please\s+)?(?:(?:could|can|would)\s+you\s+)?"
+        r"(?:(?:tell|show)\s+me\s+)?",
+        "",
+        text.strip(),
+        flags=re.IGNORECASE,
+    )
+    english_patterns = (
+        rf"^(?:(?:what is|what's|when is)\s+)?"
+        rf"(?P<name>.+?)(?:'s|’s)\s+(?:{term_pattern})[?]?$",
+        rf"^(?:(?:what is|what's|when is)\s+)?(?:the\s+)?"
+        rf"(?:{term_pattern})\s+(?:for|of)\s+(?P<name>.+?)[?]?$",
+    )
+    for pattern in english_patterns:
+        match = re.fullmatch(pattern, candidate, re.IGNORECASE)
+        if match is not None:
+            name = match.group("name").strip()
+            if name:
+                return (name,)
+
+    candidate = re.sub(
+        r"^(?:请告诉我|麻烦告诉我|告诉我|请帮我(?:查|找)(?:一下)?|"
+        r"帮我(?:查|找)(?:一下)?|请问|麻烦)\s*",
+        "",
+        text.strip(),
+    )
+    chinese = re.fullmatch(
+        rf"(?P<name>.+?)\s*的\s*(?:{term_pattern})"
+        r"(?:是|为)?(?:什么|什么时候|哪天|多少|哪里|哪儿)?[?？。！!]?",
+        candidate,
+    )
+    if chinese is not None:
+        name = chinese.group("name").strip()
+        if name and not _is_relative_alias(name) and name not in {
+            "我",
+            "本人",
+            "自己",
+            "他",
+            "她",
+            "他们",
+            "她们",
+            "这个人",
+            "那个人",
+        }:
+            return (name,)
+    return ()
 
 
 def required_entity_record_count(

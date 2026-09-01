@@ -1,7 +1,12 @@
 from pathlib import Path
 
 from home_cortex.edge_schema import EdgeSchemaRegistry
+from home_cortex.facts import (
+    SubjectReference as FactsSubjectReference,
+    parse_fact_request as facts_parse_fact_request,
+)
 from home_cortex.fallbacks import grounding_fallback, no_records_fallback
+from home_cortex.request_analysis import SubjectReference, parse_fact_request
 from home_cortex.text import latest_user_message, normalize_language_code, safe_log_token
 
 
@@ -62,3 +67,8 @@ def test_edge_schema_load_default_finds_repository_schemas() -> None:
     assert "spouse_of" in registry.relationship_names
     assert "lives_in" in registry.relationship_names
     assert registry.resolve("hosts_space").schema.id == "hosted_by"
+
+
+def test_facts_preserves_request_parser_compatibility_exports() -> None:
+    assert facts_parse_fact_request is parse_fact_request
+    assert FactsSubjectReference is SubjectReference

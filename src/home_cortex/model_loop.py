@@ -27,6 +27,7 @@ from .request_analysis import (
     PRIVATE_TOOL_FIELDS,
     RequestAnalysis,
     analyze_household_request,
+    entity_aliases,
 )
 from .text import normalize_language_code, safe_log_token
 from .tools import GRAPH_TOOL_NAMES, ToolDispatcher
@@ -57,6 +58,14 @@ class AgentStreamingError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class _RelationshipEvidence:
+    relation: str
+    source_id: str
+    related_id: str
+    related_gender: str | None = None
+
+
+@dataclass(frozen=True)
 class AgentResult:
     answer: str
     steps: int
@@ -77,6 +86,7 @@ class _LoopState:
     successful_tools: set[str] = field(default_factory=set)
     nonempty_tools: set[str] = field(default_factory=set)
     evidence_fields: set[str] = field(default_factory=set)
+    relationship_evidence: set[_RelationshipEvidence] = field(default_factory=set)
     total_tool_calls: int = 0
     failure_reason: StopReason | None = None
     grounding_retry: bool = False
@@ -104,6 +114,8 @@ class _LoopState:
                 self.requirements,
                 self.nonempty_tools,
                 self.evidence_fields,
+                self.relationship_evidence,
+                self.trusted_user_entity_id,
             )
         )
 
@@ -467,6 +479,7 @@ class ModelLoop:
             prefetched_successful,
             prefetched_nonempty,
             prefetched_fields,
+            prefetched_relationships,
             prefetched_tool_calls,
         ) = await self._prefetch_related_entity_facts(
             state.conversation,
@@ -480,6 +493,7 @@ class ModelLoop:
         state.successful_tools.update(prefetched_successful)
         state.nonempty_tools.update(prefetched_nonempty)
         state.evidence_fields.update(prefetched_fields)
+        state.relationship_evidence.update(prefetched_relationships)
         state.total_tool_calls += prefetched_tool_calls
         return state
 
@@ -494,6 +508,7 @@ class ModelLoop:
                 and not state.grounding_retry
                 and step < self.max_steps
             ):
+                _discard_latest_unsupported_answer(state.conversation)
                 state.conversation.append(
                     _grounding_retry_message(state.requirements)
                 )
@@ -504,11 +519,16 @@ class ModelLoop:
             state.requirements,
             state.nonempty_tools,
             state.evidence_fields,
+            state.relationship_evidence,
+            state.trusted_user_entity_id,
         ):
             if step < self.max_steps and _should_retry_incomplete_evidence(
                 state.requirements,
                 state.evidence_fields,
+                state.relationship_evidence,
+                state.trusted_user_entity_id,
             ):
+                _discard_latest_unsupported_answer(state.conversation)
                 state.conversation.append(
                     _grounding_retry_message(state.requirements)
                 )
@@ -522,7 +542,13 @@ class ModelLoop:
         tool_calls: Sequence[Any],
         step: int,
     ) -> None:
-        failure_reason, successful, nonempty, fields = await self._append_tool_results(
+        (
+            failure_reason,
+            successful,
+            nonempty,
+            fields,
+            relationships,
+        ) = await self._append_tool_results(
             state.conversation,
             tool_calls,
             step=step,
@@ -532,11 +558,14 @@ class ModelLoop:
             allowed_private_fields=state.allowed_private_fields,
             requirements=state.requirements,
             caller_entity_id=state.trusted_user_entity_id,
+            prior_evidence_fields=state.evidence_fields,
+            prior_relationship_evidence=state.relationship_evidence,
         )
         state.failure_reason = failure_reason
         state.successful_tools.update(successful)
         state.nonempty_tools.update(nonempty)
         state.evidence_fields.update(fields)
+        state.relationship_evidence.update(relationships)
         state.total_tool_calls += len(tool_calls)
 
     def _log_step(self, state: _LoopState, step: int, tool_calls: int) -> None:
@@ -610,7 +639,14 @@ class ModelLoop:
         request_id: str,
         presentation_language: str,
         allowed_private_fields: frozenset[str],
-    ) -> tuple[StopReason | None, set[str], set[str], set[str], int]:
+    ) -> tuple[
+        StopReason | None,
+        set[str],
+        set[str],
+        set[str],
+        set[_RelationshipEvidence],
+        int,
+    ]:
         """Resolve a known speaker's relationship + person fact deterministically.
 
         Asking the model to discover a relationship and then dereference the
@@ -618,12 +654,21 @@ class ModelLoop:
         nondeterministic. Cortex owns that graph traversal; the model only
         turns the resulting, privacy-filtered evidence into natural language.
         """
+        if requirements.required_entity_names:
+            return await self._prefetch_named_entity_resolution(
+                conversation,
+                requirements=requirements,
+                trusted_user_entity_id=trusted_user_entity_id,
+                request_id=request_id,
+                presentation_language=presentation_language,
+                allowed_private_fields=allowed_private_fields,
+            )
         if (
             trusted_user_entity_id is None
             or len(requirements.relations) != 1
             or ("get_entity", "dob") not in requirements.fields
         ):
-            return None, set(), set(), set(), 0
+            return None, set(), set(), set(), set(), 0
 
         relation = next(iter(requirements.relations))
         relationship_arguments: dict[str, Any] = {
@@ -639,6 +684,7 @@ class ModelLoop:
         successful_tools: set[str] = set()
         nonempty_tools: set[str] = set()
         evidence_fields: set[str] = set()
+        relationship_evidence: set[_RelationshipEvidence] = set()
         evidence_payloads: list[str] = []
         failure_reason: StopReason | None = None
         tool_calls = 0
@@ -656,7 +702,7 @@ class ModelLoop:
             relationship_result,
             requirements,
         )
-        successful, nonempty, fields = _tool_evidence(
+        successful, nonempty, fields, relationships = _tool_evidence(
             "get_relationships",
             relationship_arguments,
             scoped_relationship_result,
@@ -664,6 +710,7 @@ class ModelLoop:
         successful_tools.update(successful)
         nonempty_tools.update(nonempty)
         evidence_fields.update(fields)
+        relationship_evidence.update(relationships)
         evidence_payloads.append(
             self._serialize_tool_result(
                 "get_relationships",
@@ -704,7 +751,7 @@ class ModelLoop:
                 caller_entity_id=trusted_user_entity_id,
             )
             tool_calls += 1
-            successful, nonempty, fields = _tool_evidence(
+            successful, nonempty, fields, relationships = _tool_evidence(
                 "get_entity",
                 entity_arguments,
                 entity_result,
@@ -712,6 +759,16 @@ class ModelLoop:
             successful_tools.update(successful)
             nonempty_tools.update(nonempty)
             evidence_fields.update(fields)
+            relationship_evidence.update(relationships)
+            bound_entity_ids = _bound_entity_ids(
+                requirements,
+                _relationship_path_terminal_ids(
+                    requirements,
+                    relationship_evidence,
+                    trusted_user_entity_id,
+                ),
+                evidence_fields,
+            )
             evidence_payloads.append(
                 self._serialize_tool_result(
                     "get_entity",
@@ -719,6 +776,7 @@ class ModelLoop:
                     presentation_language=presentation_language,
                     allowed_private_fields=allowed_private_fields,
                     requirements=requirements,
+                    bound_entity_ids=bound_entity_ids,
                 )
             )
             failure_reason = _tool_failure_reason(entity_result, failure_reason)
@@ -740,6 +798,86 @@ class ModelLoop:
             successful_tools,
             nonempty_tools,
             evidence_fields,
+            relationship_evidence,
+            tool_calls,
+        )
+
+    async def _prefetch_named_entity_resolution(
+        self,
+        conversation: list[dict[str, Any]],
+        *,
+        requirements: EvidenceRequirements,
+        trusted_user_entity_id: str | None,
+        request_id: str,
+        presentation_language: str,
+        allowed_private_fields: frozenset[str],
+    ) -> tuple[
+        StopReason | None,
+        set[str],
+        set[str],
+        set[str],
+        set[_RelationshipEvidence],
+        int,
+    ]:
+        successful_tools: set[str] = set()
+        nonempty_tools: set[str] = set()
+        evidence_fields: set[str] = set()
+        evidence_payloads: list[str] = []
+        failure_reason: StopReason | None = None
+        tool_calls = 0
+        for name in requirements.required_entity_names[
+            : self.max_tool_calls_per_step
+        ]:
+            arguments = {
+                "text": name,
+                "entity_type": "person",
+                "limit": self.max_tool_records,
+            }
+            tool_result = await self._execute_planned_tool(
+                "search_entities",
+                arguments,
+                requirements=requirements,
+                request_id=request_id,
+                caller_entity_id=trusted_user_entity_id,
+            )
+            tool_calls += 1
+            successful, nonempty, fields, _ = _tool_evidence(
+                "search_entities",
+                arguments,
+                tool_result,
+            )
+            successful_tools.update(successful)
+            nonempty_tools.update(nonempty)
+            evidence_fields.update(fields)
+            evidence_payloads.append(
+                self._serialize_tool_result(
+                    "search_entities",
+                    tool_result,
+                    presentation_language=presentation_language,
+                    allowed_private_fields=allowed_private_fields,
+                    requirements=requirements,
+                )
+            )
+            failure_reason = _tool_failure_reason(tool_result, failure_reason)
+
+        conversation.append(
+            {
+                "role": "system",
+                "content": (
+                    "Trusted Home Cortex name-resolution evidence was retrieved "
+                    "deterministically for the latest request. Use a person ID "
+                    "only when exactly one returned entity has the requested "
+                    "name. Ask for clarification when multiple entities match.\n"
+                    + "\n".join(evidence_payloads)
+                ),
+            }
+        )
+        return (
+            failure_reason,
+            successful_tools,
+            nonempty_tools,
+            evidence_fields,
+            set(),
             tool_calls,
         )
 
@@ -791,10 +929,22 @@ class ModelLoop:
         allowed_private_fields: frozenset[str],
         requirements: EvidenceRequirements,
         caller_entity_id: str | None,
-    ) -> tuple[StopReason | None, set[str], set[str], set[str]]:
+        prior_evidence_fields: set[str],
+        prior_relationship_evidence: set[_RelationshipEvidence],
+    ) -> tuple[
+        StopReason | None,
+        set[str],
+        set[str],
+        set[str],
+        set[_RelationshipEvidence],
+    ]:
         successful_tools: set[str] = set()
         nonempty_tools: set[str] = set()
         evidence_fields: set[str] = set()
+        relationship_evidence: set[_RelationshipEvidence] = set()
+        known_evidence_fields = set(prior_evidence_fields)
+        known_relationship_evidence = set(prior_relationship_evidence)
+        pending_tool_results: list[tuple[str, dict[str, Any]]] = []
         for tool_call in tool_calls:
             tool_name = tool_call.function.name
             arguments = self._bounded_arguments(
@@ -836,7 +986,7 @@ class ModelLoop:
                 else None
             )
             failure_reason = _tool_failure_reason(tool_result, failure_reason)
-            successful, nonempty, fields = _tool_evidence(
+            successful, nonempty, fields, relationships = _tool_evidence(
                 tool_name,
                 arguments if isinstance(arguments, Mapping) else {},
                 scoped_result,
@@ -844,6 +994,9 @@ class ModelLoop:
             successful_tools.update(successful)
             nonempty_tools.update(nonempty)
             evidence_fields.update(fields)
+            relationship_evidence.update(relationships)
+            known_evidence_fields.update(fields)
+            known_relationship_evidence.update(relationships)
             logger.info(
                 "tool_execution request_id=%s step=%d tool=%s success=%s "
                 "relation=%s direction=%s record_count=%d duration_ms=%.2f "
@@ -858,6 +1011,18 @@ class ModelLoop:
                 duration_ms,
                 safe_log_token(str(error_code)),
             )
+            pending_tool_results.append((tool_name, tool_result))
+
+        bound_entity_ids = _bound_entity_ids(
+            requirements,
+            _relationship_path_terminal_ids(
+                requirements,
+                known_relationship_evidence,
+                caller_entity_id,
+            ),
+            known_evidence_fields,
+        )
+        for tool_name, tool_result in pending_tool_results:
             conversation.append(
                 {
                     "role": "tool",
@@ -868,10 +1033,17 @@ class ModelLoop:
                         presentation_language=presentation_language,
                         allowed_private_fields=allowed_private_fields,
                         requirements=requirements,
+                        bound_entity_ids=bound_entity_ids,
                     ),
                 }
             )
-        return failure_reason, successful_tools, nonempty_tools, evidence_fields
+        return (
+            failure_reason,
+            successful_tools,
+            nonempty_tools,
+            evidence_fields,
+            relationship_evidence,
+        )
 
     def _raise_step_limit(self, request_id: str, total_tool_calls: int) -> None:
         logger.info(
@@ -949,8 +1121,14 @@ class ModelLoop:
         presentation_language: str,
         allowed_private_fields: frozenset[str],
         requirements: EvidenceRequirements,
+        bound_entity_ids: set[str] | None = None,
     ) -> str:
-        scoped_result = _scope_tool_result(tool_name, tool_result, requirements)
+        scoped_result = _scope_tool_result(
+            tool_name,
+            tool_result,
+            requirements,
+            bound_entity_ids=bound_entity_ids,
+        )
         bounded = _prepare_tool_value(
             scoped_result,
             presentation_language,
@@ -1062,6 +1240,8 @@ def _has_nonempty_evidence(
     requirements: EvidenceRequirements,
     nonempty_tools: set[str],
     evidence_fields: set[str],
+    relationship_evidence: set[_RelationshipEvidence],
+    trusted_user_entity_id: str | None,
 ) -> bool:
     if not requirements.tools.issubset(nonempty_tools):
         return False
@@ -1071,31 +1251,28 @@ def _has_nonempty_evidence(
     ):
         return False
 
-    related_ids: set[str] = set()
-    for relation in requirements.relations:
-        prefix = f"get_relationships:{relation}.related_id="
-        if requirements.related_gender is not None:
-            prefix = (
-                f"get_relationships:{relation}.related_gender="
-                f"{requirements.related_gender}.id="
-            )
-        related_ids.update(
-            item.removeprefix(prefix)
-            for item in evidence_fields
-            if item.startswith(prefix)
-        )
-    if requirements.relations and requirements.related_gender and not related_ids:
+    terminal_ids = _relationship_path_terminal_ids(
+        requirements,
+        relationship_evidence,
+        trusted_user_entity_id,
+    )
+    if requirements.relationship_path and not terminal_ids:
+        return False
+    bound_entity_ids = _bound_entity_ids(
+        requirements,
+        terminal_ids,
+        evidence_fields,
+    )
+
+    related_ids = terminal_ids or _legacy_related_ids(requirements, evidence_fields)
+    if (
+        not requirements.relationship_path
+        and requirements.relations
+        and requirements.related_gender
+        and not related_ids
+    ):
         return False
 
-    if ("get_entity", "dob") in requirements.fields and requirements.relations:
-        entity_prefix = "get_entity.field=dob.id="
-        entity_ids = {
-            item.removeprefix(entity_prefix)
-            for item in evidence_fields
-            if item.startswith(entity_prefix)
-        }
-        if not related_ids.intersection(entity_ids):
-            return False
     for tool_name, field in requirements.fields:
         if tool_name != "get_entity":
             continue
@@ -1105,6 +1282,10 @@ def _has_nonempty_evidence(
             for item in evidence_fields
             if item.startswith(prefix)
         }
+        if bound_entity_ids is not None:
+            matching_ids.intersection_update(bound_entity_ids)
+        elif field == "dob" and requirements.relations:
+            matching_ids.intersection_update(related_ids)
         if len(matching_ids) < requirements.minimum_entity_records:
             return False
     return True
@@ -1113,7 +1294,23 @@ def _has_nonempty_evidence(
 def _should_retry_incomplete_evidence(
     requirements: EvidenceRequirements,
     evidence_fields: set[str],
+    relationship_evidence: set[_RelationshipEvidence],
+    trusted_user_entity_id: str | None,
 ) -> bool:
+    if requirements.relationship_path and trusted_user_entity_id is None:
+        return False
+    terminal_ids = _relationship_path_terminal_ids(
+        requirements,
+        relationship_evidence,
+        trusted_user_entity_id,
+    )
+    bound_entity_ids = _bound_entity_ids(
+        requirements,
+        terminal_ids,
+        evidence_fields,
+    )
+    if requirements.relationship_path and relationship_evidence and not terminal_ids:
+        return True
     for tool_name, field in requirements.fields:
         if tool_name != "get_entity":
             continue
@@ -1123,6 +1320,11 @@ def _should_retry_incomplete_evidence(
             for item in evidence_fields
             if item.startswith(prefix)
         }
+        if bound_entity_ids is not None and matching_ids:
+            if len(matching_ids.intersection(bound_entity_ids)) < (
+                requirements.minimum_entity_records
+            ):
+                return True
         if 0 < len(matching_ids) < requirements.minimum_entity_records:
             return True
 
@@ -1142,6 +1344,80 @@ def _should_retry_incomplete_evidence(
     return False
 
 
+def _bound_entity_ids(
+    requirements: EvidenceRequirements,
+    terminal_ids: set[str],
+    evidence_fields: set[str],
+) -> set[str] | None:
+    if requirements.relationship_path:
+        return terminal_ids
+    if requirements.required_entity_ids:
+        return set(requirements.required_entity_ids)
+    if requirements.required_entity_names:
+        resolved_ids: set[str] = set()
+        for name in requirements.required_entity_names:
+            if f"search_entities.complete.query={name}" not in evidence_fields:
+                return set()
+            prefix = f"search_entities.alias={name}.id="
+            matched_ids = {
+                item.removeprefix(prefix)
+                for item in evidence_fields
+                if item.startswith(prefix)
+            }
+            if len(matched_ids) != 1:
+                return set()
+            resolved_ids.update(matched_ids)
+        return resolved_ids
+    if requirements.entity_binding_required:
+        return set()
+    return None
+
+
+def _relationship_path_terminal_ids(
+    requirements: EvidenceRequirements,
+    relationship_evidence: set[_RelationshipEvidence],
+    trusted_user_entity_id: str | None,
+) -> set[str]:
+    path = requirements.relationship_path
+    if not path or trusted_user_entity_id is None:
+        return set()
+    current_ids = {trusted_user_entity_id}
+    for step in path:
+        current_ids = {
+            evidence.related_id
+            for evidence in relationship_evidence
+            if evidence.source_id in current_ids
+            and evidence.relation == step.relation
+            and (
+                step.gender is None
+                or evidence.related_gender == step.gender
+            )
+        }
+        if not current_ids:
+            break
+    return current_ids
+
+
+def _legacy_related_ids(
+    requirements: EvidenceRequirements,
+    evidence_fields: set[str],
+) -> set[str]:
+    related_ids: set[str] = set()
+    for relation in requirements.relations:
+        prefix = f"get_relationships:{relation}.related_id="
+        if requirements.related_gender is not None:
+            prefix = (
+                f"get_relationships:{relation}.related_gender="
+                f"{requirements.related_gender}.id="
+            )
+        related_ids.update(
+            item.removeprefix(prefix)
+            for item in evidence_fields
+            if item.startswith(prefix)
+        )
+    return related_ids
+
+
 def _constrain_tool_arguments(
     tool_name: str,
     arguments: Any,
@@ -1151,6 +1427,24 @@ def _constrain_tool_arguments(
         return arguments
 
     constrained = dict(arguments)
+    if requirements.relationship_path:
+        relation = constrained.get("relation")
+        if len(requirements.relationship_path) == 1:
+            step = requirements.relationship_path[0]
+            constrained["relation"] = step.relation
+        else:
+            matches = tuple(
+                step
+                for step in requirements.relationship_path
+                if step.relation == relation
+            )
+            step = matches[0] if len(matches) == 1 else None
+        if step is not None:
+            if step.direction is None:
+                constrained.pop("direction", None)
+            else:
+                constrained["direction"] = step.direction
+        return constrained
     if len(requirements.relations) == 1:
         constrained["relation"] = next(iter(requirements.relations))
     if requirements.relationship_direction is not None:
@@ -1162,7 +1456,13 @@ def _scope_tool_result(
     tool_name: str,
     tool_result: dict[str, Any],
     requirements: EvidenceRequirements,
+    *,
+    bound_entity_ids: set[str] | None = None,
 ) -> dict[str, Any]:
+    if tool_name == "search_entities":
+        return _scope_entity_private_fields(tool_result, set())
+    if tool_name == "get_entity":
+        return _scope_entity_private_fields(tool_result, bound_entity_ids)
     if tool_name != "get_relationships" or not requirements.relations:
         return tool_result
     records = tool_result.get("result")
@@ -1174,44 +1474,102 @@ def _scope_tool_result(
         record
         for record in records
         if isinstance(record, Mapping)
-        and record.get("relation") in requirements.relations
-        and (
-            requirements.related_gender is None
-            or (
-                isinstance(record.get("related_entity"), Mapping)
-                and record["related_entity"].get("gender")
-                == requirements.related_gender
-            )
-        )
+        and _relationship_record_matches(record, requirements)
     ]
     return scoped
+
+
+def _scope_entity_private_fields(
+    tool_result: dict[str, Any],
+    bound_entity_ids: set[str] | None,
+) -> dict[str, Any]:
+    if bound_entity_ids is None:
+        return tool_result
+    records = tool_result.get("result")
+    if not isinstance(records, list):
+        return tool_result
+    scoped = dict(tool_result)
+    scoped["result"] = [
+        (
+            dict(record)
+            if record.get("id") in bound_entity_ids
+            else {
+                key: value
+                for key, value in record.items()
+                if str(key) not in PRIVATE_TOOL_FIELDS
+            }
+        )
+        if isinstance(record, Mapping)
+        else record
+        for record in records
+    ]
+    return scoped
+
+
+def _relationship_record_matches(
+    record: Mapping[str, Any],
+    requirements: EvidenceRequirements,
+) -> bool:
+    relation = record.get("relation")
+    if relation not in requirements.relations:
+        return False
+    related = record.get("related_entity")
+    gender = related.get("gender") if isinstance(related, Mapping) else None
+    if requirements.relationship_path:
+        return any(
+            step.relation == relation
+            and (step.gender is None or step.gender == gender)
+            for step in requirements.relationship_path
+        )
+    return requirements.related_gender is None or gender == requirements.related_gender
 
 
 def _tool_evidence(
     tool_name: str,
     arguments: Mapping[str, Any],
     tool_result: Mapping[str, Any],
-) -> tuple[set[str], set[str], set[str]]:
+) -> tuple[set[str], set[str], set[str], set[_RelationshipEvidence]]:
     """Extract evidence markers without retaining or logging private values."""
     if tool_result.get("ok") is not True:
-        return set(), set(), set()
+        return set(), set(), set(), set()
 
     successful_tools = {tool_name}
     nonempty_tools: set[str] = set()
     evidence_fields: set[str] = set()
+    relationship_evidence: set[_RelationshipEvidence] = set()
     requested_relation = arguments.get("relation")
     if isinstance(requested_relation, str):
         successful_tools.add(f"{tool_name}:{requested_relation}")
 
     records = tool_result.get("result")
     if not isinstance(records, list) or not records:
-        return successful_tools, nonempty_tools, evidence_fields
+        return successful_tools, nonempty_tools, evidence_fields, relationship_evidence
 
     nonempty_tools.add(tool_name)
+    requested_limit = arguments.get("limit")
+    if (
+        tool_name == "search_entities"
+        and isinstance(requested_limit, int)
+        and not isinstance(requested_limit, bool)
+        and len(records) < requested_limit
+    ):
+        query = arguments.get("text")
+        if isinstance(query, str):
+            evidence_fields.add(
+                f"search_entities.complete.query={query.strip().casefold()}"
+            )
     for record in records:
         if not isinstance(record, Mapping):
             continue
         evidence_fields.update(f"{tool_name}.{field}" for field in record)
+        private_evidence_fields = {
+            category
+            for field in record
+            if (category := PRIVATE_TOOL_FIELDS.get(str(field))) is not None
+        }
+        evidence_fields.update(
+            f"{tool_name}.{category}" for category in private_evidence_fields
+        )
         relation = record.get("relation")
         if isinstance(relation, str):
             successful_tools.add(f"{tool_name}:{relation}")
@@ -1224,6 +1582,18 @@ def _tool_evidence(
                         f"{tool_name}:{relation}.related_id={related_id}"
                     )
                     gender = related.get("gender")
+                    source_id = arguments.get("entity_id")
+                    if isinstance(source_id, str):
+                        relationship_evidence.add(
+                            _RelationshipEvidence(
+                                relation=relation,
+                                source_id=source_id,
+                                related_id=related_id,
+                                related_gender=(
+                                    gender if isinstance(gender, str) else None
+                                ),
+                            )
+                        )
                     if isinstance(gender, str):
                         evidence_fields.add(
                             f"{tool_name}:{relation}.related_gender={gender}.id="
@@ -1236,7 +1606,16 @@ def _tool_evidence(
                 f"{tool_name}.field={field}.id={record_id}"
                 for field in record
             )
-    return successful_tools, nonempty_tools, evidence_fields
+            evidence_fields.update(
+                f"{tool_name}.field={category}.id={record_id}"
+                for category in private_evidence_fields
+            )
+            if tool_name in {"get_entity", "search_entities"}:
+                evidence_fields.update(
+                    f"{tool_name}.alias={alias.casefold()}.id={record_id}"
+                    for alias in entity_aliases(record)
+                )
+    return successful_tools, nonempty_tools, evidence_fields, relationship_evidence
 
 
 def _tool_failure_reason(
@@ -1339,19 +1718,48 @@ def _prepare_tool_value(
     return value
 
 
+def _discard_latest_unsupported_answer(
+    conversation: list[dict[str, Any]],
+) -> None:
+    if (
+        conversation
+        and conversation[-1].get("role") == "assistant"
+        and not conversation[-1].get("tool_calls")
+    ):
+        conversation.pop()
+
+
 def _grounding_retry_message(
     requirements: EvidenceRequirements,
 ) -> dict[str, str]:
     steps: list[str] = []
-    for relation in sorted(requirements.relations):
-        direction = (
-            f" in semantic direction {requirements.relationship_direction}"
-            if requirements.relationship_direction is not None
-            else ""
-        )
-        steps.append(
-            f"query the {relation} relationship{direction} with get_relationships"
-        )
+    if requirements.relationship_path:
+        for path_step in requirements.relationship_path:
+            direction = (
+                f" in semantic direction {path_step.direction}"
+                if path_step.direction is not None
+                else ""
+            )
+            gender = (
+                f" and keep the related {path_step.gender} entity"
+                if path_step.gender is not None
+                else ""
+            )
+            steps.append(
+                f"query the {path_step.relation} relationship{direction} "
+                f"with get_relationships{gender}"
+            )
+    else:
+        for relation in sorted(requirements.relations):
+            direction = (
+                f" in semantic direction {requirements.relationship_direction}"
+                if requirements.relationship_direction is not None
+                else ""
+            )
+            steps.append(
+                f"query the {relation} relationship{direction} "
+                "with get_relationships"
+            )
     for tool_name, field in sorted(requirements.fields):
         count = (
             f" for at least {requirements.minimum_entity_records} distinct entities"

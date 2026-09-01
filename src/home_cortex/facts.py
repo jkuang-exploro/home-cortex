@@ -35,9 +35,11 @@ from .request_analysis import (
     RelativeDefinition,
     RelationshipStep,
     RequestAnalysis,
+    SubjectReference,
     entity_aliases,
     analyze_household_request,
     is_home_adequacy_request,
+    parse_fact_request,
 )
 from .text import latest_user_message, safe_log_token
 
