@@ -13,6 +13,7 @@ from home_cortex.agent_service import AgentService
 from home_cortex.agents import get_agent
 from home_cortex.edge_schema import EdgeSchemaRegistry
 from home_cortex.grounding import (
+    AgentRequestContext,
     FreshnessRequirement,
     GroundingEvidence,
     GroundingExecutor,
@@ -163,6 +164,25 @@ def _named_property_plan(field: str) -> GroundingPlan:
     )
 
 
+def _speaker_property_plan(
+    field: str,
+    *,
+    transform: TransformSpec | None = None,
+) -> GroundingPlan:
+    return GroundingPlan(
+        requires_grounding=True,
+        grounding_domain="household",
+        goal=f"speaker's {field}",
+        subject=GroundingSubject(
+            reference_type="speaker",
+            expected_type="person",
+        ),
+        fields=(field,),
+        transform=transform,
+        required_evidence=(RequiredEvidence(field=field),),
+    )
+
+
 def test_planner_schema_requires_every_top_level_plan_slot() -> None:
     schema = _planner_output_schema()
 
@@ -196,26 +216,14 @@ def test_planner_compiler_adds_declared_query_dependencies_to_evidence() -> None
     }
 
 
-@pytest.mark.parametrize(
-    ("reference", "anchor", "expected_type"),
-    (
-        ("I", "authenticated_user", "person"),
-        ("我", "authenticated_user", "person"),
-        ("家里", "configured_home", "address"),
-    ),
-)
-def test_planner_compiler_normalizes_trusted_subject_anchors(
-    reference: str,
-    anchor: str,
-    expected_type: str,
-) -> None:
+def test_planner_compiler_does_not_infer_reference_type_from_entity_text() -> None:
     payload = {
         "requires_grounding": True,
         "grounding_domain": "household",
         "goal": "lookup",
         "subject": {
             "anchor": "named_entity",
-            "reference": reference,
+            "reference": "I",
             "expected_type": "measurement",
         },
         "fields": ["name"],
@@ -224,8 +232,7 @@ def test_planner_compiler_normalizes_trusted_subject_anchors(
 
     completed = _complete_evidence_requirements(payload)
 
-    assert completed["subject"]["anchor"] == anchor
-    assert completed["subject"]["expected_type"] == expected_type
+    assert completed["subject"] == payload["subject"]
 
 
 @pytest.mark.asyncio
@@ -256,6 +263,103 @@ async def test_arbitrary_new_entity_property_needs_no_code_change() -> None:
         {"id": "person:test", "name": ["Test Person"], "shoe_size_us": 10},
     )
     assert "income" not in evidence.records[0]
+
+
+@pytest.mark.asyncio
+async def test_arbitrary_speaker_property_composes_with_reference_resolution() -> None:
+    dispatcher = Dispatcher(
+        {
+            "person:test": {
+                "id": "person:test",
+                "name": ["Test Person"],
+                "shoe_size_us": 10,
+            }
+        }
+    )
+
+    evidence = await GroundingExecutor(
+        dispatcher,
+        CATALOG,
+        home_entity_id=None,
+    ).execute(
+        _speaker_property_plan("shoe_size_us"),
+        caller_entity_id="person:test",
+        household_now=datetime.fromisoformat("2026-08-31T12:00:00-07:00"),
+    )
+
+    assert evidence.status == "sufficient"
+    assert evidence.records[0]["shoe_size_us"] == 10
+    assert [name for name, _ in dispatcher.calls] == ["get_entity"]
+
+
+@pytest.mark.asyncio
+async def test_assistant_reference_resolves_from_runtime_without_graph_calls() -> None:
+    dispatcher = Dispatcher({})
+    plan = GroundingPlan(
+        requires_grounding=True,
+        grounding_domain="runtime",
+        goal="identify the subject",
+        subject=GroundingSubject(reference_type="assistant"),
+        fields=("display_name",),
+        required_evidence=(RequiredEvidence(field="display_name"),),
+    )
+
+    evidence = await GroundingExecutor(
+        dispatcher,
+        CATALOG,
+        home_entity_id=None,
+    ).execute(
+        plan,
+        context=AgentRequestContext(
+            caller_entity_id=None,
+            assistant_id="steward",
+            assistant_display_name="老管家",
+            household_id=None,
+            current_time=datetime.fromisoformat("2026-08-31T12:00:00-07:00"),
+            locale="zh",
+        ),
+    )
+
+    assert evidence.status == "sufficient"
+    assert evidence.records == (
+        {"id": "steward", "display_name": "老管家"},
+    )
+    assert evidence.requires_household_evidence is False
+    assert dispatcher.calls == []
+
+
+@pytest.mark.asyncio
+async def test_speaker_derived_property_uses_generic_date_operator() -> None:
+    dispatcher = Dispatcher(
+        {
+            "person:test": {
+                "id": "person:test",
+                "name": ["Test Person"],
+                "dob": "1988-01-01",
+            }
+        }
+    )
+    plan = _speaker_property_plan(
+        "dob",
+        transform=TransformSpec(
+            operator="completed_years",
+            field="dob",
+            reference="household_today",
+        ),
+    )
+
+    evidence = await GroundingExecutor(
+        dispatcher,
+        CATALOG,
+        home_entity_id=None,
+    ).execute(
+        plan,
+        caller_entity_id="person:test",
+        household_now=datetime.fromisoformat("2026-08-31T12:00:00-07:00"),
+    )
+
+    assert evidence.status == "sufficient"
+    assert evidence.value == 38
 
 
 @pytest.mark.asyncio
@@ -295,7 +399,7 @@ async def test_new_favorite_temperature_property_is_immediately_queryable() -> N
 
 
 @pytest.mark.asyncio
-async def test_derived_age_uses_generic_date_difference_operator() -> None:
+async def test_derived_age_uses_generic_completed_years_operator() -> None:
     dispatcher = Dispatcher(
         {
             "person:test": {
@@ -309,9 +413,8 @@ async def test_derived_age_uses_generic_date_difference_operator() -> None:
         update={
             "goal": "Test Person's age",
             "transform": TransformSpec(
-                operator="date_difference",
+                operator="completed_years",
                 field="dob",
-                mode="completed_years",
                 reference="household_today",
             ),
         }
@@ -416,9 +519,8 @@ async def test_father_in_law_age_uses_generic_traversal_and_date_operator() -> N
         ),
         fields=("dob",),
         transform=TransformSpec(
-            operator="date_difference",
+            operator="completed_years",
             field="dob",
-            mode="completed_years",
             reference="household_today",
         ),
         required_evidence=(
@@ -558,7 +660,35 @@ async def test_authenticated_anchor_must_match_planned_entity_type() -> None:
         household_now=datetime.fromisoformat("2026-08-31T12:00:00-07:00"),
     )
 
-    assert evidence.status == "entity_not_found"
+    assert evidence.status == "evidence_insufficient"
+
+
+@pytest.mark.asyncio
+async def test_missing_speaker_context_has_distinct_failure_without_graph_lookup(
+) -> None:
+    dispatcher = Dispatcher({})
+    evidence = await GroundingExecutor(
+        dispatcher,
+        CATALOG,
+        home_entity_id=None,
+    ).execute(
+        GroundingPlan(
+            requires_grounding=True,
+            grounding_domain="household",
+            goal="identify the subject",
+            subject=GroundingSubject(
+                reference_type="speaker",
+                expected_type="person",
+            ),
+            fields=("name",),
+            required_evidence=(RequiredEvidence(field="name"),),
+        ),
+        caller_entity_id=None,
+        household_now=datetime.fromisoformat("2026-08-31T12:00:00-07:00"),
+    )
+
+    assert evidence.status == "caller_context_missing"
+    assert dispatcher.calls == []
 
 
 @pytest.mark.asyncio
@@ -969,6 +1099,13 @@ def test_runtime_schema_catalog_discovers_new_fields_without_code_changes(
     )
 
     assert catalog.has_entity_field("person", "annual_income")
+    assert catalog.entity_field_type("person", "annual_income") == "integer"
+    assert (
+        catalog.prompt_payload()["entities"]["person"]["property_types"][
+            "annual_income"
+        ]
+        == "integer"
+    )
     assert "Test Person" in catalog.entity_aliases
 
 
@@ -1019,17 +1156,16 @@ async def test_structured_llm_plan_drives_open_world_service() -> None:
             "我是谁",
             GroundingPlan(
                 requires_grounding=True,
-                grounding_domain="household",
-                goal="authenticated speaker identity",
-                subject=GroundingSubject(
-                    anchor="named_entity",
-                    reference="I",
-                    expected_type="measurement",
-                ),
+                    grounding_domain="household",
+                    goal="authenticated speaker identity",
+                    subject=GroundingSubject(
+                        reference_type="speaker",
+                        expected_type="person",
+                    ),
                 fields=("name",),
                 required_evidence=(RequiredEvidence(field="name"),),
             ),
-            '"name": "匡健"',
+                "匡健",
         ),
         (
             "家里都有谁",
@@ -1568,12 +1704,12 @@ async def test_multi_step_edge_count_counts_only_terminal_relation() -> None:
         (TransformSpec(operator="min", field="value"), [{"value": 2}, {"value": 4}], 2),
         (TransformSpec(operator="max", field="value"), [{"value": 2}, {"value": 4}], 4),
         (
-            TransformSpec(operator="difference", field="left", other_field="right"),
+            TransformSpec(operator="subtract", field="left", other_field="right"),
             [{"left": 10, "right": 3}],
             7,
         ),
         (
-            TransformSpec(operator="ratio", field="left", other_field="right"),
+            TransformSpec(operator="divide", field="left", other_field="right"),
             [{"left": 10, "right": 2}],
             5,
         ),
@@ -1730,9 +1866,8 @@ async def test_ambiguous_multi_record_scalar_derivation_is_insufficient() -> Non
         traversal=(TraversalStep(relation="parent_of", direction="in"),),
         fields=("dob",),
         transform=TransformSpec(
-            operator="date_difference",
+            operator="completed_years",
             field="dob",
-            mode="completed_years",
             reference="household_today",
         ),
         required_evidence=(

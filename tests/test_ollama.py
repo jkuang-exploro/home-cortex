@@ -129,7 +129,7 @@ async def test_grounding_planner_uses_runtime_schema_and_strict_output() -> None
         "grounding_domain": "household",
         "goal": "Test Person's occupation",
         "subject": {
-            "anchor": "named_entity",
+            "reference_type": "named_entity",
             "reference": "Test Person",
             "expected_type": "person",
         },

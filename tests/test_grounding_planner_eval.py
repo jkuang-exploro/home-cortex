@@ -78,7 +78,7 @@ EVAL_CATALOG = RuntimeSchemaCatalog(
         ),
         (
             "How old is Test Person?",
-            {"grounded": True, "field": "dob", "operator": "date_difference"},
+            {"grounded": True, "field": "dob", "operator": "completed_years"},
         ),
         (
             "What is my latest body temperature?",
@@ -86,6 +86,43 @@ EVAL_CATALOG = RuntimeSchemaCatalog(
                 "grounded": True,
                 "field": "temperature_c",
                 "operator": "latest",
+                "reference_type": "speaker",
+            },
+        ),
+        (
+            "Who are you?",
+            {
+                "grounded": True,
+                "field": "display_name",
+                "reference_type": "assistant",
+                "domain": "runtime",
+            },
+        ),
+        (
+            "我是谁？",
+            {
+                "grounded": True,
+                "field": "name",
+                "reference_type": "speaker",
+                "domain": "household",
+            },
+        ),
+        (
+            "Who am I?",
+            {
+                "grounded": True,
+                "field": "name",
+                "reference_type": "speaker",
+                "domain": "household",
+            },
+        ),
+        (
+            "你是谁？",
+            {
+                "grounded": True,
+                "field": "display_name",
+                "reference_type": "assistant",
+                "domain": "runtime",
             },
         ),
     ),
@@ -115,3 +152,8 @@ async def test_actual_planner_model_behavior(
     if operator := expected.get("operator"):
         assert plan.transform is not None
         assert plan.transform.operator == operator
+    if reference_type := expected.get("reference_type"):
+        assert plan.subject is not None
+        assert plan.subject.reference_type == reference_type
+    if domain := expected.get("domain"):
+        assert plan.grounding_domain == domain

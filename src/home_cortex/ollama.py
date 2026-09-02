@@ -4,6 +4,8 @@ from typing import Any, cast
 
 from ollama import AsyncClient, ChatResponse
 
+from .operator_registry import operator_prompt_payload
+
 
 class OllamaService:
     """Make individual Ollama chat calls for the Cortex agent."""
@@ -67,9 +69,17 @@ class OllamaService:
             "Never invent a relation or claim that an unlisted property exists. "
             "A property explicitly requested by the user may still appear in "
             "required_evidence when it is absent from the catalog, so the gate can "
-            "return FIELD_NOT_AVAILABLE. Resolve first-person references "
-            "from authenticated_user, the current home from configured_home, and "
-            "other named subjects from named_entity. Use traversal steps for graph "
+            "return FIELD_NOT_AVAILABLE. Represent references canonically: use "
+            "reference_type=speaker for first-person references to the current "
+            "caller, reference_type=assistant for second-person references to this "
+            "assistant, reference_type=configured_home for the current home, "
+            "reference_type=entity_id for an explicit canonical record ID, and "
+            "reference_type=named_entity only for a genuine named subject. Never "
+            "put a pronoun in a named_entity reference. Speaker properties use "
+            "grounding_domain=household and the person schema. Assistant metadata "
+            "uses grounding_domain=runtime, requires_grounding=true, field "
+            "display_name, and no household traversal. An assistant reference must "
+            "not be sent to the household graph. Use traversal steps for graph "
             "relationships. Put every field or relation necessary for the answer "
             "in required_evidence. Use source=edge and edge_fields for properties "
             "stored on a relationship, such as start or end; otherwise use "
@@ -81,7 +91,12 @@ class OllamaService:
             "Use freshness only when the wording requires a current/recent "
             "observation. "
             "Derived values must use one of the bounded operators in the output "
-            "schema. Use date_difference/completed_years for age. Use filters and "
+            "schema; never invent an operator. Respect each field's property_types "
+            "entry: numeric aggregation requires number/integer fields, temporal "
+            "operators require date/datetime fields, and incompatible operations "
+            "will be rejected deterministically. Use completed_years for age and "
+            "date_difference for elapsed "
+            "days or seconds. Use filters and "
             "sum for bounded expense periods. Use annual_occurrence with mode=days "
             "for days until the next birthday or anniversary, or omit mode to "
             "return the next occurrence date. If the "
@@ -89,6 +104,13 @@ class OllamaService:
             "plan with that canonical snake_case property in required_evidence; "
             "the deterministic gate will report it as unavailable.\n\n"
             f"Household now: {household_now}\n"
+            "Allowed generic operator contracts:\n"
+            + json.dumps(
+                operator_prompt_payload(),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            + "\n"
             "Runtime schema:\n"
             + json.dumps(schema_catalog, ensure_ascii=False, separators=(",", ":"))
         )

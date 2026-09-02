@@ -8,11 +8,18 @@ from ollama import ChatResponse
 
 from home_cortex.agent_service import AgentLimitError, AgentService
 from home_cortex.agents import get_agent
-from home_cortex.grounding import GroundingPlan
-from home_cortex.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.grounding import (
+    GroundingPlan,
+    GroundingSubject,
+    RequiredEvidence,
+)
+from home_cortex.schema_catalog import EntityTypeSchema, RuntimeSchemaCatalog
 
 STEWARD = get_agent("steward")
-EMPTY_CATALOG = RuntimeSchemaCatalog({}, {})
+EMPTY_CATALOG = RuntimeSchemaCatalog(
+    {"person": EntityTypeSchema("person", ("id", "name"))},
+    {},
+)
 
 
 def _agent(ollama: Any, dispatcher: Any, **settings: Any) -> AgentService:
@@ -29,14 +36,22 @@ def _agent(ollama: Any, dispatcher: Any, **settings: Any) -> AgentService:
 
 
 class FakeOllamaService:
-    def __init__(self, responses: list[ChatResponse]) -> None:
+    def __init__(
+        self,
+        responses: list[ChatResponse],
+        *,
+        grounding_plan: GroundingPlan | None = None,
+    ) -> None:
         self.responses = responses
+        self.grounding_plan = grounding_plan
         self.calls: list[list[dict[str, Any]]] = []
         self.tool_names: list[tuple[str, ...]] = []
         self.plan_calls = 0
 
     async def plan_grounding(self, *_: Any, **__: Any) -> dict[str, Any]:
         self.plan_calls += 1
+        if self.grounding_plan is not None:
+            return self.grounding_plan.model_dump(mode="json")
         return GroundingPlan(
             requires_grounding=False,
             grounding_domain="external_tool",
@@ -113,6 +128,31 @@ def _tool_call(name: str = "calculate", arguments: Any = None) -> dict[str, Any]
             "arguments": arguments if arguments is not None else {"expression": "2+2"},
         }
     }
+
+
+def _speaker_name_plan() -> GroundingPlan:
+    return GroundingPlan(
+        requires_grounding=True,
+        grounding_domain="household",
+        goal="identify the subject",
+        subject=GroundingSubject(
+            reference_type="speaker",
+            expected_type="person",
+        ),
+        fields=("name",),
+        required_evidence=(RequiredEvidence(field="name"),),
+    )
+
+
+def _assistant_name_plan() -> GroundingPlan:
+    return GroundingPlan(
+        requires_grounding=True,
+        grounding_domain="runtime",
+        goal="identify the subject",
+        subject=GroundingSubject(reference_type="assistant"),
+        fields=("display_name",),
+        required_evidence=(RequiredEvidence(field="display_name"),),
+    )
 
 
 @pytest.mark.asyncio
@@ -244,10 +284,11 @@ async def test_trusted_identity_context_excludes_private_profile_fields() -> Non
 
 
 @pytest.mark.asyncio
-async def test_agent_identity_answer_uses_configured_role_and_speaker_address() -> None:
-    ollama = FakeOllamaService([])
+async def test_agent_identity_resolves_runtime_reference_without_graph_query() -> None:
+    ollama = FakeOllamaService([], grounding_plan=_assistant_name_plan())
+    dispatcher = FakeDispatcher()
 
-    result = await _agent(ollama, FakeDispatcher()).answer(
+    result = await _agent(ollama, dispatcher).answer(
         "你是谁？",
         user_entity={
             "id": "person:jian_kuang",
@@ -256,17 +297,33 @@ async def test_agent_identity_answer_uses_configured_role_and_speaker_address() 
         },
     )
 
-    assert result.answer == "先生，我是老管家。"
+    assert result.answer == "我是老管家。"
     assert ollama.calls == []
-    assert ollama.plan_calls == 0
+    assert ollama.plan_calls == 1
+    assert dispatcher.calls == []
 
 
 @pytest.mark.asyncio
-async def test_speaker_identity_uses_authenticated_context_before_planner() -> None:
-    ollama = FakeOllamaService([])
+@pytest.mark.parametrize("question", ("我是谁？", "Who am I?"))
+async def test_speaker_identity_uses_canonical_context_without_named_search(
+    question: str,
+) -> None:
+    ollama = FakeOllamaService([], grounding_plan=_speaker_name_plan())
+    dispatcher = FakeDispatcher(
+        {
+            "ok": True,
+            "tool": "get_entity",
+            "result": [
+                {
+                    "id": "person:jian_kuang",
+                    "name": ["Jian Kuang", "匡健"],
+                }
+            ],
+        }
+    )
 
-    result = await _agent(ollama, FakeDispatcher()).answer(
-        "我是谁？",
+    result = await _agent(ollama, dispatcher).answer(
+        question,
         user_entity={
             "id": "person:jian_kuang",
             "name": ["Jian Kuang", "匡健"],
@@ -274,19 +331,37 @@ async def test_speaker_identity_uses_authenticated_context_before_planner() -> N
         },
     )
 
-    assert result.answer == "先生，您是匡健。"
+    assert "匡健" in result.answer or "Jian Kuang" in result.answer
     assert ollama.calls == []
-    assert ollama.plan_calls == 0
+    assert ollama.plan_calls == 1
+    assert dispatcher.calls == [
+        ("get_entity", {"entity_id": "person:jian_kuang"})
+    ]
 
 
 @pytest.mark.asyncio
 async def test_speaker_identity_without_authentication_fails_clearly() -> None:
-    ollama = FakeOllamaService([])
+    ollama = FakeOllamaService([], grounding_plan=_speaker_name_plan())
+    dispatcher = FakeDispatcher()
 
-    result = await _agent(ollama, FakeDispatcher()).answer("我是谁？")
+    result = await _agent(ollama, dispatcher).answer("我是谁？")
 
     assert result.answer == "我无法确认当前登录者的身份。"
-    assert ollama.plan_calls == 0
+    assert ollama.plan_calls == 1
+    assert dispatcher.calls == []
+
+
+@pytest.mark.parametrize("question", ("你是谁？", "Who are you?"))
+@pytest.mark.asyncio
+async def test_assistant_reference_uses_same_runtime_path(question: str) -> None:
+    ollama = FakeOllamaService([], grounding_plan=_assistant_name_plan())
+    dispatcher = FakeDispatcher()
+
+    result = await _agent(ollama, dispatcher).answer(question)
+
+    assert "老管家" in result.answer or "the butler" in result.answer
+    assert ollama.plan_calls == 1
+    assert dispatcher.calls == []
 
 
 def _fixed_clock() -> datetime:

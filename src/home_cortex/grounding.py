@@ -9,17 +9,30 @@ import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
-from typing import Any, Literal
+from datetime import datetime, timezone
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .display import resolve_display_name
+from .operator_registry import (
+    OPERATORS,
+    PREDICATE_OPERATORS,
+    TRANSFORM_OPERATORS,
+    OperatorExecutionError,
+    OperatorInput,
+    OperatorValidationError,
+    ValueKind,
+    evaluate_predicate,
+    execute_operator,
+    infer_value_kind,
+)
 from .schema_catalog import RuntimeSchemaCatalog, record_aliases
 from .text import safe_log_token
 
 GroundingStatus = Literal[
     "sufficient",
+    "caller_context_missing",
     "entity_not_found",
     "field_not_available",
     "evidence_insufficient",
@@ -29,19 +42,39 @@ GroundingStatus = Literal[
 ]
 GroundingOperator = Literal[
     "count",
+    "first",
+    "last",
     "sum",
     "average",
     "min",
     "max",
-    "difference",
-    "ratio",
+    "argmin",
+    "argmax",
     "latest",
     "earliest",
+    "subtract",
+    "divide",
     "date_difference",
+    "completed_years",
     "duration",
     "annual_occurrence",
     "unit_conversion",
 ]
+PredicateOperator = Literal[
+    "eq",
+    "ne",
+    "lt",
+    "lte",
+    "gt",
+    "gte",
+    "in",
+    "exists",
+    "date_range",
+]
+if frozenset(get_args(GroundingOperator)) != TRANSFORM_OPERATORS:
+    raise RuntimeError("GroundingOperator must match the transform registry")
+if frozenset(get_args(PredicateOperator)) != PREDICATE_OPERATORS:
+    raise RuntimeError("PredicateOperator must match the predicate registry")
 GroundedStopReason = Literal["answer", "tool_error", "timeout"]
 
 logger = logging.getLogger("uvicorn.error.home_cortex.grounding")
@@ -54,6 +87,18 @@ class GroundedAnswer:
     stop_reason: GroundedStopReason = "answer"
 
 
+@dataclass(frozen=True)
+class AgentRequestContext:
+    """Trusted request and runtime identities used to resolve plan references."""
+
+    caller_entity_id: str | None
+    assistant_id: str
+    assistant_display_name: str
+    household_id: str | None
+    current_time: datetime
+    locale: str | None = None
+
+
 class _PlanModel(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -64,9 +109,52 @@ class _PlanModel(BaseModel):
 
 
 class GroundingSubject(_PlanModel):
-    anchor: Literal["authenticated_user", "configured_home", "named_entity"]
-    reference: str = Field(min_length=1, max_length=256)
-    expected_type: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    reference_type: Literal[
+        "speaker",
+        "assistant",
+        "named_entity",
+        "entity_id",
+        "configured_home",
+    ]
+    reference: str | None = Field(default=None, min_length=1, max_length=256)
+    expected_type: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_legacy_anchor(cls, value: Any) -> Any:
+        """Read persisted/test plans from before canonical reference types."""
+        if not isinstance(value, Mapping) or "reference_type" in value:
+            return value
+        normalized = dict(value)
+        anchor = normalized.pop("anchor", None)
+        normalized["reference_type"] = {
+            "authenticated_user": "speaker",
+            "configured_home": "configured_home",
+            "named_entity": "named_entity",
+        }.get(anchor, anchor)
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_reference(self) -> "GroundingSubject":
+        if self.reference_type in {"named_entity", "entity_id"} and not self.reference:
+            raise ValueError(f"{self.reference_type} requires reference")
+        if self.reference_type != "assistant" and self.expected_type is None:
+            raise ValueError(f"{self.reference_type} requires expected_type")
+        if self.reference_type == "entity_id" and self.expected_type is not None:
+            if not _entity_matches_type(self.reference, self.expected_type):
+                raise ValueError("entity_id reference must match expected_type")
+        return self
+
+    @property
+    def anchor(self) -> str:
+        """Compatibility view for callers that still display the old field name."""
+        return {
+            "speaker": "authenticated_user",
+            "configured_home": "configured_home",
+        }.get(self.reference_type, self.reference_type)
 
 
 class TraversalStep(_PlanModel):
@@ -83,8 +171,8 @@ class TraversalStep(_PlanModel):
 class QueryFilter(_PlanModel):
     source: Literal["entity", "edge"] = "entity"
     field: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
-    operator: Literal["eq", "ne", "lt", "lte", "gt", "gte"]
-    value: Any
+    operator: PredicateOperator
+    value: Any = None
 
 
 class QuerySort(_PlanModel):
@@ -133,35 +221,31 @@ class TransformSpec(_PlanModel):
         default=None,
         pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
     )
-    mode: Literal["completed_years", "days", "seconds"] | None = None
+    mode: Literal["days", "seconds"] | None = None
     reference: Literal["household_today", "household_now"] | None = None
     from_unit: str | None = None
     to_unit: str | None = None
 
     @model_validator(mode="after")
     def require_operator_inputs(self) -> "TransformSpec":
-        if (
-            self.operator in {"sum", "average", "min", "max"}
-            and self.field is None
-        ):
-            raise ValueError(f"{self.operator} requires field")
-        if self.operator in {"difference", "ratio"} and (
-            self.field is None or self.other_field is None
-        ):
-            raise ValueError(f"{self.operator} requires field and other_field")
-        if self.operator in {"latest", "earliest"} and (
-            self.field is None or self.order_by is None
-        ):
-            raise ValueError(f"{self.operator} requires field and order_by")
-        if self.operator in {"date_difference", "duration"}:
-            if self.field is None or self.reference is None or self.mode is None:
+        OPERATORS[self.operator].validate(
+            field=self.field,
+            other_field=self.other_field,
+            order_by=self.order_by,
+            parameters={
+                "mode": self.mode,
+                "reference": self.reference,
+                "from_unit": self.from_unit,
+                "to_unit": self.to_unit,
+            },
+        )
+        if self.operator == "completed_years":
+            if self.reference != "household_today" or self.mode is not None:
                 raise ValueError(
-                    f"{self.operator} requires field, reference, and mode"
+                    "completed_years requires household_today and no mode"
                 )
-            if self.operator == "duration" and self.mode == "completed_years":
-                raise ValueError("duration supports only days or seconds")
         if self.operator == "annual_occurrence":
-            if self.field is None or self.reference != "household_today":
+            if self.reference != "household_today":
                 raise ValueError(
                     "annual_occurrence requires field and household_today"
                 )
@@ -169,18 +253,12 @@ class TransformSpec(_PlanModel):
                 raise ValueError(
                     "annual_occurrence supports a projected date or days"
                 )
-        if self.operator == "unit_conversion" and (
-            self.field is None or self.from_unit is None or self.to_unit is None
-        ):
-            raise ValueError(
-                "unit_conversion requires field, from_unit, and to_unit"
-            )
         return self
 
 
 class GroundingPlan(_PlanModel):
     requires_grounding: bool
-    grounding_domain: Literal["household", "external_tool", "none"]
+    grounding_domain: Literal["household", "runtime", "external_tool", "none"]
     goal: str = Field(min_length=1, max_length=512)
     subject: GroundingSubject | None = None
     traversal: tuple[TraversalStep, ...] = Field(default=(), max_length=6)
@@ -197,10 +275,22 @@ class GroundingPlan(_PlanModel):
     @model_validator(mode="after")
     def validate_grounded_plan(self) -> "GroundingPlan":
         if self.requires_grounding:
-            if self.grounding_domain != "household" or self.subject is None:
-                raise ValueError("grounded plans require a household subject")
+            if (
+                self.grounding_domain not in {"household", "runtime"}
+                or self.subject is None
+            ):
+                raise ValueError("grounded plans require a resolvable subject")
             if not self.required_evidence:
                 raise ValueError("grounded plans require explicit evidence")
+            if self.grounding_domain == "runtime":
+                if self.subject.reference_type != "assistant":
+                    raise ValueError("runtime plans require an assistant reference")
+                if self.traversal or self.edge_fields:
+                    raise ValueError(
+                        "runtime plans cannot traverse the household graph"
+                    )
+            elif self.subject.reference_type == "assistant":
+                raise ValueError("assistant references belong to runtime grounding")
             required_relations = {
                 item.relation
                 for item in self.required_evidence
@@ -270,6 +360,10 @@ class GroundingPlan(_PlanModel):
                             f"{self.transform.operator} requires a primary "
                             f"{expected_direction} sort on its order_by field"
                         )
+                if self.transform.operator in {"first", "last"} and not self.sort:
+                    raise ValueError(
+                        f"{self.transform.operator} requires an explicit sort"
+                    )
             for source in ("entity", "edge"):
                 if not used_fields[source].issubset(required_fields[source]):
                     missing = ", ".join(
@@ -306,6 +400,8 @@ class GroundingEvidence:
     value: Any = None
     missing_fields: tuple[str, ...] = ()
     tool_calls: int = 0
+    resolved_subject: str | None = None
+    requires_household_evidence: bool = True
 
     @property
     def sufficient(self) -> bool:
@@ -342,12 +438,18 @@ class GroundingPlanner:
             validation_errors = (
                 error.errors(include_input=False)
                 if isinstance(error, ValidationError)
-                else [{"type": type(error).__name__}]
+                else [
+                    {
+                        "type": type(error).__name__,
+                        "message": str(error),
+                    }
+                ]
             )
             repair_instruction = {
                 "role": "system",
                 "content": (
-                    "The previous grounding plan failed structural validation. "
+                    "The previous grounding plan failed structural or operator "
+                    "contract validation. "
                     "Return a corrected complete plan. Every top-level property "
                     "must be present. Grounded plans need a subject and at least "
                     "one field or relation in required_evidence. Every traversal "
@@ -396,7 +498,105 @@ def _validate_planner_payload(
 ) -> GroundingPlan:
     completed = _complete_evidence_requirements(payload)
     completed = _normalize_trusted_plan_roots(completed, messages, catalog)
-    return GroundingPlan.model_validate_json(json.dumps(completed))
+    plan = GroundingPlan.model_validate_json(json.dumps(completed))
+    if catalog is not None:
+        validate_plan_operators(plan, catalog)
+    return plan
+
+
+def validate_plan_operators(
+    plan: GroundingPlan,
+    catalog: RuntimeSchemaCatalog,
+) -> None:
+    """Reject non-allowlisted or type-invalid computation before retrieval."""
+    for item in plan.filters:
+        definition = OPERATORS[item.operator]
+        field_kind = _plan_field_kind(plan, catalog, item.source, item.field)
+        definition.validate(field=item.field, field_kind=field_kind)
+        if item.operator == "in" and (
+            not isinstance(item.value, Sequence)
+            or isinstance(item.value, (str, bytes, bytearray))
+        ):
+            raise OperatorValidationError("in requires a collection value")
+        if item.operator == "exists" and not (
+            item.value is None or isinstance(item.value, bool)
+        ):
+            raise OperatorValidationError("exists accepts only boolean or null")
+        if item.operator == "date_range":
+            if (
+                not isinstance(item.value, Sequence)
+                or isinstance(item.value, (str, bytes, bytearray))
+                or len(item.value) != 2
+                or any(
+                    infer_value_kind(bound) not in {"date", "datetime"}
+                    for bound in item.value
+                )
+            ):
+                raise OperatorValidationError(
+                    "date_range requires [date|datetime, date|datetime]"
+                )
+    for item in plan.sort:
+        field_kind = _plan_field_kind(plan, catalog, item.source, item.field)
+        OPERATORS["sort"].validate(field=item.field, field_kind=field_kind)
+    transform = plan.transform
+    if transform is None:
+        return
+    definition = OPERATORS[transform.operator]
+    definition.validate(
+        field=transform.field,
+        field_kind=_plan_field_kind(
+            plan,
+            catalog,
+            transform.source,
+            transform.field,
+        ),
+        other_field=transform.other_field,
+        other_field_kind=_plan_field_kind(
+            plan,
+            catalog,
+            transform.source,
+            transform.other_field,
+        ),
+        order_by=transform.order_by,
+        order_by_kind=_plan_field_kind(
+            plan,
+            catalog,
+            transform.source,
+            transform.order_by,
+        ),
+        parameters={
+            "mode": transform.mode,
+            "reference": transform.reference,
+            "from_unit": transform.from_unit,
+            "to_unit": transform.to_unit,
+        },
+    )
+
+
+def _plan_field_kind(
+    plan: GroundingPlan,
+    catalog: RuntimeSchemaCatalog,
+    source: str,
+    field: str | None,
+) -> ValueKind:
+    if field is None:
+        return "unknown"
+    if plan.grounding_domain == "runtime":
+        return {
+            "id": "string",
+            "display_name": "string",
+        }.get(field, "unknown")
+    if source == "edge":
+        if not plan.traversal:
+            return "unknown"
+        return catalog.relation_field_type(plan.traversal[-1].relation, field)
+    entity_type = plan.subject.expected_type if plan.subject is not None else None
+    for step in plan.traversal:
+        if step.related_type is not None:
+            entity_type = step.related_type
+    if entity_type is None:
+        return "unknown"
+    return catalog.entity_field_type(entity_type, field)
 
 
 def _normalize_trusted_plan_roots(
@@ -425,11 +625,12 @@ def _normalize_trusted_plan_roots(
     normalized_subject = dict(subject)
     normalized_subject.update(
         {
-            "anchor": "configured_home",
-            "reference": "home",
+            "reference_type": "configured_home",
+            "reference": None,
             "expected_type": "address",
         }
     )
+    normalized_subject.pop("anchor", None)
     completed["subject"] = normalized_subject
     if catalog is not None:
         completed["traversal"] = _normalize_traversal_directions(
@@ -512,41 +713,6 @@ def _complete_evidence_requirements(
     completed = dict(payload)
     if completed.get("requires_grounding") is not True:
         return completed
-    subject = completed.get("subject")
-    if isinstance(subject, Mapping):
-        normalized_subject = dict(subject)
-        reference = normalized_subject.get("reference")
-        normalized_reference = (
-            reference.casefold().strip(" \t\r\n?!？。！")
-            if isinstance(reference, str)
-            else ""
-        )
-        if normalized_reference in {
-            "i",
-            "me",
-            "myself",
-            "authenticated user",
-            "current user",
-            "我",
-            "本人",
-            "当前用户",
-        }:
-            normalized_subject["anchor"] = "authenticated_user"
-            normalized_subject["expected_type"] = "person"
-        elif normalized_reference in {
-            "home",
-            "my home",
-            "our home",
-            "the home",
-            "家",
-            "家里",
-            "家中",
-            "我家",
-            "我们家",
-        }:
-            normalized_subject["anchor"] = "configured_home"
-            normalized_subject["expected_type"] = "address"
-        completed["subject"] = normalized_subject
     raw_requirements = completed.get("required_evidence", [])
     if not isinstance(raw_requirements, list):
         return completed
@@ -601,9 +767,12 @@ def _complete_evidence_requirements(
         operations = completed.get(operation_key, [])
         for operation in operations if isinstance(operations, list) else []:
             if isinstance(operation, Mapping):
+                field = operation.get("field")
+                if operation_key == "filters" and operation.get("operator") == "exists":
+                    field = "id"
                 require_field(
                     str(operation.get("source", "entity")),
-                    operation.get("field"),
+                    field,
                 )
     transform = completed.get("transform")
     if isinstance(transform, Mapping):
@@ -640,25 +809,56 @@ class GroundingExecutor:
         self,
         plan: GroundingPlan,
         *,
-        caller_entity_id: str | None,
-        household_now: datetime,
+        context: AgentRequestContext | None = None,
+        caller_entity_id: str | None = None,
+        household_now: datetime | None = None,
     ) -> GroundingEvidence:
+        if context is None:
+            if household_now is None:
+                raise ValueError("household_now or request context is required")
+            context = AgentRequestContext(
+                caller_entity_id=caller_entity_id,
+                assistant_id="assistant",
+                assistant_display_name="assistant",
+                household_id=self.home_entity_id,
+                current_time=household_now,
+            )
+        household_now = context.current_time
+        try:
+            validate_plan_operators(plan, self.catalog)
+        except OperatorValidationError:
+            return GroundingEvidence(
+                "evidence_insufficient",
+                requires_household_evidence=plan.grounding_domain == "household",
+            )
         execution = _PlanExecution(
             self.dispatcher,
-            caller_entity_id=caller_entity_id,
+            caller_entity_id=context.caller_entity_id,
             maximum=self.max_tool_calls,
             timeout_seconds=self.timeout_seconds,
         )
+        resolved_subject: str | None = None
+        requires_household_evidence = plan.grounding_domain == "household"
         try:
-            subjects = await self._resolve_subject(
+            subjects, requires_household_evidence = await self._resolve_subject(
                 plan.subject,
                 execution,
-                caller_entity_id,
+                context,
+            )
+            resolved_subject = next(
+                (
+                    str(subject["id"])
+                    for subject in subjects
+                    if isinstance(subject.get("id"), str)
+                ),
+                None,
             )
             if not subjects:
                 return GroundingEvidence(
                     "entity_not_found",
                     tool_calls=execution.tool_calls,
+                    resolved_subject=resolved_subject,
+                    requires_household_evidence=requires_household_evidence,
                 )
             traversed_edges: list[Mapping[str, Any]] = []
             terminal_edges: list[Mapping[str, Any]] = []
@@ -670,18 +870,24 @@ class GroundingExecutor:
                     return GroundingEvidence(
                         "entity_not_found",
                         tool_calls=execution.tool_calls,
+                        resolved_subject=resolved_subject,
+                        requires_household_evidence=requires_household_evidence,
                     )
 
             needs_entity_records = _needs_entity_records(plan)
-            loaded_records = (
-                await self._load_records(subjects, execution)
-                if needs_entity_records
-                else []
-            )
+            loaded_records = []
+            if needs_entity_records:
+                loaded_records = (
+                    await self._load_records(subjects, execution)
+                    if requires_household_evidence
+                    else [dict(subject) for subject in subjects]
+                )
             if needs_entity_records and not loaded_records:
                 return GroundingEvidence(
                     "entity_not_found",
                     tool_calls=execution.tool_calls,
+                    resolved_subject=resolved_subject,
+                    requires_household_evidence=requires_household_evidence,
                 )
             _validate_filter_inputs(loaded_records, terminal_edges, plan.filters)
             records = _apply_filters(
@@ -704,6 +910,8 @@ class GroundingExecutor:
                 return GroundingEvidence(
                     "evidence_insufficient",
                     tool_calls=execution.tool_calls,
+                    resolved_subject=resolved_subject,
+                    requires_household_evidence=requires_household_evidence,
                 )
             status, missing = _validate_evidence(
                 records,
@@ -717,12 +925,9 @@ class GroundingExecutor:
                     status,
                     missing_fields=missing,
                     tool_calls=execution.tool_calls,
+                    resolved_subject=resolved_subject,
+                    requires_household_evidence=requires_household_evidence,
                 )
-            _validate_transform_inputs(
-                records,
-                terminal_edges,
-                plan.transform,
-            )
             value = _apply_transform(
                 records,
                 terminal_edges,
@@ -747,39 +952,58 @@ class GroundingExecutor:
                 tuple(scoped_edges),
                 value,
                 tool_calls=execution.tool_calls,
+                resolved_subject=resolved_subject,
+                requires_household_evidence=requires_household_evidence,
             )
         except _PlanFailure as error:
             return GroundingEvidence(
                 error.status,
                 tool_calls=execution.tool_calls,
+                resolved_subject=resolved_subject,
+                requires_household_evidence=requires_household_evidence,
             )
 
     async def _resolve_subject(
         self,
         subject: GroundingSubject | None,
         execution: "_PlanExecution",
-        caller_entity_id: str | None,
-    ) -> list[Mapping[str, Any]]:
+        context: AgentRequestContext,
+    ) -> tuple[list[Mapping[str, Any]], bool]:
         if subject is None:
-            return []
-        if not self.catalog.has_entity_type(subject.expected_type):
+            return [], True
+        if subject.reference_type == "assistant":
+            return [
+                {
+                    "id": context.assistant_id,
+                    "display_name": context.assistant_display_name,
+                }
+            ], False
+        expected_type = subject.expected_type
+        if subject.reference_type == "speaker":
+            if context.caller_entity_id is None:
+                raise _PlanFailure("caller_context_missing")
+        if expected_type is None or not self.catalog.has_entity_type(expected_type):
             raise _PlanFailure("evidence_insufficient")
-        if subject.anchor == "authenticated_user":
-            if not _entity_matches_type(caller_entity_id, subject.expected_type):
-                return []
-            return [{"id": caller_entity_id}]
-        if subject.anchor == "configured_home":
+        if subject.reference_type == "speaker":
+            if not _entity_matches_type(context.caller_entity_id, expected_type):
+                raise _PlanFailure("evidence_insufficient")
+            return [{"id": context.caller_entity_id}], True
+        if subject.reference_type == "configured_home":
             if not _entity_matches_type(
-                self.home_entity_id,
-                subject.expected_type,
+                context.household_id,
+                expected_type,
             ):
-                return []
-            return [{"id": self.home_entity_id}]
+                return [], True
+            return [{"id": context.household_id}], True
+        if subject.reference_type == "entity_id":
+            return [{"id": subject.reference}], True
+        if subject.reference_type != "named_entity" or subject.reference is None:
+            raise _PlanFailure("evidence_insufficient")
         result = await execution.call(
             "search_entities",
             {
                 "text": subject.reference,
-                "entity_type": subject.expected_type,
+                "entity_type": expected_type,
                 "limit": _probe_limit(self.max_records),
             },
         )
@@ -795,8 +1019,8 @@ class GroundingExecutor:
         if len(exact) != 1:
             if len(exact) > 1:
                 raise _PlanFailure("evidence_insufficient")
-            return []
-        return exact
+            return [], True
+        return exact, True
 
     async def _traverse(
         self,
@@ -881,11 +1105,27 @@ class OpenWorldGroundingService:
         self,
         messages: Sequence[Mapping[str, Any]],
         *,
-        caller_entity_id: str | None,
-        household_now: datetime,
-        language: str,
+        context: AgentRequestContext | None = None,
+        caller_entity_id: str | None = None,
+        household_now: datetime | None = None,
+        language: str | None = None,
         request_id: str = "-",
     ) -> GroundedAnswer | None:
+        if context is None:
+            if household_now is None or language is None:
+                raise ValueError(
+                    "request context or legacy grounding context is required"
+                )
+            context = AgentRequestContext(
+                caller_entity_id=caller_entity_id,
+                assistant_id="assistant",
+                assistant_display_name="assistant",
+                household_id=self.executor.home_entity_id,
+                current_time=household_now,
+                locale=language,
+            )
+        household_now = context.current_time
+        language = context.locale or language or "en"
         try:
             plan = await self.planner.plan(
                 messages,
@@ -948,11 +1188,10 @@ class OpenWorldGroundingService:
             return None
         evidence = await self.executor.execute(
             plan,
-            caller_entity_id=caller_entity_id,
-            household_now=household_now,
+            context=context,
         )
         if not evidence.sufficient:
-            _log_grounding_plan(request_id, plan, evidence.status)
+            _log_grounding_plan(request_id, plan, evidence, context)
             return GroundedAnswer(
                 _grounding_status_answer(evidence, plan, language),
                 evidence.tool_calls,
@@ -961,7 +1200,7 @@ class OpenWorldGroundingService:
                 ),
             )
         text = _deterministic_evidence_answer(plan, evidence, language)
-        _log_grounding_plan(request_id, plan, evidence.status)
+        _log_grounding_plan(request_id, plan, evidence, context)
         return GroundedAnswer(text, evidence.tool_calls)
 
 
@@ -1067,27 +1306,14 @@ def _validate_filter_inputs(
 ) -> None:
     for item in filters:
         source_records = records if item.source == "entity" else edges
+        if item.operator == "exists":
+            continue
         if any(record.get(item.field) is None for record in source_records):
             raise _PlanFailure("evidence_insufficient")
 
 
 def _compare(left: Any, operator: str, right: Any) -> bool:
-    try:
-        if operator == "eq":
-            return left == right
-        if operator == "ne":
-            return left != right
-        if operator == "lt":
-            return left < right
-        if operator == "lte":
-            return left <= right
-        if operator == "gt":
-            return left > right
-        if operator == "gte":
-            return left >= right
-        return False
-    except TypeError:
-        return False
+    return evaluate_predicate(operator, left, right)
 
 
 def _apply_sort(
@@ -1179,35 +1405,6 @@ def _validate_evidence(
     return "sufficient", ()
 
 
-def _validate_transform_inputs(
-    records: Sequence[Mapping[str, Any]],
-    edges: Sequence[Mapping[str, Any]],
-    transform: TransformSpec | None,
-) -> None:
-    if transform is None or transform.operator == "count":
-        return
-    source_records = records if transform.source == "entity" else edges
-    if transform.operator in {"sum", "average", "min", "max"}:
-        field = transform.field
-        if field is None or not source_records or any(
-            not _is_number(record.get(field)) for record in source_records
-        ):
-            raise _PlanFailure("evidence_insufficient")
-        return
-    if transform.operator in {"latest", "earliest"}:
-        if (
-            not source_records
-            or transform.field is None
-            or source_records[0].get(transform.field) is None
-            or transform.order_by is None
-            or source_records[0].get(transform.order_by) is None
-        ):
-            raise _PlanFailure("evidence_insufficient")
-        return
-    if len(source_records) != 1:
-        raise _PlanFailure("evidence_insufficient")
-
-
 def _parse_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str):
         return None
@@ -1229,110 +1426,23 @@ def _apply_transform(
     if transform is None:
         return None
     source_records = records if transform.source == "entity" else edges
-    if transform.operator == "count":
-        return len(source_records)
-    field = transform.field
-    values = (
-        [record.get(field) for record in source_records]
-        if field is not None
-        else []
-    )
-    values = [value for value in values if value is not None]
-    if transform.operator in {"latest", "earliest"}:
-        if not source_records or field is None:
-            raise _PlanFailure("evidence_insufficient")
-        return source_records[0].get(field)
-    if transform.operator in {"sum", "average", "min", "max"}:
-        numeric = _numeric_values(values)
-        if not numeric:
-            raise _PlanFailure("evidence_insufficient")
-        if transform.operator == "sum":
-            return sum(numeric)
-        if transform.operator == "average":
-            return sum(numeric) / len(numeric)
-        return min(numeric) if transform.operator == "min" else max(numeric)
-    if transform.operator in {"difference", "ratio"}:
-        if field is None or transform.other_field is None or not source_records:
-            raise _PlanFailure("evidence_insufficient")
-        left = source_records[0].get(field)
-        right = source_records[0].get(transform.other_field)
-        if not _is_number(left) or not _is_number(right):
-            raise _PlanFailure("evidence_insufficient")
-        if transform.operator == "ratio":
-            if right == 0:
-                raise _PlanFailure("evidence_insufficient")
-            return left / right
-        return left - right
-    if transform.operator in {"date_difference", "duration"}:
-        if not values:
-            raise _PlanFailure("evidence_insufficient")
-        return _date_transform(values[0], transform, household_now)
-    if transform.operator == "annual_occurrence":
-        if not values:
-            raise _PlanFailure("evidence_insufficient")
-        return _annual_occurrence(values[0], transform, household_now)
-    if transform.operator == "unit_conversion":
-        if not values or not _is_number(values[0]):
-            raise _PlanFailure("evidence_insufficient")
-        return _convert_unit(values[0], transform.from_unit, transform.to_unit)
-    raise _PlanFailure("evidence_insufficient")
-
-
-def _date_transform(value: Any, transform: TransformSpec, now: datetime) -> Any:
-    if not isinstance(value, str):
-        raise _PlanFailure("evidence_insufficient")
     try:
-        stored_date = date.fromisoformat(value)
-    except ValueError:
-        parsed = _parse_datetime(value)
-        if parsed is None:
-            raise _PlanFailure("evidence_insufficient")
-        delta = now.astimezone(timezone.utc) - parsed
-        return delta.days if transform.mode == "days" else delta.total_seconds()
-    if transform.mode == "completed_years":
-        today = now.date()
-        if stored_date > today:
-            raise _PlanFailure("evidence_insufficient")
-        passed = (today.month, today.day) >= (stored_date.month, stored_date.day)
-        return today.year - stored_date.year - (not passed)
-    delta = now.date() - stored_date
-    return delta.days if transform.mode == "days" else delta.total_seconds()
-
-
-def _annual_occurrence(
-    value: Any,
-    transform: TransformSpec,
-    now: datetime,
-) -> str | int:
-    if not isinstance(value, str):
-        raise _PlanFailure("evidence_insufficient")
-    try:
-        stored = date.fromisoformat(value)
-    except ValueError:
-        parsed = _parse_datetime(value)
-        if parsed is None:
-            raise _PlanFailure("evidence_insufficient")
-        stored = parsed.date()
-    today = now.date()
-    year = today.year
-    while year <= today.year + 8:
-        try:
-            occurrence = date(year, stored.month, stored.day)
-        except ValueError:
-            year += 1
-            continue
-        if occurrence >= today:
-            return (
-                (occurrence - today).days
-                if transform.mode == "days"
-                else occurrence.isoformat()
-            )
-        year += 1
-    raise _PlanFailure("evidence_insufficient")
-
-
-def _numeric_values(values: Sequence[Any]) -> list[float | int]:
-    return [value for value in values if _is_number(value)]
+        return execute_operator(
+            transform.operator,
+            OperatorInput(
+                records=source_records,
+                field=transform.field,
+                other_field=transform.other_field,
+                order_by=transform.order_by,
+                mode=transform.mode,
+                reference=transform.reference,
+                from_unit=transform.from_unit,
+                to_unit=transform.to_unit,
+                now=household_now,
+            ),
+        )
+    except (OperatorExecutionError, OperatorValidationError) as error:
+        raise _PlanFailure("evidence_insufficient") from error
 
 
 def _is_number(value: Any) -> bool:
@@ -1342,23 +1452,6 @@ def _is_number(value: Any) -> bool:
         return math.isfinite(value)
     except OverflowError:
         return False
-
-
-def _convert_unit(value: float | int, source: str | None, target: str | None) -> float:
-    conversions = {
-        ("c", "f"): lambda number: number * 9 / 5 + 32,
-        ("f", "c"): lambda number: (number - 32) * 5 / 9,
-        ("kg", "lb"): lambda number: number * 2.2046226218,
-        ("lb", "kg"): lambda number: number / 2.2046226218,
-        ("cm", "in"): lambda number: number / 2.54,
-        ("in", "cm"): lambda number: number * 2.54,
-    }
-    if source == target and source is not None:
-        return float(value)
-    conversion = conversions.get(((source or "").casefold(), (target or "").casefold()))
-    if conversion is None:
-        raise _PlanFailure("evidence_insufficient")
-    return conversion(value)
 
 
 def _scope_records(
@@ -1442,8 +1535,16 @@ def _grounding_status_answer(
     plan: GroundingPlan,
     language: str,
 ) -> str:
-    reference = plan.subject.reference if plan.subject is not None else ""
+    reference = (
+        plan.subject.reference
+        if plan.subject is not None and plan.subject.reference is not None
+        else plan.subject.reference_type
+        if plan.subject is not None
+        else ""
+    )
     if language == "zh":
+        if evidence.status == "caller_context_missing":
+            return "我无法确认当前登录者的身份。"
         if evidence.status == "entity_not_found":
             return (
                 "家庭资料中没有找到与"
@@ -1466,6 +1567,8 @@ def _grounding_status_answer(
                 "但不足以核实这个问题。"
             )
         return "老管家目前无法从家庭资料中核实这项信息。"
+    if evidence.status == "caller_context_missing":
+        return "I cannot verify the identity of the current signed-in user."
     if evidence.status == "entity_not_found":
         return f'The home graph has no entity matching "{reference}".'
     if evidence.status == "field_not_available":
@@ -1517,12 +1620,29 @@ def _deterministic_evidence_answer(
             for edge in evidence.edges
         ]
         value = rendered_edges[0] if len(rendered_edges) == 1 else rendered_edges
-    rendered = json.dumps(value, ensure_ascii=False, default=str)
-    return (
-        f"根据家庭资料，查询结果是：{rendered}。"
-        if language == "zh"
-        else f"According to the home graph, the result is: {rendered}."
+    reference_type = (
+        plan.subject.reference_type if plan.subject is not None else None
     )
+    if isinstance(value, Mapping):
+        if reference_type == "assistant" and "display_name" in value:
+            name = str(value["display_name"])
+            return f"我是{name}。" if language == "zh" else f"I am {name}."
+        if reference_type == "speaker" and "name" in value:
+            name = str(value["name"])
+            return f"您是{name}。" if language == "zh" else f"You are {name}."
+    rendered = json.dumps(value, ensure_ascii=False, default=str)
+    source = (
+        "运行时上下文" if plan.grounding_domain == "runtime" else "家庭资料"
+    )
+    return (
+        f"根据{source}，查询结果是：{rendered}。"
+        if language == "zh"
+        else f"According to {_evidence_source(plan)}, the result is: {rendered}."
+    )
+
+
+def _evidence_source(plan: GroundingPlan) -> str:
+    return "runtime context" if plan.grounding_domain == "runtime" else "the home graph"
 
 
 _PRIVATE_HOUSEHOLD_REFERENCE = re.compile(
@@ -1598,10 +1718,17 @@ def _requested_values(
 def _log_grounding_plan(
     request_id: str,
     plan: GroundingPlan,
-    status: str,
+    evidence: GroundingEvidence,
+    context: AgentRequestContext,
 ) -> None:
-    subject_type = plan.subject.expected_type if plan.subject is not None else "none"
-    subject_anchor = plan.subject.anchor if plan.subject is not None else "none"
+    subject_type = (
+        plan.subject.expected_type
+        if plan.subject is not None and plan.subject.expected_type is not None
+        else "none"
+    )
+    reference_type = (
+        plan.subject.reference_type if plan.subject is not None else "none"
+    )
     operator = plan.transform.operator if plan.transform is not None else "none"
     fields = sorted(
         item.field for item in plan.required_evidence if item.field is not None
@@ -1612,16 +1739,20 @@ def _log_grounding_plan(
         if item.relation is not None
     )
     logger.info(
-        "grounding_plan request_id=%s grounding_required=true subject_anchor=%s "
-        "subject_type=%s "
-        "fields=%s relations=%s operator=%s evidence_status=%s",
+        "grounding_plan request_id=%s grounding_required=true "
+        "caller_context_present=%s subject_reference_type=%s subject_type=%s "
+        "resolved_subject=%s requires_household_evidence=%s fields=%s "
+        "relations=%s operator=%s evidence_status=%s",
         safe_log_token(request_id),
-        safe_log_token(subject_anchor),
+        str(context.caller_entity_id is not None).lower(),
+        safe_log_token(reference_type),
         safe_log_token(subject_type),
+        safe_log_token(evidence.resolved_subject or "none"),
+        str(evidence.requires_household_evidence).lower(),
         safe_log_token(",".join(fields) or "none"),
         safe_log_token(",".join(relations) or "none"),
         safe_log_token(operator),
-        safe_log_token(status),
+        safe_log_token(evidence.status),
     )
 
 

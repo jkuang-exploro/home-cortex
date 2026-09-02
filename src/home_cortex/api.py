@@ -168,6 +168,8 @@ async def lifespan(app: FastAPI):
             system_prompt=definition.prompt,
             tools=definition.tool_definitions,
             localized_identity=definition.settings.get("localized_identity"),
+            assistant_id=definition.id,
+            assistant_display_name=definition.display_name,
             home_entity_id=definition.settings.get("home_entity_id"),
             household_timezone=settings.calendar_timezone,
             schema_catalog=schema_catalog,
