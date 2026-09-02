@@ -594,6 +594,10 @@ def _plan_field_kind(
     for step in plan.traversal:
         if step.related_type is not None:
             entity_type = step.related_type
+        elif entity_type is not None:
+            inferred = _related_type_for_step(entity_type, step.relation, catalog)
+            if inferred is not None:
+                entity_type = inferred
     if entity_type is None:
         return "unknown"
     return catalog.entity_field_type(entity_type, field)
@@ -617,25 +621,25 @@ def _normalize_trusted_plan_roots(
         ),
         "",
     )
-    if not _references_configured_home(str(latest)):
-        return completed
     subject = completed.get("subject")
     if not isinstance(subject, Mapping):
         return completed
     normalized_subject = dict(subject)
-    normalized_subject.update(
-        {
-            "reference_type": "configured_home",
-            "reference": None,
-            "expected_type": "address",
-        }
-    )
-    normalized_subject.pop("anchor", None)
-    completed["subject"] = normalized_subject
-    if catalog is not None:
+    if _references_configured_home(str(latest)):
+        normalized_subject.update(
+            {
+                "reference_type": "configured_home",
+                "reference": None,
+                "expected_type": "address",
+            }
+        )
+        normalized_subject.pop("anchor", None)
+        completed["subject"] = normalized_subject
+    root_type = normalized_subject.get("expected_type")
+    if catalog is not None and isinstance(root_type, str):
         completed["traversal"] = _normalize_traversal_directions(
             completed.get("traversal"),
-            root_type="address",
+            root_type=root_type,
             catalog=catalog,
         )
     return completed
@@ -685,6 +689,10 @@ def _normalize_traversal_directions(
         related_type = step.get("related_type")
         if schema.symmetric:
             step["direction"] = None
+            endpoint_types = set(from_types) | set(to_types)
+            if len(endpoint_types) == 1:
+                related_type = next(iter(endpoint_types))
+                step["related_type"] = related_type
         elif current_type in from_types and current_type not in to_types:
             step["direction"] = "out"
             if len(to_types) == 1:
@@ -699,6 +707,37 @@ def _normalize_traversal_directions(
             current_type = related_type
         normalized.append(step)
     return normalized
+
+
+def _related_type_for_step(
+    current_type: str,
+    relation: str,
+    catalog: RuntimeSchemaCatalog,
+) -> str | None:
+    schema = catalog.relations.get(relation)
+    inverse = False
+    if schema is None:
+        schema = next(
+            (
+                candidate
+                for candidate in catalog.relations.values()
+                if candidate.inverse_name == relation
+            ),
+            None,
+        )
+        inverse = schema is not None
+    if schema is None:
+        return None
+    from_types = schema.to_types if inverse else schema.from_types
+    to_types = schema.from_types if inverse else schema.to_types
+    candidates: tuple[str, ...] = ()
+    if current_type in from_types and current_type not in to_types:
+        candidates = to_types
+    elif current_type in to_types and current_type not in from_types:
+        candidates = from_types
+    elif current_type in from_types and current_type in to_types:
+        candidates = tuple(sorted(set(from_types) | set(to_types)))
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def _complete_evidence_requirements(
@@ -716,34 +755,56 @@ def _complete_evidence_requirements(
     raw_requirements = completed.get("required_evidence", [])
     if not isinstance(raw_requirements, list):
         return completed
-    requirements = [
+    proposed_requirements = [
         dict(item) if isinstance(item, Mapping) else item
         for item in raw_requirements
     ]
-    covered_fields = {
-        (item.get("source", "entity"), item.get("field"))
-        for item in requirements
-        if isinstance(item, Mapping) and item.get("field") is not None
-    }
-    covered_relations = {
-        item.get("relation")
-        for item in requirements
-        if isinstance(item, Mapping) and item.get("relation") is not None
-    }
+    requirements: list[Any] = []
+    covered_fields: set[tuple[str, str]] = set()
+    covered_relations: set[str] = set()
+
+    def proposed_field_requirement(source: str, field: str) -> dict[str, Any] | None:
+        return next(
+            (
+                dict(item)
+                for item in proposed_requirements
+                if isinstance(item, Mapping)
+                and item.get("source", "entity") == source
+                and item.get("field") == field
+            ),
+            None,
+        )
+
+    def proposed_relation_requirement(relation: str) -> dict[str, Any] | None:
+        return next(
+            (
+                dict(item)
+                for item in proposed_requirements
+                if isinstance(item, Mapping)
+                and item.get("relation") == relation
+            ),
+            None,
+        )
 
     def require_field(source: str, field: Any) -> None:
         if not isinstance(field, str) or not field:
             return
         marker = (source, field)
         if marker not in covered_fields:
-            requirements.append({"source": source, "field": field})
+            requirements.append(
+                proposed_field_requirement(source, field)
+                or {"source": source, "field": field}
+            )
             covered_fields.add(marker)
 
     def require_relation(relation: Any) -> None:
         if not isinstance(relation, str) or not relation:
             return
         if relation not in covered_relations:
-            requirements.append({"source": "edge", "relation": relation})
+            requirements.append(
+                proposed_relation_requirement(relation)
+                or {"source": "edge", "relation": relation}
+            )
             covered_relations.add(relation)
 
     entity_fields = completed.get("fields", [])
@@ -1153,6 +1214,8 @@ class OpenWorldGroundingService:
                 required="unknown",
                 status="planner_error",
             )
+            if not _looks_like_factual_request(messages):
+                return None
             return GroundedAnswer(
                 (
                     "老管家目前无法判断这个请求需要哪些家庭事实。"
@@ -1371,7 +1434,7 @@ def _validate_evidence(
         matching = [
             record
             for record in source_records
-            if requirement.field in record and record.get(requirement.field) is not None
+            if requirement.field in record
         ]
         if not matching:
             missing.append(requirement.field)
@@ -1667,6 +1730,19 @@ _EXTERNAL_TOOL_REQUEST = re.compile(
     r"(?:计算|算一下).*[0-9]",
     flags=re.IGNORECASE,
 )
+
+
+def _looks_like_factual_request(
+    messages: Sequence[Mapping[str, Any]],
+) -> bool:
+    for message in reversed(messages):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        return isinstance(content, str) and bool(
+            _FACTUAL_QUESTION_FORM.search(content)
+        )
+    return False
 
 
 def _has_private_household_reference(

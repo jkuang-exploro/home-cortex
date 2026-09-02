@@ -216,6 +216,37 @@ def test_planner_compiler_adds_declared_query_dependencies_to_evidence() -> None
     }
 
 
+def test_planner_compiler_drops_evidence_unrelated_to_query_operations() -> None:
+    payload = {
+        "requires_grounding": True,
+        "grounding_domain": "household",
+        "goal": "current home residents",
+        "subject": {
+            "reference_type": "configured_home",
+            "reference": None,
+            "expected_type": "address",
+        },
+        "traversal": [{"relation": "lives_in"}],
+        "fields": ["name"],
+        "edge_fields": [],
+        "filters": [],
+        "sort": [],
+        "transform": None,
+        "required_evidence": [
+            {"source": "entity", "field": "name"},
+            {"source": "entity", "field": "end"},
+            {"source": "entity", "field": "household_role"},
+        ],
+    }
+
+    completed = _complete_evidence_requirements(payload)
+
+    assert completed["required_evidence"] == [
+        {"source": "entity", "field": "name"},
+        {"source": "edge", "relation": "lives_in"},
+    ]
+
+
 def test_planner_compiler_does_not_infer_reference_type_from_entity_text() -> None:
     payload = {
         "requires_grounding": True,
@@ -1186,12 +1217,38 @@ async def test_structured_llm_plan_drives_open_world_service() -> None:
                     ),
                 ),
                 fields=("name",),
+                edge_fields=("end", "household_role"),
                 required_evidence=(
                     RequiredEvidence(relation="lives_in"),
                     RequiredEvidence(field="name", minimum_records=2),
+                    RequiredEvidence(source="edge", field="end"),
+                    RequiredEvidence(source="edge", field="household_role"),
                 ),
             ),
             "匡健",
+        ),
+        (
+            "家里有多少人",
+            GroundingPlan(
+                requires_grounding=True,
+                grounding_domain="household",
+                goal="count current home residents",
+                subject=GroundingSubject(
+                    reference_type="named_entity",
+                    reference="home",
+                    expected_type="address",
+                ),
+                traversal=(
+                    TraversalStep(
+                        relation="lives_in",
+                        direction="out",
+                        related_type="address",
+                    ),
+                ),
+                transform=TransformSpec(operator="count"),
+                required_evidence=(RequiredEvidence(relation="lives_in"),),
+            ),
+            "2",
         ),
         (
             "家里地址是哪里",
@@ -1268,8 +1325,18 @@ async def test_reported_chinese_household_queries_use_grounding_pipeline(
     }
     relationships = {
         ("address:home", "lives_in"): [
-            {"relation": "lives_in", "related_entity": people["person:jian"]},
-            {"relation": "lives_in", "related_entity": people["person:pu"]},
+            {
+                "relation": "lives_in",
+                "end": None,
+                "household_role": "owner",
+                "related_entity": people["person:jian"],
+            },
+            {
+                "relation": "lives_in",
+                "end": None,
+                "household_role": "owner",
+                "related_entity": people["person:pu"],
+            },
         ]
     }
 
@@ -1280,7 +1347,7 @@ async def test_reported_chinese_household_queries_use_grounding_pipeline(
             return payload
 
     messages = [{"role": "user", "content": question}]
-    if question == "家里都有谁":
+    if question in {"家里都有谁", "家里有多少人"}:
         messages = [
             {"role": "user", "content": "我是谁"},
             {"role": "assistant", "content": "先生，您是匡健。"},
@@ -1910,6 +1977,27 @@ async def test_malformed_planner_output_fails_closed() -> None:
     assert answer is not None
     assert answer.stop_reason == "tool_error"
     assert "could not determine" in answer.text
+
+
+@pytest.mark.asyncio
+async def test_malformed_planner_output_for_greeting_falls_back_to_conversation() -> None:
+    class Ollama:
+        async def plan_grounding(self, *_: Any, **__: Any) -> dict[str, Any]:
+            return {"requires_grounding": True}
+
+    service = OpenWorldGroundingService(
+        GroundingPlanner(Ollama(), CATALOG),
+        GroundingExecutor(Dispatcher({}), CATALOG, home_entity_id=None),
+    )
+
+    answer = await service.try_answer(
+        [{"role": "user", "content": "您好"}],
+        caller_entity_id="person:test",
+        household_now=datetime.fromisoformat("2026-08-31T12:00:00-07:00"),
+        language="zh",
+    )
+
+    assert answer is None
 
 
 @pytest.mark.asyncio
