@@ -31,6 +31,7 @@ from home_cortex.grounding import (
     _complete_evidence_requirements,
     _deterministic_evidence_answer,
     _planner_output_schema,
+    _validate_planner_payload,
 )
 from home_cortex.schema_catalog import (
     EntityTypeSchema,
@@ -307,6 +308,146 @@ def test_planner_compiler_does_not_infer_reference_type_from_entity_text() -> No
     completed = _complete_evidence_requirements(payload)
 
     assert completed["subject"] == payload["subject"]
+
+
+@pytest.mark.parametrize(
+    (
+        "question",
+        "reference",
+        "expected_reference",
+        "domain",
+        "field",
+        "operator",
+    ),
+    (
+        ("我是谁", "我", "speaker", "household", "name", "select"),
+        ("你是谁", "你", "assistant", "runtime", "display_name", "first"),
+    ),
+)
+def test_contextual_identity_payload_is_repaired_before_strict_validation(
+    question: str,
+    reference: str,
+    expected_reference: str,
+    domain: str,
+    field: str,
+    operator: str,
+) -> None:
+    payload = {
+        "requires_grounding": True,
+        "grounding_domain": "household",
+        "goal": "identify the subject",
+        "subject": {
+            "reference_type": "named_entity",
+            "reference": reference,
+            "expected_type": "person",
+        },
+        "traversal": [],
+        "fields": [],
+        "edge_fields": [],
+        "filters": [],
+        "sort": [],
+        "transform": {
+            "operator": operator,
+            "source": "entity",
+            "field": field,
+            "other_field": None,
+            "order_by": None,
+            "mode": None,
+            "reference": None,
+            "from_unit": None,
+            "to_unit": None,
+        },
+        "required_evidence": [{"source": "entity", "field": field}],
+    }
+
+    plan = _validate_planner_payload(
+        payload,
+        messages=[{"role": "user", "content": question}],
+        catalog=CATALOG,
+    )
+
+    assert plan.subject is not None
+    assert plan.subject.reference_type == expected_reference
+    assert plan.grounding_domain == domain
+    assert plan.transform is None
+    if operator == "select":
+        assert plan.fields == (field,)
+    assert plan.required_evidence == (RequiredEvidence(field=field),)
+
+
+def test_schema_normalizes_household_roster_field_sources() -> None:
+    catalog = RuntimeSchemaCatalog(
+        {
+            "person": EntityTypeSchema("person", ("id", "name")),
+            "address": EntityTypeSchema("address", ("id", "name")),
+        },
+        {
+            "lives_in": RelationTypeSchema(
+                "lives_in",
+                ("person",),
+                ("address",),
+                ("start", "end", "household_role"),
+                False,
+                True,
+                None,
+            )
+        },
+    )
+    payload = {
+        "requires_grounding": True,
+        "grounding_domain": "household",
+        "goal": "home member roster",
+        "subject": {
+            "reference_type": "named_entity",
+            "reference": "configured_home",
+            "expected_type": "address",
+        },
+        "traversal": [
+            {
+                "relation": "lives_in",
+                "direction": "out",
+                "related_type": "address",
+                "include_ended": False,
+                "field_equals": {},
+            }
+        ],
+        "fields": ["name", "end", "household_role"],
+        "edge_fields": [],
+        "filters": [],
+        "sort": [],
+        "transform": None,
+        "required_evidence": [
+            {"source": "entity", "relation": "lives_in"},
+            {"source": "entity", "field": "name"},
+            {"source": "entity", "field": "end"},
+            {"source": "entity", "field": "household_role"},
+        ],
+    }
+
+    plan = _validate_planner_payload(
+        payload,
+        messages=[
+            {"role": "user", "content": "能告诉我一下家里的成员名单吗？"}
+        ],
+        catalog=catalog,
+    )
+
+    assert plan.subject is not None
+    assert plan.subject.reference_type == "configured_home"
+    assert plan.traversal == (
+        TraversalStep(relation="lives_in", direction="in", related_type="person"),
+    )
+    assert plan.fields == ("name",)
+    assert plan.edge_fields == ("end", "household_role")
+    assert {
+        (requirement.source, requirement.field)
+        for requirement in plan.required_evidence
+        if requirement.field is not None
+    } == {
+        ("entity", "name"),
+        ("edge", "end"),
+        ("edge", "household_role"),
+    }
 
 
 @pytest.mark.asyncio

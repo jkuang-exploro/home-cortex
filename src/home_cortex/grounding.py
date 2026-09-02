@@ -496,8 +496,10 @@ def _validate_planner_payload(
     messages: Sequence[Mapping[str, Any]] = (),
     catalog: RuntimeSchemaCatalog | None = None,
 ) -> GroundingPlan:
-    completed = _complete_evidence_requirements(payload)
-    completed = _normalize_trusted_plan_roots(completed, messages, catalog)
+    completed = _normalize_trusted_plan_roots(payload, messages, catalog)
+    if catalog is not None:
+        completed = _normalize_schema_backed_plan(completed, catalog)
+    completed = _complete_evidence_requirements(completed)
     plan = GroundingPlan.model_validate_json(json.dumps(completed))
     if catalog is not None:
         validate_plan_operators(plan, catalog)
@@ -509,6 +511,7 @@ def validate_plan_operators(
     catalog: RuntimeSchemaCatalog,
 ) -> None:
     """Reject non-allowlisted or type-invalid computation before retrieval."""
+    _validate_traversal_contract(plan, catalog)
     for item in plan.filters:
         definition = OPERATORS[item.operator]
         field_kind = _plan_field_kind(plan, catalog, item.source, item.field)
@@ -573,6 +576,35 @@ def validate_plan_operators(
     )
 
 
+def _validate_traversal_contract(
+    plan: GroundingPlan,
+    catalog: RuntimeSchemaCatalog,
+) -> None:
+    if not plan.requires_grounding or plan.grounding_domain == "runtime":
+        return
+    entity_type = plan.subject.expected_type if plan.subject is not None else None
+    if entity_type is None or not catalog.has_entity_type(entity_type):
+        raise OperatorValidationError("subject entity type is not in runtime schema")
+    for step in plan.traversal:
+        candidates = _related_types_for_step(entity_type, step.relation, catalog)
+        if step.related_type is not None and step.related_type in candidates:
+            related_type = step.related_type
+        elif len(candidates) == 1:
+            related_type = candidates[0]
+        else:
+            raise OperatorValidationError(
+                f"relation {step.relation} does not unambiguously connect "
+                f"entity type {entity_type}"
+            )
+        if step.related_type is not None and step.related_type not in candidates:
+            raise OperatorValidationError(
+                f"relation {step.relation} from {entity_type} reaches "
+                f"{', '.join(candidates) or 'no entity type'}, "
+                f"not {step.related_type}"
+            )
+        entity_type = related_type
+
+
 def _plan_field_kind(
     plan: GroundingPlan,
     catalog: RuntimeSchemaCatalog,
@@ -625,7 +657,40 @@ def _normalize_trusted_plan_roots(
     if not isinstance(subject, Mapping):
         return completed
     normalized_subject = dict(subject)
-    if _references_configured_home(str(latest)):
+    reference_type = normalized_subject.get("reference_type")
+    if reference_type is None:
+        reference_type = {
+            "authenticated_user": "speaker",
+            "configured_home": "configured_home",
+            "named_entity": "named_entity",
+        }.get(normalized_subject.get("anchor"), normalized_subject.get("anchor"))
+    contextual_type = _contextual_reference_type(
+        reference_type,
+        normalized_subject.get("reference"),
+    )
+    if contextual_type == "speaker":
+        normalized_subject.update(
+            {
+                "reference_type": "speaker",
+                "reference": None,
+                "expected_type": "person",
+            }
+        )
+        normalized_subject.pop("anchor", None)
+        completed["grounding_domain"] = "household"
+        completed["subject"] = normalized_subject
+    elif contextual_type == "assistant":
+        normalized_subject.update(
+            {
+                "reference_type": "assistant",
+                "reference": None,
+                "expected_type": None,
+            }
+        )
+        normalized_subject.pop("anchor", None)
+        completed["grounding_domain"] = "runtime"
+        completed["subject"] = normalized_subject
+    elif _references_configured_home(str(latest)):
         normalized_subject.update(
             {
                 "reference_type": "configured_home",
@@ -635,6 +700,15 @@ def _normalize_trusted_plan_roots(
         )
         normalized_subject.pop("anchor", None)
         completed["subject"] = normalized_subject
+    transform = completed.get("transform")
+    if (
+        isinstance(transform, Mapping)
+        and transform.get("operator") in {"first", "last"}
+        and not completed.get("traversal")
+        and normalized_subject.get("reference_type")
+        in {"speaker", "assistant", "configured_home", "entity_id"}
+    ):
+        completed["transform"] = None
     root_type = normalized_subject.get("expected_type")
     if catalog is not None and isinstance(root_type, str):
         completed["traversal"] = _normalize_traversal_directions(
@@ -650,6 +724,161 @@ def _references_configured_home(text: str) -> bool:
     return bool(
         re.search(r"\b(?:(?:my|our|the)\s+)?(?:home|household)\b", normalized)
         or re.search(r"(?:我家|我们家|咱们家|家里|家中|家里的|家中的)", normalized)
+    )
+
+
+def _contextual_reference_type(reference_type: Any, reference: Any) -> str | None:
+    if reference_type in {"speaker", "assistant"}:
+        return str(reference_type)
+    if reference_type != "named_entity" or not isinstance(reference, str):
+        return None
+    normalized = reference.casefold().strip(" \t\r\n?!？。！")
+    if normalized in {"i", "me", "my", "mine", "我", "我的"}:
+        return "speaker"
+    if normalized in {"you", "your", "yours", "你", "您", "你的", "您的"}:
+        return "assistant"
+    return None
+
+
+def _normalize_schema_backed_plan(
+    payload: Mapping[str, Any],
+    catalog: RuntimeSchemaCatalog,
+) -> dict[str, Any]:
+    """Correct model-declared field sources using the terminal runtime schema."""
+    completed = dict(payload)
+    transform = completed.get("transform")
+    if isinstance(transform, Mapping) and transform.get("operator") == "select":
+        field = transform.get("field")
+        source = transform.get("source", "entity")
+        projection_key = "edge_fields" if source == "edge" else "fields"
+        projection = completed.get(projection_key)
+        projected = list(projection) if isinstance(projection, list) else []
+        if isinstance(field, str) and field not in projected:
+            projected.append(field)
+        completed[projection_key] = projected
+        completed["transform"] = None
+    subject = completed.get("subject")
+    entity_type = (
+        subject.get("expected_type") if isinstance(subject, Mapping) else None
+    )
+    traversal = completed.get("traversal")
+    terminal_relation: str | None = None
+    for step in traversal if isinstance(traversal, list) else []:
+        if not isinstance(step, Mapping):
+            continue
+        relation = step.get("relation")
+        if not isinstance(relation, str):
+            continue
+        terminal_relation = relation
+        related_type = step.get("related_type")
+        if isinstance(related_type, str):
+            entity_type = related_type
+        elif isinstance(entity_type, str):
+            inferred = _related_type_for_step(entity_type, relation, catalog)
+            if inferred is not None:
+                entity_type = inferred
+
+    entity_fields = (
+        set(catalog.entities[entity_type].properties)
+        if isinstance(entity_type, str) and entity_type in catalog.entities
+        else set()
+    )
+    if completed.get("grounding_domain") == "runtime":
+        entity_fields.update({"id", "display_name"})
+    relation_schema = _relation_schema_for(terminal_relation, catalog)
+    edge_fields = set(relation_schema.properties) if relation_schema else set()
+
+    def source_for(field: Any, proposed: Any) -> str:
+        source = proposed if proposed in {"entity", "edge"} else "entity"
+        if not isinstance(field, str):
+            return source
+        belongs_to_entity = field in entity_fields
+        belongs_to_edge = field in edge_fields
+        if belongs_to_edge and not belongs_to_entity:
+            return "edge"
+        if belongs_to_entity and not belongs_to_edge:
+            return "entity"
+        return source
+
+    projected: dict[str, list[str]] = {"entity": [], "edge": []}
+    for source, key in (("entity", "fields"), ("edge", "edge_fields")):
+        values = completed.get(key)
+        for field in values if isinstance(values, list) else []:
+            if not isinstance(field, str):
+                continue
+            destination = source_for(field, source)
+            if field not in projected[destination]:
+                projected[destination].append(field)
+    completed["fields"] = projected["entity"]
+    completed["edge_fields"] = projected["edge"]
+
+    for key in ("filters", "sort"):
+        operations = completed.get(key)
+        if not isinstance(operations, list):
+            continue
+        normalized_operations: list[Any] = []
+        for operation in operations:
+            if not isinstance(operation, Mapping):
+                normalized_operations.append(operation)
+                continue
+            normalized = dict(operation)
+            normalized["source"] = source_for(
+                normalized.get("field"),
+                normalized.get("source"),
+            )
+            normalized_operations.append(normalized)
+        completed[key] = normalized_operations
+
+    transform = completed.get("transform")
+    if isinstance(transform, Mapping):
+        normalized_transform = dict(transform)
+        transform_fields = [
+            normalized_transform.get(key)
+            for key in ("field", "other_field", "order_by")
+            if isinstance(normalized_transform.get(key), str)
+        ]
+        inferred_sources = {
+            source_for(field, normalized_transform.get("source"))
+            for field in transform_fields
+        }
+        if len(inferred_sources) == 1:
+            normalized_transform["source"] = inferred_sources.pop()
+        completed["transform"] = normalized_transform
+
+    requirements = completed.get("required_evidence")
+    if isinstance(requirements, list):
+        normalized_requirements: list[Any] = []
+        for requirement in requirements:
+            if not isinstance(requirement, Mapping):
+                normalized_requirements.append(requirement)
+                continue
+            normalized = dict(requirement)
+            if normalized.get("field") is not None:
+                normalized["source"] = source_for(
+                    normalized.get("field"),
+                    normalized.get("source"),
+                )
+            normalized_requirements.append(normalized)
+        completed["required_evidence"] = normalized_requirements
+    return completed
+
+
+def _relation_schema_for(
+    relation: str | None,
+    catalog: RuntimeSchemaCatalog,
+) -> Any:
+    if relation is None:
+        return None
+    schema = catalog.relations.get(relation)
+    if schema is not None:
+        return schema
+    return next(
+        (
+            candidate
+            for candidate in catalog.relations.values()
+            if candidate.inverse_name == relation
+        ),
+        None,
     )
 
 
@@ -714,6 +943,15 @@ def _related_type_for_step(
     relation: str,
     catalog: RuntimeSchemaCatalog,
 ) -> str | None:
+    candidates = _related_types_for_step(current_type, relation, catalog)
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _related_types_for_step(
+    current_type: str,
+    relation: str,
+    catalog: RuntimeSchemaCatalog,
+) -> tuple[str, ...]:
     schema = catalog.relations.get(relation)
     inverse = False
     if schema is None:
@@ -727,7 +965,7 @@ def _related_type_for_step(
         )
         inverse = schema is not None
     if schema is None:
-        return None
+        return ()
     from_types = schema.to_types if inverse else schema.from_types
     to_types = schema.from_types if inverse else schema.to_types
     candidates: tuple[str, ...] = ()
@@ -737,7 +975,7 @@ def _related_type_for_step(
         candidates = from_types
     elif current_type in from_types and current_type in to_types:
         candidates = tuple(sorted(set(from_types) | set(to_types)))
-    return candidates[0] if len(candidates) == 1 else None
+    return tuple(sorted(set(candidates)))
 
 
 def _complete_evidence_requirements(
@@ -1178,6 +1416,8 @@ class OpenWorldGroundingService:
                     for detail in error.errors(include_input=False)
                 )
                 if isinstance(error, ValidationError)
+                else str(error)
+                if isinstance(error, OperatorValidationError)
                 else "none"
             )
             logger.warning(
