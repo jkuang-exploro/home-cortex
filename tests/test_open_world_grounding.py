@@ -216,7 +216,7 @@ def test_planner_compiler_adds_declared_query_dependencies_to_evidence() -> None
     }
 
 
-def test_planner_compiler_drops_evidence_unrelated_to_query_operations() -> None:
+def test_planner_compiler_preserves_explicit_evidence_and_adds_dependencies() -> None:
     payload = {
         "requires_grounding": True,
         "grounding_domain": "household",
@@ -243,7 +243,50 @@ def test_planner_compiler_drops_evidence_unrelated_to_query_operations() -> None
 
     assert completed["required_evidence"] == [
         {"source": "entity", "field": "name"},
+        {"source": "entity", "field": "end"},
+        {"source": "entity", "field": "household_role"},
         {"source": "edge", "relation": "lives_in"},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("domain", "subject", "field"),
+    (
+        (
+            "household",
+            GroundingSubject(reference_type="speaker", expected_type="person"),
+            "name",
+        ),
+        (
+            "runtime",
+            GroundingSubject(reference_type="assistant"),
+            "display_name",
+        ),
+    ),
+)
+def test_planner_compiler_preserves_identity_evidence_without_projection(
+    domain: str,
+    subject: GroundingSubject,
+    field: str,
+) -> None:
+    payload = GroundingPlan(
+        requires_grounding=True,
+        grounding_domain=domain,
+        goal="identify the subject",
+        subject=subject,
+        required_evidence=(RequiredEvidence(field=field),),
+    ).model_dump(mode="json")
+
+    completed = _complete_evidence_requirements(payload)
+
+    assert completed["required_evidence"] == [
+        {
+            "source": "entity",
+            "field": field,
+            "relation": None,
+            "minimum_records": 1,
+            "freshness": None,
+        }
     ]
 
 

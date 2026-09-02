@@ -462,6 +462,31 @@ def test_standalone_first_turn_greeting_does_not_call_ollama(
     assert agent.calls == []
 
 
+def test_standalone_later_greeting_uses_stable_conversation_reply(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": VIRTUAL_MODEL,
+            "stream": False,
+            "messages": [
+                {"role": "user", "content": "Earlier question"},
+                {"role": "assistant", "content": "Earlier answer"},
+                {"role": "user", "content": "您好"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == (
+        "您好。有什么需要我处理的吗？"
+    )
+    assert agent.calls == []
+
+
 @pytest.mark.parametrize(
     ("headers", "status_code", "error_code"),
     [

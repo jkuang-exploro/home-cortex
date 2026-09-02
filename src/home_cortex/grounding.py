@@ -755,56 +755,34 @@ def _complete_evidence_requirements(
     raw_requirements = completed.get("required_evidence", [])
     if not isinstance(raw_requirements, list):
         return completed
-    proposed_requirements = [
+    requirements = [
         dict(item) if isinstance(item, Mapping) else item
         for item in raw_requirements
     ]
-    requirements: list[Any] = []
-    covered_fields: set[tuple[str, str]] = set()
-    covered_relations: set[str] = set()
-
-    def proposed_field_requirement(source: str, field: str) -> dict[str, Any] | None:
-        return next(
-            (
-                dict(item)
-                for item in proposed_requirements
-                if isinstance(item, Mapping)
-                and item.get("source", "entity") == source
-                and item.get("field") == field
-            ),
-            None,
-        )
-
-    def proposed_relation_requirement(relation: str) -> dict[str, Any] | None:
-        return next(
-            (
-                dict(item)
-                for item in proposed_requirements
-                if isinstance(item, Mapping)
-                and item.get("relation") == relation
-            ),
-            None,
-        )
+    covered_fields = {
+        (item.get("source", "entity"), item.get("field"))
+        for item in requirements
+        if isinstance(item, Mapping) and item.get("field") is not None
+    }
+    covered_relations = {
+        item.get("relation")
+        for item in requirements
+        if isinstance(item, Mapping) and item.get("relation") is not None
+    }
 
     def require_field(source: str, field: Any) -> None:
         if not isinstance(field, str) or not field:
             return
         marker = (source, field)
         if marker not in covered_fields:
-            requirements.append(
-                proposed_field_requirement(source, field)
-                or {"source": source, "field": field}
-            )
+            requirements.append({"source": source, "field": field})
             covered_fields.add(marker)
 
     def require_relation(relation: Any) -> None:
         if not isinstance(relation, str) or not relation:
             return
         if relation not in covered_relations:
-            requirements.append(
-                proposed_relation_requirement(relation)
-                or {"source": "edge", "relation": relation}
-            )
+            requirements.append({"source": "edge", "relation": relation})
             covered_relations.add(relation)
 
     entity_fields = completed.get("fields", [])

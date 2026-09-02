@@ -486,13 +486,20 @@ async def chat_completions(
             user_entity,
             conversation_language(messages),
         )
-    if greeting is not None and _is_standalone_greeting(messages):
+    standalone_greeting = None
+    if _is_standalone_greeting(messages):
+        standalone_greeting = (
+            greeting.text
+            if greeting is not None
+            else _continued_greeting(conversation_language(messages))
+        )
+    if standalone_greeting is not None:
         if body.stream:
             return StreamingResponse(
                 _stream_chat_completion(
                     completion_id,
                     created,
-                    _single_answer(greeting.text),
+                    _single_answer(standalone_greeting),
                     request,
                     model=definition.display_name,
                 ),
@@ -506,7 +513,7 @@ async def chat_completions(
             completion_id,
             created,
             definition.display_name,
-            greeting.text,
+            standalone_greeting,
         )
     agent_messages = messages
     if body.stream:
@@ -585,6 +592,14 @@ def _is_new_conversation(messages: list[dict[str, Any]]) -> bool:
 def _is_standalone_greeting(messages: list[dict[str, Any]]) -> bool:
     normalized = latest_user_message(messages).strip().casefold().rstrip("!！.。?？,， ")
     return normalized in {"hello", "hi", "hey", "你好", "您好", "嗨"}
+
+
+def _continued_greeting(language: str) -> str:
+    return (
+        "您好。有什么需要我处理的吗？"
+        if language == "zh"
+        else "Hello. How may I help?"
+    )
 
 
 def _greeted_answer(greeting: str | None, answer: str) -> str:

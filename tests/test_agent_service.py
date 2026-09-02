@@ -139,7 +139,6 @@ def _speaker_name_plan() -> GroundingPlan:
             reference_type="speaker",
             expected_type="person",
         ),
-        fields=("name",),
         required_evidence=(RequiredEvidence(field="name"),),
     )
 
@@ -150,7 +149,6 @@ def _assistant_name_plan() -> GroundingPlan:
         grounding_domain="runtime",
         goal="identify the subject",
         subject=GroundingSubject(reference_type="assistant"),
-        fields=("display_name",),
         required_evidence=(RequiredEvidence(field="display_name"),),
     )
 
