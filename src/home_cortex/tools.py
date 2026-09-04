@@ -61,6 +61,8 @@ class ResolveEntityAliasArguments(ToolArguments):
     text: str = Field(min_length=1, max_length=256)
     entity_type: str | None = Field(default=None, pattern=TABLE_NAME_PATTERN)
     limit: int | None = Field(default=None, ge=1, le=100)
+    speaker_id: str | None = Field(default=None, pattern=RECORD_ID_PATTERN)
+    household_id: str | None = Field(default=None, pattern=RECORD_ID_PATTERN)
 
 
 class GetEntityArguments(ToolArguments):
@@ -144,7 +146,7 @@ TOOLS: list[dict[str, Any]] = [
             "name": "get_entity",
             "description": (
                 "Retrieve exactly one entity by canonical record ID, such as "
-                "person:jian_kuang. Use this when the ID is already known "
+                "person:household_member. Use this when the ID is already known "
                 "(authenticated speaker, related_entity.id, or a prior "
                 "search). Do not use search_entities for a known ID. Semantic "
                 "property names are resolved by the household fact layer."
@@ -316,7 +318,7 @@ TOOLS: list[dict[str, Any]] = [
                         "description": (
                             "Optional person record ID whose authorized "
                             "calendars should be queried, such as "
-                            "person:jian_kuang."
+                            "person:household_member."
                         ),
                     },
                     "limit": {
@@ -577,6 +579,8 @@ class ToolDispatcher:
             arguments.text,
             entity_type=arguments.entity_type,
             limit=arguments.limit,
+            speaker_id=arguments.speaker_id,
+            household_id=arguments.household_id,
         )
 
     async def _get_entity(

@@ -88,6 +88,50 @@ reference_concepts:
       - relation: parent
         filters:
           - {property: gender, value: female}
+  paternal_grandson:
+    aliases: [孙子, paternal grandson]
+    path:
+      - relation: child
+        filters:
+          - {property: gender, value: male}
+      - relation: child
+        filters:
+          - {property: gender, value: male}
+  maternal_grandson:
+    aliases: [外孙, maternal grandson]
+    path:
+      - relation: child
+        filters:
+          - {property: gender, value: female}
+      - relation: child
+        filters:
+          - {property: gender, value: male}
+  paternal_grandfather:
+    aliases: [爷爷, paternal grandfather]
+    path:
+      - relation: parent
+        filters:
+          - {property: gender, value: male}
+      - relation: parent
+        filters:
+          - {property: gender, value: male}
+  maternal_grandfather:
+    aliases: [外公, 姥爷, maternal grandfather]
+    path:
+      - relation: parent
+        filters:
+          - {property: gender, value: female}
+      - relation: parent
+        filters:
+          - {property: gender, value: male}
+  older_brother:
+    aliases: [哥哥, older brother]
+    path:
+      - relation: parent
+      - relation: child
+        filters:
+          - {property: gender, value: male}
+          - {property: birth_date, operator: lt, value_from: anchor}
   father_in_law:
     aliases: [岳父, 公公, father-in-law, father in law]
     path:

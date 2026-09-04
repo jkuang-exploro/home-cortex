@@ -14,7 +14,11 @@ from .edge_schema import (
     UnknownEdgeSchemaError,
 )
 from .record_ids import canonical_record_id, split_record_id
-from .schema_catalog import normalize_entity_alias, record_aliases
+from .schema_catalog import (
+    matches_scoped_appellation,
+    normalize_entity_alias,
+    record_aliases,
+)
 
 ENTITY_SUMMARY_FIELDS = frozenset(
     {
@@ -141,8 +145,11 @@ class RetrievalService:
         text: str,
         entity_type: str | None = None,
         limit: int | None = None,
+        *,
+        speaker_id: str | None = None,
+        household_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Resolve an exact normalized alias from runtime database records."""
+        """Resolve stored aliases, then scoped appellations, from runtime data."""
         normalized = normalize_entity_alias(text)
         if not normalized:
             raise ValueError("Entity alias cannot be empty")
@@ -161,7 +168,8 @@ class RetrievalService:
             SELECT * FROM type::table($table)
             ORDER BY id;
         """
-        matches: list[dict[str, Any]] = []
+        alias_matches: list[dict[str, Any]] = []
+        appellation_matches: list[dict[str, Any]] = []
         for table in tables:
             records = _query_records(
                 await self.database.query(
@@ -169,7 +177,7 @@ class RetrievalService:
                     {"table": table},
                 )
             )
-            matches.extend(
+            alias_matches.extend(
                 _entity_summary(record)
                 for record in records
                 if any(
@@ -177,6 +185,17 @@ class RetrievalService:
                     for alias in record_aliases(record)
                 )
             )
+            appellation_matches.extend(
+                _entity_summary(record)
+                for record in records
+                if matches_scoped_appellation(
+                    record,
+                    text,
+                    speaker_id=speaker_id,
+                    household_id=household_id,
+                )
+            )
+        matches = alias_matches or appellation_matches
         matches.sort(key=lambda record: str(record.get("id", "")))
         return matches[:result_limit]
 

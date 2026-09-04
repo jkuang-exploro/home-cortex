@@ -135,6 +135,26 @@ returns every exact match. It never chooses the first record when an alias is
 ambiguous. To add a nickname, edit only the person's node data and re-run
 ingestion; application source changes are unnecessary.
 
+Names whose meaning depends on household or speaker belong in scoped
+`appellations`, not global `aliases`:
+
+```json
+{
+  "appellations": [
+    {
+      "value": "Papa",
+      "household_id": "address:example",
+      "speaker_ids": ["person:child"]
+    }
+  ]
+}
+```
+
+Every appellation must declare at least a household or speaker scope. The
+resolver tries direct names/aliases first, then appellations matching the
+trusted active-speaker and household context. Relational descriptions such as
+“my son” still belong in the ontology and graph rather than this list.
+
 Language-independent property mappings and composable kinship concepts live in
 `schemas/semantic/ontology.yaml`. For example, `father_in_law` expands to
 `spouse -> parent[gender=male]`, while the base `parent` relation points to the
@@ -143,11 +163,25 @@ term to the appropriate ontology `aliases` list, then rebuild/restart the API.
 Do not add context-dependent phrases such as “my son” to a person's static
 aliases.
 
+The symbolic semantic reference `self` is resolved from the authenticated
+speaker on each request. It is not tied to a default household member. The
+ontology can therefore compile the same “my son” plan for different speakers,
+and the resolver starts traversal from each request's active speaker.
+
 Tier 0 consumes this same ontology only as a latency optimization. To exercise
 the semantic planner and authoritative entity resolver without Tier 0, set:
 
 ```dotenv
 HOME_CORTEX_DISABLE_TIER0=1
+```
+
+The fact benchmark supports both execution modes and records speaker ID,
+utterance, semantic plan, resolution path, canonical IDs, LLM/DB calls, timing,
+and answer. `MODE` and `--mode` are equivalent:
+
+```sh
+MODE=tier0_enabled home-cortex-fact-benchmark --backend surrealdb
+MODE=tier0_disabled home-cortex-fact-benchmark --backend surrealdb --repeat 1
 ```
 
 The ingestion endpoint rejects unknown relationship files, invalid endpoint

@@ -24,6 +24,18 @@ def test_default_ontology_owns_property_and_kinship_semantics() -> None:
     father_in_law = ontology.reference_concepts["father_in_law"]
     assert [step.relation for step in father_in_law.path] == ["spouse", "parent"]
     assert father_in_law.path[-1].filters[0].value == "male"
+    assert [
+        step.filters[0].value
+        for step in ontology.reference_concepts["paternal_grandson"].path
+    ] == ["male", "male"]
+    assert [
+        step.filters[0].value
+        for step in ontology.reference_concepts["maternal_grandson"].path
+    ] == ["female", "male"]
+    older_brother = ontology.reference_concepts["older_brother"]
+    age_filter = older_brother.path[-1].filters[-1]
+    assert age_filter.operator == "lt"
+    assert age_filter.value_from == "anchor"
 
 
 def test_new_kinship_alias_requires_only_ontology_change(tmp_path: Path) -> None:

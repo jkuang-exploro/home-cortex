@@ -176,6 +176,46 @@ async def test_resolve_entity_alias_preserves_ambiguity() -> None:
 
 
 @pytest.mark.asyncio
+async def test_scoped_appellation_requires_matching_speaker_and_household() -> None:
+    database = FakeDatabase(
+        {
+            "person": [
+                {
+                    "id": RecordID("person", "parent"),
+                    "name": ["Household Parent"],
+                    "appellations": [
+                        {
+                            "value": "Papa",
+                            "household_id": "address:test_house",
+                            "speaker_ids": ["person:child"],
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
+
+    unscoped = await service.resolve_entity_alias("Papa", entity_type="person")
+    wrong_speaker = await service.resolve_entity_alias(
+        "Papa",
+        entity_type="person",
+        speaker_id="person:other",
+        household_id="address:test_house",
+    )
+    resolved = await service.resolve_entity_alias(
+        "PAPA!",
+        entity_type="person",
+        speaker_id="person:child",
+        household_id="address:test_house",
+    )
+
+    assert unscoped == []
+    assert wrong_speaker == []
+    assert [record["id"] for record in resolved] == ["person:parent"]
+
+
+@pytest.mark.asyncio
 async def test_search_entity_summaries_exclude_private_profile_fields() -> None:
     database = FakeDatabase(
         {

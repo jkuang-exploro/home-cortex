@@ -49,6 +49,15 @@ class RelationTypeSchema:
 
 
 @dataclass(frozen=True)
+class ScopedAppellation:
+    """A household name whose meaning depends on trusted request scope."""
+
+    value: str
+    household_id: str | None = None
+    speaker_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class RuntimeSchemaCatalog:
     """Queryable fields and relations discovered from deployment data/schema."""
 
@@ -284,3 +293,63 @@ def normalize_entity_alias(value: str) -> str:
         for character in normalized
     )
     return re.sub(r"\s+", " ", normalized).strip()
+
+
+def record_appellations(record: Mapping[str, Any]) -> tuple[ScopedAppellation, ...]:
+    """Return valid, explicitly scoped appellations stored on an entity."""
+    raw = record.get("appellations")
+    if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes, bytearray)):
+        return ()
+    result: list[ScopedAppellation] = []
+    for item in raw:
+        if not isinstance(item, Mapping):
+            continue
+        value = item.get("value")
+        household_id = item.get("household_id")
+        raw_speakers = item.get("speaker_ids", ())
+        if not isinstance(value, str) or not value.strip():
+            continue
+        if household_id is not None and not isinstance(household_id, str):
+            continue
+        if not isinstance(raw_speakers, Sequence) or isinstance(
+            raw_speakers,
+            (str, bytes, bytearray),
+        ):
+            continue
+        speaker_ids = tuple(
+            speaker
+            for speaker in raw_speakers
+            if isinstance(speaker, str) and speaker
+        )
+        if household_id is None and not speaker_ids:
+            continue
+        result.append(
+            ScopedAppellation(value.strip(), household_id, speaker_ids)
+        )
+    return tuple(result)
+
+
+def matches_scoped_appellation(
+    record: Mapping[str, Any],
+    value: str,
+    *,
+    speaker_id: str | None,
+    household_id: str | None,
+) -> bool:
+    """Match an appellation only when every stored scope constraint holds."""
+    normalized = normalize_entity_alias(value)
+    return any(
+        normalize_entity_alias(item.value) == normalized
+        and (
+            item.household_id is None
+            or (
+                household_id is not None
+                and item.household_id == household_id
+            )
+        )
+        and (
+            not item.speaker_ids
+            or (speaker_id is not None and speaker_id in item.speaker_ids)
+        )
+        for item in record_appellations(record)
+    )

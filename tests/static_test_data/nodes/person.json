@@ -10,7 +10,14 @@
     "id": "person:blair_example",
     "name": ["Blair Example", "布莱尔"],
     "first_name": "Blair",
-    "last_name": "Example"
+    "last_name": "Example",
+    "appellations": [
+      {
+        "value": "Papa",
+        "household_id": "address:test_house",
+        "speaker_ids": ["person:casey_example"]
+      }
+    ]
   },
   {
     "id": "person:casey_example",

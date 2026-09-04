@@ -98,6 +98,27 @@ class SemanticFilter(_SemanticModel):
     ] = "eq"
     value: str | int | float | bool | tuple[str | int | float, ...] | None = None
     source: Literal["entity", "relation"] = "entity"
+    value_from: Literal["anchor"] | None = None
+    value_property: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
+    )
+
+    @model_validator(mode="after")
+    def validate_dynamic_value(self) -> "SemanticFilter":
+        if self.value_from is not None and self.value is not None:
+            raise ValueError("filter cannot define both value and value_from")
+        if self.value_property is not None and self.value_from is None:
+            raise ValueError("value_property requires value_from")
+        if self.value_from is not None and self.source != "entity":
+            raise ValueError("dynamic filter values require entity source")
+        if self.value_from is not None and self.operator in {
+            "in",
+            "exists",
+            "date_range",
+        }:
+            raise ValueError("dynamic filter value is incompatible with operator")
+        return self
 
 
 class SemanticRelationStep(_SemanticModel):
@@ -232,6 +253,8 @@ class ResolutionResult:
 class SemanticSchemaRegistry:
     """Map stable semantic concepts to deployment-specific schema names."""
 
+    _RESOLVER_METADATA_PROPERTIES = frozenset({"aliases", "appellations"})
+
     def __init__(
         self,
         catalog: RuntimeSchemaCatalog,
@@ -284,6 +307,8 @@ class SemanticSchemaRegistry:
         return next((field for field in candidates if field in available), None)
 
     def _property_candidates(self, semantic: str) -> tuple[str, ...]:
+        if semantic in self._RESOLVER_METADATA_PROPERTIES:
+            return ()
         if semantic in self.ontology.properties:
             return self.ontology.property_fields(semantic)
         if semantic in self._aliased_physical_properties:
@@ -334,6 +359,7 @@ class SemanticSchemaRegistry:
             physical
             for physical in schema.properties
             if physical != "id"
+            and physical not in self._RESOLVER_METADATA_PROPERTIES
             and physical not in self._aliased_physical_properties
         )
         return frozenset(properties)
@@ -354,7 +380,8 @@ class SemanticSchemaRegistry:
         properties.update(
             physical
             for physical in schema.properties
-            if physical not in self._aliased_physical_properties
+            if physical not in self._RESOLVER_METADATA_PROPERTIES
+            and physical not in self._aliased_physical_properties
         )
         return frozenset(properties)
 
@@ -394,7 +421,8 @@ class SemanticSchemaRegistry:
             if resolved_types is None:
                 return False
             final_types[id(reference)] = resolved_types
-            step_types = self._base_entity_types(reference)
+            anchor_types = self._base_entity_types(reference)
+            step_types = anchor_types
             for step in reference.path:
                 next_types = self._traversal_target_types(step.relation, step_types)
                 if next_types is None:
@@ -404,6 +432,13 @@ class SemanticSchemaRegistry:
                         kind = self._semantic_kind(next_types, item.property)
                         if kind is None or not self._valid_predicate(item, kind):
                             return False
+                        if item.value_from == "anchor":
+                            anchor_kind = self._semantic_kind(
+                                anchor_types,
+                                item.value_property or item.property,
+                            )
+                            if anchor_kind is None or anchor_kind != kind:
+                                return False
                     if item.source == "relation":
                         resolved = self.physical_relation(step.relation)
                         if resolved is None:
@@ -758,6 +793,8 @@ class TierZeroSemanticParser:
                             operator=item.operator,
                             value=item.value,
                             source=item.source,
+                            value_from=item.value_from,
+                            value_property=item.value_property,
                         )
                         for item in step.filters
                     ),
@@ -888,9 +925,9 @@ class EntityResolver:
                 }
             ]
         elif reference.kind == "self":
-            if context.caller_entity_id is None:
+            if context.speaker.speaker_id is None:
                 raise _FactFailure("caller_context_missing")
-            entities = [{"id": context.caller_entity_id}]
+            entities = [{"id": context.speaker.speaker_id}]
         elif reference.kind == "current_household":
             if context.household_id is None:
                 raise _FactFailure("entity_not_found")
@@ -904,6 +941,8 @@ class EntityResolver:
                     "text": reference.value,
                     "entity_type": reference.entity_type,
                     "limit": self.max_records,
+                    "speaker_id": context.speaker.speaker_id,
+                    "household_id": context.speaker.household_id,
                 },
             )
             if not records:
@@ -924,6 +963,7 @@ class EntityResolver:
         else:
             raise _FactFailure("computation_impossible")
 
+        anchors = list(entities)
         last_relation: str | None = None
         for step in reference.path:
             resolved = self.schema.physical_relation(step.relation)
@@ -957,7 +997,12 @@ class EntityResolver:
                     if isinstance(candidate, Mapping):
                         related.append(dict(candidate))
             entities = _unique_entities(related)
-            entities = await self._filter_entities(entities, step.filters, execution)
+            entities = await self._filter_entities(
+                entities,
+                step.filters,
+                execution,
+                anchors,
+            )
             if not entities:
                 if allow_empty_collection:
                     return []
@@ -992,6 +1037,7 @@ class EntityResolver:
         entities: list[dict[str, Any]],
         filters: Sequence[SemanticFilter],
         execution: "_FactExecution",
+        anchors: Sequence[Mapping[str, Any]],
     ) -> list[dict[str, Any]]:
         entity_filters = [item for item in filters if item.source == "entity"]
         if not entity_filters:
@@ -1019,12 +1065,42 @@ class EntityResolver:
             record = (
                 await self._load(entity, execution) if needs_load else dict(entity)
             )
-            if all(
-                evaluate_predicate(item.operator, record.get(physical), item.value)
-                for item, physical in mapped
-            ):
+            predicates: list[bool] = []
+            for item, physical in mapped:
+                expected = item.value
+                if item.value_from == "anchor":
+                    expected = await self._anchor_property(
+                        anchors,
+                        item.value_property or item.property,
+                        execution,
+                    )
+                predicates.append(
+                    evaluate_predicate(item.operator, record.get(physical), expected)
+                )
+            if all(predicates):
                 matched.append(record)
         return matched
+
+    async def _anchor_property(
+        self,
+        anchors: Sequence[Mapping[str, Any]],
+        semantic_property: str,
+        execution: "_FactExecution",
+    ) -> Any:
+        if len(anchors) != 1:
+            raise _FactFailure("ambiguous", candidates=tuple(anchors))
+        anchor = await self._load(anchors[0], execution)
+        physical = self.schema.physical_property(
+            _entity_type(anchor),
+            semantic_property,
+        )
+        if physical is None or anchor.get(physical) is None:
+            raise _FactFailure(
+                "property_unavailable",
+                evidence=FactEvidence(semantic_property=semantic_property),
+                missing=(semantic_property,),
+            )
+        return anchor[physical]
 
     async def _load_if_unnamed(
         self,

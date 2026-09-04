@@ -88,6 +88,16 @@ class GroundedAnswer:
 
 
 @dataclass(frozen=True)
+class SpeakerContext:
+    """Trusted household perspective used to resolve symbolic ``self``."""
+
+    speaker_id: str | None
+    household_id: str | None
+    locale: str | None
+    timezone: str | None
+
+
+@dataclass(frozen=True)
 class AgentRequestContext:
     """Trusted request and runtime identities used to resolve plan references."""
 
@@ -97,6 +107,19 @@ class AgentRequestContext:
     household_id: str | None
     current_time: datetime
     locale: str | None = None
+
+    @property
+    def speaker(self) -> SpeakerContext:
+        return SpeakerContext(
+            speaker_id=self.caller_entity_id,
+            household_id=self.household_id,
+            locale=self.locale,
+            timezone=(
+                str(self.current_time.tzinfo)
+                if self.current_time.tzinfo is not None
+                else None
+            ),
+        )
 
 
 class _PlanModel(BaseModel):
@@ -1928,8 +1951,7 @@ def _evidence_source(plan: GroundingPlan) -> str:
 
 _PRIVATE_HOUSEHOLD_REFERENCE = re.compile(
     r"\b(?:i|my|mine|we|our|ours)\b|"
-    r"我(?:的|家|们家|岳|爸|妈|父|母|妻|夫|儿|女|老公|老婆)|"
-    r"咱们家",
+    r"我|我们|咱们",
     flags=re.IGNORECASE,
 )
 _FACTUAL_QUESTION_FORM = re.compile(

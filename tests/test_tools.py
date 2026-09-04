@@ -32,11 +32,20 @@ class FakeRetrievalService:
         text: str,
         entity_type: str | None = None,
         limit: int | None = None,
+        *,
+        speaker_id: str | None = None,
+        household_id: str | None = None,
     ) -> list[dict[str, Any]]:
         self.calls.append(
             (
                 "resolve_entity_alias",
-                {"text": text, "entity_type": entity_type, "limit": limit},
+                {
+                    "text": text,
+                    "entity_type": entity_type,
+                    "limit": limit,
+                    "speaker_id": speaker_id,
+                    "household_id": household_id,
+                },
             )
         )
         return [{"id": "person:alex_example", "name": ["Alex Example"]}]
@@ -263,7 +272,13 @@ async def test_alias_resolution_is_resolver_only_not_model_facing() -> None:
     assert retrieval.calls == [
         (
             "resolve_entity_alias",
-            {"text": "Alex", "entity_type": "person", "limit": None},
+            {
+                "text": "Alex",
+                "entity_type": "person",
+                "limit": None,
+                "speaker_id": None,
+                "household_id": None,
+            },
         )
     ]
 

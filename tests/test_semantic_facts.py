@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from home_cortex.grounding import AgentRequestContext
 from home_cortex.operator_registry import OPERATORS
 from home_cortex.schema_catalog import (
     RuntimeSchemaCatalog,
+    matches_scoped_appellation,
     normalize_entity_alias,
     record_aliases,
 )
@@ -58,15 +60,30 @@ class FixtureGraphDispatcher:
         elif tool_name in {"search_entities", "resolve_entity_alias"}:
             query = arguments["text"].casefold()
             expected = arguments.get("entity_type")
-            records = [
-                self._summary(record)
+            candidates = [
+                record
                 for record in self.entities.values()
-                if (expected is None or record["id"].startswith(f"{expected}:"))
-                and any(
+                if expected is None or record["id"].startswith(f"{expected}:")
+            ]
+            aliases = [
+                self._summary(record)
+                for record in candidates
+                if any(
                     normalize_entity_alias(query) == normalize_entity_alias(alias)
                     for alias in record_aliases(record)
                 )
-            ][: arguments.get("limit", 25)]
+            ]
+            appellations = [
+                self._summary(record)
+                for record in candidates
+                if matches_scoped_appellation(
+                    record,
+                    arguments["text"],
+                    speaker_id=arguments.get("speaker_id"),
+                    household_id=arguments.get("household_id"),
+                )
+            ]
+            records = (aliases or appellations)[: arguments.get("limit", 25)]
         elif tool_name == "get_relationships":
             records = self._relationships(arguments)
         else:
@@ -241,6 +258,128 @@ async def test_all_static_and_relational_references_converge_on_canonical_person
         answer.result.evidence.entity_ids == ("person:dylan_kuang",)
         for answer in answers
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("speaker_id", "question"),
+    (
+        ("person:jian_kuang", "我儿子是谁"),
+        ("person:pu_ba", "我儿子是谁"),
+        ("person:guiqiu_wang", "我孙子是谁"),
+        ("person:zhigang_ba", "我外孙是谁"),
+        ("person:evelyn_kuang", "我哥哥是谁"),
+    ),
+)
+async def test_speaker_relative_kinship_converges_on_dylan(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    speaker_id: str,
+    question: str,
+) -> None:
+    answer = await _ask(
+        service,
+        replace(context, caller_entity_id=speaker_id),
+        question,
+    )
+
+    assert answer.result.status == "found"
+    assert answer.result.evidence.entity_ids == ("person:dylan_kuang",)
+
+
+@pytest.mark.asyncio
+async def test_same_self_relation_resolves_from_each_active_speaker(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    dispatcher.entities.update(
+        {
+            "person:other_parent": {
+                "id": "person:other_parent",
+                "name": ["Other Parent"],
+                "gender": "female",
+                "dob": "1985-01-01",
+            },
+            "person:other_son": {
+                "id": "person:other_son",
+                "name": ["Other Son"],
+                "gender": "male",
+                "dob": "2018-01-01",
+            },
+        }
+    )
+    dispatcher.edges["parent_of"].append(
+        {"from": "person:other_parent", "to": "person:other_son", "type": "mother"}
+    )
+
+    jian = await _ask(service, context, "我儿子是谁")
+    other = await _ask(
+        service,
+        replace(context, caller_entity_id="person:other_parent"),
+        "我儿子是谁",
+    )
+
+    assert jian.result.evidence.entity_ids == ("person:dylan_kuang",)
+    assert other.result.evidence.entity_ids == ("person:other_son",)
+
+
+@pytest.mark.asyncio
+async def test_multi_match_grandson_is_ambiguous(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    dispatcher.entities["person:second_grandson"] = {
+        "id": "person:second_grandson",
+        "name": ["次孙"],
+        "gender": "male",
+        "dob": "2022-01-01",
+    }
+    dispatcher.edges["parent_of"].append(
+        {
+            "from": "person:jian_kuang",
+            "to": "person:second_grandson",
+            "type": "father",
+        }
+    )
+
+    answer = await _ask(
+        service,
+        replace(context, caller_entity_id="person:guiqiu_wang"),
+        "我孙子是谁",
+    )
+
+    assert answer.result.status == "ambiguous"
+    assert {item["id"] for item in answer.result.candidates} == {
+        "person:dylan_kuang",
+        "person:second_grandson",
+    }
+
+
+@pytest.mark.asyncio
+async def test_scoped_appellation_is_grounded_by_resolver_context(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    dispatcher.entities["person:dylan_kuang"]["appellations"] = [
+        {
+            "value": "大宝",
+            "household_id": "address:fort_cerritos",
+            "speaker_ids": ["person:jian_kuang"],
+        }
+    ]
+
+    resolved = await _ask(service, context, "大宝是谁")
+    unscoped = await _ask(
+        service,
+        replace(context, caller_entity_id="person:pu_ba"),
+        "大宝是谁",
+    )
+
+    assert resolved.result.evidence.entity_ids == ("person:dylan_kuang",)
+    assert unscoped.result.status == "entity_not_found"
 
 
 @pytest.mark.asyncio
@@ -541,6 +680,8 @@ def test_capabilities_are_semantic_and_new_fields_require_no_handler(
     assert "dob" not in schema.capability_payload()["semantic_properties"]["person"]
     assert "first_name" not in schema.capability_payload()["semantic_properties"]["person"]
     assert "last_name" not in schema.capability_payload()["semantic_properties"]["person"]
+    assert "aliases" not in schema.capability_payload()["semantic_properties"]["person"]
+    assert "appellations" not in schema.capability_payload()["semantic_properties"]["person"]
     assert "parent_of" not in json.dumps(schema.capability_payload())
     assert schema.physical_property("person", "dob") is None
     assert schema.physical_relation("parent_of") is None
@@ -1054,6 +1195,105 @@ async def test_tier_zero_disabled_preserves_semantic_correctness(
     assert answers["家里有几个人"].result.value == 5
     assert all(answer.timings.tier == 1 for answer in answers.values())
     assert all(answer.timings.llm_call_count == 1 for answer in answers.values())
+
+
+@pytest.mark.asyncio
+async def test_tier_zero_disabled_preserves_multi_speaker_kinship(
+    dispatcher: FixtureGraphDispatcher,
+    context: AgentRequestContext,
+) -> None:
+    schema = SemanticSchemaRegistry(
+        RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    )
+    paths = {
+        "我儿子是谁": [
+            {
+                "relation": "child",
+                "filters": [{"property": "gender", "value": "male"}],
+            }
+        ],
+        "我孙子是谁": [
+            {
+                "relation": "child",
+                "filters": [{"property": "gender", "value": "male"}],
+            },
+            {
+                "relation": "child",
+                "filters": [{"property": "gender", "value": "male"}],
+            },
+        ],
+        "我外孙是谁": [
+            {
+                "relation": "child",
+                "filters": [{"property": "gender", "value": "female"}],
+            },
+            {
+                "relation": "child",
+                "filters": [{"property": "gender", "value": "male"}],
+            },
+        ],
+        "我哥哥是谁": [
+            {"relation": "parent", "filters": []},
+            {
+                "relation": "child",
+                "filters": [
+                    {"property": "gender", "value": "male"},
+                    {
+                        "property": "birth_date",
+                        "operator": "lt",
+                        "value_from": "anchor",
+                    },
+                ],
+            },
+        ],
+    }
+
+    class Interpreter:
+        async def plan_semantic_fact(
+            self,
+            messages: list[dict[str, Any]],
+            *_: Any,
+            **__: Any,
+        ) -> dict[str, Any]:
+            return {
+                "requires_fact": True,
+                "request": {
+                    "operation": "resolve_reference",
+                    "subject": {
+                        "kind": "self",
+                        "entity_type": "person",
+                        "path": paths[messages[-1]["content"]],
+                    },
+                },
+            }
+
+    semantic = SemanticFactService(
+        HouseholdFactEngine(dispatcher, schema),
+        planner=SemanticFactPlanner(Interpreter(), schema),
+        tier_zero_enabled=False,
+    )
+    cases = (
+        ("person:jian_kuang", "我儿子是谁"),
+        ("person:pu_ba", "我儿子是谁"),
+        ("person:guiqiu_wang", "我孙子是谁"),
+        ("person:zhigang_ba", "我外孙是谁"),
+        ("person:evelyn_kuang", "我哥哥是谁"),
+    )
+
+    answers = [
+        await _ask(
+            semantic,
+            replace(context, caller_entity_id=speaker_id),
+            question,
+        )
+        for speaker_id, question in cases
+    ]
+
+    assert all(
+        answer.result.evidence.entity_ids == ("person:dylan_kuang",)
+        for answer in answers
+    )
+    assert all(answer.timings.tier == 1 for answer in answers)
 
 
 @pytest.mark.asyncio

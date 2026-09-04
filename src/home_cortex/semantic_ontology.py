@@ -18,6 +18,8 @@ class OntologyFilter:
     operator: str = "eq"
     value: str | int | float | bool | None = None
     source: str = "entity"
+    value_from: str | None = None
+    value_property: str | None = None
 
 
 @dataclass(frozen=True)
@@ -154,6 +156,16 @@ class SemanticOntology:
                                     "operator": item.operator,
                                     "value": item.value,
                                     "source": item.source,
+                                    **(
+                                        {"value_from": item.value_from}
+                                        if item.value_from is not None
+                                        else {}
+                                    ),
+                                    **(
+                                        {"value_property": item.value_property}
+                                        if item.value_property is not None
+                                        else {}
+                                    ),
                                 }
                                 for item in step.filters
                             ],
@@ -247,20 +259,49 @@ def _parse_filter(
 ) -> OntologyFilter:
     label = f"reference_concepts.{concept}.path[{step_index}].filters[{filter_index}]"
     item = _mapping(raw, label, path)
-    extra = sorted(set(item) - {"property", "operator", "value", "source"})
+    extra = sorted(
+        set(item)
+        - {
+            "property",
+            "operator",
+            "value",
+            "source",
+            "value_from",
+            "value_property",
+        }
+    )
     property_name = item.get("property")
     operator = item.get("operator", "eq")
     source = item.get("source", "entity")
+    value_from = item.get("value_from")
+    value_property = item.get("value_property")
     if extra or not isinstance(property_name, str):
         raise ValueError(f"Invalid {label}")
     if operator not in PREDICATE_OPERATORS:
         raise ValueError(f"{label} uses an unregistered predicate")
     if source not in {"entity", "relation"}:
         raise ValueError(f"{label}.source must be entity or relation")
+    if value_from not in {None, "anchor"}:
+        raise ValueError(f"{label}.value_from must be anchor when present")
+    if value_property is not None and not isinstance(value_property, str):
+        raise ValueError(f"{label}.value_property must be a string")
+    if value_property is not None and value_from is None:
+        raise ValueError(f"{label}.value_property requires value_from")
+    if value_from is not None and source != "entity":
+        raise ValueError(f"{label}.value_from requires entity source")
     value = item.get("value")
     if value is not None and not isinstance(value, (str, int, float, bool)):
         raise ValueError(f"{label}.value must be a scalar")
-    return OntologyFilter(property_name, operator, value, source)
+    if value_from is not None and value is not None:
+        raise ValueError(f"{label} cannot define both value and value_from")
+    return OntologyFilter(
+        property_name,
+        operator,
+        value,
+        source,
+        value_from,
+        value_property,
+    )
 
 
 def _mapping(value: Any, field: str, path: Path) -> dict[str, Any]:

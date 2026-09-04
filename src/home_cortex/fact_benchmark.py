@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import statistics
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 from zoneinfo import ZoneInfo
 
 from .agents import get_agent
@@ -16,14 +18,17 @@ from .config import get_settings
 from .db import Database
 from .edge_schema import EdgeSchemaRegistry
 from .grounding import AgentRequestContext
+from .ollama import OllamaService
 from .retrieval import RetrievalService
 from .schema_catalog import (
     RuntimeSchemaCatalog,
+    matches_scoped_appellation,
     normalize_entity_alias,
     record_aliases,
 )
 from .semantic_facts import (
     HouseholdFactEngine,
+    SemanticFactPlanner,
     SemanticFactService,
     SemanticSchemaRegistry,
 )
@@ -62,11 +67,33 @@ TEMPORAL_OPERATIONS = frozenset(
     {"date_difference", "completed_years", "duration", "annual_occurrence"}
 )
 
+BenchmarkMode = Literal["tier0_enabled", "tier0_disabled"]
 
-async def benchmark_runtime(caller_entity_id: str, repeat: int) -> dict[str, Any]:
+
+@dataclass(frozen=True)
+class BenchmarkCase:
+    speaker_id: str
+    utterance: str
+
+
+SPEAKER_CASES = (
+    BenchmarkCase("person:jian_kuang", "我儿子是谁"),
+    BenchmarkCase("person:pu_ba", "我儿子是谁"),
+    BenchmarkCase("person:guiqiu_wang", "我孙子是谁"),
+    BenchmarkCase("person:zhigang_ba", "我外孙是谁"),
+    BenchmarkCase("person:evelyn_kuang", "我哥哥是谁"),
+)
+
+
+async def benchmark_runtime(
+    caller_entity_id: str,
+    repeat: int,
+    mode: BenchmarkMode = "tier0_enabled",
+) -> dict[str, Any]:
     settings = get_settings()
     steward = get_agent("steward")
     database = Database(settings)
+    llm: OllamaService | None = None
     await database.connect()
     try:
         edge_registry = EdgeSchemaRegistry.from_directory(settings.edge_schema_dir)
@@ -78,12 +105,13 @@ async def benchmark_runtime(caller_entity_id: str, repeat: int) -> dict[str, Any
             edge_registry,
         )
         dispatcher = ToolDispatcher(retrieval, sorted(GRAPH_TOOL_NAMES))
+        schema = SemanticSchemaRegistry(catalog)
+        if mode == "tier0_disabled":
+            llm = OllamaService(settings.ollama_url, settings.ollama_model)
         service = SemanticFactService(
-            HouseholdFactEngine(
-                dispatcher,
-                SemanticSchemaRegistry(catalog),
-                max_records=settings.retrieval_limit,
-            )
+            HouseholdFactEngine(dispatcher, schema, max_records=settings.retrieval_limit),
+            planner=(SemanticFactPlanner(llm, schema) if llm is not None else None),
+            tier_zero_enabled=mode == "tier0_enabled",
         )
         localized = steward.settings.get("localized_identity", {})
         context = AgentRequestContext(
@@ -94,8 +122,16 @@ async def benchmark_runtime(caller_entity_id: str, repeat: int) -> dict[str, Any
             current_time=datetime.now(ZoneInfo(settings.calendar_timezone)),
             locale="zh",
         )
-        return await _run_suite(service, context, repeat, backend="surrealdb")
+        return await _run_suite(
+            service,
+            context,
+            repeat,
+            backend="surrealdb",
+            mode=mode,
+        )
     finally:
+        if llm is not None:
+            await llm.close()
         await database.close()
 
 
@@ -104,13 +140,21 @@ async def benchmark_json(
     repeat: int,
     data_dir: Path,
     schema_dir: Path,
+    mode: BenchmarkMode = "tier0_enabled",
 ) -> dict[str, Any]:
     steward = get_agent("steward")
     edge_registry = EdgeSchemaRegistry.from_directory(schema_dir)
     catalog = RuntimeSchemaCatalog.from_data_dir(data_dir, edge_registry)
     dispatcher = _JsonGraphDispatcher(data_dir, edge_registry)
+    schema = SemanticSchemaRegistry(catalog)
+    llm: OllamaService | None = None
+    if mode == "tier0_disabled":
+        settings = get_settings()
+        llm = OllamaService(settings.ollama_url, settings.ollama_model)
     service = SemanticFactService(
-        HouseholdFactEngine(dispatcher, SemanticSchemaRegistry(catalog))
+        HouseholdFactEngine(dispatcher, schema),
+        planner=(SemanticFactPlanner(llm, schema) if llm is not None else None),
+        tier_zero_enabled=mode == "tier0_enabled",
     )
     localized = steward.settings.get("localized_identity", {})
     context = AgentRequestContext(
@@ -121,7 +165,11 @@ async def benchmark_json(
         current_time=datetime.now(ZoneInfo("America/Los_Angeles")),
         locale="zh",
     )
-    return await _run_suite(service, context, repeat, backend="json")
+    try:
+        return await _run_suite(service, context, repeat, backend="json", mode=mode)
+    finally:
+        if llm is not None:
+            await llm.close()
 
 
 async def _run_suite(
@@ -130,20 +178,29 @@ async def _run_suite(
     repeat: int,
     *,
     backend: str,
+    mode: BenchmarkMode,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     latencies: list[float] = []
-    for question in QUESTIONS:
+    cases = (
+        *(BenchmarkCase(context.caller_entity_id or "", question) for question in QUESTIONS),
+        *SPEAKER_CASES,
+    )
+    for case in cases:
+        case_context = replace(context, caller_entity_id=case.speaker_id or None)
         latest = None
         samples: list[float] = []
         for _ in range(repeat):
             latest = await service.try_answer(
-                [{"role": "user", "content": question}],
-                context=context,
+                [{"role": "user", "content": case.utterance}],
+                context=case_context,
                 request_id="fact-benchmark",
             )
             if latest is None:
-                raise RuntimeError(f"Tier-0 did not recognize {question!r}")
+                raise RuntimeError(
+                    f"Semantic pipeline did not answer {case.utterance!r} "
+                    f"for {case.speaker_id!r} in {mode}"
+                )
             samples.append(latest.timings.total_ms)
             latencies.append(latest.timings.total_ms)
         assert latest is not None
@@ -168,9 +225,21 @@ async def _run_suite(
         }
         rows.append(
             {
-                "question": question,
+                "speaker_id": case.speaker_id,
+                "utterance": case.utterance,
+                "question": case.utterance,
                 "answer": latest.text,
                 "semantic_plan": latest.request.model_dump(mode="json"),
+                "resolution_path": [
+                    {
+                        "anchor": reference.kind,
+                        "anchor_text": reference.value,
+                        "relations": [
+                            step.model_dump(mode="json") for step in reference.path
+                        ],
+                    }
+                    for reference in references
+                ],
                 "route": f"tier_{latest.timings.tier}",
                 "tier": latest.timings.tier,
                 "resolved_entities": list(latest.result.evidence.entity_ids),
@@ -201,6 +270,7 @@ async def _run_suite(
         )
     return {
         "backend": backend,
+        "mode": mode,
         "queries": rows,
         "aggregate": {
             "samples": len(latencies),
@@ -238,15 +308,30 @@ class _JsonGraphDispatcher:
         elif tool_name in {"search_entities", "resolve_entity_alias"}:
             query = normalize_entity_alias(arguments["text"])
             expected = arguments.get("entity_type")
-            records = [
-                _summary(entity)
+            candidates = [
+                entity
                 for entity in self.entities.values()
-                if (expected is None or entity["id"].startswith(f"{expected}:"))
-                and any(
+                if expected is None or entity["id"].startswith(f"{expected}:")
+            ]
+            aliases = [
+                _summary(entity)
+                for entity in candidates
+                if any(
                     query == normalize_entity_alias(alias)
                     for alias in record_aliases(entity)
                 )
-            ][: arguments.get("limit", 25)]
+            ]
+            appellations = [
+                _summary(entity)
+                for entity in candidates
+                if matches_scoped_appellation(
+                    entity,
+                    arguments["text"],
+                    speaker_id=arguments.get("speaker_id"),
+                    household_id=arguments.get("household_id"),
+                )
+            ]
+            records = (aliases or appellations)[: arguments.get("limit", 25)]
         elif tool_name == "get_relationships":
             records = self._relationships(arguments)
         else:
@@ -306,6 +391,15 @@ def main() -> None:
     parser.add_argument("--caller", default="person:jian_kuang")
     parser.add_argument("--repeat", type=int, default=5)
     parser.add_argument(
+        "--mode",
+        choices=("tier0_enabled", "tier0_disabled"),
+        default=os.environ.get("MODE", "tier0_enabled"),
+        help=(
+            "Enable the deterministic fast parser or force every query through "
+            "the configured semantic planner. May also be set with MODE."
+        ),
+    )
+    parser.add_argument(
         "--backend",
         choices=("json", "surrealdb"),
         default="json",
@@ -322,9 +416,10 @@ def main() -> None:
             arguments.repeat,
             arguments.data_dir,
             arguments.schema_dir,
+            arguments.mode,
         )
         if arguments.backend == "json"
-        else benchmark_runtime(arguments.caller, arguments.repeat)
+        else benchmark_runtime(arguments.caller, arguments.repeat, arguments.mode)
     )
     result = asyncio.run(coroutine)
     print(json.dumps(result, ensure_ascii=False, indent=2))
