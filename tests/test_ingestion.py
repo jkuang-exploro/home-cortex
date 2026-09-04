@@ -5,8 +5,9 @@ from typing import Any
 
 import pytest
 from surrealdb import AsyncSurreal, RecordID
+from surrealdb.errors import NotFoundError
 
-from home_cortex.ingestion import ingest_directory
+from home_cortex.ingestion import _prune_table, ingest_directory
 
 STATIC_TEST_DATA = Path(__file__).parent / "static_test_data"
 
@@ -31,6 +32,47 @@ class MemoryDatabase:
         variables: dict[str, Any] | None = None,
     ) -> Any:
         return await self.client.query(statement, variables or {})
+
+
+@pytest.mark.asyncio
+async def test_pruning_a_never_created_empty_table_is_idempotent() -> None:
+    class MissingTableDatabase:
+        async def query(self, *_: Any, **__: Any) -> Any:
+            raise NotFoundError(
+                "Table",
+                "The table 'contained_in' does not exist",
+                details={"Table": {"name": "contained_in"}},
+            )
+
+    await _prune_table(  # type: ignore[arg-type]
+        MissingTableDatabase(),
+        "contained_in",
+        [],
+    )
+
+
+@pytest.mark.asyncio
+async def test_pruning_nonempty_or_unrelated_missing_table_still_fails() -> None:
+    class MissingTableDatabase:
+        async def query(self, *_: Any, **__: Any) -> Any:
+            raise NotFoundError(
+                "Table",
+                "The table 'other' does not exist",
+                details={"Table": {"name": "other"}},
+            )
+
+    with pytest.raises(NotFoundError):
+        await _prune_table(  # type: ignore[arg-type]
+            MissingTableDatabase(),
+            "contained_in",
+            [],
+        )
+    with pytest.raises(NotFoundError):
+        await _prune_table(  # type: ignore[arg-type]
+            MissingTableDatabase(),
+            "other",
+            [RecordID("other", "one")],
+        )
 
 
 @pytest.mark.asyncio

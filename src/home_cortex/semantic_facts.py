@@ -7,7 +7,6 @@ import logging
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
 from time import perf_counter
 from typing import Any, Literal, get_args
 
@@ -15,6 +14,17 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .display import resolve_display_name
 from .grounding import AgentRequestContext, GroundedAnswer
+from .operator_registry import (
+    OPERATORS,
+    PREDICATE_OPERATORS,
+    OperatorExecutionError,
+    OperatorInput,
+    OperatorValidationError,
+    evaluate_predicate,
+    execute_operator,
+    infer_field_kind,
+    operator_prompt_payload,
+)
 from .schema_catalog import RuntimeSchemaCatalog
 from .text import safe_log_token
 
@@ -30,15 +40,23 @@ FactStatus = Literal[
     "computation_impossible",
 ]
 FactOperation = Literal[
-    "resolve_entity",
-    "get_property",
-    "list",
+    "resolve_reference",
+    "select",
     "count",
-    "exists",
+    "first",
+    "last",
+    "latest",
+    "earliest",
+    "sum",
+    "average",
+    "min",
+    "max",
     "argmin",
     "argmax",
+    "date_difference",
     "completed_years",
-    "compare",
+    "duration",
+    "unit_conversion",
 ]
 ReferenceKind = Literal[
     "self",
@@ -55,8 +73,18 @@ class _SemanticModel(BaseModel):
 
 class SemanticFilter(_SemanticModel):
     property: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
-    operator: Literal["eq"] = "eq"
-    value: str | int | float | bool
+    operator: Literal[
+        "eq",
+        "ne",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "in",
+        "exists",
+        "date_range",
+    ] = "eq"
+    value: str | int | float | bool | tuple[str | int | float, ...] | None = None
     source: Literal["entity", "relation"] = "entity"
 
 
@@ -91,19 +119,21 @@ class SemanticFactRequest(_SemanticModel):
         pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
     )
     other: SemanticReference | None = None
-    comparison: Literal["older", "younger"] | None = None
+    mode: Literal["days", "seconds"] | None = None
+    from_unit: str | None = Field(default=None, max_length=16)
+    to_unit: str | None = Field(default=None, max_length=16)
 
     @model_validator(mode="after")
     def validate_operation(self) -> "SemanticFactRequest":
-        if self.operation in {"get_property", "argmin", "argmax"} and not self.property:
-            raise ValueError(f"{self.operation} requires property")
+        if self.operation not in OPERATORS:
+            raise ValueError("operation is not in the generic operator registry")
         if self.operation == "completed_years" and self.property is None:
             object.__setattr__(self, "property", "birth_date")
-        if self.operation == "compare" and (
-            self.other is None or self.comparison is None
-        ):
-            raise ValueError("compare requires other and comparison")
         return self
+
+
+if not set(get_args(FactOperation)).issubset(OPERATORS):
+    raise RuntimeError("FactOperation must be backed by the generic operator registry")
 
 
 class SemanticPlan(_SemanticModel):
@@ -181,7 +211,11 @@ class SemanticSchemaRegistry:
 
     PROPERTY_CANDIDATES: Mapping[str, tuple[str, ...]] = {
         "display_name": ("display_name", "name", "full_name"),
+        "given_name": ("given_name", "first_name"),
+        "family_name": ("family_name", "last_name", "surname"),
+        "form_of_address": ("form_of_address", "address_as"),
         "birth_date": ("birth_date", "birthday", "dob", "date_of_birth"),
+        "full_address": ("full_address", "address", "street_address"),
         "gender": ("gender", "sex"),
         "household_role": ("household_role", "member_role", "role"),
     }
@@ -190,6 +224,7 @@ class SemanticSchemaRegistry:
         "child": ("parent_of",),
         "parent": ("parent_of", "child_of"),
         "member": ("lives_in", "member_of"),
+        "residence": ("lives_in", "resides_at"),
     }
 
     def __init__(self, catalog: RuntimeSchemaCatalog) -> None:
@@ -218,6 +253,8 @@ class SemanticSchemaRegistry:
                     direction = "in"
                 elif semantic == "member":
                     direction = "in"
+                elif semantic == "residence":
+                    direction = "out"
                 return candidate, direction
         return None
 
@@ -230,6 +267,9 @@ class SemanticSchemaRegistry:
     def capability_payload(self) -> dict[str, Any]:
         if self._capability_cache is not None:
             return self._capability_cache
+        fact_operations = set(get_args(FactOperation))
+        exposed_operators = fact_operations | set(PREDICATE_OPERATORS) | {"traverse"}
+        contracts = operator_prompt_payload()
         semantic_properties = {
             entity_type: sorted(self.semantic_properties(entity_type))
             for entity_type in self.catalog.entities
@@ -253,7 +293,10 @@ class SemanticSchemaRegistry:
                 relation: sorted(self.semantic_relation_properties(relation))
                 for relation in relations
             },
-            "operations": list(get_args(FactOperation)),
+            "operations": sorted(fact_operations),
+            "operator_contracts": {
+                name: contracts[name] for name in sorted(exposed_operators)
+            },
         }
         return self._capability_cache
 
@@ -310,52 +353,212 @@ class SemanticSchemaRegistry:
             if (physical := self.physical_property(entity_type, semantic)) is not None
         )
 
+    def mentions_known_entity(self, text: str) -> bool:
+        normalized = text.casefold()
+        return any(
+            alias.casefold() in normalized
+            for alias in self.catalog.entity_aliases
+            if len(alias.strip()) >= 2
+        )
+
     def validates(self, request: SemanticFactRequest) -> bool:
         """Reject model plans outside the advertised semantic protocol."""
         references = (request.subject,) + ((request.other,) if request.other else ())
+        final_types: dict[int, frozenset[str]] = {}
         for reference in references:
-            if reference.kind == "assistant" and reference.path:
-                return False
-            if reference.entity_type is not None and not self.catalog.has_entity_type(
-                reference.entity_type
+            contextual_type = {
+                "self": "person",
+                "assistant": "person",
+                "current_household": "address",
+            }.get(reference.kind)
+            if (
+                contextual_type is not None
+                and reference.entity_type is not None
+                and reference.entity_type != contextual_type
             ):
                 return False
-            if any(self.physical_relation(step.relation) is None for step in reference.path):
+            if (
+                reference.kind == "entity_id"
+                and reference.value is not None
+                and reference.entity_type is not None
+                and reference.entity_type != reference.value.partition(":")[0]
+            ):
                 return False
+            if reference.kind == "assistant" and reference.path:
+                return False
+            resolved_types = self._reference_entity_types(reference)
+            if resolved_types is None:
+                return False
+            final_types[id(reference)] = resolved_types
+            step_types = self._base_entity_types(reference)
             for step in reference.path:
+                next_types = self._traversal_target_types(step.relation, step_types)
+                if next_types is None:
+                    return False
                 for item in step.filters:
-                    if item.source == "entity" and not any(
-                        item.property in self.semantic_properties(entity_type)
-                        for entity_type in self.catalog.entities
-                    ):
-                        return False
+                    if item.source == "entity":
+                        kind = self._semantic_kind(next_types, item.property)
+                        if kind is None or not self._valid_predicate(item, kind):
+                            return False
                     if item.source == "relation":
                         resolved = self.physical_relation(step.relation)
-                        if resolved is None or self.relation_property(
-                            resolved[0], item.property
-                        ) is None:
+                        if resolved is None:
                             return False
-        if request.property is not None and not any(
-            request.property in self.semantic_properties(entity_type)
-            for entity_type in self.catalog.entities
-        ):
+                        physical = self.relation_property(resolved[0], item.property)
+                        if physical is None:
+                            return False
+                        kind = self.catalog.relation_field_type(resolved[0], physical)
+                        if not self._valid_predicate(item, kind):
+                            return False
+                step_types = next_types
+
+        operation = OPERATORS[request.operation]
+        collection_input = bool(request.subject.path or request.other is not None)
+        if operation.input_shape == "collection" and not collection_input:
             return False
-        property_kinds = (
-            self.semantic_property_kinds(request.property)
+        if request.operation == "resolve_reference":
+            return request.property is None and request.other is None
+        if request.operation == "select":
+            if request.other is not None:
+                return False
+            if request.property is None:
+                return bool(request.subject.path)
+            return self._semantic_kind(
+                final_types[id(request.subject)],
+                request.property,
+            ) is not None
+
+        field_kind = (
+            self._semantic_kind(final_types[id(request.subject)], request.property)
             if request.property is not None
-            else frozenset()
+            else "unknown"
         )
-        if request.operation == "completed_years" and not property_kinds.intersection(
-            {"date", "datetime"}
+        if request.property is not None and field_kind is None:
+            return False
+        if (
+            request.property is not None
+            and field_kind == "unknown"
+            and "any" not in operation.field_kinds
         ):
             return False
-        if request.operation in {"argmin", "argmax"} and not property_kinds.intersection(
-            {"integer", "number", "date", "datetime"}
+        if request.other is not None:
+            other_kind = self._semantic_kind(
+                final_types[id(request.other)],
+                request.property,
+            )
+            if field_kind != other_kind:
+                return False
+        parameters = {
+            "reference": "household_now",
+            "mode": request.mode,
+            "from_unit": request.from_unit,
+            "to_unit": request.to_unit,
+        }
+        try:
+            operation.validate(
+                field=request.property,
+                field_kind=field_kind or "unknown",
+                order_by=(
+                    request.property
+                    if request.operation in {"latest", "earliest"}
+                    else None
+                ),
+                order_by_kind=field_kind or "unknown",
+                parameters=parameters,
+            )
+        except OperatorValidationError:
+            return False
+        return True
+
+    def _base_entity_types(self, reference: SemanticReference) -> frozenset[str]:
+        if reference.kind in {"self", "assistant"}:
+            return frozenset({"person"})
+        if reference.kind == "current_household":
+            return frozenset({"address"})
+        if reference.kind == "entity_id" and reference.value is not None:
+            return frozenset({reference.value.partition(":")[0]})
+        if reference.entity_type is not None:
+            return frozenset({reference.entity_type})
+        return frozenset(self.catalog.entities)
+
+    def _reference_entity_types(
+        self,
+        reference: SemanticReference,
+    ) -> frozenset[str] | None:
+        types = self._base_entity_types(reference)
+        if not types or any(not self.catalog.has_entity_type(item) for item in types):
+            return None
+        for step in reference.path:
+            types = self._traversal_target_types(step.relation, types) or frozenset()
+            if not types:
+                return None
+        return types
+
+    def _traversal_target_types(
+        self,
+        semantic_relation: str,
+        source_types: frozenset[str],
+    ) -> frozenset[str] | None:
+        resolved = self.physical_relation(semantic_relation)
+        if resolved is None:
+            return None
+        relation, direction = resolved
+        schema = self.catalog.relations.get(relation)
+        if schema is None:
+            return None
+        from_types = frozenset(schema.from_types)
+        to_types = frozenset(schema.to_types)
+        if direction == "out":
+            return to_types if source_types.intersection(from_types) else None
+        if direction == "in":
+            return from_types if source_types.intersection(to_types) else None
+        targets: set[str] = set()
+        if source_types.intersection(from_types):
+            targets.update(to_types)
+        if source_types.intersection(to_types):
+            targets.update(from_types)
+        return frozenset(targets) or None
+
+    def _semantic_kind(
+        self,
+        entity_types: frozenset[str],
+        semantic_property: str | None,
+    ) -> str | None:
+        if semantic_property is None:
+            return None
+        kinds = {
+            self.catalog.entity_field_type(entity_type, physical)
+            for entity_type in entity_types
+            if (physical := self.physical_property(entity_type, semantic_property))
+            is not None
+        }
+        if len(kinds) != 1:
+            return None
+        return next(iter(kinds))
+
+    @staticmethod
+    def _valid_predicate(item: SemanticFilter, field_kind: str) -> bool:
+        definition = OPERATORS[item.operator]
+        if field_kind == "unknown" and "any" not in definition.field_kinds:
+            return False
+        if item.operator == "exists" and not (
+            item.value is None or isinstance(item.value, bool)
         ):
             return False
-        if request.operation == "compare" and "birth_date" not in set().union(
-            *(self.semantic_properties(item) for item in self.catalog.entities)
+        if item.operator == "in" and not isinstance(item.value, tuple):
+            return False
+        if item.operator == "date_range" and (
+            not isinstance(item.value, tuple)
+            or len(item.value) != 2
+            or any(not isinstance(value, str) for value in item.value)
         ):
+            return False
+        try:
+            definition.validate(
+                field=item.property,
+                field_kind=field_kind,
+            )
+        except OperatorValidationError:
             return False
         return True
 
@@ -432,7 +635,14 @@ class TierZeroSemanticParser:
         if household and _asks_count(normalized):
             return SemanticFactRequest(operation="count", subject=_household_members())
         if household and _asks_list(normalized):
-            return SemanticFactRequest(operation="list", subject=_household_members())
+            return SemanticFactRequest(operation="select", subject=_household_members())
+
+        if _asks_residence_address(normalized):
+            return SemanticFactRequest(
+                operation="select",
+                subject=_self_residence(),
+                property="full_address",
+            )
 
         property_name, stem = _extract_property(normalized)
         if property_name == "age":
@@ -450,7 +660,7 @@ class TierZeroSemanticParser:
             reference = self._parse_reference(stem)
             return (
                 SemanticFactRequest(
-                    operation="get_property",
+                    operation="select",
                     subject=reference,
                     property=property_name,
                 )
@@ -468,7 +678,7 @@ class TierZeroSemanticParser:
         if _asks_identity(normalized):
             reference = self._parse_reference(_strip_identity_syntax(normalized))
             return (
-                SemanticFactRequest(operation="resolve_entity", subject=reference)
+                SemanticFactRequest(operation="resolve_reference", subject=reference)
                 if reference is not None
                 else None
             )
@@ -539,10 +749,10 @@ class TierZeroSemanticParser:
         if left is None or right is None:
             return None
         return SemanticFactRequest(
-            operation="compare",
+            operation="argmin",
             subject=left,
             other=right,
-            comparison="older",
+            property="birth_date",
         )
 
 
@@ -563,9 +773,11 @@ class HouseholdFactEngine:
         request: SemanticFactRequest,
         context: AgentRequestContext,
     ) -> tuple[FactResult, int, float, float]:
+        if not self.schema.validates(request):
+            return FactResult("computation_impossible"), 0, 0, 0
         execution = _FactExecution(self.dispatcher, context.caller_entity_id)
         resolution_started = perf_counter()
-        allow_empty_collection = request.operation in {"count", "list", "exists"}
+        allow_empty_collection = request.operation in {"count", "select"}
         try:
             entities = await self._resolve_reference(
                 request.subject,
@@ -669,6 +881,7 @@ class HouseholdFactEngine:
                     "entity_id": entity_id,
                     "relation": relation,
                     "include_ended": False,
+                    "include_residents": False,
                     "limit": self.max_records,
                 }
                 if direction is not None:
@@ -708,7 +921,7 @@ class HouseholdFactEngine:
                     evidence=FactEvidence(semantic_property=item.property),
                     missing=(item.property,),
                 )
-            if edge.get(physical) != item.value:
+            if not evaluate_predicate(item.operator, edge.get(physical), item.value):
                 return False
         return True
 
@@ -742,7 +955,10 @@ class HouseholdFactEngine:
                 physical not in entity for _, physical in mapped if physical is not None
             )
             record = await self._load(entity, execution) if needs_load else dict(entity)
-            if all(record.get(physical) == item.value for item, physical in mapped):
+            if all(
+                evaluate_predicate(item.operator, record.get(physical), item.value)
+                for item, physical in mapped
+            ):
                 matched.append(record)
         return matched
 
@@ -765,13 +981,12 @@ class HouseholdFactEngine:
             tuple(execution.relationship_evidence),
         )
         if request.operation == "count":
-            return FactResult("found", len(entities), evidence)
-        if request.operation == "exists":
-            return FactResult("found", bool(entities), evidence)
-        if request.operation == "list":
+            value = execute_operator("count", OperatorInput(records=entities))
+            return FactResult("found", value, evidence)
+        if request.operation == "select" and request.property is None:
             visible = [await self._load_if_unnamed(item, execution) for item in entities]
             return FactResult("found", visible, evidence)
-        if request.operation == "resolve_entity":
+        if request.operation == "resolve_reference":
             singular = await self._singular(
                 entities,
                 request,
@@ -781,70 +996,119 @@ class HouseholdFactEngine:
             if isinstance(singular, FactResult):
                 return singular
             return FactResult("found", singular, evidence)
-        if request.operation in {"get_property", "completed_years"}:
+        if request.operation == "select":
             singular = await self._singular(entities, request, execution)
             if isinstance(singular, FactResult):
                 return singular
-            property_result = self._property(singular, request.property or "birth_date")
+            property_result = self._property(singular, request.property or "")
             if isinstance(property_result, FactResult):
                 return property_result
-            if request.operation == "completed_years":
-                years = _completed_years(property_result, context.current_time.date())
-                if years is None:
-                    return FactResult(
-                        "computation_impossible",
-                        evidence=evidence,
-                        missing_requirements=(request.property or "birth_date",),
-                    )
-                return FactResult("found", years, evidence)
             return FactResult("found", property_result, evidence)
-        if request.operation in {"argmin", "argmax"}:
-            candidates: list[tuple[Any, dict[str, Any]]] = []
-            for entity in entities:
-                record = await self._load(entity, execution)
-                value = self._property(record, request.property or "")
-                if isinstance(value, FactResult):
-                    return FactResult(
-                        "computation_impossible",
-                        evidence=evidence,
-                        missing_requirements=(request.property or "",),
-                    )
-                ordered = _ordered_value(value)
-                if ordered is None:
-                    return FactResult("computation_impossible", evidence=evidence)
-                candidates.append((ordered, record))
-            if not candidates:
-                return FactResult("relationship_not_found", evidence=evidence)
-            selected = (min if request.operation == "argmin" else max)(
-                candidates,
-                key=lambda item: item[0],
-            )[1]
-            return FactResult("found", selected, evidence)
-        if request.operation == "compare":
+        definition = OPERATORS[request.operation]
+        records = list(entities)
+        if request.other is not None:
             left = await self._singular(entities, request, execution)
             right = await self._singular(other_entities, request, execution)
             if isinstance(left, FactResult):
                 return left
             if isinstance(right, FactResult):
                 return right
-            left_date = _parse_date(self._property(left, "birth_date"))
-            right_date = _parse_date(self._property(right, "birth_date"))
-            if left_date is None or right_date is None:
+            records = [left, right]
+        elif definition.input_shape == "scalar":
+            singular = await self._singular(entities, request, execution)
+            if isinstance(singular, FactResult):
+                return singular
+            records = [singular]
+        else:
+            records = [await self._load(item, execution) for item in records]
+        normalized: list[dict[str, Any]] = []
+        for record in records:
+            value = (
+                self._property(record, request.property)
+                if request.property is not None
+                else record
+            )
+            if isinstance(value, FactResult):
                 return FactResult(
                     "computation_impossible",
                     evidence=evidence,
-                    missing_requirements=("birth_date",),
+                    missing_requirements=(request.property or "",),
                 )
-            older = left if left_date < right_date else right
-            younger = right if older is left else left
-            selected = older if request.comparison == "older" else younger
-            other = younger if selected is older else older
-            return FactResult(
-                "found",
-                {"selected": selected, "other": other, "equal": left_date == right_date},
-                evidence,
+            normalized.append({"value": value, "entity": record})
+        if not normalized:
+            return FactResult("computation_impossible", evidence=evidence)
+        if request.operation in {"latest", "earliest"}:
+            normalized.sort(
+                key=lambda item: item["value"],
+                reverse=request.operation == "latest",
             )
-        return FactResult("computation_impossible", evidence=evidence)
+        field = "value" if request.property is not None else None
+        parameters = {
+            "reference": "household_now",
+            "mode": request.mode,
+            "from_unit": request.from_unit,
+            "to_unit": request.to_unit,
+        }
+        try:
+            definition.validate(
+                field=field,
+                field_kind=(
+                    infer_field_kind([item["value"] for item in normalized])
+                    if field is not None
+                    else "unknown"
+                ),
+                order_by=(field if request.operation in {"latest", "earliest"} else None),
+                order_by_kind=(
+                    infer_field_kind([item["value"] for item in normalized])
+                    if field is not None
+                    else "unknown"
+                ),
+                parameters=parameters,
+            )
+            value = execute_operator(
+                request.operation,
+                OperatorInput(
+                    records=normalized,
+                    field=field,
+                    order_by=field if request.operation in {"latest", "earliest"} else None,
+                    mode=request.mode,
+                    reference="household_now",
+                    from_unit=request.from_unit,
+                    to_unit=request.to_unit,
+                    now=context.current_time,
+                ),
+            )
+        except (OperatorValidationError, OperatorExecutionError, TypeError, ValueError):
+            return FactResult(
+                "computation_impossible",
+                evidence=evidence,
+                missing_requirements=((request.property,) if request.property else ()),
+            )
+        if isinstance(value, Mapping) and isinstance(value.get("entity"), Mapping):
+            selected = dict(value["entity"])
+            if request.other is not None:
+                selected_id = selected.get("id")
+                other = next(
+                    (
+                        record
+                        for record in records
+                        if record.get("id") != selected_id
+                    ),
+                    records[0],
+                )
+                selected_value = self._property(selected, request.property or "")
+                other_value = self._property(other, request.property or "")
+                return FactResult(
+                    "found",
+                    {
+                        "selected": selected,
+                        "other": other,
+                        "equal": selected_value == other_value,
+                    },
+                    evidence,
+                )
+            value = selected
+        return FactResult("found", value, evidence)
 
     async def _singular(
         self,
@@ -960,30 +1224,42 @@ class FactRenderer:
             if request.subject.kind == "current_household":
                 return f"家里目前有{_zh_number(count)}{noun}。"
             return f"您目前有{_zh_number(count)}{noun}。"
-        if request.operation == "list":
+        if request.operation == "select" and request.property is None:
             values = result.value if isinstance(result.value, list) else []
+            if not values:
+                return "家庭资料中目前没有记录当前家庭成员。"
             names = "、".join(_name(item, "zh") for item in values)
             return f"家里目前的成员有：{names}。"
-        if request.operation == "exists":
-            return "有相关记录。" if result.value else "没有相关记录。"
-        if request.operation == "get_property":
+        if request.operation == "select":
             if request.property == "birth_date":
                 return f"{_subject_possessive(request.subject)}生日是{result.value}。"
+            if request.property == "full_address":
+                return f"您的具体住址是{_format_address(result.value)}。"
             return f"查询到的值是{result.value}。"
         if request.operation == "completed_years":
             return f"{_subject_nominative(request.subject)}今年{result.value}岁。"
         if request.operation in {"argmin", "argmax"}:
+            if request.other is not None and isinstance(result.value, Mapping):
+                selected = _name(result.value.get("selected"), "zh")
+                other = _name(result.value.get("other"), "zh")
+                if result.value.get("equal"):
+                    return f"{selected}和{other}年龄相同。"
+                adjective = "大" if request.operation == "argmin" else "小"
+                return f"{selected}年龄比{other}{adjective}。"
             if request.property == "birth_date":
                 qualifier = "最年长" if request.operation == "argmin" else "最年轻"
                 return f"家里{qualifier}的是{_name(result.value, 'zh')}。"
             return f"符合极值条件的是{_name(result.value, 'zh')}。"
-        if request.operation == "compare" and isinstance(result.value, Mapping):
-            selected = _name(result.value.get("selected"), "zh")
-            other = _name(result.value.get("other"), "zh")
-            if result.value.get("equal"):
-                return f"{selected}和{other}年龄相同。"
-            adjective = "大" if request.comparison == "older" else "小"
-            return f"{selected}年龄比{other}{adjective}。"
+        if request.operation in {"sum", "average", "min", "max"}:
+            return f"计算结果是{result.value}。"
+        if request.operation in {
+            "date_difference",
+            "duration",
+            "unit_conversion",
+        }:
+            return f"换算结果是{result.value}。"
+        if request.operation in {"first", "last", "latest", "earliest"}:
+            return f"符合条件的是{_name(result.value, 'zh')}。"
         if request.subject.kind == "assistant":
             return f"我是{context.assistant_display_name}。"
         name = _name(result.value, "zh")
@@ -1008,23 +1284,37 @@ class FactRenderer:
             }[result.status]
         if request.operation == "count":
             return f"The current count is {result.value}."
-        if request.operation == "list":
+        if request.operation == "select" and request.property is None:
+            if not result.value:
+                return "The household data has no current member records."
             return "Current household members: " + ", ".join(
                 _name(item, "en") for item in result.value
             ) + "."
-        if request.operation == "get_property":
+        if request.operation == "select":
+            if request.property == "full_address":
+                return f"Your street address is {_format_address(result.value)}."
             return f"The requested value is {result.value}."
         if request.operation == "completed_years":
             return f"The completed age is {result.value}."
         if request.operation in {"argmin", "argmax"}:
+            if request.other is not None and isinstance(result.value, Mapping):
+                selected = _name(result.value.get("selected"), "en")
+                other = _name(result.value.get("other"), "en")
+                if result.value.get("equal"):
+                    return f"{selected} and {other} are the same age."
+                adjective = "older" if request.operation == "argmin" else "younger"
+                return f"{selected} is {adjective} than {other}."
             return f"The matching household member is {_name(result.value, 'en')}."
-        if request.operation == "compare" and isinstance(result.value, Mapping):
-            selected = _name(result.value.get("selected"), "en")
-            other = _name(result.value.get("other"), "en")
-            if result.value.get("equal"):
-                return f"{selected} and {other} are the same age."
-            adjective = "older" if request.comparison == "older" else "younger"
-            return f"{selected} is {adjective} than {other}."
+        if request.operation in {"sum", "average", "min", "max"}:
+            return f"The computed result is {result.value}."
+        if request.operation in {
+            "date_difference",
+            "duration",
+            "unit_conversion",
+        }:
+            return f"The converted result is {result.value}."
+        if request.operation in {"first", "last", "latest", "earliest"}:
+            return f"The matching result is {_name(result.value, 'en')}."
         if request.subject.kind == "assistant":
             return f"I am {context.assistant_display_name}, the Home Cortex household assistant."
         return f"The resolved person is {_name(result.value, 'en')}."
@@ -1060,7 +1350,10 @@ class SemanticFactService:
         llm_ms = 0.0
         llm_call_count = 0
         if request is None:
-            if self.planner is None or not _likely_semantic_fact(latest):
+            if self.planner is None or not (
+                _likely_semantic_fact(latest)
+                or self.engine.schema.mentions_known_entity(latest)
+            ):
                 return SemanticAttempt(False)
             tier = 1
             llm_call_count = 1
@@ -1140,7 +1433,7 @@ class SemanticFactService:
         llm_call_count: int,
     ) -> FactAnswer:
         safe_request = request or SemanticFactRequest(
-            operation="resolve_entity",
+            operation="resolve_reference",
             subject=SemanticReference(kind="self", entity_type="person"),
         )
         result = FactResult("computation_impossible")
@@ -1261,10 +1554,10 @@ def _likely_semantic_fact(text: str) -> bool:
     if not normalized:
         return False
     semantic_terms = re.search(
-        r"家里|我家|家庭|老婆|妻子|丈夫|老公|儿子|女儿|孩子|"
+        r"家里|我家|我们家|家庭|我的|老婆|妻子|丈夫|老公|儿子|女儿|孩子|"
         r"爸爸|父亲|妈妈|母亲|生日|出生|几岁|年纪|年龄|"
         r"household|wife|husband|spouse|son|daughter|child|parent|"
-        r"birthday|birth date|how old",
+        r"birthday|birth date|how old|my |our ",
         normalized,
     )
     question_shape = re.search(
@@ -1310,8 +1603,16 @@ def _plan_for_log(request: SemanticFactRequest) -> dict[str, Any]:
     payload = request.model_dump(mode="json")
     for key in ("subject", "other"):
         reference = payload.get(key)
-        if isinstance(reference, dict) and reference.get("value") is not None:
+        if not isinstance(reference, dict):
+            continue
+        if reference.get("value") is not None:
             reference["value"] = "[redacted]"
+        for step in reference.get("path", []):
+            if not isinstance(step, dict):
+                continue
+            for item in step.get("filters", []):
+                if isinstance(item, dict) and "value" in item:
+                    item["value"] = "[redacted]"
     return payload
 
 
@@ -1379,6 +1680,16 @@ def _asks_household_children(text: str) -> bool:
     return _asks_count(text) and bool(re.search(r"孩子|小孩|children", text))
 
 
+def _asks_residence_address(text: str) -> bool:
+    return bool(
+        re.search(
+            r"住哪里|住哪儿|具体住址|街道地址|家庭住址|家庭地址|"
+            r"住址(?:是)?什么|where do i live|my (?:home |street )?address",
+            text,
+        )
+    )
+
+
 def _is_household_oldest(text: str) -> bool:
     return (
         _mentions_household(text)
@@ -1391,6 +1702,14 @@ def _household_members() -> SemanticReference:
         kind="current_household",
         entity_type="address",
         path=(SemanticRelationStep(relation="member"),),
+    )
+
+
+def _self_residence() -> SemanticReference:
+    return SemanticReference(
+        kind="self",
+        entity_type="person",
+        path=(SemanticRelationStep(relation="residence"),),
     )
 
 
@@ -1410,38 +1729,6 @@ def _entity_type(entity: Mapping[str, Any]) -> str:
 
 def _string_or_none(value: Any) -> str | None:
     return str(value) if value is not None else None
-
-
-def _parse_date(value: Any) -> date | None:
-    if not isinstance(value, str):
-        return None
-    try:
-        return date.fromisoformat(value[:10])
-    except ValueError:
-        return None
-
-
-def _ordered_value(value: Any) -> int | float | date | datetime | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return value
-    parsed_date = _parse_date(value)
-    if parsed_date is not None:
-        return parsed_date
-    if isinstance(value, str):
-        try:
-            return datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-    return None
-
-
-def _completed_years(value: Any, today: date) -> int | None:
-    born = _parse_date(value)
-    if born is None or born > today:
-        return None
-    return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 
 
 def _name(entity: Any, language: str) -> str:
@@ -1481,6 +1768,7 @@ def _relation_label(
         "child": "亲子",
         "parent": "父母",
         "member": "家庭成员",
+        "residence": "居住地",
     }.get(semantic_relation or _last_relation(reference), "对应的")
 
 
@@ -1517,6 +1805,7 @@ def _relation_noun(step: SemanticRelationStep) -> str:
         ("parent", "female"): "母亲",
         ("parent", None): "父母",
         ("member", None): "家庭成员",
+        ("residence", None): "住所",
     }.get((step.relation, gender), "关联实体")
 
 
@@ -1526,8 +1815,12 @@ def _property_label(properties: Sequence[str]) -> str:
     return {
         "birth_date": "出生日期",
         "display_name": "姓名",
+        "given_name": "名字",
+        "family_name": "姓氏",
+        "form_of_address": "称呼",
         "gender": "性别",
         "household_role": "家庭角色",
+        "full_address": "具体住址",
     }.get(properties[0], "所需信息")
 
 
@@ -1545,3 +1838,16 @@ def _zh_number(value: int) -> str:
         9: "九",
         10: "十",
     }.get(value, str(value))
+
+
+def _format_address(value: Any) -> str:
+    if not isinstance(value, Mapping):
+        return str(value)
+    street = value.get("street")
+    city = value.get("city")
+    state = value.get("state")
+    postal = value.get("zip") or value.get("postal_code")
+    locality = ", ".join(str(item) for item in (city, state) if item)
+    if postal:
+        locality = f"{locality} {postal}".strip()
+    return ", ".join(str(item) for item in (street, locality) if item)

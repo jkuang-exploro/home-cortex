@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from surrealdb import RecordID
+from surrealdb.errors import NotFoundError
 
 from .db import Database
 from .edge_schema import EdgeSchema, EdgeSchemaRegistry, UnknownEdgeSchemaError
@@ -383,7 +384,19 @@ async def _prune_table(
     record_ids: list[RecordID],
 ) -> None:
     """Make each JSON file the source of truth for its corresponding table."""
-    await database.query(
-        "DELETE FROM type::table($table) WHERE id NOT IN $record_ids;",
-        {"table": table, "record_ids": record_ids},
-    )
+    try:
+        await database.query(
+            "DELETE FROM type::table($table) WHERE id NOT IN $record_ids;",
+            {"table": table, "record_ids": record_ids},
+        )
+    except NotFoundError as error:
+        # SurrealDB 3 rejects DELETE against a table that has never existed.
+        # Empty retired/source tables are already in the desired state.
+        missing_table = error.table_name
+        message = str(error).casefold()
+        if not record_ids and (
+            missing_table == table
+            or f"table '{table.casefold()}' does not exist" in message
+        ):
+            return
+        raise

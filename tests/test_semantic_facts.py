@@ -4,9 +4,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
+from home_cortex.agent_service import AgentService
 from home_cortex.edge_schema import EdgeSchemaRegistry
 from home_cortex.grounding import AgentRequestContext
+from home_cortex.operator_registry import OPERATORS
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
 from home_cortex.semantic_facts import (
     HouseholdFactEngine,
@@ -19,6 +22,7 @@ from home_cortex.semantic_facts import (
     SemanticSchemaRegistry,
     TierZeroSemanticParser,
 )
+from home_cortex.tools import get_tool_definitions
 
 DATA_DIR = Path(__file__).parents[1] / "data"
 
@@ -156,6 +160,7 @@ async def _ask(
         ("我是谁", "匡健"),
         ("你是谁", "老管家"),
         ("家里都有谁", "匡健"),
+        ("家里都有哪些人", "匡健"),
         ("家里有几个人", "五个人"),
         ("我老婆是谁", "巴璞"),
         ("我生日是哪天", "1988-11-11"),
@@ -170,6 +175,9 @@ async def _ask(
         ("我老婆和我谁年龄大", "巴璞年龄比匡健大"),
         ("家里有几个孩子", "两个孩子"),
         ("我老婆的爸爸是谁", "您妻子的父亲是巴志刚"),
+        ("我家住哪里", "12745 Droxford St, Cerritos, CA 90703"),
+        ("请问我的具体住址是什么？", "12745 Droxford St, Cerritos, CA 90703"),
+        ("街道地址", "12745 Droxford St, Cerritos, CA 90703"),
     ),
 )
 async def test_canonical_and_composed_facts_are_deterministic(
@@ -198,6 +206,21 @@ async def test_household_list_is_current_and_uses_one_graph_query(
     assert "张玉梅" not in answer.text
     assert answer.timings.db_query_count == 1
     assert [name for name, _ in dispatcher.calls] == ["get_relationships"]
+
+
+@pytest.mark.asyncio
+async def test_empty_household_list_has_a_clear_response(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    dispatcher.edges["lives_in"] = []
+
+    answer = await _ask(service, context, "家里都有哪些人")
+
+    assert answer.result.status == "found"
+    assert answer.result.value == []
+    assert answer.text == "家庭资料中目前没有记录当前家庭成员。"
 
 
 def test_birth_date_plan_never_contains_physical_alias() -> None:
@@ -273,7 +296,7 @@ async def test_named_entity_with_absent_spouse_preserves_relationship_status(
 ) -> None:
     dispatcher.edges["spouse_of"] = []
     request = SemanticFactRequest(
-        operation="resolve_entity",
+        operation="resolve_reference",
         subject=SemanticReference(
             kind="named_entity",
             value="匡健",
@@ -361,6 +384,106 @@ def test_capabilities_are_semantic_and_new_fields_require_no_handler(
     assert "favorite_color" in schema.capability_payload()["semantic_properties"]["person"]
     assert "birth_date" in schema.capability_payload()["semantic_properties"]["person"]
     assert "dob" not in schema.capability_payload()["semantic_properties"]["person"]
+    assert "first_name" not in schema.capability_payload()["semantic_properties"]["person"]
+    assert "last_name" not in schema.capability_payload()["semantic_properties"]["person"]
+    contracts = schema.capability_payload()["operator_contracts"]
+    assert contracts["average"]["field_types"] == ["integer", "number"]
+    assert contracts["completed_years"]["output"] == "integer"
+    assert set(schema.capability_payload()["operations"]).issubset(OPERATORS)
+
+
+@pytest.mark.asyncio
+async def test_tier_one_can_select_a_new_schema_field_without_a_fact_handler(
+    dispatcher: FixtureGraphDispatcher,
+    context: AgentRequestContext,
+) -> None:
+    dispatcher.entities["person:jian_kuang"]["favorite_color"] = "green"
+    catalog = RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    person = catalog.entities["person"]
+    augmented = type(person)(
+        "person",
+        (*person.properties, "favorite_color"),
+        {**person.property_types, "favorite_color": "string"},
+    )
+    schema = SemanticSchemaRegistry(
+        RuntimeSchemaCatalog({**catalog.entities, "person": augmented}, catalog.relations)
+    )
+
+    class Interpreter:
+        async def plan_semantic_fact(self, *_: Any, **__: Any) -> dict[str, Any]:
+            return {
+                "requires_fact": True,
+                "request": {
+                    "operation": "select",
+                    "subject": {"kind": "self", "entity_type": "person"},
+                    "property": "favorite_color",
+                },
+            }
+
+    semantic = SemanticFactService(
+        HouseholdFactEngine(dispatcher, schema),
+        planner=SemanticFactPlanner(Interpreter(), schema),
+    )
+
+    answer = await _ask(semantic, context, "我的偏爱颜色是什么？")
+
+    assert answer.result.status == "found"
+    assert answer.result.value == "green"
+    assert answer.timings.llm_call_count == 1
+
+
+def test_semantic_ir_rejects_non_allowlisted_operation() -> None:
+    with pytest.raises(ValidationError):
+        SemanticFactRequest.model_validate(
+            {
+                "operation": "GET_AGE",
+                "subject": {"kind": "self", "entity_type": "person"},
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_agent_service_reported_queries_never_reach_legacy_planner(
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    catalog = RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+
+    class NoLegacyPlanner:
+        async def plan_grounding(self, *_: Any, **__: Any) -> dict[str, Any]:
+            raise AssertionError("legacy physical-field planner was invoked")
+
+    agent = AgentService(
+        NoLegacyPlanner(),  # type: ignore[arg-type]
+        dispatcher,  # type: ignore[arg-type]
+        system_prompt="You are the household steward.",
+        tools=get_tool_definitions(("get_entity",)),
+        schema_catalog=catalog,
+        localized_identity={"zh": "老管家"},
+        assistant_id="steward",
+        home_entity_id="address:fort_cerritos",
+        clock=lambda: datetime.fromisoformat("2026-09-03T12:00:00-07:00"),
+    )
+    identity = {"id": "person:jian_kuang", "name": ["Jian Kuang", "匡健"]}
+
+    answers = {
+        question: (
+            await agent.answer(question, user_entity=identity)
+        ).answer
+        for question in (
+            "我是谁",
+            "家里都有哪些人",
+            "我家住哪里",
+            "请问我的具体住址是什么？",
+            "街道地址",
+        )
+    }
+
+    assert "匡健" in answers["我是谁"]
+    assert "巴璞" in answers["家里都有哪些人"]
+    assert all(
+        "12745 Droxford St" in answers[question]
+        for question in ("我家住哪里", "请问我的具体住址是什么？", "街道地址")
+    )
 
 
 def test_semantic_validator_rejects_type_incompatible_extreme(
@@ -377,6 +500,48 @@ def test_semantic_validator_rejects_type_incompatible_extreme(
     )
 
     assert schema.validates(request) is False
+
+
+def test_semantic_validator_rejects_context_reference_type_spoofing(
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    schema = SemanticSchemaRegistry(
+        RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    )
+
+    assert schema.validates(
+        SemanticFactRequest(
+            operation="resolve_reference",
+            subject=SemanticReference(kind="self", entity_type="address"),
+        )
+    ) is False
+    assert schema.validates(
+        SemanticFactRequest(
+            operation="resolve_reference",
+            subject=SemanticReference(
+                kind="entity_id",
+                value="person:jian_kuang",
+                entity_type="address",
+            ),
+        )
+    ) is False
+
+    assert schema.validates(
+        SemanticFactRequest(
+            operation="count",
+            subject=SemanticReference(kind="self", entity_type="person"),
+        )
+    ) is False
+    assert schema.validates(
+        SemanticFactRequest(
+            operation="select",
+            subject=SemanticReference(
+                kind="current_household",
+                entity_type="address",
+            ),
+            property="birth_date",
+        )
+    ) is False
 
 
 @pytest.mark.asyncio
@@ -396,6 +561,38 @@ async def test_empty_child_collection_counts_as_zero_not_missing_person(
     assert answer.result.status == "found"
     assert answer.result.value == 0
     assert "零个孩子" in answer.text
+
+
+@pytest.mark.asyncio
+async def test_registered_date_range_predicate_filters_relationships(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+) -> None:
+    request = SemanticFactRequest(
+        operation="count",
+        subject=SemanticReference(
+            kind="current_household",
+            entity_type="address",
+            path=(
+                SemanticRelationStep(
+                    relation="member",
+                    filters=(
+                        SemanticFilter(
+                            property="start",
+                            operator="date_range",
+                            value=("2026-06-01", "2026-07-01"),
+                            source="relation",
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    result, _, _, _ = await service.engine.execute(request, context)
+
+    assert result.status == "found"
+    assert result.value == 3
 
 
 @pytest.mark.asyncio
@@ -436,6 +633,16 @@ async def test_new_numeric_field_immediately_supports_generic_argmax(
     assert schema.validates(request) is True
     assert result.status == "found"
     assert result.value["id"] == max(household_ids)
+
+    total_request = SemanticFactRequest(
+        operation="sum",
+        subject=parsed.subject,
+        property="fixture_score",
+    )
+    total, _, _, _ = await engine.execute(total_request, context)
+    assert schema.validates(total_request) is True
+    assert total.status == "found"
+    assert total.value == 15
 
 
 @pytest.mark.asyncio
@@ -502,7 +709,7 @@ async def test_tier_one_rejects_unadvertised_semantic_property(
             return {
                 "requires_fact": True,
                 "request": {
-                    "operation": "get_property",
+                    "operation": "select",
                     "subject": {"kind": "self", "entity_type": "person"},
                     "property": "invented_private_fact",
                 },

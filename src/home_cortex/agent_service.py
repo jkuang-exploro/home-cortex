@@ -237,7 +237,10 @@ class AgentService:
                 semantic_attempt.answer.text,
                 semantic_attempt.answer.timings.db_query_count,
             )
-        elif semantic_attempt.claimed:
+        elif semantic_attempt.claimed or self.semantic_facts.planner is not None:
+            # Production Ollama runtimes use the semantic planner exclusively for
+            # household facts. The legacy physical-field planner remains only as
+            # compatibility for injected test/alternate clients without it.
             grounded_answer = None
         else:
             grounded_answer = await self.grounding.try_answer(

@@ -166,6 +166,25 @@ async def test_returns_conversational_answer_without_dispatching_tools() -> None
 
 
 @pytest.mark.asyncio
+async def test_assistant_capability_question_skips_household_grounding() -> None:
+    class ProductionSemanticOllama(FakeOllamaService):
+        async def plan_semantic_fact(self, *_: Any, **__: Any) -> dict[str, Any]:
+            raise AssertionError("ordinary persona requests do not need fact planning")
+
+    ollama = ProductionSemanticOllama(
+        [_chat_response("我可以协助管理家庭事务。")]
+    )
+    dispatcher = FakeDispatcher()
+
+    result = await _agent(ollama, dispatcher).answer("你能做什么？")
+
+    assert result.answer == "我可以协助管理家庭事务。"
+    assert ollama.plan_calls == 0
+    assert len(ollama.calls) == 1
+    assert dispatcher.calls == []
+
+
+@pytest.mark.asyncio
 async def test_non_grounded_loop_exposes_no_household_graph_tools() -> None:
     ollama = FakeOllamaService([_chat_response("Hello")])
 

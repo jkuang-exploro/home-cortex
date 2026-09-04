@@ -47,17 +47,21 @@ class FakeRetrievalService:
         limit: int | None = None,
         *,
         include_ended: bool = False,
+        include_residents: bool = True,
     ) -> list[dict[str, Any]]:
+        options = {
+            "entity_id": entity_id,
+            "relation": relation,
+            "direction": direction,
+            "limit": limit,
+            "include_ended": include_ended,
+        }
+        if not include_residents:
+            options["include_residents"] = False
         self.calls.append(
             (
                 "get_relationships",
-                {
-                    "entity_id": entity_id,
-                    "relation": relation,
-                    "direction": direction,
-                    "limit": limit,
-                    "include_ended": include_ended,
-                },
+                options,
             )
         )
         if self.error:
@@ -93,7 +97,8 @@ def test_tool_definitions_are_json_serializable_and_read_only() -> None:
         "get_relationships",
         "search_entities",
     }
-    assert "Person record stores date of birth in dob" in serialized
+    assert "date of birth in dob" not in serialized
+    assert "Semantic property names" in serialized
     assert "surrealql" not in serialized.lower()
     assert "execute" not in names
     assert "person, address, space, or item" in serialized
@@ -179,6 +184,23 @@ async def test_dispatches_relationship_lookup() -> None:
             "include_ended": False,
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_relationship_lookup_can_skip_resident_roster_expansion() -> None:
+    dispatcher, retrieval = _dispatcher()
+
+    response = await dispatcher.dispatch(
+        "get_relationships",
+        {
+            "entity_id": "person:alex_example",
+            "relation": "lives_in",
+            "include_residents": False,
+        },
+    )
+
+    assert response["ok"] is True
+    assert retrieval.calls[0][1]["include_residents"] is False
 
 
 @pytest.mark.asyncio

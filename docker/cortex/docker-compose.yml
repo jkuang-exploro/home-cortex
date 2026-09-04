@@ -2,7 +2,6 @@ services:
   ollama:
     image: ollama/ollama:0.32.13
     restart: unless-stopped
-    gpus: all
     volumes:
       - ollama-data:/root/.ollama
     environment:

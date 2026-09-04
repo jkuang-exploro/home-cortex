@@ -180,6 +180,13 @@ curl -X POST http://localhost:8001/v1/chat/completions \
   -d '{"model":"老管家","stream":false,"messages":[{"role":"user","content":"Where do I live?"}]}'
 ```
 
+The base Compose file runs on macOS and CPU-only Docker hosts. On a Linux host
+with an NVIDIA Container Toolkit installation, opt into GPU access explicitly:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+```
+
 Open the interactive API documentation at
 `http://192.168.68.59:8001/docs`.
 

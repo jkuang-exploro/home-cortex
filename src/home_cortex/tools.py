@@ -66,6 +66,7 @@ class GetRelationshipsArguments(ToolArguments):
     relation: str | None = Field(default=None, pattern=TABLE_NAME_PATTERN)
     direction: Literal["out", "in", "both"] | None = None
     include_ended: bool = False
+    include_residents: bool = True
     limit: int | None = Field(default=None, ge=1, le=100)
 
 
@@ -139,8 +140,8 @@ TOOLS: list[dict[str, Any]] = [
                 "Retrieve exactly one entity by canonical record ID, such as "
                 "person:jian_kuang. Use this when the ID is already known "
                 "(authenticated speaker, related_entity.id, or a prior "
-                "search). Do not use search_entities for a known ID. A "
-                "Person record stores date of birth in dob."
+                "search). Do not use search_entities for a known ID. Semantic "
+                "property names are resolved by the household fact layer."
             ),
             "parameters": {
                 "type": "object",
@@ -205,6 +206,15 @@ TOOLS: list[dict[str, Any]] = [
                         "default": False,
                         "description": (
                             "Include ended temporal relationships. Defaults to false."
+                        ),
+                    },
+                    "include_residents": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": (
+                            "For a person's residence edge, include the current "
+                            "household roster. Set false when only the related "
+                            "address entity is needed."
                         ),
                     },
                     "limit": {
@@ -524,12 +534,17 @@ class ToolDispatcher:
         arguments: ToolArguments,
     ) -> list[dict[str, Any]]:
         assert isinstance(arguments, GetRelationshipsArguments)
+        options: dict[str, Any] = {
+            "relation": arguments.relation,
+            "direction": arguments.direction,
+            "limit": arguments.limit,
+            "include_ended": arguments.include_ended,
+        }
+        if not arguments.include_residents:
+            options["include_residents"] = False
         return await self.retrieval.get_relationships(
             arguments.entity_id,
-            relation=arguments.relation,
-            direction=arguments.direction,
-            limit=arguments.limit,
-            include_ended=arguments.include_ended,
+            **options,
         )
 
     async def _calculate(self, arguments: ToolArguments) -> dict[str, Any]:
