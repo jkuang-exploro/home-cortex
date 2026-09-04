@@ -17,6 +17,7 @@ from home_cortex.grounding import (
 from home_cortex.operator_registry import (
     OPERATORS,
     TRANSFORM_OPERATORS,
+    OperatorExecutionError,
     OperatorInput,
     OperatorValidationError,
     execute_operator,
@@ -98,6 +99,7 @@ def test_registry_is_explicit_generic_and_bounded() -> None:
         "date_difference",
         "completed_years",
         "duration",
+        "annual_occurrence",
         "unit_conversion",
     }.issubset(OPERATORS)
     assert {
@@ -119,6 +121,49 @@ def test_operator_contracts_are_machine_readable() -> None:
     assert OPERATORS["average"].field_kinds == {"integer", "number"}
     assert OPERATORS["argmin"].output_kind == "record"
     assert OPERATORS["completed_years"].output_kind == "integer"
+    assert OPERATORS["annual_occurrence"].field_kinds == {"date", "datetime"}
+
+
+@pytest.mark.parametrize(
+    ("stored", "now", "mode", "expected"),
+    (
+        ("2016-10-30", "2026-10-30T00:01:00-07:00", "days", 0),
+        ("2016-10-30", "2026-10-31T00:01:00-07:00", None, "2027-10-30"),
+        ("2000-01-01", "2026-12-31T23:30:00-08:00", "days", 1),
+        ("2000-02-29", "2026-03-01T12:00:00-08:00", None, "2028-02-29"),
+    ),
+)
+def test_annual_occurrence_uses_household_local_calendar_and_leap_day_policy(
+    stored: str,
+    now: str,
+    mode: str | None,
+    expected: str | int,
+) -> None:
+    result = execute_operator(
+        "annual_occurrence",
+        OperatorInput(
+            records=({"birth_date": stored},),
+            field="birth_date",
+            mode=mode,
+            reference="household_now",
+            now=datetime.fromisoformat(now),
+        ),
+    )
+
+    assert result == expected
+
+
+def test_annual_occurrence_rejects_invalid_temporal_values() -> None:
+    with pytest.raises(OperatorExecutionError):
+        execute_operator(
+            "annual_occurrence",
+            OperatorInput(
+                records=({"birth_date": "not-a-date"},),
+                field="birth_date",
+                reference="household_now",
+                now=datetime.fromisoformat("2026-09-03T12:00:00-07:00"),
+            ),
+        )
 
 
 @pytest.mark.parametrize(

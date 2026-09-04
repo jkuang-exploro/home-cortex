@@ -168,6 +168,7 @@ async def _ask(
         ("我儿子是谁", "匡德伦"),
         ("我女儿是谁", "匡悠然"),
         ("我儿子几岁了", "9岁"),
+        ("我儿子几岁", "9岁"),
         ("谁最年长", "巴志刚"),
         ("我和我老婆谁年龄大", "巴璞年龄比匡健大"),
         ("我老婆的生日是哪天", "1988-02-26"),
@@ -175,6 +176,21 @@ async def _ask(
         ("我老婆和我谁年龄大", "巴璞年龄比匡健大"),
         ("家里有几个孩子", "两个孩子"),
         ("我老婆的爸爸是谁", "您妻子的父亲是巴志刚"),
+        ("我老婆的父亲是谁", "您妻子的父亲是巴志刚"),
+        ("巴璞的父亲是谁", "巴璞的父亲是巴志刚"),
+        ("巴志刚的女儿是谁", "巴志刚的女儿是巴璞"),
+        ("我岳父是谁", "您配偶的父亲是巴志刚"),
+        ("我岳母是谁", "您配偶的母亲是张玉梅"),
+        ("匡德伦的生日是哪天", "匡德伦的出生日期是2016-10-30"),
+        ("匡德伦哪天出生", "匡德伦的出生日期是2016-10-30"),
+        ("匡德伦的出生日期是什么", "匡德伦的出生日期是2016-10-30"),
+        ("when was Dylan Kuang born", "2016-10-30"),
+        ("what is my date of birth", "1988-11-11"),
+        ("巴璞哪天过生日", "巴璞的下次生日是2027-02-26"),
+        ("我儿子哪天过生日", "您儿子的下次生日是2026-10-30"),
+        ("我儿子的生日还有多少天", "您儿子的生日还有58天"),
+        ("距离我儿子生日还有几天", "您儿子的生日还有58天"),
+        ("我老婆生日还有多少天", "您妻子的生日还有177天"),
         ("我家住哪里", "12745 Droxford St, Cerritos, CA 90703"),
         ("请问我的具体住址是什么？", "12745 Droxford St, Cerritos, CA 90703"),
         ("街道地址", "12745 Droxford St, Cerritos, CA 90703"),
@@ -231,6 +247,37 @@ def test_birth_date_plan_never_contains_physical_alias() -> None:
     assert "dob" not in request.model_dump_json()
 
 
+def test_birthday_intents_have_distinct_generic_plans() -> None:
+    parser = TierZeroSemanticParser()
+
+    birth_date = parser.parse("匡德伦的生日是哪天")
+    age = parser.parse("我儿子几岁了")
+    next_birthday = parser.parse("我儿子哪天过生日")
+    days_until = parser.parse("我儿子的生日还有多少天")
+
+    assert birth_date is not None and birth_date.operation == "select"
+    assert age is not None and age.operation == "completed_years"
+    assert next_birthday is not None
+    assert next_birthday.operation == "annual_occurrence"
+    assert next_birthday.mode is None
+    assert days_until is not None
+    assert days_until.operation == "annual_occurrence"
+    assert days_until.mode == "days"
+    assert all(
+        request.property == "birth_date"
+        for request in (birth_date, age, next_birthday, days_until)
+    )
+
+
+def test_in_law_is_composed_from_existing_generic_relations() -> None:
+    request = TierZeroSemanticParser().parse("我岳父是谁")
+
+    assert request is not None
+    assert [step.relation for step in request.subject.path] == ["spouse", "parent"]
+    assert request.subject.path[-1].filters[0].property == "gender"
+    assert request.subject.path[-1].filters[0].value == "male"
+
+
 @pytest.mark.asyncio
 async def test_birth_date_resolves_when_storage_uses_birthday(
     dispatcher: FixtureGraphDispatcher,
@@ -275,6 +322,81 @@ async def test_missing_birth_date_is_semantic_and_does_not_hallucinate(
 
 
 @pytest.mark.asyncio
+async def test_missing_birth_date_is_computation_input_missing_for_transform(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    dispatcher.entities["person:dylan_kuang"].pop("dob")
+
+    answer = await _ask(service, context, "我儿子的生日还有多少天")
+
+    assert answer.result.status == "computation_input_missing"
+    assert answer.result.missing_requirements == ("birth_date",)
+    assert "出生日期" in answer.text
+
+
+@pytest.mark.asyncio
+async def test_named_person_missing_birth_date_is_property_unavailable_not_computation(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    dispatcher.entities["person:dylan_kuang"].pop("dob")
+
+    answer = await _ask(service, context, "匡德伦哪天出生")
+
+    assert answer.result.status == "property_unavailable"
+    assert answer.result.missing_requirements == ("birth_date",)
+    assert "匡德伦的出生日期" in answer.text
+    assert "计算" not in answer.text
+
+
+@pytest.mark.asyncio
+async def test_invalid_birth_date_is_computation_impossible(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    dispatcher.entities["person:dylan_kuang"]["dob"] = "not-a-date"
+
+    answer = await _ask(service, context, "我儿子的生日还有多少天")
+
+    assert answer.result.status == "computation_impossible"
+    assert "家庭资料不足以完成" in answer.text
+
+
+@pytest.mark.asyncio
+async def test_missing_named_person_is_entity_not_found(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+) -> None:
+    answer = await _ask(service, context, "不存在的人哪天出生")
+
+    assert answer.result.status == "entity_not_found"
+    assert "没有找到对应的人或实体" in answer.text
+
+
+@pytest.mark.asyncio
+async def test_duplicate_exact_name_is_ambiguous(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    dispatcher.entities["person:other_dylan"] = {
+        "id": "person:other_dylan",
+        "name": ["Other Dylan", "匡德伦"],
+        "gender": "male",
+        "dob": "2001-01-01",
+    }
+
+    answer = await _ask(service, context, "匡德伦哪天出生")
+
+    assert answer.result.status == "ambiguous"
+    assert "找到多个符合条件" in answer.text
+
+
+@pytest.mark.asyncio
 async def test_absent_relationship_is_not_reported_as_missing_entity(
     service: SemanticFactService,
     context: AgentRequestContext,
@@ -286,6 +408,20 @@ async def test_absent_relationship_is_not_reported_as_missing_entity(
 
     assert answer.result.status == "relationship_not_found"
     assert "配偶关系" in answer.text
+
+
+@pytest.mark.asyncio
+async def test_absent_in_law_path_is_relationship_not_found(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    dispatcher.edges["spouse_of"] = []
+
+    answer = await _ask(service, context, "我岳父是谁")
+
+    assert answer.result.status == "relationship_not_found"
+    assert answer.result.evidence.relationship == "spouse"
 
 
 @pytest.mark.asyncio
@@ -500,6 +636,13 @@ def test_semantic_validator_rejects_type_incompatible_extreme(
     )
 
     assert schema.validates(request) is False
+
+    invalid_birthday = SemanticFactRequest(
+        operation="annual_occurrence",
+        subject=SemanticReference(kind="self", entity_type="person"),
+        property="display_name",
+    )
+    assert schema.validates(invalid_birthday) is False
 
 
 def test_semantic_validator_rejects_context_reference_type_spoofing(

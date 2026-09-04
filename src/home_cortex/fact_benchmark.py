@@ -30,16 +30,27 @@ QUESTIONS = (
     "你是谁",
     "家里都有谁",
     "家里都有哪些人",
-    "家里有几个人",
+    "家里有多少人",
     "我家住哪里",
     "请问我的具体住址是什么？",
     "我老婆是谁",
     "我生日是哪天",
     "我有几个孩子",
     "我儿子是谁",
-    "我儿子几岁了",
-    "谁最年长",
+    "我儿子几岁",
+    "家里谁最年长",
     "我和我老婆谁年龄大",
+    "匡德伦的生日是哪天",
+    "匡德伦哪天出生",
+    "巴璞哪天过生日",
+    "我儿子哪天过生日",
+    "我儿子的生日还有多少天",
+    "我岳父是谁",
+    "我岳母是谁",
+)
+
+TEMPORAL_OPERATIONS = frozenset(
+    {"date_difference", "completed_years", "duration", "annual_occurrence"}
 )
 
 
@@ -127,15 +138,56 @@ async def _run_suite(
             samples.append(latest.timings.total_ms)
             latencies.append(latest.timings.total_ms)
         assert latest is not None
+        references = (latest.request.subject,) + (
+            (latest.request.other,) if latest.request.other is not None else ()
+        )
+        relations = [
+            step.relation for reference in references for step in reference.path
+        ]
+        semantic_properties = {
+            item
+            for item in (
+                latest.request.property,
+                *(
+                    query_filter.property
+                    for reference in references
+                    for step in reference.path
+                    for query_filter in step.filters
+                ),
+            )
+            if item is not None
+        }
         rows.append(
             {
                 "question": question,
                 "answer": latest.text,
                 "semantic_plan": latest.request.model_dump(mode="json"),
+                "route": f"tier_{latest.timings.tier}",
                 "tier": latest.timings.tier,
+                "resolved_entities": list(latest.result.evidence.entity_ids),
+                "semantic_properties": sorted(semantic_properties),
+                "relations": relations,
+                "temporal_operations": (
+                    [latest.request.operation]
+                    if latest.request.operation in TEMPORAL_OPERATIONS
+                    else []
+                ),
+                "result_status": latest.result.status,
+                "missing_requirements": list(latest.result.missing_requirements),
                 "llm_call_count": latest.timings.llm_call_count,
                 "db_query_count": latest.timings.db_query_count,
                 "total_latency_ms": round(statistics.median(samples), 3),
+                "stage_latency_ms": {
+                    "routing": round(latest.timings.routing_ms, 3),
+                    "semantic_parse": round(latest.timings.semantic_parse_ms, 3),
+                    "entity_resolution": round(
+                        latest.timings.entity_resolution_ms, 3
+                    ),
+                    "fact_query": round(latest.timings.fact_query_ms, 3),
+                    "computation": round(latest.timings.computation_ms, 3),
+                    "render": round(latest.timings.render_ms, 3),
+                    "llm": round(latest.timings.llm_ms, 3),
+                },
             }
         )
     return {

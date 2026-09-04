@@ -37,6 +37,7 @@ FactStatus = Literal[
     "relationship_not_found",
     "property_unavailable",
     "ambiguous",
+    "computation_input_missing",
     "computation_impossible",
 ]
 FactOperation = Literal[
@@ -56,6 +57,7 @@ FactOperation = Literal[
     "date_difference",
     "completed_years",
     "duration",
+    "annual_occurrence",
     "unit_conversion",
 ]
 ReferenceKind = Literal[
@@ -597,6 +599,18 @@ class TierZeroSemanticParser:
         (("爸爸", "父亲", "father"), "parent", "male"),
         (("妈妈", "母亲", "mother"), "parent", "female"),
     )
+    _COMPOSED_RELATIONS: tuple[
+        tuple[tuple[str, ...], tuple[tuple[str, str | None], ...]], ...
+    ] = (
+        (
+            ("岳父", "公公", "father-in-law", "father in law"),
+            (("spouse", None), ("parent", "male")),
+        ),
+        (
+            ("岳母", "婆婆", "mother-in-law", "mother in law"),
+            (("spouse", None), ("parent", "female")),
+        ),
+    )
 
     def parse(self, text: str) -> SemanticFactRequest | None:
         normalized = _normalize_request(text)
@@ -644,6 +658,21 @@ class TierZeroSemanticParser:
                 property="full_address",
             )
 
+        birthday_intent = _extract_birthday_intent(normalized)
+        if birthday_intent is not None:
+            operation, stem, mode = birthday_intent
+            reference = self._parse_reference(stem)
+            return (
+                SemanticFactRequest(
+                    operation=operation,
+                    subject=reference,
+                    property="birth_date",
+                    mode=mode,
+                )
+                if reference is not None
+                else None
+            )
+
         property_name, stem = _extract_property(normalized)
         if property_name == "age":
             reference = self._parse_reference(stem)
@@ -687,8 +716,9 @@ class TierZeroSemanticParser:
     def _parse_reference(self, text: str) -> SemanticReference | None:
         normalized = text.strip("的 ")
         base: ReferenceKind
+        base_value: str | None = None
         remainder: str
-        if normalized.startswith(("我", "my ")) or normalized in {"i", "me"}:
+        if normalized.startswith(("我", "my ")) or normalized in {"i", "me", "my"}:
             base = "self"
             remainder = (
                 normalized[1:]
@@ -697,7 +727,10 @@ class TierZeroSemanticParser:
                 if normalized.startswith("my ")
                 else ""
             )
-        elif normalized.startswith(("你", "您", "your ")) or normalized == "you":
+        elif normalized.startswith(("你", "您", "your ")) or normalized in {
+            "you",
+            "your",
+        }:
             base = "assistant"
             remainder = (
                 normalized[1:]
@@ -707,11 +740,40 @@ class TierZeroSemanticParser:
                 else ""
             )
         else:
-            return None
+            if not normalized or len(normalized) > 256:
+                return None
+            name, separator, possible_path = normalized.partition("的")
+            if not separator or not name or not self._starts_relation(possible_path):
+                return SemanticReference(
+                    kind="named_entity",
+                    value=normalized,
+                    entity_type="person",
+                )
+            base = "named_entity"
+            base_value = name
+            remainder = possible_path
         remainder = remainder.strip("的 ")
         steps: list[SemanticRelationStep] = []
         while remainder:
             matched = False
+            for aliases, composed in self._COMPOSED_RELATIONS:
+                alias = next((item for item in aliases if remainder.startswith(item)), None)
+                if alias is None:
+                    continue
+                for relation, gender in composed:
+                    filters = (
+                        (SemanticFilter(property="gender", value=gender),)
+                        if gender is not None
+                        else ()
+                    )
+                    steps.append(
+                        SemanticRelationStep(relation=relation, filters=filters)
+                    )
+                remainder = remainder[len(alias) :].strip("的 ")
+                matched = True
+                break
+            if matched:
+                continue
             for aliases, relation, gender in self._RELATIONS:
                 alias = next((item for item in aliases if remainder.startswith(item)), None)
                 if alias is None:
@@ -727,7 +789,19 @@ class TierZeroSemanticParser:
                 break
             if not matched:
                 return None
-        return SemanticReference(kind=base, entity_type="person", path=tuple(steps))
+        return SemanticReference(
+            kind=base,
+            value=base_value,
+            entity_type="person",
+            path=tuple(steps),
+        )
+
+    def _starts_relation(self, text: str) -> bool:
+        return any(
+            text.startswith(alias)
+            for aliases, *_ in (*self._COMPOSED_RELATIONS, *self._RELATIONS)
+            for alias in aliases
+        )
 
     def _parse_comparison(self, text: str) -> SemanticFactRequest | None:
         suffix = next(
@@ -858,6 +932,13 @@ class HouseholdFactEngine:
                     "limit": self.max_records,
                 },
             )
+            exact = [
+                record
+                for record in records
+                if _has_exact_alias(record, reference.value or "")
+            ]
+            if exact:
+                records = exact
             if not records:
                 raise _FactFailure("entity_not_found")
             entities = records
@@ -1030,9 +1111,14 @@ class HouseholdFactEngine:
             )
             if isinstance(value, FactResult):
                 return FactResult(
-                    "computation_impossible",
+                    (
+                        "computation_input_missing"
+                        if value.status == "property_unavailable"
+                        else value.status
+                    ),
                     evidence=evidence,
-                    missing_requirements=(request.property or "",),
+                    missing_requirements=value.missing_requirements,
+                    candidates=value.candidates,
                 )
             normalized.append({"value": value, "entity": record})
         if not normalized:
@@ -1214,6 +1300,9 @@ class FactRenderer:
         if result.status == "ambiguous":
             names = "、".join(_name(item, "zh") for item in result.candidates)
             return f"找到多个符合条件的家庭成员：{names}。请说明您指哪一位。"
+        if result.status == "computation_input_missing":
+            label = _property_label(result.missing_requirements) or "所需资料"
+            return f"目前没有足够的{label}来完成这项计算。"
         if result.status == "computation_impossible":
             label = _property_label(result.missing_requirements)
             suffix = f"，缺少{label}" if label else ""
@@ -1232,12 +1321,19 @@ class FactRenderer:
             return f"家里目前的成员有：{names}。"
         if request.operation == "select":
             if request.property == "birth_date":
-                return f"{_subject_possessive(request.subject)}生日是{result.value}。"
+                return f"{_subject_possessive(request.subject)}出生日期是{result.value}。"
             if request.property == "full_address":
                 return f"您的具体住址是{_format_address(result.value)}。"
             return f"查询到的值是{result.value}。"
         if request.operation == "completed_years":
             return f"{_subject_nominative(request.subject)}今年{result.value}岁。"
+        if request.operation == "annual_occurrence":
+            if request.mode == "days":
+                days = int(result.value)
+                if days == 0:
+                    return f"{_subject_possessive(request.subject)}生日就是今天。"
+                return f"{_subject_possessive(request.subject)}生日还有{days}天。"
+            return f"{_subject_possessive(request.subject)}下次生日是{result.value}。"
         if request.operation in {"argmin", "argmax"}:
             if request.other is not None and isinstance(result.value, Mapping):
                 selected = _name(result.value.get("selected"), "zh")
@@ -1280,6 +1376,9 @@ class FactRenderer:
                 "relationship_not_found": "No matching household relationship is recorded.",
                 "property_unavailable": "The entity is recorded, but that semantic property is unavailable.",
                 "ambiguous": "More than one household entity matches; please clarify which one.",
+                "computation_input_missing": (
+                    "A required semantic property is unavailable for this computation."
+                ),
                 "computation_impossible": "The available evidence is insufficient for that computation.",
             }[result.status]
         if request.operation == "count":
@@ -1296,6 +1395,15 @@ class FactRenderer:
             return f"The requested value is {result.value}."
         if request.operation == "completed_years":
             return f"The completed age is {result.value}."
+        if request.operation == "annual_occurrence":
+            if request.mode == "days":
+                days = int(result.value)
+                return (
+                    "The birthday is today."
+                    if days == 0
+                    else f"The birthday is in {days} days."
+                )
+            return f"The next birthday is {result.value}."
         if request.operation in {"argmin", "argmax"}:
             if request.other is not None and isinstance(result.value, Mapping):
                 selected = _name(result.value.get("selected"), "en")
@@ -1555,7 +1663,7 @@ def _likely_semantic_fact(text: str) -> bool:
         return False
     semantic_terms = re.search(
         r"家里|我家|我们家|家庭|我的|老婆|妻子|丈夫|老公|儿子|女儿|孩子|"
-        r"爸爸|父亲|妈妈|母亲|生日|出生|几岁|年纪|年龄|"
+        r"爸爸|父亲|妈妈|母亲|岳父|岳母|公公|婆婆|生日|出生|几岁|年纪|年龄|"
         r"household|wife|husband|spouse|son|daughter|child|parent|"
         r"birthday|birth date|how old|my |our ",
         normalized,
@@ -1624,22 +1732,63 @@ def _normalize_request(text: str) -> str:
 
 
 def _extract_property(text: str) -> tuple[str | None, str]:
-    birth = re.search(r"(?:的)?(?:生日|出生日期|出生时间)(?:是|在)?(?:哪天|什么时候|何时)?$", text)
+    born = re.fullmatch(r"(.+?)(?:的)?哪天出生", text)
+    if born:
+        return "birth_date", born.group(1).strip("的 ")
+    birth = re.search(
+        r"(?:的)?(?:生日|出生日期|出生时间)"
+        r"(?:是|在)?(?:哪天|什么时候|何时|是什么)?$",
+        text,
+    )
     if birth:
         return "birth_date", text[: birth.start()].strip("的 ")
     age = re.search(r"(?:现在|今年)?(?:几岁(?:了)?|多大(?:了)?)$", text)
     if age:
         return "age", text[: age.start()].strip("的 ")
-    english_birth = re.match(
-        r"(?:what|when) (?:is|was) (.+?)(?:'s| ) (?:birthday|birth date)$",
+    english_birth = re.fullmatch(
+        r"(?:what|when) (?:is|was) (.+?)(?:'s)? "
+        r"(?:birthday|birth date|date of birth)",
         text,
     )
     if english_birth:
         return "birth_date", english_birth.group(1).strip()
+    english_born = re.fullmatch(r"when was (.+?) born", text)
+    if english_born:
+        return "birth_date", english_born.group(1).strip()
     english_age = re.match(r"how old (?:is|are) (.+)$", text)
     if english_age:
         return "age", english_age.group(1).strip()
     return None, text
+
+
+def _extract_birthday_intent(
+    text: str,
+) -> tuple[Literal["annual_occurrence"], str, Literal["days"] | None] | None:
+    countdown = re.fullmatch(
+        r"(?:距离|离)?(.+?)(?:的)?生日(?:还)?(?:有|剩)(?:多少|几)天(?:了)?",
+        text,
+    )
+    if countdown:
+        return "annual_occurrence", countdown.group(1).strip("的 "), "days"
+    english_countdown = re.fullmatch(
+        r"how many days (?:are left )?until (.+?)(?:'s| ) birthday",
+        text,
+    )
+    if english_countdown:
+        return "annual_occurrence", english_countdown.group(1).strip(), "days"
+    upcoming = re.fullmatch(
+        r"(.+?)(?:的)?(?:下次生日(?:是|在)?哪天|哪天过生日)",
+        text,
+    )
+    if upcoming:
+        return "annual_occurrence", upcoming.group(1).strip("的 "), None
+    english_upcoming = re.fullmatch(
+        r"when is (.+?)(?:'s| ) next birthday",
+        text,
+    )
+    if english_upcoming:
+        return "annual_occurrence", english_upcoming.group(1).strip(), None
+    return None
 
 
 def _strip_identity_syntax(text: str) -> str:
@@ -1727,6 +1876,26 @@ def _entity_type(entity: Mapping[str, Any]) -> str:
     return entity_id.partition(":")[0]
 
 
+def _has_exact_alias(entity: Mapping[str, Any], expected: str) -> bool:
+    aliases: list[str] = []
+    names = entity.get("name")
+    if isinstance(names, str):
+        aliases.append(names)
+    elif isinstance(names, Mapping):
+        aliases.extend(value for value in names.values() if isinstance(value, str))
+    elif isinstance(names, Sequence) and not isinstance(
+        names, (str, bytes, bytearray)
+    ):
+        aliases.extend(value for value in names if isinstance(value, str))
+    aliases.extend(
+        value
+        for field in ("display_name", "full_name")
+        if isinstance((value := entity.get(field)), str)
+    )
+    normalized = expected.strip().casefold()
+    return any(alias.strip().casefold() == normalized for alias in aliases)
+
+
 def _string_or_none(value: Any) -> str | None:
     return str(value) if value is not None else None
 
@@ -1778,10 +1947,15 @@ def _subject_possessive(reference: SemanticReference) -> str:
 
 def _subject_nominative(reference: SemanticReference) -> str:
     if not reference.path:
-        return "您" if reference.kind == "self" else "对应实体"
+        if reference.kind == "self":
+            return "您"
+        if reference.kind == "named_entity" and reference.value:
+            return reference.value
+        return "对应实体"
     label = {
         "self": "您",
         "current_household": "家里",
+        "named_entity": reference.value or "对应实体",
     }.get(reference.kind, "对应实体")
     for index, step in enumerate(reference.path):
         connector = "" if reference.kind == "self" and index == 0 else "的"
