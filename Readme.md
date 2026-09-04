@@ -59,3 +59,15 @@ Target: deliver high-level intents in **<3–4 seconds** on modest always-on har
 - Full natural-language interface
 
 ### Architecture Sketch
+
+### Household fact benchmark
+
+Run the zero-LLM semantic fact suite directly against the source JSON:
+
+```bash
+python -m home_cortex.fact_benchmark --backend json --repeat 20
+```
+
+To include the configured SurrealDB runtime latency, use
+`--backend surrealdb`. The report includes each semantic plan, answer, tier,
+LLM-call count, graph/DB-query count, and aggregate P50/P95 latency.

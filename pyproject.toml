@@ -19,6 +19,9 @@ dependencies = [
     "httpx2>=2,<3",
 ]
 
+[project.scripts]
+home-cortex-fact-benchmark = "home_cortex.fact_benchmark:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8,<9",

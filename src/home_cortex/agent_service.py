@@ -33,6 +33,12 @@ from .model_loop import (
 )
 from .ollama import OllamaService
 from .schema_catalog import RuntimeSchemaCatalog
+from .semantic_facts import (
+    HouseholdFactEngine,
+    SemanticFactPlanner,
+    SemanticFactService,
+    SemanticSchemaRegistry,
+)
 from .tools import ToolDispatcher
 
 
@@ -85,6 +91,20 @@ class AgentService:
         self.assistant_display_name = assistant_display_name
         self.home_entity_id = home_entity_id
         self._clock = clock
+        semantic_schema = SemanticSchemaRegistry(schema_catalog)
+        semantic_planner = (
+            SemanticFactPlanner(ollama, semantic_schema)
+            if hasattr(ollama, "plan_semantic_fact")
+            else None
+        )
+        self.semantic_facts = SemanticFactService(
+            HouseholdFactEngine(
+                dispatcher,
+                semantic_schema,
+                max_records=self.model_loop.max_tool_records,
+            ),
+            planner=semantic_planner,
+        )
         self.grounding = OpenWorldGroundingService(
             GroundingPlanner(ollama, schema_catalog),
             GroundingExecutor(
@@ -207,11 +227,24 @@ class AgentService:
             current_time=household_now,
             locale=language,
         )
-        grounded_answer = await self.grounding.try_answer(
+        semantic_attempt = await self.semantic_facts.attempt(
             safe_messages,
             context=context,
             request_id=request_id,
         )
+        if semantic_attempt.answer is not None:
+            grounded_answer = GroundedAnswer(
+                semantic_attempt.answer.text,
+                semantic_attempt.answer.timings.db_query_count,
+            )
+        elif semantic_attempt.claimed:
+            grounded_answer = None
+        else:
+            grounded_answer = await self.grounding.try_answer(
+                safe_messages,
+                context=context,
+                request_id=request_id,
+            )
         trusted = self._trusted_conversation(
             safe_messages,
             identity,

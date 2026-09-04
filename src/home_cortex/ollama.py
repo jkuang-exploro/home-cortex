@@ -140,6 +140,55 @@ class OllamaService:
             raise ValueError("Grounding planner returned a non-object")
         return parsed
 
+    async def plan_semantic_fact(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        capabilities: Mapping[str, Any],
+        output_schema: Mapping[str, Any],
+        *,
+        household_now: str,
+    ) -> Mapping[str, Any]:
+        """Interpret an open-ended request without exposing physical storage."""
+        prompt = (
+            "You are the Home Cortex semantic fact interpreter. Decide whether "
+            "the latest user request asks for a fact about this household or its "
+            "assistant identity. If it does, emit exactly one composable semantic "
+            "request using only the capabilities and output schema supplied below. "
+            "If it does not, set requires_fact=false and request=null.\n\n"
+            "References: self is the authenticated speaker; assistant is this "
+            "assistant; current_household is the configured home; named_entity "
+            "uses only a genuine name; entity_id uses only an explicit canonical "
+            "ID. Build relationship composition by appending path steps. Spouse, "
+            "child, parent, and member are semantic relations. A wife is spouse "
+            "filtered by semantic gender=female; a son is child filtered by "
+            "gender=male. Entity filters use source=entity; relationship metadata "
+            "filters use source=relation.\n\n"
+            "Use semantic properties exactly as advertised. Never emit JSON, SQL, "
+            "database field names, source file names, executable code, or an "
+            "unlisted operation/relation/property. Use resolve_entity for identity, "
+            "get_property for stored properties, completed_years for calendar age, "
+            "count/list/exists for collections, argmin/argmax for extrema, and "
+            "compare for older/younger comparisons. Do not calculate or verbalize "
+            "the answer.\n\n"
+            f"Household now: {household_now}\n"
+            "Semantic capabilities:\n"
+            + json.dumps(capabilities, ensure_ascii=False, separators=(",", ":"))
+        )
+        response = await self.client.chat(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": prompt},
+                *[dict(message) for message in messages],
+            ],
+            stream=False,
+            think=False,
+            format=dict(output_schema),
+        )
+        parsed = json.loads(response.message.content or "")
+        if not isinstance(parsed, Mapping):
+            raise ValueError("Semantic fact planner returned a non-object")
+        return parsed
+
     async def stream_chat_with_tools(
         self,
         messages: Sequence[Mapping[str, Any]],

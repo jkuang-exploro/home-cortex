@@ -297,7 +297,7 @@ async def test_agent_identity_resolves_runtime_reference_without_graph_query() -
 
     assert result.answer == "我是老管家。"
     assert ollama.calls == []
-    assert ollama.plan_calls == 1
+    assert ollama.plan_calls == 0
     assert dispatcher.calls == []
 
 
@@ -331,7 +331,7 @@ async def test_speaker_identity_uses_canonical_context_without_named_search(
 
     assert "匡健" in result.answer or "Jian Kuang" in result.answer
     assert ollama.calls == []
-    assert ollama.plan_calls == 1
+    assert ollama.plan_calls == 0
     assert dispatcher.calls == [
         ("get_entity", {"entity_id": "person:jian_kuang"})
     ]
@@ -345,7 +345,7 @@ async def test_speaker_identity_without_authentication_fails_clearly() -> None:
     result = await _agent(ollama, dispatcher).answer("我是谁？")
 
     assert result.answer == "我无法确认当前登录者的身份。"
-    assert ollama.plan_calls == 1
+    assert ollama.plan_calls == 0
     assert dispatcher.calls == []
 
 
@@ -358,7 +358,7 @@ async def test_assistant_reference_uses_same_runtime_path(question: str) -> None
     result = await _agent(ollama, dispatcher).answer(question)
 
     assert "老管家" in result.answer or "the butler" in result.answer
-    assert ollama.plan_calls == 1
+    assert ollama.plan_calls == 0
     assert dispatcher.calls == []
 
 
