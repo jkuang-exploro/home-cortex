@@ -183,6 +183,10 @@ async def _ask(
         ("我儿子几岁了", "9岁"),
         ("我儿子几岁", "9岁"),
         ("谁最年长", "巴志刚"),
+        ("最年长的是谁", "巴志刚"),
+        ("家里最年长的是谁", "巴志刚"),
+        ("家里最年幼的是谁", "匡悠然"),
+        ("我们什么时候结婚的", "2014-05-04"),
         ("我和我老婆谁年龄大", "巴璞年龄比匡健大"),
         ("我老婆的生日是哪天", "1988-02-26"),
         ("我儿子的生日是哪天", "2016-10-30"),
@@ -953,8 +957,30 @@ async def test_argmin_and_argmax_share_the_household_extrema_path(
     assert oldest_result.value["id"] == "person:zhigang_ba"
     assert youngest_result.value["id"] == "person:evelyn_kuang"
     assert oldest.subject == youngest.subject
-    assert TierZeroSemanticParser().parse("谁最年幼") is None
-    assert TierZeroSemanticParser().parse("谁年纪最小") is None
+    youngest_plans = (
+        TierZeroSemanticParser().parse("谁最年幼"),
+        TierZeroSemanticParser().parse("谁年纪最小"),
+        TierZeroSemanticParser().parse("家里最年幼的是谁"),
+    )
+    assert all(plan is not None for plan in youngest_plans)
+    assert all(plan.operation == "argmax" for plan in youngest_plans if plan)
+    assert all(plan.subject == youngest.subject for plan in youngest_plans if plan)
+
+
+def test_marriage_date_is_a_relationship_property_fast_path() -> None:
+    plans = (
+        TierZeroSemanticParser().parse("我们什么时候结婚的"),
+        TierZeroSemanticParser().parse("我和我老婆哪天结婚"),
+        TierZeroSemanticParser().parse("我们的结婚日期是什么"),
+    )
+
+    assert all(plan is not None for plan in plans)
+    for plan in plans:
+        assert plan is not None
+        assert plan.operation == "select"
+        assert plan.property == "start_date"
+        assert plan.property_source == "relationship"
+        assert [step.relation for step in plan.subject.path] == ["spouse"]
 
 
 @pytest.mark.asyncio

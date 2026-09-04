@@ -898,11 +898,23 @@ class TierZeroSemanticParser:
         normalized = _normalize_request(text)
         if not normalized:
             return None
-        if _is_household_oldest(normalized):
+        age_extreme = _household_age_extreme(normalized)
+        if age_extreme is not None:
             return SemanticFactRequest(
-                operation="argmin",
+                operation=age_extreme,
                 subject=_household_members(),
                 property="birth_date",
+            )
+        if _asks_marriage_date(normalized):
+            return SemanticFactRequest(
+                operation="select",
+                subject=SemanticReference(
+                    kind="self",
+                    entity_type="person",
+                    path=(SemanticRelationStep(relation="spouse"),),
+                ),
+                property="start_date",
+                property_source="relationship",
             )
         comparison = self._parse_comparison(normalized)
         if comparison is not None:
@@ -2603,11 +2615,47 @@ def _asks_residence_address(text: str) -> bool:
     )
 
 
-def _is_household_oldest(text: str) -> bool:
-    return (
-        _mentions_household(text)
-        and bool(re.search(r"谁最年长|谁年龄最大|谁年纪最大|oldest", text))
-    ) or text in {"谁最年长", "谁年龄最大"}
+def _household_age_extreme(text: str) -> Literal["argmin", "argmax"] | None:
+    oldest = bool(
+        re.search(
+            r"(?:谁最年长|最年长的?是?谁|谁年龄最大|年龄最大的?是?谁|"
+            r"谁年纪最大|年纪最大的?是?谁|oldest)",
+            text,
+        )
+    )
+    youngest = bool(
+        re.search(
+            r"(?:谁最年幼|最年幼的?是?谁|谁最年轻|最年轻的?是?谁|"
+            r"谁年龄最小|年龄最小的?是?谁|谁年纪最小|年纪最小的?是?谁|youngest)",
+            text,
+        )
+    )
+    if not oldest and not youngest:
+        return None
+    if not _mentions_household(text) and not re.fullmatch(
+        r"(?:谁最年长|最年长的?是?谁|谁年龄最大|年龄最大的?是?谁|"
+        r"谁年纪最大|年纪最大的?是?谁|谁最年幼|最年幼的?是?谁|"
+        r"谁最年轻|最年轻的?是?谁|谁年龄最小|年龄最小的?是?谁|"
+        r"谁年纪最小|年纪最小的?是?谁|who is (?:the )?(?:oldest|youngest))",
+        text,
+    ):
+        return None
+    return "argmin" if oldest else "argmax"
+
+
+def _asks_marriage_date(text: str) -> bool:
+    return bool(
+        re.fullmatch(
+            r"(?:我们|我(?:和|与|跟)我?(?:老婆|妻子|配偶)|我)"
+            r"(?:是|在)?(?:哪天|什么时候|何时)结婚的?",
+            text,
+        )
+        or re.fullmatch(
+            r"(?:我们|我(?:和|与|跟)我?(?:老婆|妻子|配偶)|我)的?结婚日期"
+            r"(?:是|在)?(?:哪天|什么时候|何时|是什么)?",
+            text,
+        )
+    )
 
 
 def _household_members() -> SemanticReference:

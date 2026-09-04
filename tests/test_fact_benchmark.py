@@ -81,7 +81,7 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
         OllamaService.plan_semantic_fact = original  # type: ignore[method-assign]
 
     assert result["mode"] == "tier0_enabled"
-    assert result["aggregate"]["llm_call_count"] == 5
+    assert result["aggregate"]["llm_call_count"] == 2
     assert result["diagnostic_comparisons"]["age_extrema"]["谁最年长"][
         "operation"
     ] == "argmin"
