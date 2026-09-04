@@ -62,7 +62,8 @@ Target: deliver high-level intents in **<3–4 seconds** on modest always-on har
 
 ### Household fact benchmark
 
-Run the zero-LLM semantic fact suite directly against the source JSON:
+Run the Tier-0-first semantic fact suite (with Tier-1 fallback for open-world
+queries) directly against the source JSON:
 
 ```bash
 python -m home_cortex.fact_benchmark --backend json --repeat 20

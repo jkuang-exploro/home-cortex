@@ -9,7 +9,7 @@ from typing import Any, Mapping
 
 import yaml
 
-from .operator_registry import PREDICATE_OPERATORS
+from .operator_registry import OPERATORS, PREDICATE_OPERATORS
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,26 @@ class OntologyProperty:
     fast_path: bool = False
 
 
+@dataclass(frozen=True)
+class OntologyPredicateFallback:
+    property: str
+    transform: str
+    operator: str
+    value_from_policy: str
+
+
+@dataclass(frozen=True)
+class OntologyCollectionPredicate:
+    name: str
+    aliases: tuple[str, ...]
+    entity_types: tuple[str, ...]
+    relation_property: str
+    recognized_values: tuple[str, ...]
+    matching_values: tuple[str, ...]
+    fallback: OntologyPredicateFallback
+    default_scope_relation: str | None = None
+
+
 class SemanticOntology:
     """Validated domain ontology loaded from repository schema data."""
 
@@ -52,10 +72,14 @@ class SemanticOntology:
         properties: Mapping[str, OntologyProperty],
         base_relations: Mapping[str, str],
         reference_concepts: Mapping[str, OntologyReferenceConcept],
+        policy_values: Mapping[str, int | float],
+        collection_predicates: Mapping[str, OntologyCollectionPredicate],
     ) -> None:
         self.properties = MappingProxyType(dict(properties))
         self.base_relations = MappingProxyType(dict(base_relations))
         self.reference_concepts = MappingProxyType(dict(reference_concepts))
+        self.policy_values = MappingProxyType(dict(policy_values))
+        self.collection_predicates = MappingProxyType(dict(collection_predicates))
         alias_pairs = [
             (alias.casefold(), concept)
             for concept in self.reference_concepts.values()
@@ -70,6 +94,20 @@ class SemanticOntology:
         self._reference_aliases = tuple(
             sorted(alias_pairs, key=lambda item: len(item[0]), reverse=True)
         )
+        predicate_alias_pairs = [
+            (alias.casefold(), definition.name)
+            for definition in self.collection_predicates.values()
+            for alias in (definition.name, *definition.aliases)
+        ]
+        predicate_duplicates = _duplicates(alias for alias, _ in predicate_alias_pairs)
+        if predicate_duplicates:
+            raise ValueError(
+                "Semantic predicate aliases must be unique: "
+                + ", ".join(sorted(predicate_duplicates))
+            )
+        self._collection_predicate_aliases = MappingProxyType(
+            dict(predicate_alias_pairs)
+        )
 
     @classmethod
     def from_file(cls, path: Path) -> "SemanticOntology":
@@ -78,7 +116,14 @@ class SemanticOntology:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError(f"{path} must contain a YAML object")
-        allowed = {"version", "properties", "base_relations", "reference_concepts"}
+        allowed = {
+            "version",
+            "properties",
+            "base_relations",
+            "reference_concepts",
+            "policy_values",
+            "collection_predicates",
+        }
         extra = sorted(set(raw) - allowed)
         if extra:
             raise ValueError(f"Unknown semantic ontology fields: {', '.join(extra)}")
@@ -92,10 +137,29 @@ class SemanticOntology:
             base_relations,
             path,
         )
+        policy_values = _parse_policy_values(raw.get("policy_values", {}), path)
+        collection_predicates = _parse_collection_predicates(
+            raw.get("collection_predicates", {}),
+            policy_values,
+            path,
+        )
+        invalid_scope_relations = {
+            definition.default_scope_relation
+            for definition in collection_predicates.values()
+            if definition.default_scope_relation is not None
+            and definition.default_scope_relation not in base_relations
+        }
+        if invalid_scope_relations:
+            raise ValueError(
+                "Collection predicates reference unknown scope relations: "
+                + ", ".join(sorted(invalid_scope_relations))
+            )
         return cls(
             properties=properties,
             base_relations=base_relations,
             reference_concepts=concepts,
+            policy_values=policy_values,
+            collection_predicates=collection_predicates,
         )
 
     @classmethod
@@ -137,6 +201,9 @@ class SemanticOntology:
                 return concept, len(alias)
         return None
 
+    def resolve_collection_predicate(self, value: str) -> str | None:
+        return self._collection_predicate_aliases.get(value.casefold())
+
     def prompt_payload(self) -> dict[str, Any]:
         return {
             "properties": {
@@ -175,7 +242,131 @@ class SemanticOntology:
                 }
                 for name, concept in self.reference_concepts.items()
             },
+            "collection_predicates": {
+                name: {
+                    "aliases": list(definition.aliases),
+                    "entity_types": list(definition.entity_types),
+                    "default_scope_relation": definition.default_scope_relation,
+                    "precedence": [
+                        {
+                            "source": "relation",
+                            "property": definition.relation_property,
+                            "recognized_values": list(definition.recognized_values),
+                            "matching_values": list(definition.matching_values),
+                        },
+                        {
+                            "source": "derived",
+                            "property": definition.fallback.property,
+                            "transform": definition.fallback.transform,
+                            "operator": definition.fallback.operator,
+                            "value": self.policy_values[
+                                definition.fallback.value_from_policy
+                            ],
+                        },
+                    ],
+                }
+                for name, definition in self.collection_predicates.items()
+            },
         }
+
+
+def _parse_policy_values(raw: Any, path: Path) -> dict[str, int | float]:
+    values = _mapping(raw, "policy_values", path)
+    result: dict[str, int | float] = {}
+    for name, value in values.items():
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or value < 0
+        ):
+            raise ValueError(f"policy_values.{name} must be a non-negative number")
+        result[name] = value
+    return result
+
+
+def _parse_collection_predicates(
+    raw: Any,
+    policy_values: Mapping[str, int | float],
+    path: Path,
+) -> dict[str, OntologyCollectionPredicate]:
+    values = _mapping(raw, "collection_predicates", path)
+    result: dict[str, OntologyCollectionPredicate] = {}
+    for name, definition in values.items():
+        label = f"collection_predicates.{name}"
+        item = _mapping(definition, label, path)
+        allowed = {
+            "aliases",
+            "entity_types",
+            "relation_property",
+            "recognized_values",
+            "matching_values",
+            "fallback",
+            "default_scope_relation",
+        }
+        if extra := sorted(set(item) - allowed):
+            raise ValueError(f"Unknown {label} fields: {', '.join(extra)}")
+        relation_property = item.get("relation_property")
+        if not isinstance(relation_property, str) or not relation_property:
+            raise ValueError(f"{label}.relation_property must be a string")
+        default_scope_relation = item.get("default_scope_relation")
+        if default_scope_relation is not None and (
+            not isinstance(default_scope_relation, str)
+            or not default_scope_relation
+        ):
+            raise ValueError(f"{label}.default_scope_relation must be a string")
+        recognized = _strings(
+            item.get("recognized_values"),
+            f"{label}.recognized_values",
+            path,
+        )
+        matching = _strings(
+            item.get("matching_values"),
+            f"{label}.matching_values",
+            path,
+        )
+        if not set(matching).issubset(recognized):
+            raise ValueError(f"{label}.matching_values must be recognized values")
+        fallback_raw = _mapping(item.get("fallback"), f"{label}.fallback", path)
+        if set(fallback_raw) != {
+            "property",
+            "transform",
+            "operator",
+            "value_from_policy",
+        }:
+            raise ValueError(f"{label}.fallback has invalid fields")
+        property_name = fallback_raw.get("property")
+        transform = fallback_raw.get("transform")
+        operator = fallback_raw.get("operator")
+        value_from_policy = fallback_raw.get("value_from_policy")
+        if not all(
+            isinstance(value, str) and value
+            for value in (property_name, transform, operator, value_from_policy)
+        ):
+            raise ValueError(f"{label}.fallback values must be strings")
+        if transform not in OPERATORS or OPERATORS[transform].implementation is None:
+            raise ValueError(f"{label}.fallback transform is not executable")
+        if operator not in PREDICATE_OPERATORS:
+            raise ValueError(f"{label}.fallback operator is not allowlisted")
+        if value_from_policy not in policy_values:
+            raise ValueError(f"{label}.fallback references an unknown policy value")
+        result[name] = OntologyCollectionPredicate(
+            name=name,
+            aliases=_strings(item.get("aliases"), f"{label}.aliases", path),
+            entity_types=_strings(
+                item.get("entity_types"), f"{label}.entity_types", path
+            ),
+            relation_property=relation_property,
+            recognized_values=recognized,
+            matching_values=matching,
+            fallback=OntologyPredicateFallback(
+                property=property_name,
+                transform=transform,
+                operator=operator,
+                value_from_policy=value_from_policy,
+            ),
+            default_scope_relation=default_scope_relation,
+        )
+    return result
 
 
 def _parse_properties(raw: Any, path: Path) -> dict[str, OntologyProperty]:

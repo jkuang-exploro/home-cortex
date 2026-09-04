@@ -477,6 +477,7 @@ _DEFINITIONS = (
     _definition("select", "retrieval", "plan", "collection"),
     _definition("traverse", "retrieval", "plan", "collection"),
     _definition("resolve_reference", "retrieval", "plan", "record"),
+    _definition("filter", "collection", "collection", "collection"),
     *(
         _definition(
             name,

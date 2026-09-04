@@ -168,6 +168,20 @@ speaker on each request. It is not tied to a default household member. The
 ontology can therefore compile the same “my son” plan for different speakers,
 and the resolver starts traversal from each request's active speaker.
 
+The semantic fact IR is a bounded algebra backed by the explicit operator
+registry. Collection filters compose with operations such as `count`, `argmin`,
+and `argmax`; `adult` and `minor` are declarative ontology predicates rather
+than fact handlers. Their policy prefers a recognized `household_role` on the
+membership edge and falls back to `completed_years(birth_date)` using the one
+`adulthood_years` value in `schemas/semantic/ontology.yaml`. A person's `child`
+relationship remains distinct from a minor household member.
+
+Properties can explicitly come from the final relationship edge. Semantic
+`start_date`/`end_date` map to deployment edge fields in the ontology, allowing
+the same spouse traversal to resolve either the partner entity or the
+relationship start date. The executor validates all operations, filters,
+predicate names, property sources, and types before it reads or computes data.
+
 Tier 0 consumes this same ontology only as a latency optimization. To exercise
 the semantic planner and authoritative entity resolver without Tier 0, set:
 
@@ -176,12 +190,16 @@ HOME_CORTEX_DISABLE_TIER0=1
 ```
 
 The fact benchmark supports both execution modes and records speaker ID,
-utterance, semantic plan, resolution path, canonical IDs, LLM/DB calls, timing,
-and answer. `MODE` and `--mode` are equivalent:
+utterance, semantic plan, scope, filters, operators, relationship references,
+entity/relationship properties, failure stage, canonical IDs, LLM/DB calls,
+timing, and answer. `MODE` and `--mode` are equivalent; repeat `--question` to
+run a focused Tier-1 suite:
 
 ```sh
 MODE=tier0_enabled home-cortex-fact-benchmark --backend surrealdb
 MODE=tier0_disabled home-cortex-fact-benchmark --backend surrealdb --repeat 1
+home-cortex-fact-benchmark --backend surrealdb --mode tier0_disabled \
+  --question 谁最年幼 --question 我们什么时候结婚的
 ```
 
 The ingestion endpoint rejects unknown relationship files, invalid endpoint

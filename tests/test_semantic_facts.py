@@ -901,7 +901,7 @@ async def test_registered_date_range_predicate_filters_relationships(
                     relation="member",
                     filters=(
                         SemanticFilter(
-                            property="start",
+                            property="start_date",
                             operator="date_range",
                             value=("2026-06-01", "2026-07-01"),
                             source="relation",
@@ -916,6 +916,407 @@ async def test_registered_date_range_predicate_filters_relationships(
 
     assert result.status == "found"
     assert result.value == 3
+
+
+def _member_collection() -> SemanticReference:
+    return SemanticReference(
+        kind="current_household",
+        entity_type="address",
+        path=(SemanticRelationStep(relation="member"),),
+    )
+
+
+def _speaker_spouse() -> SemanticReference:
+    return SemanticReference(
+        kind="self",
+        entity_type="person",
+        path=(SemanticRelationStep(relation="spouse"),),
+    )
+
+
+@pytest.mark.asyncio
+async def test_argmin_and_argmax_share_the_household_extrema_path(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+) -> None:
+    oldest = SemanticFactRequest(
+        operation="argmin",
+        subject=_member_collection(),
+        property="birth_date",
+    )
+    youngest = oldest.model_copy(update={"operation": "argmax"})
+
+    oldest_result, _, _, _ = await service.engine.execute(oldest, context)
+    youngest_result, _, _, _ = await service.engine.execute(youngest, context)
+
+    assert oldest_result.status == youngest_result.status == "found"
+    assert oldest_result.value["id"] == "person:zhigang_ba"
+    assert youngest_result.value["id"] == "person:evelyn_kuang"
+    assert oldest.subject == youngest.subject
+    assert TierZeroSemanticParser().parse("谁最年幼") is None
+    assert TierZeroSemanticParser().parse("谁年纪最小") is None
+
+
+@pytest.mark.asyncio
+async def test_youngest_reports_partial_birth_date_evidence(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    dispatcher.entities["person:evelyn_kuang"].pop("dob")
+    request = SemanticFactRequest(
+        operation="argmax",
+        subject=_member_collection(),
+        property="birth_date",
+    )
+
+    result, _, _, _ = await service.engine.execute(request, context)
+
+    assert result.status == "computation_input_missing"
+    assert result.missing_requirements == ("birth_date",)
+    assert "缺少部分家庭成员的出生日期" in service.renderer.render(
+        request, result, context
+    )
+
+
+@pytest.mark.asyncio
+async def test_count_composes_with_generic_property_and_status_filters(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+) -> None:
+    adult = SemanticFactRequest(
+        operation="count",
+        subject=_member_collection(),
+        filters=(SemanticFilter(predicate="adult"),),
+    )
+    minor = adult.model_copy(
+        update={"filters": (SemanticFilter(predicate="minor"),)}
+    )
+    female = adult.model_copy(
+        update={"filters": (SemanticFilter(property="gender", value="female"),)}
+    )
+
+    adult_result, _, _, _ = await service.engine.execute(adult, context)
+    minor_result, _, _, _ = await service.engine.execute(minor, context)
+    female_result, _, _, _ = await service.engine.execute(female, context)
+
+    assert adult_result.status == minor_result.status == female_result.status == "found"
+    assert adult_result.value == 3
+    assert minor_result.value == 2
+    assert female_result.value == 2
+    assert "成年人" in service.renderer.render(adult, adult_result, context)
+    assert "未成年人" in service.renderer.render(minor, minor_result, context)
+
+
+@pytest.mark.asyncio
+async def test_minor_status_is_distinct_from_a_persons_child_relation(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+) -> None:
+    household_minors = SemanticFactRequest(
+        operation="count",
+        subject=_member_collection(),
+        filters=(SemanticFilter(predicate="minor"),),
+    )
+    speakers_children = SemanticFactRequest(
+        operation="count",
+        subject=SemanticReference(
+            kind="self",
+            entity_type="person",
+            path=(SemanticRelationStep(relation="child"),),
+        ),
+    )
+
+    minors, _, _, _ = await service.engine.execute(household_minors, context)
+    children, _, _, _ = await service.engine.execute(speakers_children, context)
+
+    assert minors.value == 2
+    assert children.value == 2
+    assert household_minors.subject.path[-1].relation == "member"
+    assert speakers_children.subject.path[-1].relation == "child"
+
+
+@pytest.mark.asyncio
+async def test_status_predicate_prefers_authoritative_role_then_falls_back_to_age(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    request = SemanticFactRequest(
+        operation="count",
+        subject=_member_collection(),
+        filters=(SemanticFilter(predicate="adult"),),
+    )
+    dylan_edge = next(
+        edge
+        for edge in dispatcher.edges["lives_in"]
+        if edge["from"] == "person:dylan_kuang"
+    )
+    dylan_edge["household_role"] = "owner"
+    role_result, _, _, _ = await service.engine.execute(request, context)
+    assert role_result.value == 4
+
+    dylan_edge.pop("household_role")
+    fallback_result, _, _, _ = await service.engine.execute(request, context)
+    assert fallback_result.value == 3
+
+    dispatcher.entities["person:dylan_kuang"].pop("dob")
+    missing_result, _, _, _ = await service.engine.execute(request, context)
+    assert missing_result.status == "filter_input_missing"
+    assert missing_result.missing_requirements[:1] == ("adult",)
+
+
+@pytest.mark.asyncio
+async def test_relationship_properties_and_duration_use_the_spouse_edge(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+) -> None:
+    marriage_date = SemanticFactRequest(
+        operation="select",
+        subject=_speaker_spouse(),
+        property="start_date",
+        property_source="relationship",
+    )
+    duration = marriage_date.model_copy(
+        update={"operation": "duration", "mode": "days"}
+    )
+
+    date_result, _, _, _ = await service.engine.execute(marriage_date, context)
+    duration_result, _, _, _ = await service.engine.execute(duration, context)
+
+    assert date_result.status == "found"
+    assert date_result.value == "2014-05-04"
+    assert date_result.evidence.entity_ids == ("person:pu_ba",)
+    assert date_result.evidence.relationships[0].start == "2014-05-04"
+    assert duration_result.status == "found"
+    assert duration_result.value > 4000
+
+
+@pytest.mark.asyncio
+async def test_missing_relationship_start_has_specific_failure(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    dispatcher.edges["spouse_of"][0].pop("start")
+    request = SemanticFactRequest(
+        operation="select",
+        subject=_speaker_spouse(),
+        property="start_date",
+        property_source="relationship",
+    )
+
+    result, _, _, _ = await service.engine.execute(request, context)
+
+    assert result.status == "relation_property_unavailable"
+    assert result.evidence.relationship == "spouse"
+    assert result.evidence.relationships
+    assert result.missing_requirements == ("start_date",)
+    assert "没有记录结婚日期" in service.renderer.render(request, result, context)
+
+
+@pytest.mark.asyncio
+async def test_relationship_property_resolution_is_speaker_relative(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    dispatcher.entities.update(
+        {
+            "person:alex_fixture": {"id": "person:alex_fixture", "name": ["Alex"]},
+            "person:sam_fixture": {"id": "person:sam_fixture", "name": ["Sam"]},
+        }
+    )
+    dispatcher.edges["spouse_of"].append(
+        {
+            "from": "person:alex_fixture",
+            "to": "person:sam_fixture",
+            "start": "2020-02-20",
+            "end": None,
+        }
+    )
+    request = SemanticFactRequest(
+        operation="select",
+        subject=_speaker_spouse(),
+        property="start_date",
+        property_source="relationship",
+    )
+
+    result, _, _, _ = await service.engine.execute(
+        request,
+        replace(context, caller_entity_id="person:alex_fixture"),
+    )
+
+    assert result.status == "found"
+    assert result.value == "2020-02-20"
+    assert result.evidence.entity_ids == ("person:sam_fixture",)
+
+
+def test_filter_and_relationship_capabilities_are_semantic_and_allowlisted(
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    schema = SemanticSchemaRegistry(
+        RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    )
+    capabilities = schema.capability_payload()
+
+    assert "filter" in OPERATORS
+    assert "filter" in capabilities["operations"]
+    assert capabilities["collection_predicates"] == ["adult", "minor"]
+    assert capabilities["property_sources"] == ["entity", "relationship"]
+    assert capabilities["semantic_relation_properties"]["spouse"] == [
+        "end_date",
+        "start_date",
+    ]
+    assert "start" not in capabilities["semantic_relation_properties"]["spouse"]
+    invalid = SemanticFactRequest(
+        operation="count",
+        subject=_member_collection(),
+        filters=(SemanticFilter(predicate="invented_status"),),
+    )
+    assert schema.validates(invalid) is False
+
+
+@pytest.mark.asyncio
+async def test_planner_schema_excludes_entity_ids_and_normalizes_status_filter_shape(
+    dispatcher: FixtureGraphDispatcher,
+    context: AgentRequestContext,
+) -> None:
+    schema = SemanticSchemaRegistry(
+        RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    )
+
+    class Interpreter:
+        output_schema: dict[str, Any] | None = None
+
+        async def plan_semantic_fact(
+            self,
+            _messages: Any,
+            _capabilities: Any,
+            output_schema: dict[str, Any],
+            **_: Any,
+        ) -> dict[str, Any]:
+            self.output_schema = output_schema
+            return {
+                "requires_fact": True,
+                "request": {
+                    "operation": "count",
+                    "subject": {
+                        "kind": "current_household",
+                        "entity_type": "person",
+                        "path": [
+                            {
+                                "relation": "child",
+                                "filters": [{"property": "adult"}],
+                            }
+                        ],
+                    },
+                },
+            }
+
+    interpreter = Interpreter()
+    plan, _ = await SemanticFactPlanner(interpreter, schema).plan([], context)
+
+    assert interpreter.output_schema is not None
+    kinds = interpreter.output_schema["$defs"]["SemanticReference"]["properties"][
+        "kind"
+    ]["enum"]
+    assert "entity_id" not in kinds
+    assert plan.request is not None
+    assert plan.request.subject.entity_type == "address"
+    assert plan.request.subject.path[-1].relation == "member"
+    assert plan.request.subject.path[-1].filters == ()
+    assert plan.request.filters == (SemanticFilter(predicate="adult"),)
+    assert schema.validates(plan.request) is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("utterance", "operation", "expected"),
+    (
+        ("家里最小的是谁？", "argmax", "匡悠然"),
+        ("家里最年轻的是哪位？", "argmax", "匡悠然"),
+        ("目前家里成年人一共有多少位？", "count", "三位成年人"),
+        ("家里未成年的有几个？", "count", "两个未成年人"),
+        ("我们是哪天结的婚？", "select", "2014-05-04"),
+        ("我和巴璞从什么时候开始是夫妻？", "select", "2014-05-04"),
+    ),
+)
+async def test_open_world_plans_execute_with_tier_zero_disabled(
+    utterance: str,
+    operation: str,
+    expected: str,
+    dispatcher: FixtureGraphDispatcher,
+    context: AgentRequestContext,
+) -> None:
+    catalog = RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    schema = SemanticSchemaRegistry(catalog)
+
+    class Interpreter:
+        async def plan_semantic_fact(
+            self,
+            messages: Any,
+            _capabilities: Any,
+            _output_schema: Any,
+            **_: Any,
+        ) -> dict[str, Any]:
+            text = messages[-1]["content"]
+            if "最小" in text or "最年轻" in text:
+                request = {
+                    "operation": "argmax",
+                    "subject": {
+                        "kind": "current_household",
+                        "entity_type": "address",
+                        "path": [{"relation": "member"}],
+                    },
+                    "property": "birth_date",
+                }
+            elif "成年人" in text:
+                request = {
+                    "operation": "count",
+                    "subject": {
+                        "kind": "current_household",
+                        "entity_type": "address",
+                        "path": [{"relation": "member"}],
+                    },
+                    "filters": [{"predicate": "adult"}],
+                }
+            elif "未成年" in text:
+                request = {
+                    "operation": "count",
+                    "subject": {
+                        "kind": "current_household",
+                        "entity_type": "address",
+                        "path": [{"relation": "member"}],
+                    },
+                    "filters": [{"predicate": "minor"}],
+                }
+            else:
+                request = {
+                    "operation": "select",
+                    "subject": {
+                        "kind": "self",
+                        "entity_type": "person",
+                        "path": [{"relation": "spouse"}],
+                    },
+                    "property": "start_date",
+                    "property_source": "relationship",
+                }
+            return {"requires_fact": True, "request": request}
+
+    semantic = SemanticFactService(
+        HouseholdFactEngine(dispatcher, schema),
+        planner=SemanticFactPlanner(Interpreter(), schema),
+        tier_zero_enabled=False,
+    )
+
+    answer = await _ask(semantic, context, utterance)
+
+    assert answer.timings.tier == 1
+    assert answer.timings.llm_call_count == 1
+    assert answer.request.operation == operation
+    assert answer.result.status == "found"
+    assert expected in answer.text
 
 
 @pytest.mark.asyncio
@@ -1045,7 +1446,7 @@ async def test_tier_one_rejects_unadvertised_semantic_property(
 
     answer = await _ask(semantic, context, "我有什么秘密家庭属性")
 
-    assert answer.result.status == "computation_impossible"
+    assert answer.result.status == "semantic_plan_unsupported"
     assert answer.timings.llm_call_count == 1
     assert dispatcher.calls == []
 

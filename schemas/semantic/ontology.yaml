@@ -26,6 +26,41 @@ properties:
   household_role:
     fields: [household_role, member_role, role]
     aliases: [家庭角色, household role]
+  start_date:
+    fields: [start, since, start_date]
+    aliases: [开始日期, 起始日期, 结婚日期, start date, since]
+  end_date:
+    fields: [end, until, end_date]
+    aliases: [结束日期, end date, until]
+
+policy_values:
+  adulthood_years: 18
+
+collection_predicates:
+  adult:
+    aliases: [成年人, 成人, adults]
+    entity_types: [person]
+    default_scope_relation: member
+    relation_property: household_role
+    recognized_values: [owner, adult_dependent, minor_dependent]
+    matching_values: [owner, adult_dependent]
+    fallback:
+      property: birth_date
+      transform: completed_years
+      operator: gte
+      value_from_policy: adulthood_years
+  minor:
+    aliases: [未成年人, 孩子, 小孩, minors, child]
+    entity_types: [person]
+    default_scope_relation: member
+    relation_property: household_role
+    recognized_values: [owner, adult_dependent, minor_dependent]
+    matching_values: [minor_dependent]
+    fallback:
+      property: birth_date
+      transform: completed_years
+      operator: lt
+      value_from_policy: adulthood_years
 
 base_relations:
   spouse:

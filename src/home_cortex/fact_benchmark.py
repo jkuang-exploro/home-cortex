@@ -31,6 +31,7 @@ from .semantic_facts import (
     SemanticFactPlanner,
     SemanticFactService,
     SemanticSchemaRegistry,
+    _failure_stage,
 )
 from .tools import GRAPH_TOOL_NAMES, ToolDispatcher
 
@@ -40,6 +41,7 @@ QUESTIONS = (
     "家里都有谁",
     "家里都有哪些人",
     "家里有多少人",
+    "家里有几个人",
     "我家住哪里",
     "请问我的具体住址是什么？",
     "我老婆是谁",
@@ -48,6 +50,11 @@ QUESTIONS = (
     "我儿子是谁",
     "我儿子几岁",
     "家里谁最年长",
+    "谁最年长",
+    "谁最年幼",
+    "谁年纪最小",
+    "有几个成年人",
+    "有几个孩子",
     "我和我老婆谁年龄大",
     "匡德伦的生日是哪天",
     "匡德伦哪天出生",
@@ -61,6 +68,7 @@ QUESTIONS = (
     "我儿子的生日还有多少天",
     "我岳父是谁",
     "我岳母是谁",
+    "我们什么时候结婚的",
 )
 
 TEMPORAL_OPERATIONS = frozenset(
@@ -89,6 +97,7 @@ async def benchmark_runtime(
     caller_entity_id: str,
     repeat: int,
     mode: BenchmarkMode = "tier0_enabled",
+    questions: Sequence[str] = QUESTIONS,
 ) -> dict[str, Any]:
     settings = get_settings()
     steward = get_agent("steward")
@@ -106,8 +115,7 @@ async def benchmark_runtime(
         )
         dispatcher = ToolDispatcher(retrieval, sorted(GRAPH_TOOL_NAMES))
         schema = SemanticSchemaRegistry(catalog)
-        if mode == "tier0_disabled":
-            llm = OllamaService(settings.ollama_url, settings.ollama_model)
+        llm = OllamaService(settings.ollama_url, settings.ollama_model)
         service = SemanticFactService(
             HouseholdFactEngine(dispatcher, schema, max_records=settings.retrieval_limit),
             planner=(SemanticFactPlanner(llm, schema) if llm is not None else None),
@@ -128,6 +136,8 @@ async def benchmark_runtime(
             repeat,
             backend="surrealdb",
             mode=mode,
+            questions=questions,
+            speaker_cases=(SPEAKER_CASES if tuple(questions) == QUESTIONS else ()),
         )
     finally:
         if llm is not None:
@@ -141,6 +151,7 @@ async def benchmark_json(
     data_dir: Path,
     schema_dir: Path,
     mode: BenchmarkMode = "tier0_enabled",
+    questions: Sequence[str] = QUESTIONS,
 ) -> dict[str, Any]:
     steward = get_agent("steward")
     edge_registry = EdgeSchemaRegistry.from_directory(schema_dir)
@@ -148,9 +159,8 @@ async def benchmark_json(
     dispatcher = _JsonGraphDispatcher(data_dir, edge_registry)
     schema = SemanticSchemaRegistry(catalog)
     llm: OllamaService | None = None
-    if mode == "tier0_disabled":
-        settings = get_settings()
-        llm = OllamaService(settings.ollama_url, settings.ollama_model)
+    settings = get_settings()
+    llm = OllamaService(settings.ollama_url, settings.ollama_model)
     service = SemanticFactService(
         HouseholdFactEngine(dispatcher, schema),
         planner=(SemanticFactPlanner(llm, schema) if llm is not None else None),
@@ -166,7 +176,15 @@ async def benchmark_json(
         locale="zh",
     )
     try:
-        return await _run_suite(service, context, repeat, backend="json", mode=mode)
+        return await _run_suite(
+            service,
+            context,
+            repeat,
+            backend="json",
+            mode=mode,
+            questions=questions,
+            speaker_cases=(SPEAKER_CASES if tuple(questions) == QUESTIONS else ()),
+        )
     finally:
         if llm is not None:
             await llm.close()
@@ -179,12 +197,14 @@ async def _run_suite(
     *,
     backend: str,
     mode: BenchmarkMode,
+    questions: Sequence[str] = QUESTIONS,
+    speaker_cases: Sequence[BenchmarkCase] = SPEAKER_CASES,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     latencies: list[float] = []
     cases = (
-        *(BenchmarkCase(context.caller_entity_id or "", question) for question in QUESTIONS),
-        *SPEAKER_CASES,
+        *(BenchmarkCase(context.caller_entity_id or "", question) for question in questions),
+        *speaker_cases,
     )
     for case in cases:
         case_context = replace(context, caller_entity_id=case.speaker_id or None)
@@ -220,9 +240,58 @@ async def _run_suite(
                     for step in reference.path
                     for query_filter in step.filters
                 ),
+                *(query_filter.property for query_filter in latest.request.filters),
             )
             if item is not None
         }
+        filters = [
+            {
+                "stage": "collection",
+                **query_filter.model_dump(mode="json"),
+            }
+            for query_filter in latest.request.filters
+        ] + [
+            {
+                "stage": "traversal",
+                "relation": step.relation,
+                **query_filter.model_dump(mode="json"),
+            }
+            for reference in references
+            for step in reference.path
+            for query_filter in step.filters
+        ]
+        entity_properties = {
+            item.property
+            for item in latest.request.filters
+            if item.property is not None and item.source == "entity"
+        }
+        relationship_properties = {
+            item.property
+            for item in latest.request.filters
+            if item.property is not None and item.source == "relation"
+        }
+        for item in latest.request.filters:
+            if item.predicate is None:
+                continue
+            definition = service.engine.schema.ontology.collection_predicates.get(
+                item.predicate
+            )
+            if definition is None:
+                continue
+            entity_properties.add(definition.fallback.property)
+            relationship_properties.add(definition.relation_property)
+        if latest.request.property is not None:
+            target = (
+                relationship_properties
+                if latest.request.property_source == "relationship"
+                else entity_properties
+            )
+            target.add(latest.request.property)
+        operators = [latest.request.operation]
+        if any(reference.path for reference in references):
+            operators.insert(0, "traverse")
+        if latest.request.filters:
+            operators.insert(-1, "filter")
         rows.append(
             {
                 "speaker_id": case.speaker_id,
@@ -230,6 +299,9 @@ async def _run_suite(
                 "question": case.utterance,
                 "answer": latest.text,
                 "semantic_plan": latest.request.model_dump(mode="json"),
+                "scope": latest.request.subject.model_dump(mode="json"),
+                "filters": filters,
+                "operators": operators,
                 "resolution_path": [
                     {
                         "anchor": reference.kind,
@@ -243,6 +315,18 @@ async def _run_suite(
                 "route": f"tier_{latest.timings.tier}",
                 "tier": latest.timings.tier,
                 "resolved_entities": list(latest.result.evidence.entity_ids),
+                "relationship_refs": [
+                    {
+                        "relation": item.relation,
+                        "source_id": item.source_id,
+                        "target_id": item.target_id,
+                        "start": item.start,
+                        "end": item.end,
+                    }
+                    for item in latest.result.evidence.relationships
+                ],
+                "entity_properties": sorted(entity_properties),
+                "relationship_properties": sorted(relationship_properties),
                 "semantic_properties": sorted(semantic_properties),
                 "relations": relations,
                 "temporal_operations": (
@@ -251,6 +335,7 @@ async def _run_suite(
                     else []
                 ),
                 "result_status": latest.result.status,
+                "failure_stage": _failure_stage(latest.result.status),
                 "missing_requirements": list(latest.result.missing_requirements),
                 "llm_call_count": latest.timings.llm_call_count,
                 "db_query_count": latest.timings.db_query_count,
@@ -268,10 +353,29 @@ async def _run_suite(
                 },
             }
         )
+    row_by_question = {row["utterance"]: row for row in rows}
+    comparisons = {
+        "age_extrema": {
+            question: row_by_question[question]["semantic_plan"]
+            for question in ("谁最年长", "谁最年幼")
+            if question in row_by_question
+        },
+        "household_counts": {
+            question: row_by_question[question]["semantic_plan"]
+            for question in ("家里有几个人", "有几个成年人")
+            if question in row_by_question
+        },
+        "spouse_entity_vs_relationship": {
+            question: row_by_question[question]["semantic_plan"]
+            for question in ("我老婆是谁", "我们什么时候结婚的")
+            if question in row_by_question
+        },
+    }
     return {
         "backend": backend,
         "mode": mode,
         "queries": rows,
+        "diagnostic_comparisons": comparisons,
         "aggregate": {
             "samples": len(latencies),
             "p50_ms": round(_percentile(latencies, 0.50), 3),
@@ -407,6 +511,12 @@ def main() -> None:
     )
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--schema-dir", type=Path, default=Path("schemas/edge"))
+    parser.add_argument(
+        "--question",
+        action="append",
+        dest="questions",
+        help="Benchmark only this utterance; may be repeated.",
+    )
     arguments = parser.parse_args()
     if arguments.repeat < 1:
         parser.error("--repeat must be at least 1")
@@ -417,9 +527,15 @@ def main() -> None:
             arguments.data_dir,
             arguments.schema_dir,
             arguments.mode,
+            arguments.questions or QUESTIONS,
         )
         if arguments.backend == "json"
-        else benchmark_runtime(arguments.caller, arguments.repeat, arguments.mode)
+        else benchmark_runtime(
+            arguments.caller,
+            arguments.repeat,
+            arguments.mode,
+            arguments.questions or QUESTIONS,
+        )
     )
     result = asyncio.run(coroutine)
     print(json.dumps(result, ensure_ascii=False, indent=2))

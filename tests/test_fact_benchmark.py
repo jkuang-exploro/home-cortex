@@ -21,16 +21,86 @@ ROOT = Path(__file__).parents[1]
 
 @pytest.mark.asyncio
 async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
-    result = await benchmark_json(
-        "person:jian_kuang",
-        1,
-        ROOT / "data",
-        ROOT / "schemas" / "edge",
-        "tier0_enabled",
-    )
+    async def plan_semantic_fact(
+        _self: Any,
+        messages: Any,
+        _capabilities: Any,
+        _output_schema: Any,
+        **_: Any,
+    ) -> dict[str, Any]:
+        text = messages[-1]["content"]
+        members = {
+            "kind": "current_household",
+            "entity_type": "address",
+            "path": [{"relation": "member"}],
+        }
+        if text in {"谁最年幼", "谁年纪最小"}:
+            request = {
+                "operation": "argmax",
+                "subject": members,
+                "property": "birth_date",
+            }
+        elif text == "有几个成年人":
+            request = {
+                "operation": "count",
+                "subject": members,
+                "filters": [{"predicate": "adult"}],
+            }
+        elif text == "有几个孩子":
+            request = {
+                "operation": "count",
+                "subject": members,
+                "filters": [{"predicate": "minor"}],
+            }
+        else:
+            request = {
+                "operation": "select",
+                "subject": {
+                    "kind": "self",
+                    "entity_type": "person",
+                    "path": [{"relation": "spouse"}],
+                },
+                "property": "start_date",
+                "property_source": "relationship",
+            }
+        return {"requires_fact": True, "request": request}
+
+    from home_cortex.ollama import OllamaService
+
+    original = OllamaService.plan_semantic_fact
+    OllamaService.plan_semantic_fact = plan_semantic_fact  # type: ignore[method-assign]
+    try:
+        result = await benchmark_json(
+            "person:jian_kuang",
+            1,
+            ROOT / "data",
+            ROOT / "schemas" / "edge",
+            "tier0_enabled",
+        )
+    finally:
+        OllamaService.plan_semantic_fact = original  # type: ignore[method-assign]
 
     assert result["mode"] == "tier0_enabled"
-    assert result["aggregate"]["llm_call_count"] == 0
+    assert result["aggregate"]["llm_call_count"] == 5
+    assert result["diagnostic_comparisons"]["age_extrema"]["谁最年长"][
+        "operation"
+    ] == "argmin"
+    assert result["diagnostic_comparisons"]["age_extrema"]["谁最年幼"][
+        "operation"
+    ] == "argmax"
+    adult = next(
+        row for row in result["queries"] if row["utterance"] == "有几个成年人"
+    )
+    assert adult["operators"] == ["traverse", "filter", "count"]
+    assert adult["filters"][0]["predicate"] == "adult"
+    assert adult["relationship_properties"] == ["household_role"]
+    marriage = next(
+        row
+        for row in result["queries"]
+        if row["utterance"] == "我们什么时候结婚的"
+    )
+    assert marriage["relationship_properties"] == ["start_date"]
+    assert marriage["failure_stage"] is None
     rows = {
         (row["speaker_id"], row["utterance"]): row
         for row in result["queries"]
