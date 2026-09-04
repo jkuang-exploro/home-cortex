@@ -17,7 +17,11 @@ from .db import Database
 from .edge_schema import EdgeSchemaRegistry
 from .grounding import AgentRequestContext
 from .retrieval import RetrievalService
-from .schema_catalog import RuntimeSchemaCatalog
+from .schema_catalog import (
+    RuntimeSchemaCatalog,
+    normalize_entity_alias,
+    record_aliases,
+)
 from .semantic_facts import (
     HouseholdFactEngine,
     SemanticFactService,
@@ -42,6 +46,11 @@ QUESTIONS = (
     "我和我老婆谁年龄大",
     "匡德伦的生日是哪天",
     "匡德伦哪天出生",
+    "匡德伦是谁",
+    "Dylan是谁",
+    "德伦是谁",
+    "Dylan Kuang是谁",
+    "巴璞的儿子是谁",
     "巴璞哪天过生日",
     "我儿子哪天过生日",
     "我儿子的生日还有多少天",
@@ -226,14 +235,17 @@ class _JsonGraphDispatcher:
         if tool_name == "get_entity":
             entity = self.entities.get(arguments["entity_id"])
             records = [entity] if entity is not None else []
-        elif tool_name == "search_entities":
-            query = arguments["text"].casefold()
+        elif tool_name in {"search_entities", "resolve_entity_alias"}:
+            query = normalize_entity_alias(arguments["text"])
             expected = arguments.get("entity_type")
             records = [
                 _summary(entity)
                 for entity in self.entities.values()
                 if (expected is None or entity["id"].startswith(f"{expected}:"))
-                and any(query == alias.casefold() for alias in _aliases(entity))
+                and any(
+                    query == normalize_entity_alias(alias)
+                    for alias in record_aliases(entity)
+                )
             ][: arguments.get("limit", 25)]
         elif tool_name == "get_relationships":
             records = self._relationships(arguments)
@@ -268,17 +280,6 @@ class _JsonGraphDispatcher:
             edge["related_entity"] = _summary(self.entities[related_id])
             records.append(edge)
         return records[: arguments.get("limit", 25)]
-
-
-def _aliases(entity: dict[str, Any]) -> list[str]:
-    name = entity.get("name")
-    if isinstance(name, str):
-        return [name]
-    if isinstance(name, list):
-        return [item for item in name if isinstance(item, str)]
-    if isinstance(name, dict):
-        return [item for item in name.values() if isinstance(item, str)]
-    return []
 
 
 def _summary(entity: dict[str, Any]) -> dict[str, Any]:

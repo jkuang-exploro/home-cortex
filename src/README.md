@@ -115,6 +115,41 @@ Likewise, do not add `hosts_space.json`; inverse hosted-space traversal uses the
 canonical `hosted_by` table. `get_relationships` consults the registry,
 accepts `out`, `in`, or `both` directions, and excludes ended temporal edges
 unless `include_ended` is true.
+
+## Entity aliases and semantic ontology
+
+Household identity comes from node data. A person can have multilingual full
+names in `name` and additional stable names in `aliases`:
+
+```json
+{
+  "id": "person:example",
+  "name": ["Example Person", "示例人"],
+  "aliases": ["Example", "小示"]
+}
+```
+
+Alias lookup reads the runtime database, applies Unicode NFKC normalization,
+case folding, whitespace folding, and basic punctuation normalization, and
+returns every exact match. It never chooses the first record when an alias is
+ambiguous. To add a nickname, edit only the person's node data and re-run
+ingestion; application source changes are unnecessary.
+
+Language-independent property mappings and composable kinship concepts live in
+`schemas/semantic/ontology.yaml`. For example, `father_in_law` expands to
+`spouse -> parent[gender=male]`, while the base `parent` relation points to the
+declarative inverse name from `schemas/edge/parent_of.yaml`. Add a new kinship
+term to the appropriate ontology `aliases` list, then rebuild/restart the API.
+Do not add context-dependent phrases such as “my son” to a person's static
+aliases.
+
+Tier 0 consumes this same ontology only as a latency optimization. To exercise
+the semantic planner and authoritative entity resolver without Tier 0, set:
+
+```dotenv
+HOME_CORTEX_DISABLE_TIER0=1
+```
+
 The ingestion endpoint rejects unknown relationship files, invalid endpoint
 types, references to nodes missing from the source data, temporal fields on
 non-temporal edges, reverse duplicates of a symmetric fact, and a registered

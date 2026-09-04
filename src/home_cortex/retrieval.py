@@ -14,6 +14,7 @@ from .edge_schema import (
     UnknownEdgeSchemaError,
 )
 from .record_ids import canonical_record_id, split_record_id
+from .schema_catalog import normalize_entity_alias, record_aliases
 
 ENTITY_SUMMARY_FIELDS = frozenset(
     {
@@ -134,6 +135,50 @@ class RetrievalService:
             if record.get("id") == record_id:
                 return record
         return None
+
+    async def resolve_entity_alias(
+        self,
+        text: str,
+        entity_type: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Resolve an exact normalized alias from runtime database records."""
+        normalized = normalize_entity_alias(text)
+        if not normalized:
+            raise ValueError("Entity alias cannot be empty")
+        result_limit = self._validated_limit(limit)
+        if entity_type is not None:
+            if entity_type not in self.node_tables:
+                raise ValueError(
+                    f"Unknown entity type {entity_type!r}; expected one of "
+                    f"{', '.join(self.node_tables)}"
+                )
+            tables = (entity_type,)
+        else:
+            tables = self.node_tables
+
+        statement = """
+            SELECT * FROM type::table($table)
+            ORDER BY id;
+        """
+        matches: list[dict[str, Any]] = []
+        for table in tables:
+            records = _query_records(
+                await self.database.query(
+                    statement,
+                    {"table": table},
+                )
+            )
+            matches.extend(
+                _entity_summary(record)
+                for record in records
+                if any(
+                    normalize_entity_alias(alias) == normalized
+                    for alias in record_aliases(record)
+                )
+            )
+        matches.sort(key=lambda record: str(record.get("id", "")))
+        return matches[:result_limit]
 
     async def get_relationships(
         self,

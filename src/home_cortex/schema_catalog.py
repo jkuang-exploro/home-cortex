@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
@@ -218,7 +220,7 @@ def _validated_property_types(
 
 
 def record_aliases(record: Mapping[str, Any]) -> tuple[str, ...]:
-    """Return normalized display aliases used for exact entity resolution."""
+    """Return stored display aliases used for exact entity resolution."""
     names = record.get("name")
     aliases: list[str]
     if isinstance(names, str):
@@ -239,8 +241,46 @@ def record_aliases(record: Mapping[str, Any]) -> tuple[str, ...]:
         ]
     else:
         aliases = []
+    stored_aliases = record.get("aliases")
+    if isinstance(stored_aliases, Sequence) and not isinstance(
+        stored_aliases, (str, bytes, bytearray)
+    ):
+        aliases.extend(
+            item
+            for item in stored_aliases
+            if isinstance(item, str) and item.strip()
+        )
+        aliases.extend(
+            value
+            for item in stored_aliases
+            if isinstance(item, Mapping)
+            and isinstance((value := item.get("value")), str)
+            and value.strip()
+        )
+    for field in (
+        "display_name",
+        "preferred_name",
+        "nickname",
+        "english_name",
+        "chinese_name",
+    ):
+        value = record.get(field)
+        if isinstance(value, str) and value.strip():
+            aliases.append(value)
     first_name = record.get("first_name")
     last_name = record.get("last_name")
+    if isinstance(first_name, str):
+        aliases.append(first_name)
     if isinstance(first_name, str) and isinstance(last_name, str):
         aliases.append(f"{first_name} {last_name}")
-    return tuple(alias.strip() for alias in aliases if alias.strip())
+    return tuple(dict.fromkeys(alias.strip() for alias in aliases if alias.strip()))
+
+
+def normalize_entity_alias(value: str) -> str:
+    """Normalize lookup syntax without erasing meaningful name characters."""
+    normalized = unicodedata.normalize("NFKC", value).casefold().strip()
+    normalized = "".join(
+        " " if unicodedata.category(character).startswith("P") else character
+        for character in normalized
+    )
+    return re.sub(r"\s+", " ", normalized).strip()

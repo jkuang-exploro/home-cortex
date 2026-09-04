@@ -172,6 +172,7 @@ async def lifespan(app: FastAPI):
             assistant_display_name=definition.display_name,
             home_entity_id=definition.settings.get("home_entity_id"),
             household_timezone=settings.calendar_timezone,
+            disable_tier0=settings.home_cortex_disable_tier0,
             schema_catalog=schema_catalog,
         )
     app.state.agents = runtimes

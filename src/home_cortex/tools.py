@@ -57,6 +57,12 @@ class SearchEntitiesArguments(ToolArguments):
     limit: int | None = Field(default=None, ge=1, le=100)
 
 
+class ResolveEntityAliasArguments(ToolArguments):
+    text: str = Field(min_length=1, max_length=256)
+    entity_type: str | None = Field(default=None, pattern=TABLE_NAME_PATTERN)
+    limit: int | None = Field(default=None, ge=1, le=100)
+
+
 class GetEntityArguments(ToolArguments):
     entity_id: str = Field(pattern=RECORD_ID_PATTERN)
 
@@ -403,6 +409,7 @@ class ToolDispatcher:
         self.retrieval = retrieval
         self.calendar = calendar
         argument_models: dict[str, type[ToolArguments]] = {
+            "resolve_entity_alias": ResolveEntityAliasArguments,
             "search_entities": SearchEntitiesArguments,
             "get_entity": GetEntityArguments,
             "get_relationships": GetRelationshipsArguments,
@@ -411,6 +418,7 @@ class ToolDispatcher:
             "calendar.check_availability": CheckAvailabilityArguments,
         }
         handlers: dict[str, Handler] = {
+            "resolve_entity_alias": self._resolve_entity_alias,
             "search_entities": self._search_entities,
             "get_entity": self._get_entity,
             "get_relationships": self._get_relationships,
@@ -418,12 +426,16 @@ class ToolDispatcher:
             "calendar.list_events": self._list_events,
             "calendar.check_availability": self._check_availability,
         }
-        selected = (
-            tuple(allowed_tools) if allowed_tools is not None else tuple(handlers)
+        selected_public = (
+            tuple(allowed_tools)
+            if allowed_tools is not None
+            else tuple(name for name in handlers if name != "resolve_entity_alias")
         )
-        unknown = sorted(set(selected) - handlers.keys())
+        unknown = sorted(set(selected_public) - handlers.keys())
         if unknown:
             raise ValueError(f"Unknown tool names: {', '.join(unknown)}")
+        selected = tuple(dict.fromkeys((*selected_public, "resolve_entity_alias")))
+        self._public_tools = frozenset(selected_public)
         self._argument_models = {name: argument_models[name] for name in selected}
         self._handlers = {name: handlers[name] for name in selected}
 
@@ -434,14 +446,49 @@ class ToolDispatcher:
         *,
         caller_entity_id: str | None = None,
     ) -> dict[str, Any]:
+        return await self._dispatch(
+            tool_name,
+            arguments,
+            caller_entity_id=caller_entity_id,
+            allow_internal=False,
+        )
+
+    async def dispatch_internal(
+        self,
+        tool_name: str,
+        arguments: Any,
+        *,
+        caller_entity_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Execute resolver-only operations unavailable to model tool calls."""
+        return await self._dispatch(
+            tool_name,
+            arguments,
+            caller_entity_id=caller_entity_id,
+            allow_internal=True,
+        )
+
+    async def _dispatch(
+        self,
+        tool_name: str,
+        arguments: Any,
+        *,
+        caller_entity_id: str | None,
+        allow_internal: bool,
+    ) -> dict[str, Any]:
         argument_model = self._argument_models.get(tool_name)
         handler = self._handlers.get(tool_name)
-        if argument_model is None or handler is None:
+        internal_allowed = allow_internal and tool_name == "resolve_entity_alias"
+        if (
+            argument_model is None
+            or handler is None
+            or (tool_name not in self._public_tools and not internal_allowed)
+        ):
             return self._error(
                 tool_name,
                 "unknown_tool",
                 f"Tool {tool_name!r} is not available",
-                available_tools=sorted(self._handlers),
+                available_tools=sorted(self._public_tools),
             )
 
         if not isinstance(arguments, dict):
@@ -516,6 +563,17 @@ class ToolDispatcher:
     ) -> list[dict[str, Any]]:
         assert isinstance(arguments, SearchEntitiesArguments)
         return await self.retrieval.search_entities(
+            arguments.text,
+            entity_type=arguments.entity_type,
+            limit=arguments.limit,
+        )
+
+    async def _resolve_entity_alias(
+        self,
+        arguments: ToolArguments,
+    ) -> list[dict[str, Any]]:
+        assert isinstance(arguments, ResolveEntityAliasArguments)
+        return await self.retrieval.resolve_entity_alias(
             arguments.text,
             entity_type=arguments.entity_type,
             limit=arguments.limit,

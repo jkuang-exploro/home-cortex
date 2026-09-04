@@ -6,6 +6,7 @@ from surrealdb import AsyncSurreal, RecordID
 
 from home_cortex.ingestion import ingest_directory
 from home_cortex.retrieval import RetrievalService, to_json_value
+from home_cortex.schema_catalog import normalize_entity_alias
 
 STATIC_TEST_DATA = Path(__file__).parent / "static_test_data"
 
@@ -120,6 +121,58 @@ async def test_search_entities_can_restrict_entity_type_and_limit() -> None:
     assert result == [{"id": "person:a"}]
     assert len(database.queries) == 1
     assert database.queries[0][1]["limit"] == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_entity_alias_is_exact_normalized_and_database_backed() -> None:
+    database = FakeDatabase(
+        {
+            "person": [
+                {
+                    "id": RecordID("person", "dylan"),
+                    "name": ["Dylan Kuang", "匡德伦"],
+                    "aliases": ["Dylan", "德伦"],
+                },
+                {
+                    "id": RecordID("person", "dylan_sr"),
+                    "name": ["Dylan Senior"],
+                },
+            ]
+        }
+    )
+    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
+
+    result = await service.resolve_entity_alias(
+        "  ＤＹＬＡＮ!!!  ",
+        entity_type="person",
+    )
+
+    assert [record["id"] for record in result] == ["person:dylan"]
+    assert len(database.queries) == 1
+    assert "SELECT * FROM type::table($table)" in database.queries[0][0]
+    assert "LIMIT $limit" not in database.queries[0][0]
+    assert "limit" not in database.queries[0][1]
+    assert normalize_entity_alias(" ＤＹＬＡＮ!!! ") == "dylan"
+
+
+@pytest.mark.asyncio
+async def test_resolve_entity_alias_preserves_ambiguity() -> None:
+    database = FakeDatabase(
+        {
+            "person": [
+                {"id": RecordID("person", "first"), "aliases": ["David"]},
+                {"id": RecordID("person", "second"), "aliases": ["david"]},
+            ]
+        }
+    )
+    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
+
+    result = await service.resolve_entity_alias("DAVID", entity_type="person")
+
+    assert [record["id"] for record in result] == [
+        "person:first",
+        "person:second",
+    ]
 
 
 @pytest.mark.asyncio

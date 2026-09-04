@@ -26,6 +26,7 @@ from .operator_registry import (
     operator_prompt_payload,
 )
 from .schema_catalog import RuntimeSchemaCatalog
+from .semantic_ontology import SemanticOntology
 from .text import safe_log_token
 
 logger = logging.getLogger("uvicorn.error.home_cortex.semantic_facts")
@@ -66,6 +67,15 @@ ReferenceKind = Literal[
     "current_household",
     "named_entity",
     "entity_id",
+]
+ResolutionStatus = Literal[
+    "resolved",
+    "not_found",
+    "ambiguous",
+    "invalid_reference",
+    "missing_context",
+    "relationship_not_found",
+    "property_unavailable",
 ]
 
 
@@ -208,29 +218,32 @@ class SemanticAttempt:
     answer: FactAnswer | None = None
 
 
+@dataclass(frozen=True)
+class ResolutionResult:
+    status: ResolutionStatus
+    entities: tuple[Mapping[str, Any], ...] = ()
+    entity_ids: tuple[str, ...] = ()
+    confidence: float | None = None
+    evidence: FactEvidence = FactEvidence()
+    candidates: tuple[Mapping[str, Any], ...] = ()
+    missing_requirements: tuple[str, ...] = ()
+
+
 class SemanticSchemaRegistry:
     """Map stable semantic concepts to deployment-specific schema names."""
 
-    PROPERTY_CANDIDATES: Mapping[str, tuple[str, ...]] = {
-        "display_name": ("display_name", "name", "full_name"),
-        "given_name": ("given_name", "first_name"),
-        "family_name": ("family_name", "last_name", "surname"),
-        "form_of_address": ("form_of_address", "address_as"),
-        "birth_date": ("birth_date", "birthday", "dob", "date_of_birth"),
-        "full_address": ("full_address", "address", "street_address"),
-        "gender": ("gender", "sex"),
-        "household_role": ("household_role", "member_role", "role"),
-    }
-    RELATION_CANDIDATES: Mapping[str, tuple[str, ...]] = {
-        "spouse": ("spouse_of", "spouse"),
-        "child": ("parent_of",),
-        "parent": ("parent_of", "child_of"),
-        "member": ("lives_in", "member_of"),
-        "residence": ("lives_in", "resides_at"),
-    }
-
-    def __init__(self, catalog: RuntimeSchemaCatalog) -> None:
+    def __init__(
+        self,
+        catalog: RuntimeSchemaCatalog,
+        ontology: SemanticOntology | None = None,
+    ) -> None:
         self.catalog = catalog
+        self.ontology = ontology or SemanticOntology.load_default()
+        self._aliased_physical_properties = frozenset(
+            physical
+            for definition in self.ontology.properties.values()
+            for physical in definition.fields
+        )
         self._property_cache: dict[tuple[str, str], str | None] = {}
         self._capability_cache: dict[str, Any] | None = None
 
@@ -240,31 +253,42 @@ class SemanticSchemaRegistry:
             return self._property_cache[marker]
         schema = self.catalog.entities.get(entity_type)
         available = set(schema.properties) if schema else set()
-        candidates = self.PROPERTY_CANDIDATES.get(semantic, (semantic,))
+        candidates = self._property_candidates(semantic)
         physical = next((field for field in candidates if field in available), None)
         self._property_cache[marker] = physical
         return physical
 
     def physical_relation(self, semantic: str) -> tuple[str, str | None] | None:
-        for candidate in self.RELATION_CANDIDATES.get(semantic, (semantic,)):
-            if self.catalog.has_relation(candidate):
-                direction = None
-                if semantic == "child":
-                    direction = "out"
-                elif semantic == "parent":
-                    direction = "in"
-                elif semantic == "member":
-                    direction = "in"
-                elif semantic == "residence":
-                    direction = "out"
-                return candidate, direction
+        public_name = self.ontology.base_relations.get(semantic)
+        if public_name is None:
+            return None
+        direct = self.catalog.relations.get(public_name)
+        if direct is not None:
+            return direct.name, None if direct.symmetric else "out"
+        inverse = next(
+            (
+                schema
+                for schema in self.catalog.relations.values()
+                if schema.inverse_name == public_name
+            ),
+            None,
+        )
+        if inverse is not None:
+            return inverse.name, "in"
         return None
 
     def relation_property(self, relation: str, semantic: str) -> str | None:
         schema = self.catalog.relations.get(relation)
         available = set(schema.properties) if schema else set()
-        candidates = self.PROPERTY_CANDIDATES.get(semantic, (semantic,))
+        candidates = self._property_candidates(semantic)
         return next((field for field in candidates if field in available), None)
+
+    def _property_candidates(self, semantic: str) -> tuple[str, ...]:
+        if semantic in self.ontology.properties:
+            return self.ontology.property_fields(semantic)
+        if semantic in self._aliased_physical_properties:
+            return ()
+        return (semantic,)
 
     def capability_payload(self) -> dict[str, Any]:
         if self._capability_cache is not None:
@@ -278,15 +302,9 @@ class SemanticSchemaRegistry:
         }
         relations = {
             semantic
-            for semantic in self.RELATION_CANDIDATES
+            for semantic in self.ontology.base_relations
             if self.physical_relation(semantic) is not None
         }
-        aliased_relations = {
-            physical
-            for candidates in self.RELATION_CANDIDATES.values()
-            for physical in candidates
-        }
-        relations.update(set(self.catalog.relations) - aliased_relations)
         self._capability_cache = {
             "entity_types": sorted(self.catalog.entities),
             "semantic_properties": semantic_properties,
@@ -299,6 +317,7 @@ class SemanticSchemaRegistry:
             "operator_contracts": {
                 name: contracts[name] for name in sorted(exposed_operators)
             },
+            "reference_ontology": self.ontology.prompt_payload(),
         }
         return self._capability_cache
 
@@ -308,18 +327,14 @@ class SemanticSchemaRegistry:
             return frozenset()
         properties = {
             semantic
-            for semantic in self.PROPERTY_CANDIDATES
+            for semantic in self.ontology.properties
             if self.physical_property(entity_type, semantic) is not None
-        }
-        aliased_physical = {
-            physical
-            for candidates in self.PROPERTY_CANDIDATES.values()
-            for physical in candidates
         }
         properties.update(
             physical
             for physical in schema.properties
-            if physical != "id" and physical not in aliased_physical
+            if physical != "id"
+            and physical not in self._aliased_physical_properties
         )
         return frozenset(properties)
 
@@ -333,18 +348,13 @@ class SemanticSchemaRegistry:
             return frozenset()
         properties = {
             semantic_property
-            for semantic_property in self.PROPERTY_CANDIDATES
+            for semantic_property in self.ontology.properties
             if self.relation_property(relation, semantic_property) is not None
-        }
-        aliased_physical = {
-            physical
-            for candidates in self.PROPERTY_CANDIDATES.values()
-            for physical in candidates
         }
         properties.update(
             physical
             for physical in schema.properties
-            if physical not in aliased_physical
+            if physical not in self._aliased_physical_properties
         )
         return frozenset(properties)
 
@@ -353,14 +363,6 @@ class SemanticSchemaRegistry:
             self.catalog.entity_field_type(entity_type, physical)
             for entity_type in self.catalog.entities
             if (physical := self.physical_property(entity_type, semantic)) is not None
-        )
-
-    def mentions_known_entity(self, text: str) -> bool:
-        normalized = text.casefold()
-        return any(
-            alias.casefold() in normalized
-            for alias in self.catalog.entity_aliases
-            if len(alias.strip()) >= 2
         )
 
     def validates(self, request: SemanticFactRequest) -> bool:
@@ -584,33 +586,21 @@ class SemanticFactPlanner:
             SemanticPlan.model_json_schema(),
             household_now=context.current_time.isoformat(),
         )
-        return SemanticPlan.model_validate(payload), (perf_counter() - started) * 1000
+        plan = SemanticPlan.model_validate(payload)
+        if plan.request is not None and any(
+            reference.kind == "entity_id"
+            for reference in (plan.request.subject, plan.request.other)
+            if reference is not None
+        ):
+            raise ValueError("The semantic planner cannot originate entity IDs")
+        return plan, (perf_counter() - started) * 1000
 
 
 class TierZeroSemanticParser:
     """Parse a bounded vocabulary into composable IR, never whole-query handlers."""
 
-    _RELATIONS: tuple[tuple[tuple[str, ...], str, str | None], ...] = (
-        (("老婆", "妻子", "wife"), "spouse", "female"),
-        (("老公", "丈夫", "husband"), "spouse", "male"),
-        (("儿子", "son"), "child", "male"),
-        (("女儿", "daughter"), "child", "female"),
-        (("孩子", "小孩", "children", "child"), "child", None),
-        (("爸爸", "父亲", "father"), "parent", "male"),
-        (("妈妈", "母亲", "mother"), "parent", "female"),
-    )
-    _COMPOSED_RELATIONS: tuple[
-        tuple[tuple[str, ...], tuple[tuple[str, str | None], ...]], ...
-    ] = (
-        (
-            ("岳父", "公公", "father-in-law", "father in law"),
-            (("spouse", None), ("parent", "male")),
-        ),
-        (
-            ("岳母", "婆婆", "mother-in-law", "mother in law"),
-            (("spouse", None), ("parent", "female")),
-        ),
-    )
+    def __init__(self, ontology: SemanticOntology | None = None) -> None:
+        self.ontology = ontology or SemanticOntology.load_default()
 
     def parse(self, text: str) -> SemanticFactRequest | None:
         normalized = _normalize_request(text)
@@ -658,7 +648,7 @@ class TierZeroSemanticParser:
                 property="full_address",
             )
 
-        birthday_intent = _extract_birthday_intent(normalized)
+        birthday_intent = _extract_birthday_intent(normalized, self.ontology)
         if birthday_intent is not None:
             operation, stem, mode = birthday_intent
             reference = self._parse_reference(stem)
@@ -673,7 +663,7 @@ class TierZeroSemanticParser:
                 else None
             )
 
-        property_name, stem = _extract_property(normalized)
+        property_name, stem = _extract_property(normalized, self.ontology)
         if property_name == "age":
             reference = self._parse_reference(stem)
             return (
@@ -755,40 +745,26 @@ class TierZeroSemanticParser:
         remainder = remainder.strip("的 ")
         steps: list[SemanticRelationStep] = []
         while remainder:
-            matched = False
-            for aliases, composed in self._COMPOSED_RELATIONS:
-                alias = next((item for item in aliases if remainder.startswith(item)), None)
-                if alias is None:
-                    continue
-                for relation, gender in composed:
-                    filters = (
-                        (SemanticFilter(property="gender", value=gender),)
-                        if gender is not None
-                        else ()
-                    )
-                    steps.append(
-                        SemanticRelationStep(relation=relation, filters=filters)
-                    )
-                remainder = remainder[len(alias) :].strip("的 ")
-                matched = True
-                break
-            if matched:
-                continue
-            for aliases, relation, gender in self._RELATIONS:
-                alias = next((item for item in aliases if remainder.startswith(item)), None)
-                if alias is None:
-                    continue
-                filters = (
-                    (SemanticFilter(property="gender", value=gender),)
-                    if gender is not None
-                    else ()
-                )
-                steps.append(SemanticRelationStep(relation=relation, filters=filters))
-                remainder = remainder[len(alias) :].strip("的 ")
-                matched = True
-                break
-            if not matched:
+            matched = self.ontology.match_reference_prefix(remainder)
+            if matched is None:
                 return None
+            concept, consumed = matched
+            steps.extend(
+                SemanticRelationStep(
+                    relation=step.relation,
+                    filters=tuple(
+                        SemanticFilter(
+                            property=item.property,
+                            operator=item.operator,
+                            value=item.value,
+                            source=item.source,
+                        )
+                        for item in step.filters
+                    ),
+                )
+                for step in concept.path
+            )
+            remainder = remainder[consumed:].strip("的 ")
         return SemanticReference(
             kind=base,
             value=base_value,
@@ -797,11 +773,7 @@ class TierZeroSemanticParser:
         )
 
     def _starts_relation(self, text: str) -> bool:
-        return any(
-            text.startswith(alias)
-            for aliases, *_ in (*self._COMPOSED_RELATIONS, *self._RELATIONS)
-            for alias in aliases
-        )
+        return self.ontology.match_reference_prefix(text) is not None
 
     def _parse_comparison(self, text: str) -> SemanticFactRequest | None:
         suffix = next(
@@ -830,7 +802,9 @@ class TierZeroSemanticParser:
         )
 
 
-class HouseholdFactEngine:
+class EntityResolver:
+    """Authoritative resolver from semantic references to canonical entities."""
+
     def __init__(
         self,
         dispatcher: Any,
@@ -842,76 +816,76 @@ class HouseholdFactEngine:
         self.schema = schema
         self.max_records = max_records
 
-    async def execute(
+    async def resolve(
         self,
-        request: SemanticFactRequest,
+        reference: SemanticReference,
         context: AgentRequestContext,
-    ) -> tuple[FactResult, int, float, float]:
-        if not self.schema.validates(request):
-            return FactResult("computation_impossible"), 0, 0, 0
-        execution = _FactExecution(self.dispatcher, context.caller_entity_id)
-        resolution_started = perf_counter()
-        allow_empty_collection = request.operation in {"count", "select"}
+        execution: "_FactExecution",
+        *,
+        allow_empty_collection: bool = False,
+        expect_many: bool = False,
+    ) -> ResolutionResult:
         try:
-            entities = await self._resolve_reference(
-                request.subject,
+            entities = await self._resolve(
+                reference,
                 context,
                 execution,
                 allow_empty_collection=allow_empty_collection,
             )
-            other_entities = (
-                await self._resolve_reference(
-                    request.other,
-                    context,
-                    execution,
-                    allow_empty_collection=False,
+            if len(entities) > 1 and not expect_many:
+                candidates = tuple(
+                    [await self._load_if_unnamed(item, execution) for item in entities]
                 )
-                if request.other is not None
-                else []
+                return ResolutionResult("ambiguous", candidates=candidates)
+            entity_ids = tuple(
+                str(item["id"])
+                for item in entities
+                if isinstance(item.get("id"), str)
             )
-        except _FactFailure as error:
-            return (
-                FactResult(
-                    error.status,
-                    evidence=error.evidence,
-                    missing_requirements=error.missing,
+            return ResolutionResult(
+                "resolved",
+                tuple(entities),
+                entity_ids,
+                1.0,
+                FactEvidence(
+                    entity_ids=entity_ids,
+                    relationship=(
+                        reference.path[-1].relation if reference.path else None
+                    ),
+                    relationships=tuple(execution.relationship_evidence),
                 ),
-                execution.query_count,
-                (perf_counter() - resolution_started) * 1000,
-                0,
-            )
-        entity_resolution_ms = (perf_counter() - resolution_started) * 1000
-        computation_started = perf_counter()
-        try:
-            result = await self._operate(
-                request,
-                entities,
-                other_entities,
-                context,
-                execution,
             )
         except _FactFailure as error:
-            result = FactResult(
-                error.status,
+            status: ResolutionStatus = {
+                "caller_context_missing": "missing_context",
+                "entity_not_found": "not_found",
+                "relationship_not_found": "relationship_not_found",
+                "property_unavailable": "property_unavailable",
+                "ambiguous": "ambiguous",
+                "computation_input_missing": "invalid_reference",
+                "computation_impossible": "invalid_reference",
+            }[error.status]
+            return ResolutionResult(
+                status,
                 evidence=error.evidence,
+                candidates=error.candidates,
                 missing_requirements=error.missing,
             )
-        computation_ms = (perf_counter() - computation_started) * 1000
-        return result, execution.query_count, entity_resolution_ms, computation_ms
 
-    async def _resolve_reference(
+    async def _resolve(
         self,
-        reference: SemanticReference | None,
+        reference: SemanticReference,
         context: AgentRequestContext,
         execution: "_FactExecution",
         *,
         allow_empty_collection: bool,
     ) -> list[dict[str, Any]]:
-        if reference is None:
-            return []
         if reference.kind == "assistant":
             entities = [
-                {"id": context.assistant_id, "display_name": context.assistant_display_name}
+                {
+                    "id": context.assistant_id,
+                    "display_name": context.assistant_display_name,
+                }
             ]
         elif reference.kind == "self":
             if context.caller_entity_id is None:
@@ -923,25 +897,32 @@ class HouseholdFactEngine:
             entities = [{"id": context.household_id}]
         elif reference.kind == "entity_id":
             entities = [{"id": reference.value}]
-        else:
+        elif reference.kind == "named_entity":
             records = await execution.records(
-                "search_entities",
+                "resolve_entity_alias",
                 {
                     "text": reference.value,
                     "entity_type": reference.entity_type,
                     "limit": self.max_records,
                 },
             )
-            exact = [
-                record
-                for record in records
-                if _has_exact_alias(record, reference.value or "")
-            ]
-            if exact:
-                records = exact
             if not records:
                 raise _FactFailure("entity_not_found")
+            if len(records) > 1:
+                raise _FactFailure(
+                    "ambiguous",
+                    evidence=FactEvidence(
+                        entity_ids=tuple(
+                            str(item["id"])
+                            for item in records
+                            if isinstance(item.get("id"), str)
+                        )
+                    ),
+                    candidates=tuple(records),
+                )
             entities = records
+        else:
+            raise _FactFailure("computation_impossible")
 
         last_relation: str | None = None
         for step in reference.path:
@@ -1035,13 +1016,138 @@ class HouseholdFactEngine:
             needs_load = any(
                 physical not in entity for _, physical in mapped if physical is not None
             )
-            record = await self._load(entity, execution) if needs_load else dict(entity)
+            record = (
+                await self._load(entity, execution) if needs_load else dict(entity)
+            )
             if all(
                 evaluate_predicate(item.operator, record.get(physical), item.value)
                 for item, physical in mapped
             ):
                 matched.append(record)
         return matched
+
+    async def _load_if_unnamed(
+        self,
+        entity: Mapping[str, Any],
+        execution: "_FactExecution",
+    ) -> dict[str, Any]:
+        if any(entity.get(field) for field in ("display_name", "name", "full_name")):
+            return dict(entity)
+        return await self._load(entity, execution)
+
+    @staticmethod
+    async def _load(
+        entity: Mapping[str, Any],
+        execution: "_FactExecution",
+    ) -> dict[str, Any]:
+        entity_id = entity.get("id")
+        if not isinstance(entity_id, str):
+            raise _FactFailure("entity_not_found")
+        records = await execution.records("get_entity", {"entity_id": entity_id})
+        if not records:
+            raise _FactFailure("entity_not_found")
+        return dict(records[0])
+
+
+class HouseholdFactEngine:
+    def __init__(
+        self,
+        dispatcher: Any,
+        schema: SemanticSchemaRegistry,
+        *,
+        max_records: int = 25,
+        resolver: EntityResolver | None = None,
+    ) -> None:
+        self.dispatcher = dispatcher
+        self.schema = schema
+        self.max_records = max_records
+        self.resolver = resolver or EntityResolver(
+            dispatcher,
+            schema,
+            max_records=max_records,
+        )
+
+    async def execute(
+        self,
+        request: SemanticFactRequest,
+        context: AgentRequestContext,
+    ) -> tuple[FactResult, int, float, float]:
+        if not self.schema.validates(request):
+            return FactResult("computation_impossible"), 0, 0, 0
+        execution = _FactExecution(self.dispatcher, context.caller_entity_id)
+        resolution_started = perf_counter()
+        allow_empty_collection = request.operation in {"count", "select"}
+        operation = OPERATORS[request.operation]
+        expect_many = request.other is None and (
+            operation.input_shape == "collection"
+            or (request.operation == "select" and request.property is None)
+        )
+        resolution = await self.resolver.resolve(
+            request.subject,
+            context,
+            execution,
+            allow_empty_collection=allow_empty_collection,
+            expect_many=expect_many,
+        )
+        other_resolution = (
+            await self.resolver.resolve(
+                request.other,
+                context,
+                execution,
+                allow_empty_collection=False,
+                expect_many=False,
+            )
+            if request.other is not None
+            else ResolutionResult("resolved")
+        )
+        failed = next(
+            (
+                item
+                for item in (resolution, other_resolution)
+                if item.status != "resolved"
+            ),
+            None,
+        )
+        if failed is not None:
+            status: FactStatus = {
+                "not_found": "entity_not_found",
+                "ambiguous": "ambiguous",
+                "invalid_reference": "computation_impossible",
+                "missing_context": "caller_context_missing",
+                "relationship_not_found": "relationship_not_found",
+                "property_unavailable": "property_unavailable",
+            }[failed.status]
+            return (
+                FactResult(
+                    status,
+                    evidence=failed.evidence,
+                    missing_requirements=failed.missing_requirements,
+                    candidates=failed.candidates,
+                ),
+                execution.query_count,
+                (perf_counter() - resolution_started) * 1000,
+                0,
+            )
+        entities = [dict(item) for item in resolution.entities]
+        other_entities = [dict(item) for item in other_resolution.entities]
+        entity_resolution_ms = (perf_counter() - resolution_started) * 1000
+        computation_started = perf_counter()
+        try:
+            result = await self._operate(
+                request,
+                entities,
+                other_entities,
+                context,
+                execution,
+            )
+        except _FactFailure as error:
+            result = FactResult(
+                error.status,
+                evidence=error.evidence,
+                missing_requirements=error.missing,
+            )
+        computation_ms = (perf_counter() - computation_started) * 1000
+        return result, execution.query_count, entity_resolution_ms, computation_ms
 
     async def _operate(
         self,
@@ -1435,11 +1541,13 @@ class SemanticFactService:
         parser: TierZeroSemanticParser | None = None,
         renderer: FactRenderer | None = None,
         planner: SemanticFactPlanner | None = None,
+        tier_zero_enabled: bool = True,
     ) -> None:
         self.engine = engine
-        self.parser = parser or TierZeroSemanticParser()
+        self.parser = parser or TierZeroSemanticParser(engine.schema.ontology)
         self.renderer = renderer or FactRenderer()
         self.planner = planner
+        self.tier_zero_enabled = tier_zero_enabled
 
     async def attempt(
         self,
@@ -1452,16 +1560,13 @@ class SemanticFactService:
         latest = _latest_user_text(messages)
         routing_started = perf_counter()
         parse_started = perf_counter()
-        request = self.parser.parse(latest)
+        request = self.parser.parse(latest) if self.tier_zero_enabled else None
         semantic_parse_ms = (perf_counter() - parse_started) * 1000
         tier = 0
         llm_ms = 0.0
         llm_call_count = 0
         if request is None:
-            if self.planner is None or not (
-                _likely_semantic_fact(latest)
-                or self.engine.schema.mentions_known_entity(latest)
-            ):
+            if self.planner is None:
                 return SemanticAttempt(False)
             tier = 1
             llm_call_count = 1
@@ -1614,7 +1719,13 @@ class _FactExecution:
             if cached is not None:
                 return [dict(cached)]
         self.query_count += 1
-        response = await self.dispatcher.dispatch(
+        dispatch = (
+            self.dispatcher.dispatch_internal
+            if tool == "resolve_entity_alias"
+            and hasattr(self.dispatcher, "dispatch_internal")
+            else self.dispatcher.dispatch
+        )
+        response = await dispatch(
             tool,
             arguments,
             caller_entity_id=self.caller_entity_id,
@@ -1637,11 +1748,13 @@ class _FactFailure(RuntimeError):
         *,
         evidence: FactEvidence = FactEvidence(),
         missing: tuple[str, ...] = (),
+        candidates: tuple[Mapping[str, Any], ...] = (),
     ) -> None:
         super().__init__(status)
         self.status = status
         self.evidence = evidence
         self.missing = missing
+        self.candidates = candidates
 
 
 def _latest_user_text(messages: Sequence[Mapping[str, Any]]) -> str:
@@ -1654,26 +1767,6 @@ def _latest_user_text(messages: Sequence[Mapping[str, Any]]) -> str:
         ),
         "",
     )
-
-
-def _likely_semantic_fact(text: str) -> bool:
-    """Conservative Tier-1 routing; Tier-0 remains the canonical fast path."""
-    normalized = _normalize_request(text)
-    if not normalized:
-        return False
-    semantic_terms = re.search(
-        r"家里|我家|我们家|家庭|我的|老婆|妻子|丈夫|老公|儿子|女儿|孩子|"
-        r"爸爸|父亲|妈妈|母亲|岳父|岳母|公公|婆婆|生日|出生|几岁|年纪|年龄|"
-        r"household|wife|husband|spouse|son|daughter|child|parent|"
-        r"birthday|birth date|how old|my |our ",
-        normalized,
-    )
-    question_shape = re.search(
-        r"谁|什么|多少|几个|几位|哪|何时|什么时候|多大|几岁|"
-        r"who|what|when|how many|how old|which|oldest|youngest",
-        normalized,
-    )
-    return semantic_terms is not None and question_shape is not None
 
 
 def _log_fact_query(
@@ -1731,59 +1824,69 @@ def _normalize_request(text: str) -> str:
     return re.sub(r"\s+", " ", normalized)
 
 
-def _extract_property(text: str) -> tuple[str | None, str]:
-    born = re.fullmatch(r"(.+?)(?:的)?哪天出生", text)
-    if born:
-        return "birth_date", born.group(1).strip("的 ")
-    birth = re.search(
-        r"(?:的)?(?:生日|出生日期|出生时间)"
-        r"(?:是|在)?(?:哪天|什么时候|何时|是什么)?$",
-        text,
-    )
-    if birth:
-        return "birth_date", text[: birth.start()].strip("的 ")
+def _extract_property(
+    text: str,
+    ontology: SemanticOntology,
+) -> tuple[str | None, str]:
     age = re.search(r"(?:现在|今年)?(?:几岁(?:了)?|多大(?:了)?)$", text)
     if age:
         return "age", text[: age.start()].strip("的 ")
-    english_birth = re.fullmatch(
-        r"(?:what|when) (?:is|was) (.+?)(?:'s)? "
-        r"(?:birthday|birth date|date of birth)",
-        text,
-    )
-    if english_birth:
-        return "birth_date", english_birth.group(1).strip()
-    english_born = re.fullmatch(r"when was (.+?) born", text)
-    if english_born:
-        return "birth_date", english_born.group(1).strip()
     english_age = re.match(r"how old (?:is|are) (.+)$", text)
     if english_age:
         return "age", english_age.group(1).strip()
+    for alias, semantic_property in ontology.fast_property_aliases():
+        escaped = re.escape(alias.casefold())
+        english = re.fullmatch(
+            rf"(?:what|when) (?:is|was) (.+?)(?:'s)? {escaped}",
+            text,
+        )
+        if english:
+            return semantic_property, english.group(1).strip()
+        english_postfix = re.fullmatch(rf"when was (.+?) {escaped}", text)
+        if english_postfix:
+            return semantic_property, english_postfix.group(1).strip()
+        suffix = re.search(
+            rf"(?:的)?{escaped}(?:是|在)?(?:哪天|什么时候|何时|是什么)?$",
+            text,
+        )
+        if suffix:
+            return semantic_property, text[: suffix.start()].strip("的 ")
     return None, text
 
 
 def _extract_birthday_intent(
     text: str,
+    ontology: SemanticOntology,
 ) -> tuple[Literal["annual_occurrence"], str, Literal["days"] | None] | None:
+    birth_aliases = [
+        alias
+        for alias, semantic_property in ontology.fast_property_aliases()
+        if semantic_property == "birth_date"
+    ]
+    alias_pattern = "|".join(re.escape(alias.casefold()) for alias in birth_aliases)
     countdown = re.fullmatch(
-        r"(?:距离|离)?(.+?)(?:的)?生日(?:还)?(?:有|剩)(?:多少|几)天(?:了)?",
+        rf"(?:距离|离)?(.+?)(?:的)?(?:{alias_pattern})"
+        r"(?:还)?(?:有|剩)(?:多少|几)天(?:了)?",
         text,
     )
     if countdown:
         return "annual_occurrence", countdown.group(1).strip("的 "), "days"
     english_countdown = re.fullmatch(
-        r"how many days (?:are left )?until (.+?)(?:'s| ) birthday",
+        rf"how many days (?:are left )?until (.+?)(?:'s| )"
+        rf"(?:{alias_pattern})",
         text,
     )
     if english_countdown:
         return "annual_occurrence", english_countdown.group(1).strip(), "days"
     upcoming = re.fullmatch(
-        r"(.+?)(?:的)?(?:下次生日(?:是|在)?哪天|哪天过生日)",
+        rf"(.+?)(?:的)?(?:下次(?:{alias_pattern})(?:是|在)?哪天|"
+        rf"哪天过(?:{alias_pattern}))",
         text,
     )
     if upcoming:
         return "annual_occurrence", upcoming.group(1).strip("的 "), None
     english_upcoming = re.fullmatch(
-        r"when is (.+?)(?:'s| ) next birthday",
+        rf"when is (.+?)(?:'s| ) next (?:{alias_pattern})",
         text,
     )
     if english_upcoming:
@@ -1874,26 +1977,6 @@ def _unique_entities(entities: Sequence[Mapping[str, Any]]) -> list[dict[str, An
 def _entity_type(entity: Mapping[str, Any]) -> str:
     entity_id = str(entity.get("id", ""))
     return entity_id.partition(":")[0]
-
-
-def _has_exact_alias(entity: Mapping[str, Any], expected: str) -> bool:
-    aliases: list[str] = []
-    names = entity.get("name")
-    if isinstance(names, str):
-        aliases.append(names)
-    elif isinstance(names, Mapping):
-        aliases.extend(value for value in names.values() if isinstance(value, str))
-    elif isinstance(names, Sequence) and not isinstance(
-        names, (str, bytes, bytearray)
-    ):
-        aliases.extend(value for value in names if isinstance(value, str))
-    aliases.extend(
-        value
-        for field in ("display_name", "full_name")
-        if isinstance((value := entity.get(field)), str)
-    )
-    normalized = expected.strip().casefold()
-    return any(alias.strip().casefold() == normalized for alias in aliases)
 
 
 def _string_or_none(value: Any) -> str | None:

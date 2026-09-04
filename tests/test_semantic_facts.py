@@ -10,7 +10,11 @@ from home_cortex.agent_service import AgentService
 from home_cortex.edge_schema import EdgeSchemaRegistry
 from home_cortex.grounding import AgentRequestContext
 from home_cortex.operator_registry import OPERATORS
-from home_cortex.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.schema_catalog import (
+    RuntimeSchemaCatalog,
+    normalize_entity_alias,
+    record_aliases,
+)
 from home_cortex.semantic_facts import (
     HouseholdFactEngine,
     SemanticFactRequest,
@@ -51,14 +55,17 @@ class FixtureGraphDispatcher:
         if tool_name == "get_entity":
             record = self.entities.get(arguments["entity_id"])
             records = [record] if record else []
-        elif tool_name == "search_entities":
+        elif tool_name in {"search_entities", "resolve_entity_alias"}:
             query = arguments["text"].casefold()
             expected = arguments.get("entity_type")
             records = [
                 self._summary(record)
                 for record in self.entities.values()
                 if (expected is None or record["id"].startswith(f"{expected}:"))
-                and any(query == alias.casefold() for alias in self._aliases(record))
+                and any(
+                    normalize_entity_alias(query) == normalize_entity_alias(alias)
+                    for alias in record_aliases(record)
+                )
             ][: arguments.get("limit", 25)]
         elif tool_name == "get_relationships":
             records = self._relationships(arguments)
@@ -95,17 +102,6 @@ class FixtureGraphDispatcher:
             edge["related_entity"] = self._summary(self.entities[related_id])
             records.append(edge)
         return records[: arguments.get("limit", 25)]
-
-    @staticmethod
-    def _aliases(record: dict[str, Any]) -> list[str]:
-        value = record.get("name")
-        if isinstance(value, str):
-            return [value]
-        if isinstance(value, list):
-            return [item for item in value if isinstance(item, str)]
-        if isinstance(value, dict):
-            return [item for item in value.values() if isinstance(item, str)]
-        return []
 
     @staticmethod
     def _summary(record: dict[str, Any]) -> dict[str, Any]:
@@ -222,6 +218,29 @@ async def test_household_list_is_current_and_uses_one_graph_query(
     assert "张玉梅" not in answer.text
     assert answer.timings.db_query_count == 1
     assert [name for name, _ in dispatcher.calls] == ["get_relationships"]
+
+
+@pytest.mark.asyncio
+async def test_all_static_and_relational_references_converge_on_canonical_person(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+) -> None:
+    questions = (
+        "匡德伦是谁",
+        "德伦是谁",
+        "Dylan是谁",
+        "Dylan Kuang是谁",
+        "我儿子是谁",
+        "巴璞的儿子是谁",
+    )
+
+    answers = [await _ask(service, context, question) for question in questions]
+
+    assert all(answer.result.status == "found" for answer in answers)
+    assert all(
+        answer.result.evidence.entity_ids == ("person:dylan_kuang",)
+        for answer in answers
+    )
 
 
 @pytest.mark.asyncio
@@ -522,6 +541,9 @@ def test_capabilities_are_semantic_and_new_fields_require_no_handler(
     assert "dob" not in schema.capability_payload()["semantic_properties"]["person"]
     assert "first_name" not in schema.capability_payload()["semantic_properties"]["person"]
     assert "last_name" not in schema.capability_payload()["semantic_properties"]["person"]
+    assert "parent_of" not in json.dumps(schema.capability_payload())
+    assert schema.physical_property("person", "dob") is None
+    assert schema.physical_relation("parent_of") is None
     contracts = schema.capability_payload()["operator_contracts"]
     assert contracts["average"]["field_types"] == ["integer", "number"]
     assert contracts["completed_years"]["output"] == "integer"
@@ -683,6 +705,23 @@ def test_semantic_validator_rejects_context_reference_type_spoofing(
                 entity_type="address",
             ),
             property="birth_date",
+        )
+    ) is False
+    assert schema.validates(
+        SemanticFactRequest(
+            operation="select",
+            subject=SemanticReference(kind="self", entity_type="person"),
+            property="dob",
+        )
+    ) is False
+    assert schema.validates(
+        SemanticFactRequest(
+            operation="resolve_reference",
+            subject=SemanticReference(
+                kind="self",
+                entity_type="person",
+                path=(SemanticRelationStep(relation="parent_of"),),
+            ),
         )
     ) is False
 
@@ -868,3 +907,263 @@ async def test_tier_one_rejects_unadvertised_semantic_property(
     assert answer.result.status == "computation_impossible"
     assert answer.timings.llm_call_count == 1
     assert dispatcher.calls == []
+
+
+@pytest.mark.asyncio
+async def test_tier_zero_disabled_preserves_semantic_correctness(
+    dispatcher: FixtureGraphDispatcher,
+    context: AgentRequestContext,
+) -> None:
+    catalog = RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    schema = SemanticSchemaRegistry(catalog)
+
+    def reference(
+        kind: str,
+        *,
+        value: str | None = None,
+        path: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "kind": kind,
+            "value": value,
+            "entity_type": "address" if kind == "current_household" else "person",
+            "path": path or [],
+        }
+
+    son = [
+        {
+            "relation": "child",
+            "filters": [{"property": "gender", "value": "male"}],
+        }
+    ]
+    wife = [
+        {
+            "relation": "spouse",
+            "filters": [{"property": "gender", "value": "female"}],
+        }
+    ]
+    father_in_law = [
+        {"relation": "spouse", "filters": []},
+        {
+            "relation": "parent",
+            "filters": [{"property": "gender", "value": "male"}],
+        },
+    ]
+    members = [{"relation": "member", "filters": []}]
+    plans: dict[str, dict[str, Any]] = {
+        "我是谁": {"operation": "resolve_reference", "subject": reference("self")},
+        "匡德伦是谁": {
+            "operation": "resolve_reference",
+            "subject": reference("named_entity", value="匡德伦"),
+        },
+        "德伦是谁": {
+            "operation": "resolve_reference",
+            "subject": reference("named_entity", value="德伦"),
+        },
+        "Dylan是谁": {
+            "operation": "resolve_reference",
+            "subject": reference("named_entity", value="Dylan"),
+        },
+        "我儿子是谁": {
+            "operation": "resolve_reference",
+            "subject": reference("self", path=son),
+        },
+        "巴璞的儿子是谁": {
+            "operation": "resolve_reference",
+            "subject": reference("named_entity", value="巴璞", path=son),
+        },
+        "我老婆是谁": {
+            "operation": "resolve_reference",
+            "subject": reference("self", path=wife),
+        },
+        "我岳父是谁": {
+            "operation": "resolve_reference",
+            "subject": reference("self", path=father_in_law),
+        },
+        "我儿子哪天出生": {
+            "operation": "select",
+            "subject": reference("self", path=son),
+            "property": "birth_date",
+        },
+        "我儿子的生日还有多少天": {
+            "operation": "annual_occurrence",
+            "subject": reference("self", path=son),
+            "property": "birth_date",
+            "mode": "days",
+        },
+        "家里有几个人": {
+            "operation": "count",
+            "subject": reference("current_household", path=members),
+        },
+        "家里谁最年长": {
+            "operation": "argmin",
+            "subject": reference("current_household", path=members),
+            "property": "birth_date",
+        },
+        "我和我老婆谁年龄大": {
+            "operation": "argmin",
+            "subject": reference("self"),
+            "other": reference("self", path=wife),
+            "property": "birth_date",
+        },
+    }
+
+    class Interpreter:
+        async def plan_semantic_fact(
+            self,
+            messages: list[dict[str, Any]],
+            *_: Any,
+            **__: Any,
+        ) -> dict[str, Any]:
+            question = messages[-1]["content"]
+            return {"requires_fact": True, "request": plans[question]}
+
+    class DisabledParser:
+        def parse(self, _text: str) -> None:
+            raise AssertionError("Tier 0 must be bypassed")
+
+    semantic = SemanticFactService(
+        HouseholdFactEngine(dispatcher, schema),
+        parser=DisabledParser(),  # type: ignore[arg-type]
+        planner=SemanticFactPlanner(Interpreter(), schema),
+        tier_zero_enabled=False,
+    )
+
+    answers = {
+        question: await _ask(semantic, context, question) for question in plans
+    }
+
+    dylan_queries = (
+        "匡德伦是谁",
+        "德伦是谁",
+        "Dylan是谁",
+        "我儿子是谁",
+        "巴璞的儿子是谁",
+        "我儿子哪天出生",
+        "我儿子的生日还有多少天",
+    )
+    assert all(
+        answers[question].result.evidence.entity_ids == ("person:dylan_kuang",)
+        for question in dylan_queries
+    )
+    assert answers["我是谁"].result.evidence.entity_ids == ("person:jian_kuang",)
+    assert answers["我老婆是谁"].result.evidence.entity_ids == ("person:pu_ba",)
+    assert answers["我岳父是谁"].result.evidence.entity_ids == (
+        "person:zhigang_ba",
+    )
+    assert answers["家里有几个人"].result.value == 5
+    assert all(answer.timings.tier == 1 for answer in answers.values())
+    assert all(answer.timings.llm_call_count == 1 for answer in answers.values())
+
+
+@pytest.mark.asyncio
+async def test_tier_one_open_world_paraphrases_use_resolver_not_entity_ids(
+    dispatcher: FixtureGraphDispatcher,
+    context: AgentRequestContext,
+) -> None:
+    catalog = RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    schema = SemanticSchemaRegistry(catalog)
+    outputs = {
+        "Dylan是哪位？": {
+            "kind": "named_entity",
+            "value": "Dylan",
+            "entity_type": "person",
+        },
+        "德伦是哪一个人？": {
+            "kind": "named_entity",
+            "value": "德伦",
+            "entity_type": "person",
+        },
+        "巴璞她儿子是谁？": {
+            "kind": "named_entity",
+            "value": "巴璞",
+            "entity_type": "person",
+            "path": [
+                {
+                    "relation": "child",
+                    "filters": [{"property": "gender", "value": "male"}],
+                }
+            ],
+        },
+        "我家那个叫Dylan的孩子是谁？": {
+            "kind": "named_entity",
+            "value": "Dylan",
+            "entity_type": "person",
+        },
+        "我妻子的父亲是谁？": {
+            "kind": "self",
+            "entity_type": "person",
+            "path": [
+                {
+                    "relation": "spouse",
+                    "filters": [{"property": "gender", "value": "female"}],
+                },
+                {
+                    "relation": "parent",
+                    "filters": [{"property": "gender", "value": "male"}],
+                },
+            ],
+        },
+    }
+
+    class Interpreter:
+        async def plan_semantic_fact(
+            self,
+            messages: list[dict[str, Any]],
+            *_: Any,
+            **__: Any,
+        ) -> dict[str, Any]:
+            return {
+                "requires_fact": True,
+                "request": {
+                    "operation": "resolve_reference",
+                    "subject": outputs[messages[-1]["content"]],
+                },
+            }
+
+    semantic = SemanticFactService(
+        HouseholdFactEngine(dispatcher, schema),
+        planner=SemanticFactPlanner(Interpreter(), schema),
+        tier_zero_enabled=False,
+    )
+
+    answers = [await _ask(semantic, context, question) for question in outputs]
+
+    assert all(answer.result.status == "found" for answer in answers)
+    assert [answer.result.evidence.entity_ids for answer in answers] == [
+        ("person:dylan_kuang",),
+        ("person:dylan_kuang",),
+        ("person:dylan_kuang",),
+        ("person:dylan_kuang",),
+        ("person:zhigang_ba",),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_semantic_planner_rejects_model_originated_entity_id(
+    dispatcher: FixtureGraphDispatcher,
+    context: AgentRequestContext,
+) -> None:
+    schema = SemanticSchemaRegistry(
+        RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    )
+
+    class Interpreter:
+        async def plan_semantic_fact(self, *_: Any, **__: Any) -> dict[str, Any]:
+            return {
+                "requires_fact": True,
+                "request": {
+                    "operation": "resolve_reference",
+                    "subject": {
+                        "kind": "entity_id",
+                        "value": "person:dylan_kuang",
+                        "entity_type": "person",
+                    },
+                },
+            }
+
+    with pytest.raises(ValueError, match="cannot originate entity IDs"):
+        await SemanticFactPlanner(Interpreter(), schema).plan(
+            [{"role": "user", "content": "Dylan是谁"}],
+            context,
+        )

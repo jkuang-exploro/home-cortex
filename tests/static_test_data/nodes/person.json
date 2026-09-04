@@ -15,6 +15,7 @@
   {
     "id": "person:casey_example",
     "name": ["Casey Example", "凯西"],
+    "aliases": ["Casey", "小凯"],
     "first_name": "Casey",
     "last_name": "Example",
     "gender": "female"

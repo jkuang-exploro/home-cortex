@@ -27,6 +27,20 @@ class FakeRetrievalService:
             raise self.error
         return [{"id": "address:test_house", "name": "Test House"}]
 
+    async def resolve_entity_alias(
+        self,
+        text: str,
+        entity_type: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        self.calls.append(
+            (
+                "resolve_entity_alias",
+                {"text": text, "entity_type": entity_type, "limit": limit},
+            )
+        )
+        return [{"id": "person:alex_example", "name": ["Alex Example"]}]
+
     async def get_entity(self, record_id: str) -> dict[str, Any] | None:
         self.calls.append(("get_entity", {"entity_id": record_id}))
         if self.error:
@@ -226,6 +240,32 @@ async def test_rejects_unknown_tool_without_calling_retrieval() -> None:
         },
     }
     assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_alias_resolution_is_resolver_only_not_model_facing() -> None:
+    dispatcher, retrieval = _dispatcher()
+
+    public = await dispatcher.dispatch(
+        "resolve_entity_alias",
+        {"text": "Alex", "entity_type": "person"},
+    )
+    internal = await dispatcher.dispatch_internal(
+        "resolve_entity_alias",
+        {"text": "Alex", "entity_type": "person"},
+    )
+
+    assert public["ok"] is False
+    assert public["error"]["code"] == "unknown_tool"
+    assert "resolve_entity_alias" not in public["error"]["available_tools"]
+    assert internal["ok"] is True
+    assert internal["result"][0]["id"] == "person:alex_example"
+    assert retrieval.calls == [
+        (
+            "resolve_entity_alias",
+            {"text": "Alex", "entity_type": "person", "limit": None},
+        )
+    ]
 
 
 @pytest.mark.asyncio

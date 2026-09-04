@@ -1,0 +1,104 @@
+version: 1
+
+properties:
+  display_name:
+    fields: [display_name, name, full_name]
+    aliases: [姓名, 名字, name, display name]
+  given_name:
+    fields: [given_name, first_name]
+    aliases: [名字, given name, first name]
+  family_name:
+    fields: [family_name, last_name, surname]
+    aliases: [姓氏, surname, family name, last name]
+  form_of_address:
+    fields: [form_of_address, address_as]
+    aliases: [称呼, form of address]
+  birth_date:
+    fields: [birth_date, birthday, dob, date_of_birth]
+    aliases: [生日, 出生日期, 出生时间, 哪天出生, birthday, birth date, date of birth, born]
+    fast_path: true
+  full_address:
+    fields: [full_address, address, street_address]
+    aliases: [住址, 地址, 街道地址, full address, street address]
+  gender:
+    fields: [gender, sex]
+    aliases: [性别, gender, sex]
+  household_role:
+    fields: [household_role, member_role, role]
+    aliases: [家庭角色, household role]
+
+base_relations:
+  spouse:
+    edge: spouse_of
+  child:
+    edge: parent_of
+  parent:
+    edge: child_of
+  member:
+    edge: has_resident
+  residence:
+    edge: lives_in
+
+reference_concepts:
+  spouse:
+    aliases: [配偶, spouse]
+    path:
+      - relation: spouse
+  wife:
+    aliases: [老婆, 妻子, wife]
+    path:
+      - relation: spouse
+        filters:
+          - {property: gender, value: female}
+  husband:
+    aliases: [老公, 丈夫, husband]
+    path:
+      - relation: spouse
+        filters:
+          - {property: gender, value: male}
+  child:
+    aliases: [孩子, 小孩, child, children]
+    path:
+      - relation: child
+  son:
+    aliases: [儿子, son]
+    path:
+      - relation: child
+        filters:
+          - {property: gender, value: male}
+  daughter:
+    aliases: [女儿, daughter]
+    path:
+      - relation: child
+        filters:
+          - {property: gender, value: female}
+  parent:
+    aliases: [父母, parent, parents]
+    path:
+      - relation: parent
+  father:
+    aliases: [爸爸, 父亲, father]
+    path:
+      - relation: parent
+        filters:
+          - {property: gender, value: male}
+  mother:
+    aliases: [妈妈, 母亲, mother]
+    path:
+      - relation: parent
+        filters:
+          - {property: gender, value: female}
+  father_in_law:
+    aliases: [岳父, 公公, father-in-law, father in law]
+    path:
+      - relation: spouse
+      - relation: parent
+        filters:
+          - {property: gender, value: male}
+  mother_in_law:
+    aliases: [岳母, 婆婆, mother-in-law, mother in law]
+    path:
+      - relation: spouse
+      - relation: parent
+        filters:
+          - {property: gender, value: female}

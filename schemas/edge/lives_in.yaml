@@ -5,3 +5,4 @@ from_types:
 to_types:
   - address
 temporal: true
+inverse_name: has_resident

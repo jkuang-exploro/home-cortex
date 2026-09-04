@@ -82,6 +82,16 @@ def test_unknown_calendar_timezone_is_rejected() -> None:
         )
 
 
+def test_tier_zero_can_be_disabled_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HOME_CORTEX_DISABLE_TIER0", "1")
+
+    settings = Settings(_env_file=None, ollama_model="test-model")
+
+    assert settings.home_cortex_disable_tier0 is True
+
+
 @pytest.mark.parametrize(
     "identity_map",
     [

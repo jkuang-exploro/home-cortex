@@ -72,6 +72,7 @@ class AgentService:
         assistant_display_name: str | None = None,
         home_entity_id: str | None = None,
         household_timezone: str = "America/Los_Angeles",
+        disable_tier0: bool = False,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.model_loop = ModelLoop(
@@ -104,6 +105,7 @@ class AgentService:
                 max_records=self.model_loop.max_tool_records,
             ),
             planner=semantic_planner,
+            tier_zero_enabled=not disable_tier0,
         )
         self.grounding = OpenWorldGroundingService(
             GroundingPlanner(ollama, schema_catalog),
