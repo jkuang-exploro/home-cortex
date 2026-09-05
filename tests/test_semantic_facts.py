@@ -1137,6 +1137,13 @@ def test_capabilities_are_semantic_and_allowlisted(
         "start_date",
     ]
     assert set(capabilities["operations"]).issubset(set(OPERATORS) | {"filter", "traverse"})
+    compact = schema.planner_capability_payload()
+    compact_json = json.dumps(compact)
+    assert "operation_semantics" not in compact
+    assert "operation_requirements" not in compact
+    assert "dob" not in compact_json
+    assert "father_in_law" in compact["concepts"]
+    assert compact["predicates"] == ["adult", "minor"]
     invalid = SemanticFactRequest(
         operation="count",
         subject=_members(),
@@ -1511,6 +1518,7 @@ async def test_planner_retries_once_for_structural_failure(
     assert outcome.diagnostics.validation_result == "VALID"
     assert outcome.diagnostics.attempt_count == 2
     assert interpreter.calls == 2
+    assert interpreter.messages[0] == [{"role": "user", "content": "我是谁"}]
     assert "strict structural validation" in interpreter.messages[1][-1]["content"]
 
 

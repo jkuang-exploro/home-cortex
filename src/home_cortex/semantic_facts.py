@@ -293,6 +293,14 @@ class PlannerDiagnostics:
     failure_detail: str | None = None
     attempt_count: int = 0
     latency_ms: float = 0
+    prompt_build_ms: float = 0
+    request_ms: float = 0
+    validation_ms: float = 0
+    prompt_eval_count: int = 0
+    prompt_eval_duration_ms: float = 0
+    eval_count: int = 0
+    eval_duration_ms: float = 0
+    load_duration_ms: float = 0
 
 
 @dataclass(frozen=True)
@@ -441,6 +449,23 @@ class SemanticSchemaRegistry:
             },
         }
         return self._capability_cache
+
+    def planner_capability_payload(self) -> dict[str, Any]:
+        """Compact catalog sent to the LLM; omits diagnostic prose."""
+        full = self.capability_payload()
+        ontology = full.get("reference_ontology", {})
+        return {
+            "references": full["references"],
+            "operations": full["operations"],
+            "properties": full["semantic_properties"],
+            "relations": full["semantic_relations"],
+            "relation_properties": full["semantic_relation_properties"],
+            "predicates": full["collection_predicates"],
+            "property_sources": full["property_sources"],
+            "property_aliases": ontology.get("properties", {}),
+            "concepts": ontology.get("reference_concepts", {}),
+            "predicate_aliases": ontology.get("collection_predicates", {}),
+        }
 
     def semantic_properties(self, entity_type: str) -> frozenset[str]:
         schema = self.catalog.entities.get(entity_type)
@@ -815,21 +840,23 @@ class SemanticFactPlanner:
         context: AgentRequestContext,
     ) -> SemanticPlannerOutcome:
         started = perf_counter()
-        output_schema = _compact_json_schema(SemanticPlan.model_json_schema())
-        reference_kind = output_schema["$defs"]["SemanticReference"]["properties"][
-            "kind"
-        ]
-        reference_kind["enum"] = [
-            item for item in reference_kind["enum"] if item != "entity_id"
-        ]
+        build_started = perf_counter()
+        output_schema = _planner_output_schema()
         capabilities = self.schema.capability_payload()
         input_summary = planner_input_summary(capabilities)
+        utterance = latest_user_message(messages)
+        prompt_build_ms = (perf_counter() - build_started) * 1000
         payload: Mapping[str, Any] | None = None
         plan: SemanticPlan | None = None
         structural_error: Exception | None = None
         attempts = 0
+        request_ms = 0.0
+        validation_ms = 0.0
+        runtime: Mapping[str, Any] = {}
         for attempts in (1, 2):
-            planner_messages = list(messages)
+            planner_messages: list[dict[str, Any]] = [
+                {"role": "user", "content": utterance}
+            ]
             if attempts == 2:
                 planner_messages.append(
                     {
@@ -842,6 +869,7 @@ class SemanticFactPlanner:
                         ),
                     }
                 )
+            request_started = perf_counter()
             try:
                 payload = await self.ollama.plan_semantic_fact(
                     planner_messages,
@@ -849,12 +877,24 @@ class SemanticFactPlanner:
                     output_schema,
                     household_now=context.current_time.isoformat(),
                 )
+                runtime = getattr(self.ollama, "last_planner_runtime", {}) or {}
+                validate_started = perf_counter()
                 plan = SemanticPlan.model_validate(payload)
+                validation_ms += (perf_counter() - validate_started) * 1000
                 structural_error = None
                 break
             except (ValueError, TypeError) as error:
+                runtime = getattr(self.ollama, "last_planner_runtime", {}) or runtime
                 structural_error = error
+            finally:
+                request_ms += (perf_counter() - request_started) * 1000
         latency_ms = (perf_counter() - started) * 1000
+        timing = {
+            "prompt_build_ms": prompt_build_ms,
+            "request_ms": request_ms,
+            "validation_ms": validation_ms,
+            **_planner_runtime_fields(runtime),
+        }
         if plan is None:
             code = _structural_validation_code(structural_error)
             raise SemanticPlannerFailure(
@@ -869,6 +909,7 @@ class SemanticFactPlanner:
                     ),
                     attempt_count=attempts,
                     latency_ms=latency_ms,
+                    **timing,
                 )
             )
         if plan.request is not None:
@@ -889,6 +930,7 @@ class SemanticFactPlanner:
                     failure_detail="The semantic planner cannot originate entity IDs",
                     attempt_count=attempts,
                     latency_ms=latency_ms,
+                    **timing,
                 )
             )
         validation: PlannerValidationCode = "NOT_A_FACT"
@@ -904,6 +946,7 @@ class SemanticFactPlanner:
                         failure_detail="semantic request violates advertised capabilities",
                         attempt_count=attempts,
                         latency_ms=latency_ms,
+                        **timing,
                     )
                 )
         diagnostics = PlannerDiagnostics(
@@ -913,6 +956,7 @@ class SemanticFactPlanner:
             validation_result=validation,
             attempt_count=attempts,
             latency_ms=latency_ms,
+            **timing,
         )
         return SemanticPlannerOutcome(plan, latency_ms, diagnostics)
 
@@ -2365,6 +2409,34 @@ def _compact_json_schema(value: Any) -> Any:
     return value
 
 
+_PLANNER_OUTPUT_SCHEMA: dict[str, Any] | None = None
+
+
+def _planner_output_schema() -> dict[str, Any]:
+    """Cached structured-output schema with model-originated IDs removed."""
+    global _PLANNER_OUTPUT_SCHEMA
+    if _PLANNER_OUTPUT_SCHEMA is None:
+        schema = _compact_json_schema(SemanticPlan.model_json_schema())
+        kind = schema["$defs"]["SemanticReference"]["properties"]["kind"]
+        kind["enum"] = [item for item in kind["enum"] if item != "entity_id"]
+        _PLANNER_OUTPUT_SCHEMA = schema
+    return _PLANNER_OUTPUT_SCHEMA
+
+
+def _planner_runtime_fields(runtime: Mapping[str, Any]) -> dict[str, Any]:
+    def number(name: str) -> float | int:
+        value = runtime.get(name, 0) or 0
+        return value
+
+    return {
+        "prompt_eval_count": int(number("prompt_eval_count")),
+        "prompt_eval_duration_ms": float(number("prompt_eval_duration_ms")),
+        "eval_count": int(number("eval_count")),
+        "eval_duration_ms": float(number("eval_duration_ms")),
+        "load_duration_ms": float(number("load_duration_ms")),
+    }
+
+
 def _structural_validation_code(
     error: Exception | None,
 ) -> PlannerValidationCode:
@@ -2387,7 +2459,10 @@ def _log_fact_query(
         "db_queries=%d llm_calls=%d routing_ms=%.2f semantic_parse_ms=%.2f "
         "entity_resolution_ms=%.2f fact_query_ms=%.2f computation_ms=%.2f "
         "render_ms=%.2f llm_ms=%.2f total_ms=%.2f status=%s failure_stage=%s "
-        "planner_validation=%s planner_attempts=%d",
+        "planner_validation=%s planner_attempts=%d "
+        "planner_prompt_build_ms=%.2f planner_request_ms=%.2f "
+        "planner_validation_ms=%.2f prompt_eval_count=%d "
+        "prompt_eval_ms=%.2f eval_count=%d eval_ms=%.2f load_ms=%.2f",
         safe_log_token(request_id),
         timings.tier,
         safe_log_token(request.operation),
@@ -2412,6 +2487,16 @@ def _log_fact_query(
             else "not_run"
         ),
         planner_diagnostics.attempt_count if planner_diagnostics is not None else 0,
+        planner_diagnostics.prompt_build_ms if planner_diagnostics is not None else 0,
+        planner_diagnostics.request_ms if planner_diagnostics is not None else 0,
+        planner_diagnostics.validation_ms if planner_diagnostics is not None else 0,
+        planner_diagnostics.prompt_eval_count if planner_diagnostics is not None else 0,
+        planner_diagnostics.prompt_eval_duration_ms
+        if planner_diagnostics is not None
+        else 0,
+        planner_diagnostics.eval_count if planner_diagnostics is not None else 0,
+        planner_diagnostics.eval_duration_ms if planner_diagnostics is not None else 0,
+        planner_diagnostics.load_duration_ms if planner_diagnostics is not None else 0,
     )
 
 

@@ -4,6 +4,68 @@ from typing import Any, cast
 
 from ollama import AsyncClient, ChatResponse
 
+from .text import latest_user_message
+
+PLANNER_KEEP_ALIVE = "24h"
+PLANNER_NUM_PREDICT = 384
+
+_PLANNER_INSTRUCTIONS = (
+    "You are Home Cortex's semantic interpreter. Map the latest user "
+    "request to exactly one supported semantic request. Household member "
+    "identity, the authenticated speaker's identity, and this assistant's "
+    "identity are facts in this domain. Only ordinary conversation emits "
+    "requires_fact=false and request=null. Return only "
+    "the strict structured output; never calculate or phrase the answer.\n\n"
+    "Identity and name questions are always facts here: compile 'who am I' "
+    "as resolve_reference(self), 'who are you' as "
+    "resolve_reference(assistant), and 'who is my son/spouse' as "
+    "resolve_reference(self followed by the declared relation path). In "
+    "every such case requires_fact=true and leave property=null. Questions for "
+    "the assistant's name are also resolve_reference(assistant), never "
+    "ordinary conversation.\n\n"
+    "References: self is always the authenticated speaker, assistant is "
+    "this assistant, current_household is the configured home, and "
+    "named_entity contains only a literal stored name or appellation from "
+    "the user. "
+    "Never emit entity_id or put pronouns/relationship phrases in a "
+    "named_entity. For speaker-relative phrases choose kind=self. Expand each "
+    "declared reference concept by copying its complete ontology path and "
+    "filters; compose multi-hop relationships by appending paths.\n\n"
+    "Canonical disambiguation: household member list/count uses "
+    "current_household->member with no filters. Unqualified household "
+    "adults/minors use exactly one adult/minor request filter. Unqualified "
+    "adult/minor predicate filters contain only predicate=adult/minor; do "
+    "not attach an age value or property. "
+    "'有几个孩子' means household minors; '我有几个孩子' means self->child. "
+    "Chinese 最年长/最老/最早出生 = argmin(birth_date); "
+    "最年幼/最年轻/年纪最小/最晚出生 = argmax(birth_date). "
+    "老婆/妻子 means self->spouse[gender=female]. A literal personal name "
+    "such as 德伦 must be named_entity using exactly that text; do not infer "
+    "a family relationship for a name. Address questions use "
+    "self->residence and property=full_address.\n\n"
+    "Use only advertised semantic relations, properties, predicates and "
+    "operations—never storage fields, SQL, file names, or code. Use "
+    "resolve_reference for identity and leave property=null; use select for "
+    "a property or list, count "
+    "for size, completed_years for age, and argmin/argmax for extrema. "
+    "Earlier birth_date is older: oldest=argmin, youngest=argmax. Collection "
+    "predicates adult/minor belong in request.filters after traversing "
+    "current_household->member; a speaker's children instead traverse "
+    "self->child.\n\n"
+    "A birthday date is select(birth_date); its next occurrence is "
+    "annual_occurrence(birth_date); a birthday countdown adds mode=days. "
+    "Phrasing such as 'from today until the birthday' is still the next "
+    "annual occurrence, not date_difference from the original birth date. "
+    "A person's home address is self->residence then full_address. Metadata "
+    "owned by the final edge uses property_source=relationship. Marriage "
+    "start is select(self->spouse, start_date, relationship); marriage "
+    "duration uses duration on that same relationship property with a mode. "
+    "A spouse's birth_date is an entity property and must keep "
+    "property_source=entity; only relationship metadata such as start_date "
+    "or end_date uses relationship. "
+    "Do not solve the factual question."
+)
+
 def _semantic_planner_examples() -> list[dict[str, str]]:
     examples: tuple[tuple[str, dict[str, Any]], ...] = (
         (
@@ -126,6 +188,9 @@ class OllamaService:
         self.model = model
         self._owns_client = client is None
         self.client = client or AsyncClient(host=self.base_url)
+        self.last_planner_runtime: dict[str, Any] = {}
+        self._cached_planner_system: str | None = None
+        self._cached_planner_capabilities_id: int | None = None
 
     async def chat(
         self,
@@ -153,6 +218,22 @@ class OllamaService:
             think=False,
         )
 
+    def _planner_system_prompt(self, capabilities: Mapping[str, Any]) -> str:
+        marker = id(capabilities)
+        if (
+            self._cached_planner_system is not None
+            and self._cached_planner_capabilities_id == marker
+        ):
+            return self._cached_planner_system
+        prompt = (
+            _PLANNER_INSTRUCTIONS
+            + "\nCapabilities:\n"
+            + json.dumps(capabilities, ensure_ascii=False, separators=(",", ":"))
+        )
+        self._cached_planner_system = prompt
+        self._cached_planner_capabilities_id = marker
+        return prompt
+
     async def plan_semantic_fact(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -162,76 +243,30 @@ class OllamaService:
         household_now: str,
     ) -> Mapping[str, Any]:
         """Interpret an open-ended request without exposing physical storage."""
-        prompt = (
-            "You are Home Cortex's semantic interpreter. Map the latest user "
-            "request to exactly one supported semantic request. Household member "
-            "identity, the authenticated speaker's identity, and this assistant's "
-            "identity are facts in this domain. Only ordinary conversation emits "
-            "requires_fact=false and request=null. Return only "
-            "the strict structured output; never calculate or phrase the answer.\n\n"
-            "Identity and name questions are always facts here: compile 'who am I' "
-            "as resolve_reference(self), 'who are you' as "
-            "resolve_reference(assistant), and 'who is my son/spouse' as "
-            "resolve_reference(self followed by the declared relation path). In "
-            "every such case requires_fact=true and property=null. Questions for "
-            "the assistant's name are also resolve_reference(assistant), never "
-            "ordinary conversation.\n\n"
-            "References: self is always the authenticated speaker, assistant is "
-            "this assistant, current_household is the configured home, and "
-            "named_entity contains only a literal stored name or appellation from "
-            "the user. "
-            "Never emit entity_id or put pronouns/relationship phrases in a "
-            "named_entity. For speaker-relative phrases choose kind=self. Expand each "
-            "declared reference concept by copying its complete ontology path and "
-            "filters; compose multi-hop relationships by appending paths.\n\n"
-            "Canonical disambiguation: household member list/count uses "
-            "current_household->member with no filters. Unqualified household "
-            "adults/minors use exactly one adult/minor request filter. Unqualified "
-            "adult/minor predicate filters contain only predicate=adult/minor; do "
-            "not attach an age value or property. "
-            "'有几个孩子' means household minors; '我有几个孩子' means self->child. "
-            "Chinese 最年长/最老/最早出生 = argmin(birth_date); "
-            "最年幼/最年轻/年纪最小/最晚出生 = argmax(birth_date). "
-            "老婆/妻子 means self->spouse[gender=female]. A literal personal name "
-            "such as 德伦 must be named_entity using exactly that text; do not infer "
-            "a family relationship for a name. Address questions use "
-            "self->residence and property=full_address.\n\n"
-            "Use only advertised semantic relations, properties, predicates and "
-            "operations—never storage fields, SQL, file names, or code. Use "
-            "resolve_reference for identity and leave property=null; use select for "
-            "a property or list, count "
-            "for size, completed_years for age, and argmin/argmax for extrema. "
-            "Earlier birth_date is older: oldest=argmin, youngest=argmax. Collection "
-            "predicates adult/minor belong in request.filters after traversing "
-            "current_household->member; a speaker's children instead traverse "
-            "self->child.\n\n"
-            "A birthday date is select(birth_date); its next occurrence is "
-            "annual_occurrence(birth_date); a birthday countdown adds mode=days. "
-            "Phrasing such as 'from today until the birthday' is still the next "
-            "annual occurrence, not date_difference from the original birth date. "
-            "A person's home address is self->residence then full_address. Metadata "
-            "owned by the final edge uses property_source=relationship. Marriage "
-            "start is select(self->spouse, start_date, relationship); marriage "
-            "duration uses duration on that same relationship property with a mode. "
-            "A spouse's birth_date is an entity property and must keep "
-            "property_source=entity; only relationship metadata such as start_date "
-            "or end_date uses relationship. "
-            f"Household now: {household_now}\n"
-            "Semantic capabilities:\n"
-            + json.dumps(capabilities, ensure_ascii=False, separators=(",", ":"))
+        forwarded: list[dict[str, Any]] = [
+            {"role": "user", "content": latest_user_message(messages)}
+        ]
+        forwarded.extend(
+            dict(message)
+            for message in messages
+            if message.get("role") == "system"
+            and "strict structural validation" in str(message.get("content", ""))
         )
         response = await self.client.chat(
             model=self.model,
             messages=[
-                {"role": "system", "content": prompt},
+                {"role": "system", "content": self._planner_system_prompt(capabilities)},
                 *_semantic_planner_examples(),
-                *[dict(message) for message in messages],
+                {"role": "system", "content": f"Household now: {household_now}"},
+                *forwarded,
             ],
             stream=False,
             think=False,
+            keep_alive=PLANNER_KEEP_ALIVE,
             format=dict(output_schema),
-            options={"temperature": 0},
+            options={"temperature": 0, "num_predict": PLANNER_NUM_PREDICT},
         )
+        self.last_planner_runtime = _ollama_runtime_metrics(response)
         parsed = json.loads(response.message.content or "")
         if not isinstance(parsed, Mapping):
             raise ValueError("Semantic fact planner returned a non-object")
@@ -262,3 +297,19 @@ class OllamaService:
     async def close(self) -> None:
         if self._owns_client:
             await self.client.close()
+
+
+def _ns_to_ms(value: int | float | None) -> float:
+    return 0.0 if not value else float(value) / 1_000_000
+
+
+def _ollama_runtime_metrics(response: ChatResponse) -> dict[str, Any]:
+    return {
+        "prompt_eval_count": int(getattr(response, "prompt_eval_count", 0) or 0),
+        "prompt_eval_duration_ms": _ns_to_ms(
+            getattr(response, "prompt_eval_duration", None)
+        ),
+        "eval_count": int(getattr(response, "eval_count", 0) or 0),
+        "eval_duration_ms": _ns_to_ms(getattr(response, "eval_duration", None)),
+        "load_duration_ms": _ns_to_ms(getattr(response, "load_duration", None)),
+    }

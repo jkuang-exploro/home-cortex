@@ -137,18 +137,39 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
     )
 
     await service.plan_semantic_fact(
-        [{"role": "user", "content": "a speaker-relative relation"}],
-        {"reference_ontology": {"reference_concepts": {}}},
+        [
+            {"role": "assistant", "content": "prior household chatter"},
+            {"role": "user", "content": "a speaker-relative relation"},
+        ],
+        {"concepts": {}, "relations": ["spouse"]},
         {"type": "object"},
         household_now="2026-09-03T12:00:00-07:00",
     )
 
-    prompt = client.calls[0]["messages"][0]["content"]
-    assert client.calls[0]["options"] == {"temperature": 0}
+    call = client.calls[0]
+    prompt = call["messages"][0]["content"]
+    clock = [
+        message["content"]
+        for message in call["messages"]
+        if message["role"] == "system" and str(message["content"]).startswith("Household now:")
+    ]
+    user_contents = [
+        message["content"]
+        for message in call["messages"]
+        if message["role"] == "user"
+    ]
+    assert call["options"] == {"temperature": 0, "num_predict": 384}
+    assert call["keep_alive"] == "24h"
+    assert call["think"] is False
+    assert clock == ["Household now: 2026-09-03T12:00:00-07:00"]
+    assert "Household now:" not in prompt
     assert "choose kind=self" in prompt
     assert "literal stored name or appellation" in prompt
     assert "leave property=null" in prompt
+    assert "Do not solve the factual question" in prompt
     assert "person:dylan_kuang" not in prompt
+    assert "prior household chatter" not in json.dumps(call["messages"])
+    assert user_contents[-1] == "a speaker-relative relation"
 
 
 @pytest.mark.asyncio
