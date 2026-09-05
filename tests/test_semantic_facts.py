@@ -978,12 +978,12 @@ def test_semantic_ir_rejects_non_allowlisted_operation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent_service_reported_queries_never_reach_legacy_planner(
+async def test_agent_service_reported_queries_use_semantic_planner(
     dispatcher: FixtureGraphDispatcher,
 ) -> None:
     catalog = RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
 
-    class NoLegacyPlanner:
+    class SemanticPlannerOnly:
         async def plan_semantic_fact(
             self,
             messages: list[dict[str, Any]],
@@ -996,11 +996,8 @@ async def test_agent_service_reported_queries_never_reach_legacy_planner(
                 "request": request.model_dump(mode="json"),
             }
 
-        async def plan_grounding(self, *_: Any, **__: Any) -> dict[str, Any]:
-            raise AssertionError("legacy physical-field planner was invoked")
-
     agent = AgentService(
-        NoLegacyPlanner(),  # type: ignore[arg-type]
+        SemanticPlannerOnly(),  # type: ignore[arg-type]
         dispatcher,  # type: ignore[arg-type]
         system_prompt="You are the household steward.",
         tools=get_tool_definitions(("get_entity",)),
@@ -1618,7 +1615,8 @@ async def test_planner_schema_excludes_entity_ids_and_normalizes_status_filter_s
             }
 
     interpreter = Interpreter()
-    plan, _ = await SemanticFactPlanner(interpreter, schema).plan([], context)
+    outcome = await SemanticFactPlanner(interpreter, schema).plan([], context)
+    plan = outcome.plan
 
     assert interpreter.output_schema is not None
     kinds = interpreter.output_schema["$defs"]["SemanticReference"]["properties"][

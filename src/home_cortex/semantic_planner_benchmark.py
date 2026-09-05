@@ -182,8 +182,6 @@ async def run_semantic_planner_benchmark(
     context: AgentRequestContext,
     cases: Sequence[SemanticEvalCase],
 ) -> dict[str, Any]:
-    if service.planner is None:
-        raise ValueError("planner-only benchmark requires SemanticFactPlanner")
     parser = TierZeroSemanticParser()
     rows: list[dict[str, Any]] = []
     planner_latencies: list[float] = []

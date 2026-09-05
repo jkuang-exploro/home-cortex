@@ -284,11 +284,6 @@ class SemanticPlannerOutcome:
     latency_ms: float
     diagnostics: PlannerDiagnostics
 
-    def __iter__(self):
-        """Preserve the former ``plan, latency = ...`` calling convention."""
-        yield self.plan
-        yield self.latency_ms
-
 
 class SemanticPlannerFailure(ValueError):
     def __init__(self, diagnostics: PlannerDiagnostics) -> None:
@@ -303,14 +298,6 @@ class FactAnswer:
     text: str
     timings: FactTimings
     planner_diagnostics: PlannerDiagnostics | None = None
-
-
-@dataclass(frozen=True)
-class SemanticAttempt:
-    """Tri-state route result: unclaimed, handled answer, or ordinary request."""
-
-    claimed: bool
-    answer: FactAnswer | None = None
 
 
 @dataclass(frozen=True)
@@ -439,104 +426,6 @@ class SemanticSchemaRegistry:
                 ),
                 "compare": "argmin or argmax with subject and other",
                 "days_until": "annual_occurrence with mode=days",
-            },
-            "composition_examples": {
-                "resolve_speaker": {
-                    "operation": "resolve_reference",
-                    "subject": {"kind": "self", "entity_type": "person"},
-                },
-                "list_household_members": {
-                    "operation": "select",
-                    "subject": {
-                        "kind": "current_household",
-                        "entity_type": "address",
-                        "path": [{"relation": "member"}],
-                    },
-                    "property": None,
-                },
-                "minimum_birth_date_entity": {
-                    "operation": "argmin",
-                    "subject": {
-                        "kind": "current_household",
-                        "entity_type": "address",
-                        "path": [{"relation": "member"}],
-                    },
-                    "property": "birth_date",
-                },
-                "maximum_birth_date_entity": {
-                    "operation": "argmax",
-                    "subject": {
-                        "kind": "current_household",
-                        "entity_type": "address",
-                        "path": [{"relation": "member"}],
-                    },
-                    "property": "birth_date",
-                },
-                "count_adult_members": {
-                    "operation": "count",
-                    "subject": {
-                        "kind": "current_household",
-                        "entity_type": "address",
-                        "path": [{"relation": "member"}],
-                    },
-                    "filters": [{"predicate": "adult"}],
-                },
-                "count_minor_members": {
-                    "operation": "count",
-                    "subject": {
-                        "kind": "current_household",
-                        "entity_type": "address",
-                        "path": [{"relation": "member"}],
-                    },
-                    "filters": [{"predicate": "minor"}],
-                },
-                "speaker_spouse_birth_date": {
-                    "operation": "select",
-                    "subject": {
-                        "kind": "self",
-                        "entity_type": "person",
-                        "path": [{"relation": "spouse"}],
-                    },
-                    "property": "birth_date",
-                },
-                "spouse_relationship_start": {
-                    "operation": "select",
-                    "subject": {
-                        "kind": "self",
-                        "entity_type": "person",
-                        "path": [{"relation": "spouse"}],
-                    },
-                    "property": "start_date",
-                    "property_source": "relationship",
-                },
-                "spouse_relationship_duration": {
-                    "operation": "duration",
-                    "subject": {
-                        "kind": "self",
-                        "entity_type": "person",
-                        "path": [{"relation": "spouse"}],
-                    },
-                    "property": "start_date",
-                    "property_source": "relationship",
-                    "mode": "days",
-                },
-                "speaker_son_birthday_countdown": {
-                    "operation": "annual_occurrence",
-                    "subject": {
-                        "kind": "self",
-                        "entity_type": "person",
-                        "path": [
-                            {
-                                "relation": "child",
-                                "filters": [
-                                    {"property": "gender", "value": "male"}
-                                ],
-                            }
-                        ],
-                    },
-                    "property": "birth_date",
-                    "mode": "days",
-                },
             },
         }
         return self._capability_cache
@@ -2213,9 +2102,9 @@ class SemanticFactService:
     def __init__(
         self,
         engine: HouseholdFactEngine,
+        planner: SemanticFactPlanner,
         parser: TierZeroSemanticParser | None = None,
         renderer: FactRenderer | None = None,
-        planner: SemanticFactPlanner | None = None,
         tier_zero_enabled: bool = True,
     ) -> None:
         self.engine = engine
@@ -2224,13 +2113,13 @@ class SemanticFactService:
         self.planner = planner
         self.tier_zero_enabled = tier_zero_enabled
 
-    async def attempt(
+    async def try_answer(
         self,
         messages: Sequence[Mapping[str, Any]],
         *,
         context: AgentRequestContext,
         request_id: str = "-",
-    ) -> SemanticAttempt:
+    ) -> FactAnswer | None:
         started = perf_counter()
         latest = _latest_user_text(messages)
         routing_started = perf_counter()
@@ -2242,13 +2131,12 @@ class SemanticFactService:
         llm_call_count = 0
         planner_diagnostics: PlannerDiagnostics | None = None
         if request is None:
-            if self.planner is None:
-                return SemanticAttempt(False)
             tier = 1
             llm_started = perf_counter()
             try:
                 outcome = await self.planner.plan(messages, context)
-                plan, llm_ms = outcome
+                plan = outcome.plan
+                llm_ms = outcome.latency_ms
                 planner_diagnostics = outcome.diagnostics
                 llm_call_count = outcome.diagnostics.attempt_count
             except SemanticPlannerFailure as error:
@@ -2261,16 +2149,13 @@ class SemanticFactService:
                     safe_log_token(error.diagnostics.validation_result),
                     error.diagnostics.attempt_count,
                 )
-                return SemanticAttempt(
-                    True,
-                    self._failure_answer(
-                        context,
-                        started,
-                        request_id=request_id,
-                        llm_ms=llm_ms,
-                        llm_call_count=llm_call_count,
-                        planner_diagnostics=planner_diagnostics,
-                    ),
+                return self._failure_answer(
+                    context,
+                    started,
+                    request_id=request_id,
+                    llm_ms=llm_ms,
+                    llm_call_count=llm_call_count,
+                    planner_diagnostics=planner_diagnostics,
                 )
             except Exception as error:
                 llm_ms = (perf_counter() - llm_started) * 1000
@@ -2280,34 +2165,26 @@ class SemanticFactService:
                     safe_log_token(request_id),
                     safe_log_token(type(error).__name__),
                 )
-                return SemanticAttempt(
-                    True,
-                    self._failure_answer(
-                        context,
-                        started,
-                        request_id=request_id,
-                        llm_ms=llm_ms,
-                        llm_call_count=llm_call_count,
-                        planner_diagnostics=planner_diagnostics,
-                    ),
+                return self._failure_answer(
+                    context,
+                    started,
+                    request_id=request_id,
+                    llm_ms=llm_ms,
+                    llm_call_count=llm_call_count,
+                    planner_diagnostics=planner_diagnostics,
                 )
             if not plan.requires_fact:
-                # The semantic classifier has claimed routing, but ordinary text
-                # generation is still needed. Do not invoke the legacy planner.
-                return SemanticAttempt(True)
+                return None
             request = plan.request
             if request is None or not self.engine.schema.validates(request):
-                return SemanticAttempt(
-                    True,
-                    self._failure_answer(
-                        context,
-                        started,
-                        request=request,
-                        request_id=request_id,
-                        llm_ms=llm_ms,
-                        llm_call_count=llm_call_count,
-                        planner_diagnostics=planner_diagnostics,
-                    ),
+                return self._failure_answer(
+                    context,
+                    started,
+                    request=request,
+                    request_id=request_id,
+                    llm_ms=llm_ms,
+                    llm_call_count=llm_call_count,
+                    planner_diagnostics=planner_diagnostics,
                 )
         routing_ms = (perf_counter() - routing_started) * 1000
         assert request is not None
@@ -2341,10 +2218,7 @@ class SemanticFactService:
             timings,
             planner_diagnostics=planner_diagnostics,
         )
-        return SemanticAttempt(
-            True,
-            FactAnswer(request, result, rendered, timings, planner_diagnostics),
-        )
+        return FactAnswer(request, result, rendered, timings, planner_diagnostics)
 
     def _failure_answer(
         self,
@@ -2387,19 +2261,6 @@ class SemanticFactService:
             timings,
             planner_diagnostics,
         )
-
-    async def try_answer(
-        self,
-        messages: Sequence[Mapping[str, Any]],
-        *,
-        context: AgentRequestContext,
-        request_id: str = "-",
-    ) -> FactAnswer | None:
-        return (await self.attempt(
-            messages,
-            context=context,
-            request_id=request_id,
-        )).answer
 
 class _FactExecution:
     def __init__(self, dispatcher: Any, caller_entity_id: str | None) -> None:

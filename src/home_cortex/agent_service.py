@@ -13,13 +13,7 @@ from .display import (
     conversation_language,
     internal_ids_requested,
 )
-from .grounding import (
-    AgentRequestContext,
-    GroundedAnswer,
-    GroundingExecutor,
-    GroundingPlanner,
-    OpenWorldGroundingService,
-)
+from .grounding import AgentRequestContext
 from .model_loop import (
     MAX_AGENT_STEPS,
     MAX_TOOL_CALLS_PER_STEP,
@@ -34,6 +28,7 @@ from .model_loop import (
 from .ollama import OllamaService
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_facts import (
+    FactAnswer,
     HouseholdFactEngine,
     SemanticFactPlanner,
     SemanticFactService,
@@ -46,7 +41,7 @@ from .tools import ToolDispatcher
 class _PreparedRequest:
     language: str
     identity: dict[str, Any] | None
-    grounded_answer: GroundedAnswer | None
+    fact_answer: FactAnswer | None
     trusted: list[dict[str, Any]]
     expose_internal_ids: bool
 
@@ -93,33 +88,14 @@ class AgentService:
         self.home_entity_id = home_entity_id
         self._clock = clock
         semantic_schema = SemanticSchemaRegistry(schema_catalog)
-        semantic_planner = (
-            SemanticFactPlanner(ollama, semantic_schema)
-            if hasattr(ollama, "plan_semantic_fact")
-            else None
-        )
         self.semantic_facts = SemanticFactService(
             HouseholdFactEngine(
                 dispatcher,
                 semantic_schema,
                 max_records=self.model_loop.max_tool_records,
             ),
-            planner=semantic_planner,
+            planner=SemanticFactPlanner(ollama, semantic_schema),
             tier_zero_enabled=not disable_tier0,
-        )
-        self.grounding = OpenWorldGroundingService(
-            GroundingPlanner(ollama, schema_catalog),
-            GroundingExecutor(
-                dispatcher,
-                schema_catalog,
-                home_entity_id=home_entity_id,
-                max_tool_calls=(
-                    self.model_loop.max_steps
-                    * self.model_loop.max_tool_calls_per_step
-                ),
-                max_records=self.model_loop.max_tool_records,
-                timeout_seconds=self.model_loop.tool_timeout_seconds,
-            ),
         )
 
     async def answer(
@@ -154,12 +130,12 @@ class AgentService:
             user_entity_id=user_entity_id,
             user_entity=user_entity,
         )
-        if prepared.grounded_answer is not None:
+        if prepared.fact_answer is not None:
             return AgentResult(
-                answer=prepared.grounded_answer.text,
+                answer=prepared.fact_answer.text,
                 steps=1,
-                tool_calls=prepared.grounded_answer.tool_calls,
-                stop_reason=prepared.grounded_answer.stop_reason,
+                tool_calls=prepared.fact_answer.timings.db_query_count,
+                stop_reason="answer",
                 messages=tuple(prepared.trusted),
             )
         result = await self.model_loop.run(
@@ -188,8 +164,8 @@ class AgentService:
             user_entity_id=user_entity_id,
             user_entity=user_entity,
         )
-        if prepared.grounded_answer is not None:
-            yield prepared.grounded_answer.text
+        if prepared.fact_answer is not None:
+            yield prepared.fact_answer.text
             return
         async for token in self.model_loop.stream(
             prepared.trusted,
@@ -229,27 +205,11 @@ class AgentService:
             current_time=household_now,
             locale=language,
         )
-        semantic_attempt = await self.semantic_facts.attempt(
+        semantic_answer = await self.semantic_facts.try_answer(
             safe_messages,
             context=context,
             request_id=request_id,
         )
-        if semantic_attempt.answer is not None:
-            grounded_answer = GroundedAnswer(
-                semantic_attempt.answer.text,
-                semantic_attempt.answer.timings.db_query_count,
-            )
-        elif semantic_attempt.claimed or self.semantic_facts.planner is not None:
-            # Production Ollama runtimes use the semantic planner exclusively for
-            # household facts. The legacy physical-field planner remains only as
-            # compatibility for injected test/alternate clients without it.
-            grounded_answer = None
-        else:
-            grounded_answer = await self.grounding.try_answer(
-                safe_messages,
-                context=context,
-                request_id=request_id,
-            )
         trusted = self._trusted_conversation(
             safe_messages,
             identity,
@@ -258,7 +218,7 @@ class AgentService:
         return _PreparedRequest(
             language=language,
             identity=identity,
-            grounded_answer=grounded_answer,
+            fact_answer=semantic_answer,
             trusted=trusted,
             expose_internal_ids=internal_ids_requested(safe_messages),
         )

@@ -118,7 +118,7 @@ async def benchmark_runtime(
         llm = OllamaService(settings.ollama_url, settings.ollama_model)
         service = SemanticFactService(
             HouseholdFactEngine(dispatcher, schema, max_records=settings.retrieval_limit),
-            planner=(SemanticFactPlanner(llm, schema) if llm is not None else None),
+            planner=SemanticFactPlanner(llm, schema),
             tier_zero_enabled=mode == "tier0_enabled",
         )
         localized = steward.settings.get("localized_identity", {})
@@ -158,12 +158,11 @@ async def benchmark_json(
     catalog = RuntimeSchemaCatalog.from_data_dir(data_dir, edge_registry)
     dispatcher = _JsonGraphDispatcher(data_dir, edge_registry)
     schema = SemanticSchemaRegistry(catalog)
-    llm: OllamaService | None = None
     settings = get_settings()
     llm = OllamaService(settings.ollama_url, settings.ollama_model)
     service = SemanticFactService(
         HouseholdFactEngine(dispatcher, schema),
-        planner=(SemanticFactPlanner(llm, schema) if llm is not None else None),
+        planner=SemanticFactPlanner(llm, schema),
         tier_zero_enabled=mode == "tier0_enabled",
     )
     localized = steward.settings.get("localized_identity", {})
@@ -186,8 +185,7 @@ async def benchmark_json(
             speaker_cases=(SPEAKER_CASES if tuple(questions) == QUESTIONS else ()),
         )
     finally:
-        if llm is not None:
-            await llm.close()
+        await llm.close()
 
 
 async def _run_suite(

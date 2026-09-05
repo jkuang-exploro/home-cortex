@@ -8,11 +8,6 @@ from ollama import ChatResponse
 
 from home_cortex.agent_service import AgentLimitError, AgentService
 from home_cortex.agents import get_agent
-from home_cortex.grounding import (
-    GroundingPlan,
-    GroundingSubject,
-    RequiredEvidence,
-)
 from home_cortex.schema_catalog import EntityTypeSchema, RuntimeSchemaCatalog
 
 STEWARD = get_agent("steward")
@@ -36,27 +31,15 @@ def _agent(ollama: Any, dispatcher: Any, **settings: Any) -> AgentService:
 
 
 class FakeOllamaService:
-    def __init__(
-        self,
-        responses: list[ChatResponse],
-        *,
-        grounding_plan: GroundingPlan | None = None,
-    ) -> None:
+    def __init__(self, responses: list[ChatResponse]) -> None:
         self.responses = responses
-        self.grounding_plan = grounding_plan
         self.calls: list[list[dict[str, Any]]] = []
         self.tool_names: list[tuple[str, ...]] = []
-        self.plan_calls = 0
+        self.semantic_plan_calls = 0
 
-    async def plan_grounding(self, *_: Any, **__: Any) -> dict[str, Any]:
-        self.plan_calls += 1
-        if self.grounding_plan is not None:
-            return self.grounding_plan.model_dump(mode="json")
-        return GroundingPlan(
-            requires_grounding=False,
-            grounding_domain="external_tool",
-            goal="ordinary or external-tool request",
-        ).model_dump(mode="json")
+    async def plan_semantic_fact(self, *_: Any, **__: Any) -> dict[str, Any]:
+        self.semantic_plan_calls += 1
+        return {"requires_fact": False, "request": None}
 
     async def chat_with_tools(
         self, messages: list[dict[str, Any]], tools: Any
@@ -130,29 +113,6 @@ def _tool_call(name: str = "calculate", arguments: Any = None) -> dict[str, Any]
     }
 
 
-def _speaker_name_plan() -> GroundingPlan:
-    return GroundingPlan(
-        requires_grounding=True,
-        grounding_domain="household",
-        goal="identify the subject",
-        subject=GroundingSubject(
-            reference_type="speaker",
-            expected_type="person",
-        ),
-        required_evidence=(RequiredEvidence(field="name"),),
-    )
-
-
-def _assistant_name_plan() -> GroundingPlan:
-    return GroundingPlan(
-        requires_grounding=True,
-        grounding_domain="runtime",
-        goal="identify the subject",
-        subject=GroundingSubject(reference_type="assistant"),
-        required_evidence=(RequiredEvidence(field="display_name"),),
-    )
-
-
 @pytest.mark.asyncio
 async def test_returns_conversational_answer_without_dispatching_tools() -> None:
     ollama = FakeOllamaService([_chat_response("The answer is ready.")])
@@ -182,7 +142,6 @@ async def test_assistant_capability_question_skips_household_grounding() -> None
     result = await _agent(ollama, dispatcher).answer("你能做什么？")
 
     assert result.answer == "我可以协助管理家庭事务。"
-    assert ollama.plan_calls == 0
     assert ollama.semantic_plan_calls == 1
     assert len(ollama.calls) == 1
     assert dispatcher.calls == []
@@ -306,7 +265,7 @@ async def test_trusted_identity_context_excludes_private_profile_fields() -> Non
 
 @pytest.mark.asyncio
 async def test_agent_identity_resolves_runtime_reference_without_graph_query() -> None:
-    ollama = FakeOllamaService([], grounding_plan=_assistant_name_plan())
+    ollama = FakeOllamaService([])
     dispatcher = FakeDispatcher()
 
     result = await _agent(ollama, dispatcher).answer(
@@ -320,7 +279,7 @@ async def test_agent_identity_resolves_runtime_reference_without_graph_query() -
 
     assert result.answer == "我是老管家。"
     assert ollama.calls == []
-    assert ollama.plan_calls == 0
+    assert ollama.semantic_plan_calls == 0
     assert dispatcher.calls == []
 
 
@@ -329,7 +288,7 @@ async def test_agent_identity_resolves_runtime_reference_without_graph_query() -
 async def test_speaker_identity_uses_canonical_context_without_named_search(
     question: str,
 ) -> None:
-    ollama = FakeOllamaService([], grounding_plan=_speaker_name_plan())
+    ollama = FakeOllamaService([])
     dispatcher = FakeDispatcher(
         {
             "ok": True,
@@ -354,7 +313,7 @@ async def test_speaker_identity_uses_canonical_context_without_named_search(
 
     assert "匡健" in result.answer or "Jian Kuang" in result.answer
     assert ollama.calls == []
-    assert ollama.plan_calls == 0
+    assert ollama.semantic_plan_calls == 0
     assert dispatcher.calls == [
         ("get_entity", {"entity_id": "person:jian_kuang"})
     ]
@@ -362,26 +321,26 @@ async def test_speaker_identity_uses_canonical_context_without_named_search(
 
 @pytest.mark.asyncio
 async def test_speaker_identity_without_authentication_fails_clearly() -> None:
-    ollama = FakeOllamaService([], grounding_plan=_speaker_name_plan())
+    ollama = FakeOllamaService([])
     dispatcher = FakeDispatcher()
 
     result = await _agent(ollama, dispatcher).answer("我是谁？")
 
     assert result.answer == "我无法确认当前登录者的身份。"
-    assert ollama.plan_calls == 0
+    assert ollama.semantic_plan_calls == 0
     assert dispatcher.calls == []
 
 
 @pytest.mark.parametrize("question", ("你是谁？", "Who are you?"))
 @pytest.mark.asyncio
 async def test_assistant_reference_uses_same_runtime_path(question: str) -> None:
-    ollama = FakeOllamaService([], grounding_plan=_assistant_name_plan())
+    ollama = FakeOllamaService([])
     dispatcher = FakeDispatcher()
 
     result = await _agent(ollama, dispatcher).answer(question)
 
     assert "老管家" in result.answer or "the butler" in result.answer
-    assert ollama.plan_calls == 0
+    assert ollama.semantic_plan_calls == 0
     assert dispatcher.calls == []
 
 

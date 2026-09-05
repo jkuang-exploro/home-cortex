@@ -4,9 +4,6 @@ from typing import Any, cast
 
 from ollama import AsyncClient, ChatResponse
 
-from .operator_registry import operator_prompt_payload
-
-
 def _semantic_planner_examples() -> list[dict[str, str]]:
     examples: tuple[tuple[str, dict[str, Any]], ...] = (
         (
@@ -156,99 +153,6 @@ class OllamaService:
             think=False,
         )
 
-    async def plan_grounding(
-        self,
-        messages: Sequence[Mapping[str, Any]],
-        schema_catalog: Mapping[str, Any],
-        output_schema: Mapping[str, Any],
-        *,
-        household_now: str,
-    ) -> Mapping[str, Any]:
-        """Classify and plan household evidence using strict structured output."""
-        planner_prompt = (
-            "You are the Home Cortex evidence planner. Decide whether answering "
-            "the latest request requires facts about this specific household, "
-            "its people, possessions, finances, health, devices, locations, or "
-            "history. General knowledge, advice, creative requests, and purely "
-            "hypothetical questions do not require household grounding. Requests "
-            "for calendar or calculation tools use grounding_domain=external_tool "
-            "with requires_grounding=false; requests needing neither graph nor an "
-            "external tool use grounding_domain=none.\n\n"
-            "For grounded requests, plan only against the supplied runtime schema. "
-            "Never invent a relation or claim that an unlisted property exists. "
-            "A property explicitly requested by the user may still appear in "
-            "required_evidence when it is absent from the catalog, so the gate can "
-            "return FIELD_NOT_AVAILABLE. Represent references canonically: use "
-            "reference_type=speaker for first-person references to the current "
-            "caller, reference_type=assistant for second-person references to this "
-            "assistant, reference_type=configured_home for the current home, "
-            "reference_type=entity_id for an explicit canonical record ID, and "
-            "reference_type=named_entity only for a genuine named subject. Never "
-            "put a pronoun in a named_entity reference. Speaker properties use "
-            "grounding_domain=household and the person schema. Assistant metadata "
-            "uses grounding_domain=runtime, requires_grounding=true, field "
-            "display_name, and no household traversal. An assistant reference must "
-            "not be sent to the household graph. Use traversal steps for graph "
-            "relationships. Put every field or relation necessary for the answer "
-            "in required_evidence, but do not add evidence fields that are not used "
-            "by projection, filtering, sorting, transformation, or freshness. The "
-            "executor already excludes ended relationships unless include_ended is "
-            "true, so do not request a nullable end field merely to establish that "
-            "a relationship is current. Use source=edge and edge_fields for properties "
-            "stored on a relationship, such as start or end; otherwise use "
-            "source=entity. Traversal direction out follows the schema's from-to "
-            "orientation and in follows it in reverse; omit direction for a "
-            "symmetric relation. Set include_ended only for an explicitly historical "
-            "request, and use filters over temporal fields to bound its period. Use "
-            "edge filters, sorts, and transforms for the final traversal step only. "
-            "Use freshness only when the wording requires a current/recent "
-            "observation. "
-            "Derived values must use one of the bounded operators in the output "
-            "schema; never invent an operator. Operator families map to distinct IR "
-            "slots: express select with fields/edge_fields, traverse with traversal, "
-            "resolve_reference with subject, predicates with filters, and sort with "
-            "sort. Never put those structural operations in transform; "
-            "transform.operator accepts only the enum exposed for that slot. "
-            "Respect each field's property_types "
-            "entry: numeric aggregation requires number/integer fields, temporal "
-            "operators require date/datetime fields, and incompatible operations "
-            "will be rejected deterministically. Use completed_years for age and "
-            "date_difference for elapsed "
-            "days or seconds. Use filters and "
-            "sum for bounded expense periods. Use annual_occurrence with mode=days "
-            "for days until the next birthday or anniversary, or omit mode to "
-            "return the next occurrence date. If the "
-            "runtime schema lacks a requested property, still return a grounded "
-            "plan with that canonical snake_case property in required_evidence; "
-            "the deterministic gate will report it as unavailable.\n\n"
-            f"Household now: {household_now}\n"
-            "Allowed generic operator contracts:\n"
-            + json.dumps(
-                operator_prompt_payload(),
-                ensure_ascii=False,
-                separators=(",", ":"),
-            )
-            + "\n"
-            "Runtime schema:\n"
-            + json.dumps(schema_catalog, ensure_ascii=False, separators=(",", ":"))
-        )
-        classifier_messages = [
-            {"role": "system", "content": planner_prompt},
-            *[dict(message) for message in messages],
-        ]
-        response = await self.client.chat(
-            model=self.model,
-            messages=classifier_messages,
-            stream=False,
-            think=False,
-            format=dict(output_schema),
-        )
-        content = response.message.content or ""
-        parsed = json.loads(content)
-        if not isinstance(parsed, Mapping):
-            raise ValueError("Grounding planner returned a non-object")
-        return parsed
-
     async def plan_semantic_fact(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -312,7 +216,6 @@ class OllamaService:
             "A spouse's birth_date is an entity property and must keep "
             "property_source=entity; only relationship metadata such as start_date "
             "or end_date uses relationship. "
-            "Use the supplied composition_examples whenever their meaning matches.\n\n"
             f"Household now: {household_now}\n"
             "Semantic capabilities:\n"
             + json.dumps(capabilities, ensure_ascii=False, separators=(",", ":"))

@@ -194,25 +194,6 @@ def execute_operator(name: str, values: OperatorInput) -> Any:
     return definition.execute(values)
 
 
-def operator_prompt_payload() -> dict[str, Any]:
-    """Expose contracts without implementation details to the semantic planner."""
-    return {
-        name: {
-            "family": definition.family,
-            "input": definition.input_shape,
-            "output": definition.output_kind,
-            "field": definition.field_requirement,
-            "field_types": sorted(definition.field_kinds),
-            "other_field": definition.other_field_required,
-            "other_field_types": sorted(definition.other_field_kinds),
-            "order_by": definition.order_by_required,
-            "order_by_types": sorted(definition.order_by_kinds),
-            "required_parameters": sorted(definition.required_parameters),
-        }
-        for name, definition in OPERATORS.items()
-    }
-
-
 def evaluate_predicate(name: str, left: Any, right: Any) -> bool:
     if name not in PREDICATE_OPERATORS:
         raise OperatorValidationError(f"predicate is not allowlisted: {name}")

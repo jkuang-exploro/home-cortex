@@ -132,15 +132,6 @@ class RuntimeSchemaCatalog:
     def has_entity_type(self, entity_type: str) -> bool:
         return entity_type in self.entities
 
-    def has_entity_field(self, entity_type: str, field: str) -> bool:
-        schema = self.entities.get(entity_type)
-        return schema is not None and field in schema.properties
-
-    def has_relation(self, relation: str) -> bool:
-        return relation in self.relations or any(
-            schema.inverse_name == relation for schema in self.relations.values()
-        )
-
     def entity_field_type(self, entity_type: str, field: str) -> ValueKind:
         schema = self.entities.get(entity_type)
         return schema.property_types.get(field, "unknown") if schema else "unknown"
@@ -157,34 +148,6 @@ class RuntimeSchemaCatalog:
                 None,
             )
         return schema.property_types.get(field, "unknown") if schema else "unknown"
-
-    def prompt_payload(self) -> dict[str, Any]:
-        return {
-            "entities": {
-                name: {
-                    "properties": list(schema.properties),
-                    "property_types": dict(schema.property_types),
-                }
-                for name, schema in self.entities.items()
-            },
-            "relations": {
-                name: {
-                    "from": list(schema.from_types),
-                    "to": list(schema.to_types),
-                    "properties": list(schema.properties),
-                    "property_types": dict(schema.property_types),
-                    "symmetric": schema.symmetric,
-                    "temporal": schema.temporal,
-                    **(
-                        {"inverse_name": schema.inverse_name}
-                        if schema.inverse_name is not None
-                        else {}
-                    ),
-                }
-                for name, schema in self.relations.items()
-            },
-        }
-
 
 def _json_records(path: Path) -> list[dict[str, Any]]:
     raw = json.loads(path.read_text(encoding="utf-8"))
