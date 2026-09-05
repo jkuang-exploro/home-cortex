@@ -469,13 +469,6 @@ class SemanticSchemaRegistry:
         )
         return frozenset(properties)
 
-    def semantic_property_kinds(self, semantic: str) -> frozenset[str]:
-        return frozenset(
-            self.catalog.entity_field_type(entity_type, physical)
-            for entity_type in self.catalog.entities
-            if (physical := self.physical_property(entity_type, semantic)) is not None
-        )
-
     def validation_code(self, request: SemanticFactRequest) -> PlannerValidationCode:
         """Return a stable, non-sensitive reason for semantic-plan rejection."""
         references = (request.subject,) + ((request.other,) if request.other else ())
