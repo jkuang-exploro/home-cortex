@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 home-cortex-fact-benchmark = "home_cortex.fact_benchmark:main"
+home-cortex-semantic-planner-benchmark = "home_cortex.semantic_planner_benchmark:main"
 
 [project.optional-dependencies]
 dev = [

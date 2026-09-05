@@ -22,6 +22,7 @@ from home_cortex.semantic_facts import (
     SemanticFactRequest,
     SemanticFactService,
     SemanticFactPlanner,
+    SemanticPlannerFailure,
     SemanticFilter,
     SemanticReference,
     SemanticRelationStep,
@@ -134,11 +135,241 @@ def dispatcher() -> FixtureGraphDispatcher:
     return FixtureGraphDispatcher()
 
 
+def _fixture_plan(text: str) -> SemanticFactRequest:
+    """Test-only planner oracle; production language parsing belongs to the LLM."""
+    member = SemanticReference(
+        kind="current_household",
+        entity_type="address",
+        path=(SemanticRelationStep(relation="member"),),
+    )
+
+    def self_path(*steps: SemanticRelationStep) -> SemanticReference:
+        return SemanticReference(kind="self", entity_type="person", path=steps)
+
+    wife = SemanticRelationStep(
+        relation="spouse",
+        filters=(SemanticFilter(property="gender", value="female"),),
+    )
+    son = SemanticRelationStep(
+        relation="child",
+        filters=(SemanticFilter(property="gender", value="male"),),
+    )
+    daughter = SemanticRelationStep(
+        relation="child",
+        filters=(SemanticFilter(property="gender", value="female"),),
+    )
+    parent_male = SemanticRelationStep(
+        relation="parent",
+        filters=(SemanticFilter(property="gender", value="male"),),
+    )
+    parent_female = SemanticRelationStep(
+        relation="parent",
+        filters=(SemanticFilter(property="gender", value="female"),),
+    )
+
+    if text in {"我是谁", "请告诉我我是谁"}:
+        return SemanticFactRequest(operation="resolve_reference", subject=self_path())
+    if text in {"你是谁", "您是哪位"}:
+        return SemanticFactRequest(
+            operation="resolve_reference",
+            subject=SemanticReference(kind="assistant", entity_type="person"),
+        )
+    if text in {"家里都有谁", "家里都有哪些人", "能告诉我一下家里的成员名单吗？"}:
+        return SemanticFactRequest(operation="select", subject=member)
+    if text == "家里有几个人":
+        return SemanticFactRequest(operation="count", subject=member)
+    if text in {"谁最年长", "最年长的是谁", "家里最年长的是谁"}:
+        return SemanticFactRequest(
+            operation="argmin", subject=member, property="birth_date"
+        )
+    if text == "家里最年幼的是谁":
+        return SemanticFactRequest(
+            operation="argmax", subject=member, property="birth_date"
+        )
+    if text == "家里有几个孩子":
+        return SemanticFactRequest(
+            operation="count",
+            subject=member,
+            filters=(SemanticFilter(predicate="minor"),),
+        )
+    if text == "我有几个孩子":
+        return SemanticFactRequest(
+            operation="count",
+            subject=self_path(SemanticRelationStep(relation="child")),
+        )
+    if text in {"我老婆是谁", "我的妻子是哪位"}:
+        return SemanticFactRequest(
+            operation="resolve_reference", subject=self_path(wife)
+        )
+    if text in {"我儿子是谁", "我的儿子叫什么"}:
+        return SemanticFactRequest(operation="resolve_reference", subject=self_path(son))
+    if text == "我女儿是谁":
+        return SemanticFactRequest(
+            operation="resolve_reference", subject=self_path(daughter)
+        )
+    if text in {"我孙子是谁", "我外孙是谁"}:
+        return SemanticFactRequest(
+            operation="resolve_reference",
+            subject=self_path(
+                SemanticRelationStep(relation="child"),
+                son,
+            ),
+        )
+    if text == "我哥哥是谁":
+        return SemanticFactRequest(
+            operation="resolve_reference",
+            subject=self_path(
+                SemanticRelationStep(relation="parent"),
+                SemanticRelationStep(
+                    relation="child",
+                    filters=(
+                        SemanticFilter(property="gender", value="male"),
+                        SemanticFilter(
+                            property="birth_date",
+                            operator="lt",
+                            value_from="anchor",
+                        ),
+                    ),
+                ),
+            ),
+        )
+    if text == "我岳父是谁":
+        return SemanticFactRequest(
+            operation="resolve_reference",
+            subject=self_path(SemanticRelationStep(relation="spouse"), parent_male),
+        )
+    if text in {"我老婆的爸爸是谁", "我老婆的父亲是谁"}:
+        return SemanticFactRequest(
+            operation="resolve_reference", subject=self_path(wife, parent_male)
+        )
+    if text == "我岳母是谁":
+        return SemanticFactRequest(
+            operation="resolve_reference",
+            subject=self_path(SemanticRelationStep(relation="spouse"), parent_female),
+        )
+    if text == "巴璞的儿子是谁":
+        subject = SemanticReference(
+            kind="named_entity",
+            value="巴璞",
+            entity_type="person",
+            path=(son,),
+        )
+        return SemanticFactRequest(operation="resolve_reference", subject=subject)
+    if text in {"巴璞的父亲是谁", "巴志刚的女儿是谁"}:
+        name, path = (
+            ("巴璞", parent_male) if text.startswith("巴璞") else ("巴志刚", daughter)
+        )
+        return SemanticFactRequest(
+            operation="resolve_reference",
+            subject=SemanticReference(
+                kind="named_entity",
+                value=name,
+                entity_type="person",
+                path=(path,),
+            ),
+        )
+    if text in {"我生日是哪天", "what is my date of birth"}:
+        return SemanticFactRequest(
+            operation="select", subject=self_path(), property="birth_date"
+        )
+    if text in {"我儿子几岁了", "我儿子几岁"}:
+        return SemanticFactRequest(
+            operation="completed_years",
+            subject=self_path(son),
+            property="birth_date",
+        )
+    if text in {"我和我老婆谁年龄大", "我老婆和我谁年龄大"}:
+        return SemanticFactRequest(
+            operation="argmin",
+            subject=self_path(),
+            other=self_path(wife),
+            property="birth_date",
+        )
+    if text in {"我老婆的生日是哪天"}:
+        return SemanticFactRequest(
+            operation="select", subject=self_path(wife), property="birth_date"
+        )
+    if text in {"我儿子的生日是哪天", "我儿子哪天出生"}:
+        return SemanticFactRequest(
+            operation="select", subject=self_path(son), property="birth_date"
+        )
+    if text in {"我儿子哪天过生日"}:
+        return SemanticFactRequest(
+            operation="annual_occurrence", subject=self_path(son), property="birth_date"
+        )
+    if text in {"我儿子的生日还有多少天", "距离我儿子生日还有几天"}:
+        return SemanticFactRequest(
+            operation="annual_occurrence",
+            subject=self_path(son),
+            property="birth_date",
+            mode="days",
+        )
+    if text == "我老婆生日还有多少天":
+        return SemanticFactRequest(
+            operation="annual_occurrence",
+            subject=self_path(wife),
+            property="birth_date",
+            mode="days",
+        )
+    if text == "我们什么时候结婚的":
+        return SemanticFactRequest(
+            operation="select",
+            subject=self_path(SemanticRelationStep(relation="spouse")),
+            property="start_date",
+            property_source="relationship",
+        )
+    if text in {"我家住哪里", "请问我的具体住址是什么？", "街道地址"}:
+        return SemanticFactRequest(
+            operation="select",
+            subject=self_path(SemanticRelationStep(relation="residence")),
+            property="full_address",
+        )
+    named_birth = {
+        "匡德伦的生日是哪天": "匡德伦",
+        "匡德伦哪天出生": "匡德伦",
+        "匡德伦的出生日期是什么": "匡德伦",
+        "when was Dylan Kuang born": "Dylan Kuang",
+        "巴璞哪天过生日": "巴璞",
+        "不存在的人哪天出生": "不存在的人",
+    }
+    if text in named_birth:
+        operation = "annual_occurrence" if text == "巴璞哪天过生日" else "select"
+        return SemanticFactRequest(
+            operation=operation,
+            subject=SemanticReference(
+                kind="named_entity", value=named_birth[text], entity_type="person"
+            ),
+            property="birth_date",
+        )
+    if text.endswith("是谁"):
+        return SemanticFactRequest(
+            operation="resolve_reference",
+            subject=SemanticReference(
+                kind="named_entity", value=text.removesuffix("是谁"), entity_type="person"
+            ),
+        )
+    raise AssertionError(f"missing fixture semantic plan for {text!r}")
+
+
+class FixtureSemanticInterpreter:
+    async def plan_semantic_fact(
+        self,
+        messages: list[dict[str, Any]],
+        *_: Any,
+        **__: Any,
+    ) -> dict[str, Any]:
+        request = _fixture_plan(messages[-1]["content"])
+        return {"requires_fact": True, "request": request.model_dump(mode="json")}
+
+
 @pytest.fixture
 def service(dispatcher: FixtureGraphDispatcher) -> SemanticFactService:
     catalog = RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
     schema = SemanticSchemaRegistry(catalog)
-    return SemanticFactService(HouseholdFactEngine(dispatcher, schema))
+    return SemanticFactService(
+        HouseholdFactEngine(dispatcher, schema),
+        planner=SemanticFactPlanner(FixtureSemanticInterpreter(), schema),
+    )
 
 
 @pytest.fixture
@@ -191,7 +422,7 @@ async def _ask(
         ("我老婆的生日是哪天", "1988-02-26"),
         ("我儿子的生日是哪天", "2016-10-30"),
         ("我老婆和我谁年龄大", "巴璞年龄比匡健大"),
-        ("家里有几个孩子", "两个孩子"),
+        ("家里有几个孩子", "两个未成年人"),
         ("我老婆的爸爸是谁", "您妻子的父亲是巴志刚"),
         ("我老婆的父亲是谁", "您妻子的父亲是巴志刚"),
         ("巴璞的父亲是谁", "巴璞的父亲是巴志刚"),
@@ -213,7 +444,7 @@ async def _ask(
         ("街道地址", "12745 Droxford St, Cerritos, CA 90703"),
     ),
 )
-async def test_canonical_and_composed_facts_are_deterministic(
+async def test_canonical_and_planner_composed_facts_execute_deterministically(
     service: SemanticFactService,
     context: AgentRequestContext,
     question: str,
@@ -223,8 +454,9 @@ async def test_canonical_and_composed_facts_are_deterministic(
 
     assert answer.result.status == "found"
     assert expected in answer.text
-    assert answer.timings.tier == 0
-    assert answer.timings.llm_call_count == 0
+    tier_zero_plan = TierZeroSemanticParser().parse(question)
+    assert answer.timings.tier == (0 if tier_zero_plan is not None else 1)
+    assert answer.timings.llm_call_count == (0 if tier_zero_plan is not None else 1)
 
 
 @pytest.mark.asyncio
@@ -401,8 +633,8 @@ async def test_empty_household_list_has_a_clear_response(
     assert answer.text == "家庭资料中目前没有记录当前家庭成员。"
 
 
-def test_birth_date_plan_never_contains_physical_alias() -> None:
-    request = TierZeroSemanticParser().parse("我生日是哪天")
+def test_semantic_birth_date_plan_never_contains_physical_alias() -> None:
+    request = _fixture_plan("我生日是哪天")
 
     assert isinstance(request, SemanticFactRequest)
     assert request.property == "birth_date"
@@ -410,12 +642,10 @@ def test_birth_date_plan_never_contains_physical_alias() -> None:
 
 
 def test_birthday_intents_have_distinct_generic_plans() -> None:
-    parser = TierZeroSemanticParser()
-
-    birth_date = parser.parse("匡德伦的生日是哪天")
-    age = parser.parse("我儿子几岁了")
-    next_birthday = parser.parse("我儿子哪天过生日")
-    days_until = parser.parse("我儿子的生日还有多少天")
+    birth_date = _fixture_plan("匡德伦的生日是哪天")
+    age = _fixture_plan("我儿子几岁了")
+    next_birthday = _fixture_plan("我儿子哪天过生日")
+    days_until = _fixture_plan("我儿子的生日还有多少天")
 
     assert birth_date is not None and birth_date.operation == "select"
     assert age is not None and age.operation == "completed_years"
@@ -432,7 +662,7 @@ def test_birthday_intents_have_distinct_generic_plans() -> None:
 
 
 def test_in_law_is_composed_from_existing_generic_relations() -> None:
-    request = TierZeroSemanticParser().parse("我岳父是谁")
+    request = _fixture_plan("我岳父是谁")
 
     assert request is not None
     assert [step.relation for step in request.subject.path] == ["spouse", "parent"]
@@ -457,8 +687,10 @@ async def test_birth_date_resolves_when_storage_uses_birthday(
         {**catalog.entities, "person": replacement},
         catalog.relations,
     )
+    schema = SemanticSchemaRegistry(catalog)
     semantic = SemanticFactService(
-        HouseholdFactEngine(dispatcher, SemanticSchemaRegistry(catalog))
+        HouseholdFactEngine(dispatcher, schema),
+        planner=SemanticFactPlanner(FixtureSemanticInterpreter(), schema),
     )
 
     answer = await _ask(semantic, context, "我生日是哪天")
@@ -689,9 +921,9 @@ def test_capabilities_are_semantic_and_new_fields_require_no_handler(
     assert "parent_of" not in json.dumps(schema.capability_payload())
     assert schema.physical_property("person", "dob") is None
     assert schema.physical_relation("parent_of") is None
-    contracts = schema.capability_payload()["operator_contracts"]
-    assert contracts["average"]["field_types"] == ["integer", "number"]
-    assert contracts["completed_years"]["output"] == "integer"
+    requirements = schema.capability_payload()["operation_requirements"]
+    assert "ordered property" in requirements["argmax"]
+    assert "household_now" in requirements["completed_years"]
     assert set(schema.capability_payload()["operations"]).issubset(OPERATORS)
 
 
@@ -752,6 +984,18 @@ async def test_agent_service_reported_queries_never_reach_legacy_planner(
     catalog = RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
 
     class NoLegacyPlanner:
+        async def plan_semantic_fact(
+            self,
+            messages: list[dict[str, Any]],
+            *_: Any,
+            **__: Any,
+        ) -> dict[str, Any]:
+            request = _fixture_plan(messages[-1]["content"])
+            return {
+                "requires_fact": True,
+                "request": request.model_dump(mode="json"),
+            }
+
         async def plan_grounding(self, *_: Any, **__: Any) -> dict[str, Any]:
             raise AssertionError("legacy physical-field planner was invoked")
 
@@ -794,11 +1038,9 @@ def test_semantic_validator_rejects_type_incompatible_extreme(
 ) -> None:
     catalog = RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
     schema = SemanticSchemaRegistry(catalog)
-    parsed = TierZeroSemanticParser().parse("谁最年长")
-    assert parsed is not None
     request = SemanticFactRequest(
         operation="argmin",
-        subject=parsed.subject,
+        subject=_member_collection(),
         property="display_name",
     )
 
@@ -957,21 +1199,14 @@ async def test_argmin_and_argmax_share_the_household_extrema_path(
     assert oldest_result.value["id"] == "person:zhigang_ba"
     assert youngest_result.value["id"] == "person:evelyn_kuang"
     assert oldest.subject == youngest.subject
-    youngest_plans = (
-        TierZeroSemanticParser().parse("谁最年幼"),
-        TierZeroSemanticParser().parse("谁年纪最小"),
-        TierZeroSemanticParser().parse("家里最年幼的是谁"),
-    )
-    assert all(plan is not None for plan in youngest_plans)
-    assert all(plan.operation == "argmax" for plan in youngest_plans if plan)
-    assert all(plan.subject == youngest.subject for plan in youngest_plans if plan)
+    assert TierZeroSemanticParser().parse("谁最年幼") is None
+    assert TierZeroSemanticParser().parse("谁年纪最小") is None
+    assert TierZeroSemanticParser().parse("家里最年幼的是谁") is None
 
 
-def test_marriage_date_is_a_relationship_property_fast_path() -> None:
+def test_marriage_date_is_a_planner_owned_relationship_property() -> None:
     plans = (
-        TierZeroSemanticParser().parse("我们什么时候结婚的"),
-        TierZeroSemanticParser().parse("我和我老婆哪天结婚"),
-        TierZeroSemanticParser().parse("我们的结婚日期是什么"),
+        _fixture_plan("我们什么时候结婚的"),
     )
 
     assert all(plan is not None for plan in plans)
@@ -981,6 +1216,7 @@ def test_marriage_date_is_a_relationship_property_fast_path() -> None:
         assert plan.property == "start_date"
         assert plan.property_source == "relationship"
         assert [step.relation for step in plan.subject.path] == ["spouse"]
+    assert TierZeroSemanticParser().parse("我们什么时候结婚的") is None
 
 
 @pytest.mark.asyncio
@@ -1190,6 +1426,14 @@ def test_filter_and_relationship_capabilities_are_semantic_and_allowlisted(
     assert "filter" in capabilities["operations"]
     assert capabilities["collection_predicates"] == ["adult", "minor"]
     assert capabilities["property_sources"] == ["entity", "relationship"]
+    assert capabilities["references"] == [
+        "self",
+        "assistant",
+        "current_household",
+        "named_entity",
+    ]
+    assert capabilities["operation_semantics"]["get_relation_property"]
+    assert capabilities["operation_semantics"]["days_until"]
     assert capabilities["semantic_relation_properties"]["spouse"] == [
         "end_date",
         "start_date",
@@ -1201,6 +1445,139 @@ def test_filter_and_relationship_capabilities_are_semantic_and_allowlisted(
         filters=(SemanticFilter(predicate="invented_status"),),
     )
     assert schema.validates(invalid) is False
+
+
+@pytest.mark.asyncio
+async def test_planner_retries_once_for_structural_failure(
+    dispatcher: FixtureGraphDispatcher,
+    context: AgentRequestContext,
+) -> None:
+    schema = SemanticSchemaRegistry(
+        RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    )
+
+    class Interpreter:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.messages: list[list[dict[str, Any]]] = []
+
+        async def plan_semantic_fact(
+            self,
+            messages: list[dict[str, Any]],
+            *_: Any,
+            **__: Any,
+        ) -> dict[str, Any]:
+            self.calls += 1
+            self.messages.append(messages)
+            if self.calls == 1:
+                return {"requires_fact": True, "request": {"operation": "select"}}
+            return {
+                "requires_fact": True,
+                "request": {
+                    "operation": "resolve_reference",
+                    "subject": {"kind": "self", "entity_type": "person"},
+                },
+            }
+
+    interpreter = Interpreter()
+    outcome = await SemanticFactPlanner(interpreter, schema).plan(
+        [{"role": "user", "content": "我是谁"}], context
+    )
+
+    assert outcome.plan.request is not None
+    assert outcome.diagnostics.validation_result == "VALID"
+    assert outcome.diagnostics.attempt_count == 2
+    assert interpreter.calls == 2
+    assert "strict structural validation" in interpreter.messages[1][-1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_planner_classifies_unsupported_operation_after_one_retry(
+    dispatcher: FixtureGraphDispatcher,
+    context: AgentRequestContext,
+) -> None:
+    schema = SemanticSchemaRegistry(
+        RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    )
+
+    class Interpreter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def plan_semantic_fact(self, *_: Any, **__: Any) -> dict[str, Any]:
+            self.calls += 1
+            return {
+                "requires_fact": True,
+                "request": {
+                    "operation": "invented_operation",
+                    "subject": {"kind": "self", "entity_type": "person"},
+                },
+            }
+
+    interpreter = Interpreter()
+    with pytest.raises(SemanticPlannerFailure) as captured:
+        await SemanticFactPlanner(interpreter, schema).plan([], context)
+
+    assert captured.value.diagnostics.validation_result == "UNSUPPORTED_OPERATION"
+    assert captured.value.diagnostics.attempt_count == 2
+    assert interpreter.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_semantic_validation_failure_is_classified_without_retry(
+    dispatcher: FixtureGraphDispatcher,
+    context: AgentRequestContext,
+) -> None:
+    schema = SemanticSchemaRegistry(
+        RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    )
+
+    class Interpreter:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def plan_semantic_fact(self, *_: Any, **__: Any) -> dict[str, Any]:
+            self.calls += 1
+            return {
+                "requires_fact": True,
+                "request": {
+                    "operation": "select",
+                    "subject": {"kind": "self", "entity_type": "person"},
+                    "property": "raw_private_field",
+                },
+            }
+
+    interpreter = Interpreter()
+    semantic = SemanticFactService(
+        HouseholdFactEngine(dispatcher, schema),
+        planner=SemanticFactPlanner(interpreter, schema),
+        tier_zero_enabled=False,
+    )
+    answer = await _ask(semantic, context, "读取一个不存在的字段")
+
+    assert answer.result.status == "semantic_plan_unsupported"
+    assert answer.planner_diagnostics is not None
+    assert answer.planner_diagnostics.validation_result == "UNKNOWN_PROPERTY"
+    assert answer.planner_diagnostics.attempt_count == 1
+    assert interpreter.calls == 1
+
+
+def test_semantic_validation_classifies_unknown_relation(
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    schema = SemanticSchemaRegistry(
+        RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    )
+    request = SemanticFactRequest(
+        operation="resolve_reference",
+        subject=SemanticReference(
+            kind="self",
+            entity_type="person",
+            path=(SemanticRelationStep(relation="invented_relation"),),
+        ),
+    )
+
+    assert schema.validation_code(request) == "UNKNOWN_RELATION"
 
 
 @pytest.mark.asyncio
@@ -1370,11 +1747,9 @@ async def test_new_numeric_field_immediately_supports_generic_argmax(
         RuntimeSchemaCatalog({**catalog.entities, "person": augmented}, catalog.relations)
     )
     engine = HouseholdFactEngine(dispatcher, schema)
-    parsed = TierZeroSemanticParser().parse("谁最年长")
-    assert parsed is not None
     request = SemanticFactRequest(
         operation="argmax",
-        subject=parsed.subject,
+        subject=_member_collection(),
         property="fixture_score",
     )
 
@@ -1386,7 +1761,7 @@ async def test_new_numeric_field_immediately_supports_generic_argmax(
 
     total_request = SemanticFactRequest(
         operation="sum",
-        subject=parsed.subject,
+        subject=_member_collection(),
         property="fixture_score",
     )
     total, _, _, _ = await engine.execute(total_request, context)
@@ -1829,8 +2204,12 @@ async def test_semantic_planner_rejects_model_originated_entity_id(
                 },
             }
 
-    with pytest.raises(ValueError, match="cannot originate entity IDs"):
+    with pytest.raises(SemanticPlannerFailure) as captured:
         await SemanticFactPlanner(Interpreter(), schema).plan(
             [{"role": "user", "content": "Dylan是谁"}],
             context,
         )
+    assert captured.value.diagnostics.validation_result == (
+        "MODEL_ORIGINATED_ENTITY_ID"
+    )
+    assert captured.value.diagnostics.attempt_count == 1

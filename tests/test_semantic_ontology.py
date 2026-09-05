@@ -5,7 +5,7 @@ import yaml
 
 from home_cortex.edge_schema import EdgeSchemaRegistry
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_facts import SemanticSchemaRegistry, TierZeroSemanticParser
+from home_cortex.semantic_facts import SemanticSchemaRegistry
 from home_cortex.semantic_ontology import SemanticOntology
 
 ROOT = Path(__file__).parents[1]
@@ -38,7 +38,9 @@ def test_default_ontology_owns_property_and_kinship_semantics() -> None:
     assert age_filter.value_from == "anchor"
 
 
-def test_new_kinship_alias_requires_only_ontology_change(tmp_path: Path) -> None:
+def test_new_kinship_alias_is_exposed_to_planner_by_ontology_change(
+    tmp_path: Path,
+) -> None:
     raw = yaml.safe_load(ONTOLOGY_PATH.read_text(encoding="utf-8"))
     raw["reference_concepts"]["father_in_law"]["aliases"].append("老丈人")
     custom_path = tmp_path / "ontology.yaml"
@@ -47,12 +49,11 @@ def test_new_kinship_alias_requires_only_ontology_change(tmp_path: Path) -> None
         encoding="utf-8",
     )
 
-    request = TierZeroSemanticParser(
-        SemanticOntology.from_file(custom_path)
-    ).parse("我老丈人是谁")
+    payload = SemanticOntology.from_file(custom_path).planner_payload()
+    concept = payload["reference_concepts"]["father_in_law"]
 
-    assert request is not None
-    assert [step.relation for step in request.subject.path] == ["spouse", "parent"]
+    assert "老丈人" in concept["aliases"]
+    assert [step["relation"] for step in concept["path"]] == ["spouse", "parent"]
 
 
 def test_relation_direction_is_derived_from_edge_schema_metadata() -> None:

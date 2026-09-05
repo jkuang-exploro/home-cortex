@@ -72,3 +72,16 @@ python -m home_cortex.fact_benchmark --backend json --repeat 20
 To include the configured SurrealDB runtime latency, use
 `--backend surrealdb`. The report includes each semantic plan, answer, tier,
 LLM-call count, graph/DB-query count, and aggregate P50/P95 latency.
+
+Use the planner-only benchmark to measure language-to-IR accuracy independently
+of Tier 0. Its 100+ paraphrase dataset reports raw and normalized plans,
+validation/executor outcomes, P50/P95 planner latency, Tier-0 parity, and accuracy
+by semantic capability:
+
+```bash
+home-cortex-semantic-planner-benchmark \
+  --data-dir data --schema-dir schemas/edge
+```
+
+The implementation findings and local-model measurements are recorded in
+[`docs/semantic-planner-authority-report.md`](docs/semantic-planner-authority-report.md).

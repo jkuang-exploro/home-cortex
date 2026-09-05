@@ -16,7 +16,6 @@ properties:
   birth_date:
     fields: [birth_date, birthday, dob, date_of_birth]
     aliases: [生日, 出生日期, 出生时间, 哪天出生, birthday, birth date, date of birth, born]
-    fast_path: true
   full_address:
     fields: [full_address, address, street_address]
     aliases: [住址, 地址, 街道地址, full address, street address]
@@ -76,7 +75,7 @@ base_relations:
 
 reference_concepts:
   spouse:
-    aliases: [配偶, spouse]
+    aliases: [配偶, 爱人, spouse, partner]
     path:
       - relation: spouse
   wife:

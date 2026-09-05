@@ -40,7 +40,6 @@ class OntologyProperty:
     name: str
     fields: tuple[str, ...]
     aliases: tuple[str, ...]
-    fast_path: bool = False
 
 
 @dataclass(frozen=True)
@@ -91,9 +90,6 @@ class SemanticOntology:
                 "Semantic relation aliases must be unique: "
                 + ", ".join(sorted(duplicates))
             )
-        self._reference_aliases = tuple(
-            sorted(alias_pairs, key=lambda item: len(item[0]), reverse=True)
-        )
         predicate_alias_pairs = [
             (alias.casefold(), definition.name)
             for definition in self.collection_predicates.values()
@@ -177,30 +173,6 @@ class SemanticOntology:
         definition = self.properties.get(semantic)
         return definition.fields if definition is not None else (semantic,)
 
-    def fast_property_aliases(self) -> tuple[tuple[str, str], ...]:
-        return tuple(
-            sorted(
-                (
-                    (alias, definition.name)
-                    for definition in self.properties.values()
-                    if definition.fast_path
-                    for alias in definition.aliases
-                ),
-                key=lambda item: len(item[0]),
-                reverse=True,
-            )
-        )
-
-    def match_reference_prefix(
-        self,
-        text: str,
-    ) -> tuple[OntologyReferenceConcept, int] | None:
-        folded = text.casefold()
-        for alias, concept in self._reference_aliases:
-            if folded.startswith(alias):
-                return concept, len(alias)
-        return None
-
     def resolve_collection_predicate(self, value: str) -> str | None:
         return self._collection_predicate_aliases.get(value.casefold())
 
@@ -264,6 +236,72 @@ class SemanticOntology:
                             ],
                         },
                     ],
+                }
+                for name, definition in self.collection_predicates.items()
+            },
+        }
+
+    def planner_payload(self) -> dict[str, Any]:
+        """Compact declarative vocabulary for a small-context local planner."""
+        return {
+            "properties": {
+                name: list(definition.aliases)
+                for name, definition in self.properties.items()
+            },
+            "base_relations": sorted(self.base_relations),
+            "reference_concepts": {
+                name: {
+                    "aliases": list(concept.aliases),
+                    "path": [
+                        {
+                            "relation": step.relation,
+                            **(
+                                {
+                                    "filters": [
+                                        {
+                                            "property": item.property,
+                                            **(
+                                                {"operator": item.operator}
+                                                if item.operator != "eq"
+                                                else {}
+                                            ),
+                                            **(
+                                                {"value": item.value}
+                                                if item.value is not None
+                                                else {}
+                                            ),
+                                            **(
+                                                {"source": item.source}
+                                                if item.source != "entity"
+                                                else {}
+                                            ),
+                                            **(
+                                                {"value_from": item.value_from}
+                                                if item.value_from is not None
+                                                else {}
+                                            ),
+                                            **(
+                                                {"value_property": item.value_property}
+                                                if item.value_property is not None
+                                                else {}
+                                            ),
+                                        }
+                                        for item in step.filters
+                                    ]
+                                }
+                                if step.filters
+                                else {}
+                            ),
+                        }
+                        for step in concept.path
+                    ],
+                }
+                for name, concept in self.reference_concepts.items()
+            },
+            "collection_predicates": {
+                name: {
+                    "aliases": list(definition.aliases),
+                    "scope_relation": definition.default_scope_relation,
                 }
                 for name, definition in self.collection_predicates.items()
             },
@@ -374,14 +412,13 @@ def _parse_properties(raw: Any, path: Path) -> dict[str, OntologyProperty]:
     result: dict[str, OntologyProperty] = {}
     for name, definition in values.items():
         item = _mapping(definition, f"properties.{name}", path)
-        extra = sorted(set(item) - {"fields", "aliases", "fast_path"})
+        extra = sorted(set(item) - {"fields", "aliases"})
         if extra:
             raise ValueError(f"Unknown properties.{name} fields: {', '.join(extra)}")
         result[name] = OntologyProperty(
             name,
             _strings(item.get("fields"), f"properties.{name}.fields", path),
             _strings(item.get("aliases", []), f"properties.{name}.aliases", path),
-            _boolean(item.get("fast_path", False), f"properties.{name}.fast_path", path),
         )
     return result
 
@@ -510,12 +547,6 @@ def _strings(value: Any, field: str, path: Path) -> tuple[str, ...]:
     if len(values) != len(set(values)):
         raise ValueError(f"{field} in {path} contains duplicates")
     return values
-
-
-def _boolean(value: Any, field: str, path: Path) -> bool:
-    if not isinstance(value, bool):
-        raise ValueError(f"{field} in {path} must be true or false")
-    return value
 
 
 def _duplicates(values: Any) -> set[str]:

@@ -203,6 +203,7 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
     )
 
     prompt = client.calls[0]["messages"][0]["content"]
+    assert client.calls[0]["options"] == {"temperature": 0}
     assert "choose kind=self" in prompt
     assert "literal stored name or appellation" in prompt
     assert "leave property=null" in prompt

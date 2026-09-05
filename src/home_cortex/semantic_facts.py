@@ -10,20 +10,18 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .display import resolve_display_name
 from .grounding import AgentRequestContext, GroundedAnswer
 from .operator_registry import (
     OPERATORS,
-    PREDICATE_OPERATORS,
     OperatorExecutionError,
     OperatorInput,
     OperatorValidationError,
     evaluate_predicate,
     execute_operator,
     infer_field_kind,
-    operator_prompt_payload,
 )
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_ontology import SemanticOntology
@@ -81,6 +79,16 @@ ResolutionStatus = Literal[
     "missing_context",
     "relationship_not_found",
     "property_unavailable",
+]
+PlannerValidationCode = Literal[
+    "VALID",
+    "NOT_A_FACT",
+    "MALFORMED_OUTPUT",
+    "UNSUPPORTED_OPERATION",
+    "UNKNOWN_PROPERTY",
+    "UNKNOWN_RELATION",
+    "MODEL_ORIGINATED_ENTITY_ID",
+    "INVALID_PLAN",
 ]
 
 
@@ -260,11 +268,41 @@ class FactTimings:
 
 
 @dataclass(frozen=True)
+class PlannerDiagnostics:
+    input_summary: Mapping[str, Any]
+    output_raw: Mapping[str, Any] | None = None
+    normalized_plan: Mapping[str, Any] | None = None
+    validation_result: PlannerValidationCode = "INVALID_PLAN"
+    failure_detail: str | None = None
+    attempt_count: int = 0
+    latency_ms: float = 0
+
+
+@dataclass(frozen=True)
+class SemanticPlannerOutcome:
+    plan: SemanticPlan
+    latency_ms: float
+    diagnostics: PlannerDiagnostics
+
+    def __iter__(self):
+        """Preserve the former ``plan, latency = ...`` calling convention."""
+        yield self.plan
+        yield self.latency_ms
+
+
+class SemanticPlannerFailure(ValueError):
+    def __init__(self, diagnostics: PlannerDiagnostics) -> None:
+        super().__init__(diagnostics.failure_detail or diagnostics.validation_result)
+        self.diagnostics = diagnostics
+
+
+@dataclass(frozen=True)
 class FactAnswer:
     request: SemanticFactRequest
     result: FactResult
     text: str
     timings: FactTimings
+    planner_diagnostics: PlannerDiagnostics | None = None
 
 
 @dataclass(frozen=True)
@@ -357,8 +395,6 @@ class SemanticSchemaRegistry:
             return self._capability_cache
         fact_operations = set(get_args(FactOperation))
         plan_operations = fact_operations | {"filter", "traverse"}
-        exposed_operators = plan_operations | set(PREDICATE_OPERATORS)
-        contracts = operator_prompt_payload()
         semantic_properties = {
             entity_type: sorted(self.semantic_properties(entity_type))
             for entity_type in self.catalog.entities
@@ -369,6 +405,12 @@ class SemanticSchemaRegistry:
             if self.physical_relation(semantic) is not None
         }
         self._capability_cache = {
+            "references": [
+                "self",
+                "assistant",
+                "current_household",
+                "named_entity",
+            ],
             "entity_types": sorted(self.catalog.entities),
             "semantic_properties": semantic_properties,
             "semantic_relations": sorted(relations),
@@ -377,13 +419,50 @@ class SemanticSchemaRegistry:
                 for relation in relations
             },
             "operations": sorted(plan_operations),
-            "operator_contracts": {
-                name: contracts[name] for name in sorted(exposed_operators)
+            "operation_requirements": {
+                "argmin": "collection + ordered property; returns entity",
+                "argmax": "collection + ordered property; returns entity",
+                "completed_years": "date property; reference=household_now",
+                "duration": "date property + mode days|seconds",
+                "annual_occurrence": "date property; mode=days only for countdown",
+                "date_difference": "date property + mode days|seconds",
+                "unit_conversion": "numeric property + from_unit + to_unit",
             },
-            "reference_ontology": self.ontology.prompt_payload(),
+            "reference_ontology": self.ontology.planner_payload(),
             "collection_predicates": sorted(self.ontology.collection_predicates),
             "property_sources": ["entity", "relationship"],
+            "operation_semantics": {
+                "list": "select with property=null over a collection reference",
+                "get_property": "select with property set and source=entity",
+                "get_relation_property": (
+                    "select with property set and source=relationship"
+                ),
+                "compare": "argmin or argmax with subject and other",
+                "days_until": "annual_occurrence with mode=days",
+            },
             "composition_examples": {
+                "resolve_speaker": {
+                    "operation": "resolve_reference",
+                    "subject": {"kind": "self", "entity_type": "person"},
+                },
+                "list_household_members": {
+                    "operation": "select",
+                    "subject": {
+                        "kind": "current_household",
+                        "entity_type": "address",
+                        "path": [{"relation": "member"}],
+                    },
+                    "property": None,
+                },
+                "minimum_birth_date_entity": {
+                    "operation": "argmin",
+                    "subject": {
+                        "kind": "current_household",
+                        "entity_type": "address",
+                        "path": [{"relation": "member"}],
+                    },
+                    "property": "birth_date",
+                },
                 "maximum_birth_date_entity": {
                     "operation": "argmax",
                     "subject": {
@@ -402,6 +481,24 @@ class SemanticSchemaRegistry:
                     },
                     "filters": [{"predicate": "adult"}],
                 },
+                "count_minor_members": {
+                    "operation": "count",
+                    "subject": {
+                        "kind": "current_household",
+                        "entity_type": "address",
+                        "path": [{"relation": "member"}],
+                    },
+                    "filters": [{"predicate": "minor"}],
+                },
+                "speaker_spouse_birth_date": {
+                    "operation": "select",
+                    "subject": {
+                        "kind": "self",
+                        "entity_type": "person",
+                        "path": [{"relation": "spouse"}],
+                    },
+                    "property": "birth_date",
+                },
                 "spouse_relationship_start": {
                     "operation": "select",
                     "subject": {
@@ -411,6 +508,34 @@ class SemanticSchemaRegistry:
                     },
                     "property": "start_date",
                     "property_source": "relationship",
+                },
+                "spouse_relationship_duration": {
+                    "operation": "duration",
+                    "subject": {
+                        "kind": "self",
+                        "entity_type": "person",
+                        "path": [{"relation": "spouse"}],
+                    },
+                    "property": "start_date",
+                    "property_source": "relationship",
+                    "mode": "days",
+                },
+                "speaker_son_birthday_countdown": {
+                    "operation": "annual_occurrence",
+                    "subject": {
+                        "kind": "self",
+                        "entity_type": "person",
+                        "path": [
+                            {
+                                "relation": "child",
+                                "filters": [
+                                    {"property": "gender", "value": "male"}
+                                ],
+                            }
+                        ],
+                    },
+                    "property": "birth_date",
+                    "mode": "days",
                 },
             },
         }
@@ -461,6 +586,58 @@ class SemanticSchemaRegistry:
             for entity_type in self.catalog.entities
             if (physical := self.physical_property(entity_type, semantic)) is not None
         )
+
+    def validation_code(self, request: SemanticFactRequest) -> PlannerValidationCode:
+        """Return a stable, non-sensitive reason for semantic-plan rejection."""
+        references = (request.subject,) + ((request.other,) if request.other else ())
+        for reference in references:
+            for step in reference.path:
+                if self.physical_relation(step.relation) is None:
+                    return "UNKNOWN_RELATION"
+        if request.property is not None:
+            if request.property_source == "relationship":
+                if self._final_relation_kind(request.subject, request.property) is None:
+                    return "UNKNOWN_PROPERTY"
+            else:
+                final_types = self._reference_entity_types(request.subject)
+                if (
+                    final_types is not None
+                    and self._semantic_kind(final_types, request.property) is None
+                ):
+                    return "UNKNOWN_PROPERTY"
+        for reference in references:
+            step_types = self._base_entity_types(reference)
+            for step in reference.path:
+                next_types = self._traversal_target_types(step.relation, step_types)
+                if next_types is None:
+                    break
+                for item in step.filters:
+                    if item.property is None:
+                        continue
+                    if item.source == "entity":
+                        if self._semantic_kind(next_types, item.property) is None:
+                            return "UNKNOWN_PROPERTY"
+                    else:
+                        resolved = self.physical_relation(step.relation)
+                        if resolved is not None and self.relation_property(
+                            resolved[0], item.property
+                        ) is None:
+                            return "UNKNOWN_PROPERTY"
+                step_types = next_types
+        for item in request.filters:
+            if item.property is None:
+                continue
+            final_types = self._reference_entity_types(request.subject)
+            if item.source == "entity" and (
+                final_types is None
+                or self._semantic_kind(final_types, item.property) is None
+            ):
+                return "UNKNOWN_PROPERTY"
+            if item.source == "relation" and self._final_relation_kind(
+                request.subject, item.property
+            ) is None:
+                return "UNKNOWN_PROPERTY"
+        return "VALID" if self.validates(request) else "INVALID_PLAN"
 
     def validates(self, request: SemanticFactRequest) -> bool:
         """Reject model plans outside the advertised semantic protocol."""
@@ -738,7 +915,7 @@ class SemanticSchemaRegistry:
 
 
 class SemanticFactPlanner:
-    """One-call semantic interpreter that never sees storage field names."""
+    """Strict semantic interpreter that never sees storage field names."""
 
     def __init__(self, ollama: Any, schema: SemanticSchemaRegistry) -> None:
         self.ollama = ollama
@@ -748,22 +925,64 @@ class SemanticFactPlanner:
         self,
         messages: Sequence[Mapping[str, Any]],
         context: AgentRequestContext,
-    ) -> tuple[SemanticPlan, float]:
+    ) -> SemanticPlannerOutcome:
         started = perf_counter()
-        output_schema = SemanticPlan.model_json_schema()
+        output_schema = _compact_json_schema(SemanticPlan.model_json_schema())
         reference_kind = output_schema["$defs"]["SemanticReference"]["properties"][
             "kind"
         ]
         reference_kind["enum"] = [
             item for item in reference_kind["enum"] if item != "entity_id"
         ]
-        payload = await self.ollama.plan_semantic_fact(
-            messages,
-            self.schema.capability_payload(),
-            output_schema,
-            household_now=context.current_time.isoformat(),
-        )
-        plan = SemanticPlan.model_validate(payload)
+        capabilities = self.schema.capability_payload()
+        input_summary = planner_input_summary(capabilities)
+        payload: Mapping[str, Any] | None = None
+        plan: SemanticPlan | None = None
+        structural_error: Exception | None = None
+        attempts = 0
+        for attempts in (1, 2):
+            planner_messages = list(messages)
+            if attempts == 2:
+                planner_messages.append(
+                    {
+                        "role": "system",
+                        "content": (
+                            "Your previous response failed strict structural "
+                            "validation. Return exactly one JSON object conforming "
+                            "to the supplied output schema. Do not change the "
+                            "meaning of the original user request."
+                        ),
+                    }
+                )
+            try:
+                payload = await self.ollama.plan_semantic_fact(
+                    planner_messages,
+                    capabilities,
+                    output_schema,
+                    household_now=context.current_time.isoformat(),
+                )
+                plan = SemanticPlan.model_validate(payload)
+                structural_error = None
+                break
+            except (ValueError, TypeError) as error:
+                structural_error = error
+        latency_ms = (perf_counter() - started) * 1000
+        if plan is None:
+            code = _structural_validation_code(structural_error)
+            raise SemanticPlannerFailure(
+                PlannerDiagnostics(
+                    input_summary=input_summary,
+                    output_raw=payload,
+                    validation_result=code,
+                    failure_detail=(
+                        type(structural_error).__name__
+                        if structural_error is not None
+                        else "planner returned no plan"
+                    ),
+                    attempt_count=attempts,
+                    latency_ms=latency_ms,
+                )
+            )
         if plan.request is not None:
             plan = plan.model_copy(
                 update={"request": self._normalize_collection_predicates(plan.request)}
@@ -773,8 +992,41 @@ class SemanticFactPlanner:
             for reference in (plan.request.subject, plan.request.other)
             if reference is not None
         ):
-            raise ValueError("The semantic planner cannot originate entity IDs")
-        return plan, (perf_counter() - started) * 1000
+            raise SemanticPlannerFailure(
+                PlannerDiagnostics(
+                    input_summary=input_summary,
+                    output_raw=payload,
+                    normalized_plan=plan.model_dump(mode="json"),
+                    validation_result="MODEL_ORIGINATED_ENTITY_ID",
+                    failure_detail="The semantic planner cannot originate entity IDs",
+                    attempt_count=attempts,
+                    latency_ms=latency_ms,
+                )
+            )
+        validation: PlannerValidationCode = "NOT_A_FACT"
+        if plan.request is not None:
+            validation = self.schema.validation_code(plan.request)
+            if validation != "VALID":
+                raise SemanticPlannerFailure(
+                    PlannerDiagnostics(
+                        input_summary=input_summary,
+                        output_raw=payload,
+                        normalized_plan=plan.model_dump(mode="json"),
+                        validation_result=validation,
+                        failure_detail="semantic request violates advertised capabilities",
+                        attempt_count=attempts,
+                        latency_ms=latency_ms,
+                    )
+                )
+        diagnostics = PlannerDiagnostics(
+            input_summary=input_summary,
+            output_raw=payload,
+            normalized_plan=plan.model_dump(mode="json"),
+            validation_result=validation,
+            attempt_count=attempts,
+            latency_ms=latency_ms,
+        )
+        return SemanticPlannerOutcome(plan, latency_ms, diagnostics)
 
     def _normalize_collection_predicates(
         self,
@@ -889,222 +1141,49 @@ class SemanticFactPlanner:
 
 
 class TierZeroSemanticParser:
-    """Parse a bounded vocabulary into composable IR, never whole-query handlers."""
+    """Recognize a deliberately tiny set of canonical, high-frequency requests.
+
+    Tier 0 is only a latency optimization. It intentionally does not attempt
+    open-ended language understanding; every plan it emits must also be covered
+    by the semantic planner evaluation suite.
+    """
 
     def __init__(self, ontology: SemanticOntology | None = None) -> None:
         self.ontology = ontology or SemanticOntology.load_default()
 
     def parse(self, text: str) -> SemanticFactRequest | None:
         normalized = _normalize_request(text)
-        if not normalized:
-            return None
-        age_extreme = _household_age_extreme(normalized)
-        if age_extreme is not None:
+        if normalized in {"我是谁", "who am i"}:
             return SemanticFactRequest(
-                operation=age_extreme,
-                subject=_household_members(),
-                property="birth_date",
+                operation="resolve_reference",
+                subject=SemanticReference(kind="self", entity_type="person"),
             )
-        if _asks_marriage_date(normalized):
+        if normalized in {"你是谁", "who are you"}:
             return SemanticFactRequest(
-                operation="select",
-                subject=SemanticReference(
-                    kind="self",
-                    entity_type="person",
-                    path=(SemanticRelationStep(relation="spouse"),),
-                ),
-                property="start_date",
-                property_source="relationship",
+                operation="resolve_reference",
+                subject=SemanticReference(kind="assistant", entity_type="person"),
             )
-        comparison = self._parse_comparison(normalized)
-        if comparison is not None:
-            return comparison
-        household = _mentions_household(normalized)
-        if household and _asks_household_children(normalized):
+        if normalized == "家里有几个人":
             return SemanticFactRequest(
                 operation="count",
-                subject=SemanticReference(
-                    kind="current_household",
-                    entity_type="address",
-                    path=(
-                        SemanticRelationStep(
-                            relation="member",
-                            filters=(
-                                SemanticFilter(
-                                    property="household_role",
-                                    value="minor_dependent",
-                                    source="relation",
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
+                subject=_household_members(),
             )
-        if household and _asks_count(normalized):
-            return SemanticFactRequest(operation="count", subject=_household_members())
-        if household and _asks_list(normalized):
-            return SemanticFactRequest(operation="select", subject=_household_members())
-
-        if _asks_residence_address(normalized):
+        if normalized == "家里都有谁":
             return SemanticFactRequest(
                 operation="select",
-                subject=_self_residence(),
-                property="full_address",
-            )
-
-        birthday_intent = _extract_birthday_intent(normalized, self.ontology)
-        if birthday_intent is not None:
-            operation, stem, mode = birthday_intent
-            reference = self._parse_reference(stem)
-            return (
-                SemanticFactRequest(
-                    operation=operation,
-                    subject=reference,
-                    property="birth_date",
-                    mode=mode,
-                )
-                if reference is not None
-                else None
-            )
-
-        property_name, stem = _extract_property(normalized, self.ontology)
-        if property_name == "age":
-            reference = self._parse_reference(stem)
-            return (
-                SemanticFactRequest(
-                    operation="completed_years",
-                    subject=reference,
-                    property="birth_date",
-                )
-                if reference is not None
-                else None
-            )
-        if property_name is not None:
-            reference = self._parse_reference(stem)
-            return (
-                SemanticFactRequest(
-                    operation="select",
-                    subject=reference,
-                    property=property_name,
-                )
-                if reference is not None
-                else None
-            )
-        if _asks_count(normalized):
-            stem = _strip_count_syntax(normalized)
-            reference = self._parse_reference(stem)
-            return (
-                SemanticFactRequest(operation="count", subject=reference)
-                if reference is not None and reference.path
-                else None
-            )
-        if _asks_identity(normalized):
-            reference = self._parse_reference(_strip_identity_syntax(normalized))
-            return (
-                SemanticFactRequest(operation="resolve_reference", subject=reference)
-                if reference is not None
-                else None
+                subject=_household_members(),
             )
         return None
 
-    def _parse_reference(self, text: str) -> SemanticReference | None:
-        normalized = text.strip("的 ")
-        base: ReferenceKind
-        base_value: str | None = None
-        remainder: str
-        if normalized.startswith(("我", "my ")) or normalized in {"i", "me", "my"}:
-            base = "self"
-            remainder = (
-                normalized[1:]
-                if normalized.startswith("我")
-                else normalized.removeprefix("my ")
-                if normalized.startswith("my ")
-                else ""
-            )
-        elif normalized.startswith(("你", "您", "your ")) or normalized in {
-            "you",
-            "your",
-        }:
-            base = "assistant"
-            remainder = (
-                normalized[1:]
-                if normalized[:1] in {"你", "您"}
-                else normalized.removeprefix("your ")
-                if normalized.startswith("your ")
-                else ""
-            )
-        else:
-            if not normalized or len(normalized) > 256:
-                return None
-            name, separator, possible_path = normalized.partition("的")
-            if not separator or not name or not self._starts_relation(possible_path):
-                return SemanticReference(
-                    kind="named_entity",
-                    value=normalized,
-                    entity_type="person",
-                )
-            base = "named_entity"
-            base_value = name
-            remainder = possible_path
-        remainder = remainder.strip("的 ")
-        steps: list[SemanticRelationStep] = []
-        while remainder:
-            matched = self.ontology.match_reference_prefix(remainder)
-            if matched is None:
-                return None
-            concept, consumed = matched
-            steps.extend(
-                SemanticRelationStep(
-                    relation=step.relation,
-                    filters=tuple(
-                        SemanticFilter(
-                            property=item.property,
-                            operator=item.operator,
-                            value=item.value,
-                            source=item.source,
-                            value_from=item.value_from,
-                            value_property=item.value_property,
-                        )
-                        for item in step.filters
-                    ),
-                )
-                for step in concept.path
-            )
-            remainder = remainder[consumed:].strip("的 ")
-        return SemanticReference(
-            kind=base,
-            value=base_value,
-            entity_type="person",
-            path=tuple(steps),
-        )
-
-    def _starts_relation(self, text: str) -> bool:
-        return self.ontology.match_reference_prefix(text) is not None
-
-    def _parse_comparison(self, text: str) -> SemanticFactRequest | None:
-        suffix = next(
-            (
-                item
-                for item in ("谁年龄大", "谁年纪大", "谁大", "who is older")
-                if text.endswith(item)
-            ),
-            None,
-        )
-        if suffix is None:
-            return None
-        operands = text[: -len(suffix)].strip("，, ?？")
-        parts = re.split(r"和|与|跟| and ", operands, maxsplit=1)
-        if len(parts) != 2:
-            return None
-        left = self._parse_reference(parts[0])
-        right = self._parse_reference(parts[1])
-        if left is None or right is None:
-            return None
-        return SemanticFactRequest(
-            operation="argmin",
-            subject=left,
-            other=right,
-            property="birth_date",
+    def canonical_utterances(self) -> tuple[str, ...]:
+        """Expose the optimization surface for Tier-0/Tier-1 parity checks."""
+        return (
+            "我是谁",
+            "Who am I?",
+            "你是谁",
+            "Who are you?",
+            "家里有几个人",
+            "家里都有谁",
         )
 
 
@@ -2215,16 +2294,41 @@ class SemanticFactService:
         tier = 0
         llm_ms = 0.0
         llm_call_count = 0
+        planner_diagnostics: PlannerDiagnostics | None = None
         if request is None:
             if self.planner is None:
                 return SemanticAttempt(False)
             tier = 1
-            llm_call_count = 1
             llm_started = perf_counter()
             try:
-                plan, llm_ms = await self.planner.plan(messages, context)
+                outcome = await self.planner.plan(messages, context)
+                plan, llm_ms = outcome
+                planner_diagnostics = outcome.diagnostics
+                llm_call_count = outcome.diagnostics.attempt_count
+            except SemanticPlannerFailure as error:
+                planner_diagnostics = error.diagnostics
+                llm_ms = error.diagnostics.latency_ms
+                llm_call_count = error.diagnostics.attempt_count
+                logger.warning(
+                    "semantic_plan_invalid request_id=%s validation=%s attempts=%d",
+                    safe_log_token(request_id),
+                    safe_log_token(error.diagnostics.validation_result),
+                    error.diagnostics.attempt_count,
+                )
+                return SemanticAttempt(
+                    True,
+                    self._failure_answer(
+                        context,
+                        started,
+                        request_id=request_id,
+                        llm_ms=llm_ms,
+                        llm_call_count=llm_call_count,
+                        planner_diagnostics=planner_diagnostics,
+                    ),
+                )
             except Exception as error:
                 llm_ms = (perf_counter() - llm_started) * 1000
+                llm_call_count = max(llm_call_count, 1)
                 logger.warning(
                     "semantic_plan_invalid request_id=%s error=%s",
                     safe_log_token(request_id),
@@ -2238,6 +2342,7 @@ class SemanticFactService:
                         request_id=request_id,
                         llm_ms=llm_ms,
                         llm_call_count=llm_call_count,
+                        planner_diagnostics=planner_diagnostics,
                     ),
                 )
             if not plan.requires_fact:
@@ -2255,6 +2360,7 @@ class SemanticFactService:
                         request_id=request_id,
                         llm_ms=llm_ms,
                         llm_call_count=llm_call_count,
+                        planner_diagnostics=planner_diagnostics,
                     ),
                 )
         routing_ms = (perf_counter() - routing_started) * 1000
@@ -2282,8 +2388,17 @@ class SemanticFactService:
             llm_call_count=llm_call_count,
             db_query_count=query_count,
         )
-        _log_fact_query(request_id, request, result, timings)
-        return SemanticAttempt(True, FactAnswer(request, result, rendered, timings))
+        _log_fact_query(
+            request_id,
+            request,
+            result,
+            timings,
+            planner_diagnostics=planner_diagnostics,
+        )
+        return SemanticAttempt(
+            True,
+            FactAnswer(request, result, rendered, timings, planner_diagnostics),
+        )
 
     def _failure_answer(
         self,
@@ -2294,6 +2409,7 @@ class SemanticFactService:
         request_id: str,
         llm_ms: float,
         llm_call_count: int,
+        planner_diagnostics: PlannerDiagnostics | None = None,
         status: FactStatus = "semantic_plan_unsupported",
     ) -> FactAnswer:
         safe_request = request or SemanticFactRequest(
@@ -2311,8 +2427,20 @@ class SemanticFactService:
             llm_call_count=llm_call_count,
             total_ms=(perf_counter() - started) * 1000,
         )
-        _log_fact_query(request_id, safe_request, result, timings)
-        return FactAnswer(safe_request, result, rendered, timings)
+        _log_fact_query(
+            request_id,
+            safe_request,
+            result,
+            timings,
+            planner_diagnostics=planner_diagnostics,
+        )
+        return FactAnswer(
+            safe_request,
+            result,
+            rendered,
+            timings,
+            planner_diagnostics,
+        )
 
     async def try_answer(
         self,
@@ -2420,17 +2548,69 @@ def _latest_user_text(messages: Sequence[Mapping[str, Any]]) -> str:
     )
 
 
+def planner_input_summary(capabilities: Mapping[str, Any]) -> dict[str, Any]:
+    """Summarize planner affordances without copying household fact values."""
+    relation_properties = capabilities.get("semantic_relation_properties", {})
+    semantic_properties = capabilities.get("semantic_properties", {})
+    return {
+        "references": list(capabilities.get("references", ())),
+        "entity_types": list(capabilities.get("entity_types", ())),
+        "relations": list(capabilities.get("semantic_relations", ())),
+        "entity_properties": {
+            str(entity_type): list(properties)
+            for entity_type, properties in semantic_properties.items()
+        }
+        if isinstance(semantic_properties, Mapping)
+        else {},
+        "relationship_properties": {
+            str(relation): list(properties)
+            for relation, properties in relation_properties.items()
+        }
+        if isinstance(relation_properties, Mapping)
+        else {},
+        "operations": list(capabilities.get("operations", ())),
+        "collection_predicates": list(
+            capabilities.get("collection_predicates", ())
+        ),
+    }
+
+
+def _compact_json_schema(value: Any) -> Any:
+    """Remove model-irrelevant prose while preserving JSON Schema constraints."""
+    if isinstance(value, Mapping):
+        return {
+            key: _compact_json_schema(item)
+            for key, item in value.items()
+            if key not in {"title", "description", "default"}
+        }
+    if isinstance(value, list):
+        return [_compact_json_schema(item) for item in value]
+    return value
+
+
+def _structural_validation_code(
+    error: Exception | None,
+) -> PlannerValidationCode:
+    if isinstance(error, ValidationError):
+        if any(item.get("loc", ())[-1:] == ("operation",) for item in error.errors()):
+            return "UNSUPPORTED_OPERATION"
+    return "MALFORMED_OUTPUT"
+
+
 def _log_fact_query(
     request_id: str,
     request: SemanticFactRequest,
     result: FactResult,
     timings: FactTimings,
+    *,
+    planner_diagnostics: PlannerDiagnostics | None = None,
 ) -> None:
     logger.info(
         "fact_query request_id=%s tier=%d operation=%s semantic_plan=%s "
         "db_queries=%d llm_calls=%d routing_ms=%.2f semantic_parse_ms=%.2f "
         "entity_resolution_ms=%.2f fact_query_ms=%.2f computation_ms=%.2f "
-        "render_ms=%.2f llm_ms=%.2f total_ms=%.2f status=%s failure_stage=%s",
+        "render_ms=%.2f llm_ms=%.2f total_ms=%.2f status=%s failure_stage=%s "
+        "planner_validation=%s planner_attempts=%d",
         safe_log_token(request_id),
         timings.tier,
         safe_log_token(request.operation),
@@ -2449,6 +2629,12 @@ def _log_fact_query(
         timings.total_ms,
         safe_log_token(result.status),
         safe_log_token(_failure_stage(result.status) or "none"),
+        safe_log_token(
+            planner_diagnostics.validation_result
+            if planner_diagnostics is not None
+            else "not_run"
+        ),
+        planner_diagnostics.attempt_count if planner_diagnostics is not None else 0,
     )
 
 
@@ -2497,180 +2683,11 @@ def _normalize_request(text: str) -> str:
     return re.sub(r"\s+", " ", normalized)
 
 
-def _extract_property(
-    text: str,
-    ontology: SemanticOntology,
-) -> tuple[str | None, str]:
-    age = re.search(r"(?:现在|今年)?(?:几岁(?:了)?|多大(?:了)?)$", text)
-    if age:
-        return "age", text[: age.start()].strip("的 ")
-    english_age = re.match(r"how old (?:is|are) (.+)$", text)
-    if english_age:
-        return "age", english_age.group(1).strip()
-    for alias, semantic_property in ontology.fast_property_aliases():
-        escaped = re.escape(alias.casefold())
-        english = re.fullmatch(
-            rf"(?:what|when) (?:is|was) (.+?)(?:'s)? {escaped}",
-            text,
-        )
-        if english:
-            return semantic_property, english.group(1).strip()
-        english_postfix = re.fullmatch(rf"when was (.+?) {escaped}", text)
-        if english_postfix:
-            return semantic_property, english_postfix.group(1).strip()
-        suffix = re.search(
-            rf"(?:的)?{escaped}(?:是|在)?(?:哪天|什么时候|何时|是什么)?$",
-            text,
-        )
-        if suffix:
-            return semantic_property, text[: suffix.start()].strip("的 ")
-    return None, text
-
-
-def _extract_birthday_intent(
-    text: str,
-    ontology: SemanticOntology,
-) -> tuple[Literal["annual_occurrence"], str, Literal["days"] | None] | None:
-    birth_aliases = [
-        alias
-        for alias, semantic_property in ontology.fast_property_aliases()
-        if semantic_property == "birth_date"
-    ]
-    alias_pattern = "|".join(re.escape(alias.casefold()) for alias in birth_aliases)
-    countdown = re.fullmatch(
-        rf"(?:距离|离)?(.+?)(?:的)?(?:{alias_pattern})"
-        r"(?:还)?(?:有|剩)(?:多少|几)天(?:了)?",
-        text,
-    )
-    if countdown:
-        return "annual_occurrence", countdown.group(1).strip("的 "), "days"
-    english_countdown = re.fullmatch(
-        rf"how many days (?:are left )?until (.+?)(?:'s| )"
-        rf"(?:{alias_pattern})",
-        text,
-    )
-    if english_countdown:
-        return "annual_occurrence", english_countdown.group(1).strip(), "days"
-    upcoming = re.fullmatch(
-        rf"(.+?)(?:的)?(?:下次(?:{alias_pattern})(?:是|在)?哪天|"
-        rf"哪天过(?:{alias_pattern}))",
-        text,
-    )
-    if upcoming:
-        return "annual_occurrence", upcoming.group(1).strip("的 "), None
-    english_upcoming = re.fullmatch(
-        rf"when is (.+?)(?:'s| ) next (?:{alias_pattern})",
-        text,
-    )
-    if english_upcoming:
-        return "annual_occurrence", english_upcoming.group(1).strip(), None
-    return None
-
-
-def _strip_identity_syntax(text: str) -> str:
-    english = re.fullmatch(r"who (?:am|are) (i|you)", text)
-    if english:
-        return english.group(1)
-    english_name = re.fullmatch(r"what is (my|your) name", text)
-    if english_name:
-        return "i" if english_name.group(1) == "my" else "you"
-    return re.sub(r"(?:是)?谁$|(?:叫)?什么(?:名字)?$", "", text).strip("的 ")
-
-
-def _strip_count_syntax(text: str) -> str:
-    return re.sub(r"有(?:多少(?:个|位)?|几个|几位)", "", text).strip("的 ")
-
-
-def _asks_identity(text: str) -> bool:
-    return bool(
-        re.search(r"(?:是)?谁$|(?:叫)?什么(?:名字)?$", text)
-        or re.fullmatch(r"who (?:am|are) (?:i|you)", text)
-        or re.fullmatch(r"what is (?:my|your) name", text)
-    )
-
-
-def _asks_count(text: str) -> bool:
-    return bool(re.search(r"(?:有)?(?:多少|几)(?:个|位)?(?:人|成员|孩子|小孩)", text))
-
-
-def _asks_list(text: str) -> bool:
-    return bool(re.search(r"都有谁|成员名单|有哪些人|who lives|who is in", text))
-
-
-def _mentions_household(text: str) -> bool:
-    return bool(re.search(r"家里|我家|我们家|家庭|household|home", text))
-
-
-def _asks_household_children(text: str) -> bool:
-    return _asks_count(text) and bool(re.search(r"孩子|小孩|children", text))
-
-
-def _asks_residence_address(text: str) -> bool:
-    return bool(
-        re.search(
-            r"住哪里|住哪儿|具体住址|街道地址|家庭住址|家庭地址|"
-            r"住址(?:是)?什么|where do i live|my (?:home |street )?address",
-            text,
-        )
-    )
-
-
-def _household_age_extreme(text: str) -> Literal["argmin", "argmax"] | None:
-    oldest = bool(
-        re.search(
-            r"(?:谁最年长|最年长的?是?谁|谁年龄最大|年龄最大的?是?谁|"
-            r"谁年纪最大|年纪最大的?是?谁|oldest)",
-            text,
-        )
-    )
-    youngest = bool(
-        re.search(
-            r"(?:谁最年幼|最年幼的?是?谁|谁最年轻|最年轻的?是?谁|"
-            r"谁年龄最小|年龄最小的?是?谁|谁年纪最小|年纪最小的?是?谁|youngest)",
-            text,
-        )
-    )
-    if not oldest and not youngest:
-        return None
-    if not _mentions_household(text) and not re.fullmatch(
-        r"(?:谁最年长|最年长的?是?谁|谁年龄最大|年龄最大的?是?谁|"
-        r"谁年纪最大|年纪最大的?是?谁|谁最年幼|最年幼的?是?谁|"
-        r"谁最年轻|最年轻的?是?谁|谁年龄最小|年龄最小的?是?谁|"
-        r"谁年纪最小|年纪最小的?是?谁|who is (?:the )?(?:oldest|youngest))",
-        text,
-    ):
-        return None
-    return "argmin" if oldest else "argmax"
-
-
-def _asks_marriage_date(text: str) -> bool:
-    return bool(
-        re.fullmatch(
-            r"(?:我们|我(?:和|与|跟)我?(?:老婆|妻子|配偶)|我)"
-            r"(?:是|在)?(?:哪天|什么时候|何时)结婚的?",
-            text,
-        )
-        or re.fullmatch(
-            r"(?:我们|我(?:和|与|跟)我?(?:老婆|妻子|配偶)|我)的?结婚日期"
-            r"(?:是|在)?(?:哪天|什么时候|何时|是什么)?",
-            text,
-        )
-    )
-
-
 def _household_members() -> SemanticReference:
     return SemanticReference(
         kind="current_household",
         entity_type="address",
         path=(SemanticRelationStep(relation="member"),),
-    )
-
-
-def _self_residence() -> SemanticReference:
-    return SemanticReference(
-        kind="self",
-        entity_type="person",
-        path=(SemanticRelationStep(relation="residence"),),
     )
 
 

@@ -34,7 +34,13 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
             "entity_type": "address",
             "path": [{"relation": "member"}],
         }
-        if text in {"谁最年幼", "谁年纪最小"}:
+        if text == "谁最年长":
+            request = {
+                "operation": "argmin",
+                "subject": members,
+                "property": "birth_date",
+            }
+        elif text in {"谁最年幼", "谁年纪最小"}:
             request = {
                 "operation": "argmax",
                 "subject": members,
@@ -69,6 +75,14 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
 
     original = OllamaService.plan_semantic_fact
     OllamaService.plan_semantic_fact = plan_semantic_fact  # type: ignore[method-assign]
+    questions = (
+        "家里有几个人",
+        "谁最年长",
+        "谁最年幼",
+        "有几个成年人",
+        "有几个孩子",
+        "我们什么时候结婚的",
+    )
     try:
         result = await benchmark_json(
             "person:jian_kuang",
@@ -76,12 +90,13 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
             ROOT / "data",
             ROOT / "schemas" / "edge",
             "tier0_enabled",
+            questions,
         )
     finally:
         OllamaService.plan_semantic_fact = original  # type: ignore[method-assign]
 
     assert result["mode"] == "tier0_enabled"
-    assert result["aggregate"]["llm_call_count"] == 2
+    assert result["aggregate"]["llm_call_count"] == 5
     assert result["diagnostic_comparisons"]["age_extrema"]["谁最年长"][
         "operation"
     ] == "argmin"
@@ -101,23 +116,6 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
     )
     assert marriage["relationship_properties"] == ["start_date"]
     assert marriage["failure_stage"] is None
-    rows = {
-        (row["speaker_id"], row["utterance"]): row
-        for row in result["queries"]
-    }
-    perspectives = (
-        ("person:jian_kuang", "我儿子是谁"),
-        ("person:pu_ba", "我儿子是谁"),
-        ("person:guiqiu_wang", "我孙子是谁"),
-        ("person:zhigang_ba", "我外孙是谁"),
-        ("person:evelyn_kuang", "我哥哥是谁"),
-    )
-    for key in perspectives:
-        row = rows[key]
-        assert row["resolved_entities"] == ["person:dylan_kuang"]
-        assert row["resolution_path"]
-        assert row["tier"] == 0
-        assert row["db_query_count"] >= 1
 
 
 @pytest.mark.asyncio

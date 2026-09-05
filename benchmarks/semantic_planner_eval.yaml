@@ -1,0 +1,345 @@
+version: 1
+
+# Expected values are semantic IR only. These utterances are intentionally not
+# consumed as a Tier-0 phrase table by production code.
+plans:
+  self_identity:
+    operation: resolve_reference
+    subject: {kind: self, entity_type: person}
+  assistant_identity:
+    operation: resolve_reference
+    subject: {kind: assistant, entity_type: person}
+  household_list:
+    operation: select
+    subject: &members
+      kind: current_household
+      entity_type: address
+      path: [{relation: member}]
+  household_count:
+    operation: count
+    subject: *members
+  oldest_member:
+    operation: argmin
+    subject: *members
+    property: birth_date
+  youngest_member:
+    operation: argmax
+    subject: *members
+    property: birth_date
+  adult_count:
+    operation: count
+    subject: *members
+    filters: [{predicate: adult}]
+  minor_count:
+    operation: count
+    subject: *members
+    filters: [{predicate: minor}]
+  wife_identity:
+    operation: resolve_reference
+    subject: &wife
+      kind: self
+      entity_type: person
+      path:
+        - relation: spouse
+          filters: [{property: gender, value: female}]
+  spouse_identity:
+    operation: resolve_reference
+    subject: &spouse
+      kind: self
+      entity_type: person
+      path: [{relation: spouse}]
+  wife_birth_date:
+    operation: select
+    subject: *wife
+    property: birth_date
+  spouse_birth_date:
+    operation: select
+    subject: *spouse
+    property: birth_date
+  marriage_start:
+    operation: select
+    subject: *spouse
+    property: start_date
+    property_source: relationship
+  marriage_duration:
+    operation: duration
+    subject: *spouse
+    property: start_date
+    property_source: relationship
+    mode: days
+  son_identity:
+    operation: resolve_reference
+    subject: &son
+      kind: self
+      entity_type: person
+      path:
+        - relation: child
+          filters: [{property: gender, value: male}]
+  daughter_identity:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+        - relation: child
+          filters: [{property: gender, value: female}]
+  daughter_given_name:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+        - relation: child
+          filters: [{property: gender, value: female}]
+    property: given_name
+  son_birth_date:
+    operation: select
+    subject: *son
+    property: birth_date
+  son_given_name:
+    operation: select
+    subject: *son
+    property: given_name
+  male_children:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path: [{relation: child}]
+    filters: [{property: gender, value: male}]
+  son_birthday_countdown:
+    operation: annual_occurrence
+    subject: *son
+    property: birth_date
+    mode: days
+  named_dylan_birthday_countdown:
+    operation: annual_occurrence
+    subject: {kind: named_entity, value: 德伦, entity_type: person}
+    property: birth_date
+    mode: days
+  father_in_law:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+        - {relation: spouse}
+        - relation: parent
+          filters: [{property: gender, value: male}]
+  wife_father:
+    operation: resolve_reference
+    subject: &wife_father
+      kind: self
+      entity_type: person
+      path:
+        - relation: spouse
+          filters: [{property: gender, value: female}]
+        - relation: parent
+          filters: [{property: gender, value: male}]
+  wife_father_given_name:
+    operation: select
+    subject: *wife_father
+    property: given_name
+  residence_address:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path: [{relation: residence}]
+    property: full_address
+
+groups:
+  - plan: self_identity
+    category: speaker_relative_reference
+    utterances:
+      - 我是谁
+      - 请告诉我我是谁
+      - 我的身份是什么
+      - 你知道我叫什么吗
+      - 当前和你说话的人是谁
+      - Who am I?
+      - What is my name?
+  - plan: assistant_identity
+    category: entity_reference
+    utterances:
+      - 你是谁
+      - 您是哪位
+      - 你的名字是什么
+      - 我该怎么称呼你
+      - 这个家庭助理是谁
+      - Who are you?
+  - plan: daughter_identity
+    category: speaker_relative_reference
+    speaker_id: person:zhigang_ba
+    utterances:
+      - 我女儿是谁
+      - 请告诉我女儿是哪位
+  - plan: daughter_given_name
+    acceptable_plans: [daughter_identity]
+    category: property_selection
+    speaker_id: person:zhigang_ba
+    utterances:
+      - 我的女儿叫什么
+  - plan: household_list
+    category: relationship_traversal
+    utterances:
+      - 家里都有谁
+      - 家里都有哪些人
+      - 请列出家庭成员
+      - 目前住在家中的人有哪些
+      - 咱家现在有哪些成员
+      - Who is in the household?
+  - plan: household_count
+    category: aggregation
+    utterances:
+      - 家里有几个人
+      - 家里现在一共多少人
+      - 当前家庭成员数量是多少
+      - 咱家总共有几位成员
+      - 数一下家里的人数
+      - How many people are in the household?
+  - plan: oldest_member
+    category: aggregation
+    utterances:
+      - 谁最年长
+      - 家里最年长的是谁
+      - 哪位家庭成员年龄最大
+      - 咱家谁岁数最大
+      - 谁出生得最早
+      - Who is the oldest household member?
+  - plan: youngest_member
+    category: aggregation
+    utterances:
+      - 谁最年幼
+      - 谁年纪最小
+      - 家里最年轻的是谁
+      - 咱家岁数最小的是哪一位
+      - 最晚出生的是谁
+      - 家里出生日期最晚的人是谁
+      - 咱们家最晚出生的那个人是谁
+      - Who is the youngest person at home?
+  - plan: adult_count
+    category: filtering
+    utterances:
+      - 有几个成年人
+      - 家里成年人有多少
+      - 家里已经成年的一共有多少位
+      - 算一下当前成人成员数量
+      - 咱家满十八岁的有几人
+      - How many adults are in the household?
+  - plan: minor_count
+    category: filtering
+    utterances:
+      - 有几个孩子
+      - 家里有多少未成年人
+      - 现在未成年的有几个
+      - 家中未满十八岁的有几位
+      - 算一下家里的儿童人数
+      - How many minors live at home?
+  - plan: wife_identity
+    category: relationship_traversal
+    utterances:
+      - 我老婆是谁
+      - 我的妻子是哪位
+  - plan: spouse_identity
+    category: relationship_traversal
+    utterances:
+      - 我配偶叫什么
+      - 和我结婚的人是谁
+      - 我的爱人是谁
+      - Who is my spouse?
+  - plan: wife_birth_date
+    category: property_selection
+    utterances:
+      - 我老婆生日是哪天
+      - 我妻子的出生日期是什么
+  - plan: spouse_birth_date
+    category: property_selection
+    utterances:
+      - 我的爱人什么时候出生
+      - 配偶的生日是几月几号
+      - 和我结婚的人哪天出生
+      - When was my spouse born?
+  - plan: marriage_start
+    category: relationship_property_lookup
+    utterances:
+      - 我们什么时候结婚的
+      - 我们哪天结婚的
+      - 我们的结婚日期是什么
+      - 我和爱人是哪一年开始做夫妻的
+      - 我跟配偶从何时起是夫妻
+      - 这段婚姻关系从哪天开始
+      - 我和我老婆何时结为夫妻
+      - When did my spouse and I get married?
+  - plan: marriage_duration
+    category: temporal_operation
+    utterances:
+      - 我们结婚多久了
+      - 我和配偶已经结婚多少天
+      - 我们成为夫妻多长时间了
+      - 从结婚到现在过了几天
+      - 这段婚姻关系持续多久了
+      - How many days have we been married?
+  - plan: son_identity
+    category: relationship_traversal
+    utterances:
+      - 我儿子是谁
+      - 哪个男孩是我儿子
+      - 我家的公子是哪位
+      - Who is my son?
+  - plan: son_given_name
+    acceptable_plans: [son_identity]
+    category: property_selection
+    utterances:
+      - 我的儿子叫什么
+  - plan: male_children
+    category: relationship_traversal
+    utterances:
+      - 请找出我的男性子女
+  - plan: son_birth_date
+    category: property_selection
+    utterances:
+      - 我儿子哪天出生
+      - 我儿子的生日是哪天
+      - 儿子的出生日期是什么
+      - 我的男性子女何时出生
+      - 告诉我儿子的生日
+      - When was my son born?
+  - plan: son_birthday_countdown
+    category: temporal_operation
+    utterances:
+      - 我儿子的生日还有多少天
+      - 距离我儿子生日还有几天
+      - 儿子的下次生日要等多少天
+      - 从今天到我儿子生日相隔几天
+      - 我儿子再过多久过生日
+      - How many days until my son's birthday?
+  - plan: named_dylan_birthday_countdown
+    category: temporal_operation
+    utterances:
+      - 德伦再过多久过生日
+  - plan: father_in_law
+    category: multi_hop_kinship
+    utterances:
+      - 我岳父是谁
+      - 我爱人的爸爸是谁
+      - 配偶的男性家长是哪位
+      - Who is my father-in-law?
+  - plan: wife_father
+    category: multi_hop_kinship
+    utterances:
+      - 我老婆的爸爸是谁
+  - plan: wife_father_given_name
+    acceptable_plans: [wife_father]
+    category: multi_hop_kinship
+    utterances:
+      - 我妻子的父亲叫什么
+  - plan: residence_address
+    category: property_selection
+    utterances:
+      - 我家住哪里
+      - 我的具体住址是什么
+      - 告诉我家庭地址
+      - 我目前居住地的完整地址是什么
+      - 咱家的街道地址在哪里
+      - What is my home address?
