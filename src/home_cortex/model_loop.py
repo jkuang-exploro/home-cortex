@@ -1,7 +1,7 @@
 """Bounded Ollama tool loop for requests that do not need household facts.
 
 Household graph reads are intentionally absent from this loop. They are planned,
-executed, and evidence-gated by :mod:`home_cortex.grounding`; this loop handles
+executed, and evidence-gated by :mod:`home_cortex.semantic_facts`; this loop handles
 ordinary conversation and non-graph tools such as calendar and calculation.
 """
 
@@ -23,7 +23,7 @@ from .display import (
 )
 from .ollama import OllamaService
 from .text import normalize_language_code, safe_log_token
-from .tools import GRAPH_TOOL_NAMES, ToolDispatcher
+from .tools import ToolDispatcher
 
 MAX_AGENT_STEPS = 4
 MAX_TOOL_CALLS_PER_STEP = 4
@@ -141,11 +141,7 @@ class ModelLoop:
         supplied_tools = tuple(dict(tool) for tool in tools)
         if not supplied_tools:
             raise ValueError("At least one tool definition is required")
-        self.tools = tuple(
-            tool
-            for tool in supplied_tools
-            if tool["function"]["name"] not in GRAPH_TOOL_NAMES
-        )
+        self.tools = supplied_tools
         self.localized_identity = {
             normalize_language_code(str(language)): name.strip()
             for language, name in (localized_identity or {}).items()
@@ -390,15 +386,6 @@ class ModelLoop:
         *,
         caller_entity_id: str | None,
     ) -> dict[str, Any]:
-        if tool_name in GRAPH_TOOL_NAMES:
-            return {
-                "ok": False,
-                "tool": tool_name,
-                "error": {
-                    "code": "tool_not_available",
-                    "message": "Household graph tools require a grounding plan",
-                },
-            }
         try:
             return await asyncio.wait_for(
                 self.dispatcher.dispatch(

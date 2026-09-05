@@ -18,8 +18,8 @@ from .record_ids import RECORD_ID_PATTERN as CANONICAL_RECORD_ID_PATTERN
 
 TABLE_NAME_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
 RECORD_ID_PATTERN = CANONICAL_RECORD_ID_PATTERN
-GRAPH_TOOL_NAMES = frozenset(
-    {"get_entity", "get_relationships", "search_entities"}
+_GRAPH_OPERATIONS = frozenset(
+    {"resolve_entity_alias", "get_entity", "get_relationships"}
 )
 
 _caller_entity_id: ContextVar[str | None] = ContextVar(
@@ -51,12 +51,6 @@ class ToolArguments(BaseModel):
     )
 
 
-class SearchEntitiesArguments(ToolArguments):
-    text: str = Field(min_length=1)
-    entity_type: str | None = Field(default=None, pattern=TABLE_NAME_PATTERN)
-    limit: int | None = Field(default=None, ge=1, le=100)
-
-
 class ResolveEntityAliasArguments(ToolArguments):
     text: str = Field(min_length=1, max_length=256)
     entity_type: str | None = Field(default=None, pattern=TABLE_NAME_PATTERN)
@@ -74,7 +68,6 @@ class GetRelationshipsArguments(ToolArguments):
     relation: str | None = Field(default=None, pattern=TABLE_NAME_PATTERN)
     direction: Literal["out", "in", "both"] | None = None
     include_ended: bool = False
-    include_residents: bool = True
     limit: int | None = Field(default=None, ge=1, le=100)
 
 
@@ -98,144 +91,6 @@ class CheckAvailabilityArguments(ToolArguments):
 
 
 TOOLS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_entities",
-            "description": (
-                "Search known home-graph entities by record ID, multilingual "
-                "name aliases, or other text fields. "
-                "Pass only the distinctive entity name or ID, not the user's "
-                "full question. Use this before requesting relationships."
-            ),
-            "parameters": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "text": {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": (
-                            "Case-insensitive entity name in any stored language, "
-                            "short text, or record ID to find; for example, "
-                            "'Fort Cerritos'."
-                        ),
-                    },
-                    "entity_type": {
-                        "type": "string",
-                        "pattern": TABLE_NAME_PATTERN,
-                        "description": (
-                            "Optional node table, such as person, address, space, "
-                            "or item."
-                        ),
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 100,
-                        "description": "Maximum number of entities to return.",
-                    },
-                },
-                "required": ["text"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_entity",
-            "description": (
-                "Retrieve exactly one entity by canonical record ID, such as "
-                "person:household_member. Use this when the ID is already known "
-                "(authenticated speaker, related_entity.id, or a prior "
-                "search). Do not use search_entities for a known ID. Semantic "
-                "property names are resolved by the household fact layer."
-            ),
-            "parameters": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "entity_id": {
-                        "type": "string",
-                        "pattern": RECORD_ID_PATTERN,
-                        "description": "Entity record ID in table:record_id format.",
-                    },
-                },
-                "required": ["entity_id"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_relationships",
-            "description": (
-                "Traverse registered graph relationships for one known entity. "
-                "The graph service applies symmetric, directed, and inverse "
-                "semantics deterministically. Each result includes the canonical "
-                "relation, semantic_relation from the queried entity's viewpoint, "
-                "direction, and related_entity. Current relationships are returned "
-                "by default. A person's lives_in result also includes residents: "
-                "every current person living at that home. Model-facing related "
-                "entities use localized names and omit direct-address titles, "
-                "birthdays, and addresses unless separately required."
-            ),
-            "parameters": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "entity_id": {
-                        "type": "string",
-                        "pattern": RECORD_ID_PATTERN,
-                        "description": "Entity record ID in table:record_id format.",
-                    },
-                    "relation": {
-                        "type": "string",
-                        "pattern": TABLE_NAME_PATTERN,
-                        "description": (
-                            "Optional relationship table, such as spouse_of, "
-                            "lives_in, parent_of, located_in, or hosted_by, or a "
-                            "derived inverse such as child_of or hosts_space."
-                        ),
-                    },
-                    "direction": {
-                        "type": "string",
-                        "enum": ["out", "in", "both"],
-                        "description": (
-                            "Optional semantic traversal direction. Symmetric "
-                            "relations always search both stored orientations. For "
-                            "relations with different endpoint types, such as "
-                            "person-to-address lives_in, the entity type determines "
-                            "the valid stored direction."
-                        ),
-                    },
-                    "include_ended": {
-                        "type": "boolean",
-                        "default": False,
-                        "description": (
-                            "Include ended temporal relationships. Defaults to false."
-                        ),
-                    },
-                    "include_residents": {
-                        "type": "boolean",
-                        "default": True,
-                        "description": (
-                            "For a person's residence edge, include the current "
-                            "household roster. Set false when only the related "
-                            "address entity is needed."
-                        ),
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 100,
-                        "description": "Maximum number of relationships to return.",
-                    },
-                },
-                "required": ["entity_id"],
-            },
-        },
-    },
     {
         "type": "function",
         "function": {
@@ -412,7 +267,6 @@ class ToolDispatcher:
         self.calendar = calendar
         argument_models: dict[str, type[ToolArguments]] = {
             "resolve_entity_alias": ResolveEntityAliasArguments,
-            "search_entities": SearchEntitiesArguments,
             "get_entity": GetEntityArguments,
             "get_relationships": GetRelationshipsArguments,
             "calculate": CalculateArguments,
@@ -421,25 +275,21 @@ class ToolDispatcher:
         }
         handlers: dict[str, Handler] = {
             "resolve_entity_alias": self._resolve_entity_alias,
-            "search_entities": self._search_entities,
             "get_entity": self._get_entity,
             "get_relationships": self._get_relationships,
             "calculate": self._calculate,
             "calendar.list_events": self._list_events,
             "calendar.check_availability": self._check_availability,
         }
-        selected_public = (
-            tuple(allowed_tools)
-            if allowed_tools is not None
-            else tuple(name for name in handlers if name != "resolve_entity_alias")
+        selected_public = tuple(allowed_tools) if allowed_tools is not None else tuple(
+            name for name in handlers if name not in _GRAPH_OPERATIONS
         )
-        unknown = sorted(set(selected_public) - handlers.keys())
+        unknown = sorted(set(selected_public) - (handlers.keys() - _GRAPH_OPERATIONS))
         if unknown:
             raise ValueError(f"Unknown tool names: {', '.join(unknown)}")
-        selected = tuple(dict.fromkeys((*selected_public, "resolve_entity_alias")))
         self._public_tools = frozenset(selected_public)
-        self._argument_models = {name: argument_models[name] for name in selected}
-        self._handlers = {name: handlers[name] for name in selected}
+        self._argument_models = argument_models
+        self._handlers = handlers
 
     async def dispatch(
         self,
@@ -462,7 +312,7 @@ class ToolDispatcher:
         *,
         caller_entity_id: str | None = None,
     ) -> dict[str, Any]:
-        """Execute resolver-only operations unavailable to model tool calls."""
+        """Execute graph operations unavailable to model tool calls."""
         return await self._dispatch(
             tool_name,
             arguments,
@@ -480,7 +330,7 @@ class ToolDispatcher:
     ) -> dict[str, Any]:
         argument_model = self._argument_models.get(tool_name)
         handler = self._handlers.get(tool_name)
-        internal_allowed = allow_internal and tool_name == "resolve_entity_alias"
+        internal_allowed = allow_internal and tool_name in _GRAPH_OPERATIONS
         if (
             argument_model is None
             or handler is None
@@ -559,17 +409,6 @@ class ToolDispatcher:
             "result": result,
         }
 
-    async def _search_entities(
-        self,
-        arguments: ToolArguments,
-    ) -> list[dict[str, Any]]:
-        assert isinstance(arguments, SearchEntitiesArguments)
-        return await self.retrieval.search_entities(
-            arguments.text,
-            entity_type=arguments.entity_type,
-            limit=arguments.limit,
-        )
-
     async def _resolve_entity_alias(
         self,
         arguments: ToolArguments,
@@ -596,17 +435,12 @@ class ToolDispatcher:
         arguments: ToolArguments,
     ) -> list[dict[str, Any]]:
         assert isinstance(arguments, GetRelationshipsArguments)
-        options: dict[str, Any] = {
-            "relation": arguments.relation,
-            "direction": arguments.direction,
-            "limit": arguments.limit,
-            "include_ended": arguments.include_ended,
-        }
-        if not arguments.include_residents:
-            options["include_residents"] = False
         return await self.retrieval.get_relationships(
             arguments.entity_id,
-            **options,
+            relation=arguments.relation,
+            direction=arguments.direction,
+            limit=arguments.limit,
+            include_ended=arguments.include_ended,
         )
 
     async def _calculate(self, arguments: ToolArguments) -> dict[str, Any]:

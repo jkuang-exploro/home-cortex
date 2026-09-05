@@ -326,21 +326,6 @@ async def ingest(request: Request) -> dict[str, Any]:
         raise APIError(400, "ingestion_failed", str(error)) from error
 
 
-@app.post("/v1/retrieve")
-async def retrieve(body: dict[str, Any], request: Request) -> dict[str, Any]:
-    _authenticate_request(request)
-    question = body.get("query") or body.get("question")
-    if not isinstance(question, str) or not question.strip():
-        raise APIError(422, "invalid_request", "Provide a non-empty 'query'")
-    result = await request.app.state.retrieval.retrieve(question.strip())
-    return {
-        "query": result.question,
-        "nodes": result.nodes,
-        "edges": result.edges,
-        "context": result.text,
-    }
-
-
 @app.post("/v1/chat")
 async def chat(body: dict[str, Any], request: Request) -> dict[str, Any]:
     return await _agent_chat(DEFAULT_AGENT_ID, body, request)

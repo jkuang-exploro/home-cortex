@@ -63,12 +63,11 @@ class RuntimeSchemaCatalog:
 
     entities: Mapping[str, EntityTypeSchema]
     relations: Mapping[str, RelationTypeSchema]
-    entity_aliases: frozenset[str] = frozenset()
+    edge_registry: EdgeSchemaRegistry | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "entities", MappingProxyType(dict(self.entities)))
         object.__setattr__(self, "relations", MappingProxyType(dict(self.relations)))
-        object.__setattr__(self, "entity_aliases", frozenset(self.entity_aliases))
 
     @classmethod
     def from_data_dir(
@@ -77,7 +76,6 @@ class RuntimeSchemaCatalog:
         edge_registry: EdgeSchemaRegistry,
     ) -> "RuntimeSchemaCatalog":
         entities: dict[str, EntityTypeSchema] = {}
-        aliases: set[str] = set()
         node_dir = data_dir / "nodes"
         if node_dir.is_dir():
             for path in sorted(node_dir.glob("*.json")):
@@ -93,11 +91,6 @@ class RuntimeSchemaCatalog:
                     path.stem,
                     tuple(fields),
                     _infer_property_types(records, fields),
-                )
-                aliases.update(
-                    alias
-                    for record in records
-                    for alias in record_aliases(record)
                 )
 
         relations: dict[str, RelationTypeSchema] = {}
@@ -127,7 +120,7 @@ class RuntimeSchemaCatalog:
                     tuple(sorted(properties)),
                 ),
             )
-        return cls(entities, relations, frozenset(aliases))
+        return cls(entities, relations, edge_registry)
 
     def has_entity_type(self, entity_type: str) -> bool:
         return entity_type in self.entities
@@ -138,15 +131,11 @@ class RuntimeSchemaCatalog:
 
     def relation_field_type(self, relation: str, field: str) -> ValueKind:
         schema = self.relations.get(relation)
-        if schema is None:
-            schema = next(
-                (
-                    candidate
-                    for candidate in self.relations.values()
-                    if candidate.inverse_name == relation
-                ),
-                None,
-            )
+        if schema is None and self.edge_registry is not None:
+            try:
+                schema = self.relations.get(self.edge_registry.resolve(relation).schema.id)
+            except LookupError:
+                pass
         return schema.property_types.get(field, "unknown") if schema else "unknown"
 
 def _json_records(path: Path) -> list[dict[str, Any]]:

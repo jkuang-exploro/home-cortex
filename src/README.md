@@ -2,8 +2,9 @@
 
 This package provides a FastAPI RAG service over SurrealDB. The API calls
 Ollama, dispatches the model's allowlisted Cortex tools, and returns the final
-grounded answer. Shared tools include household-graph lookup, local
-`calculate`, and read-only Google Calendar access.
+grounded answer. Household graph reads run only through the semantic fact
+pipeline; model-facing tools provide local calculation and read-only Google
+Calendar access.
 
 ## Endpoints
 
@@ -12,9 +13,6 @@ grounded answer. Shared tools include household-graph lookup, local
   `/app/data/edges/*.json`. It validates all input before writing, then makes
   each JSON file authoritative for its table, including pruning records removed
   from that file. When `CORTEX_API_KEY` is set, this route requires that key.
-- `POST /v1/retrieve` returns the graph context used for a question. When
-  `CORTEX_API_KEY` is set, this route requires that key. Retrieval is
-  household-scoped; per-person graph authorization is not implemented yet.
 - `POST /v1/chat` runs the default steward agent for backward compatibility.
 - `POST /agent/steward/chat` invokes the named household steward directly.
 - `POST /agent/steward/conversations` initializes a conversation and returns
@@ -282,10 +280,6 @@ docker compose up -d --build
 curl http://localhost:8001/health
 curl -X POST http://localhost:8001/admin/ingest \
   -H 'Authorization: Bearer replace-with-a-long-random-secret'
-curl -X POST http://localhost:8001/v1/retrieve \
-  -H 'Authorization: Bearer replace-with-a-long-random-secret' \
-  -H 'Content-Type: application/json' \
-  -d '{"query":"Fort Cerritos"}'
 curl -X POST http://localhost:8001/v1/chat \
   -H 'Authorization: Bearer replace-with-a-long-random-secret' \
   -H 'X-OpenWebUI-User-Email: your-login@example.com' \
@@ -338,7 +332,7 @@ initial greeting, not the language used for later answers.
 Compose enables Open WebUI's authenticated user-info forwarding. Cortex maps
 the forwarded user ID or email to a stable `person:` record, resolves it before
 the first model call, and supplies only its `id`, `name`, and `address_as` as
-trusted context. Other private fields still require an intentional tool lookup.
+trusted context. Other private fields still require an intentional semantic fact lookup.
 User-written messages cannot change this mapping. If identity mappings are
 configured, an unknown Open WebUI user receives an `identity_not_mapped` error
 instead of being treated as somebody else.
@@ -353,11 +347,11 @@ The runtime is intentionally split into focused layers:
   relationship semantics from the deployed data and edge registry. Adding a
   field to a node JSON file makes it available to planning without changing
   factual-grounding code.
-- `grounding.py` validates strict LLM query plans and executes only bounded
-  entity resolution, traversal, filtering, sorting, aggregation, date/duration,
-  unit conversion, and freshness operations. Its shared evidence gate validates
-  every required field, relation, observation count, and freshness constraint
-  before the deterministic renderer sees a value.
+- `semantic_facts.py` owns trusted request context, strict semantic plans, and
+  bounded entity resolution, traversal, filtering, sorting, aggregation,
+  date/duration, unit conversion, and freshness operations. Its shared evidence
+  gate validates every required field and relation before the deterministic
+  renderer sees a value.
 - `model_loop.py` owns the bounded Ollama loop, tool limits, display-name repair,
   and streaming for ordinary conversation and non-graph tools. Graph tools are
   deliberately not exposed through this path, so household facts cannot bypass
@@ -386,9 +380,9 @@ define `账房` and finance-only tools; those tools will not be granted to
 ## Shared Cortex tools
 
 Tools are registered centrally in `home_cortex.tools` and granted per agent
-through that agent's `ALLOWED_TOOLS`. The grounding executor exclusively uses
-the steward's graph lookup grants. The ordinary model loop receives only
-`calculate`, `calendar.list_events`, and `calendar.check_availability`.
+through that agent's `ALLOWED_TOOLS`. Graph lookup primitives are internal to
+the semantic fact executor. The ordinary model loop receives only `calculate`,
+`calendar.list_events`, and `calendar.check_availability`.
 
 `calculate` evaluates arithmetic with an allowlisted AST parser. It does not
 use Python `eval()`, has no network dependency, and returns a structured

@@ -7,13 +7,14 @@ import logging
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from time import perf_counter
 from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .display import resolve_display_name
-from .grounding import AgentRequestContext
+from .edge_schema import EdgeSchemaRegistry, UnknownEdgeSchemaError
 from .operator_registry import (
     OPERATORS,
     OperatorExecutionError,
@@ -25,7 +26,7 @@ from .operator_registry import (
 )
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_ontology import SemanticOntology
-from .text import safe_log_token
+from .text import latest_user_message, safe_log_token
 
 logger = logging.getLogger("uvicorn.error.home_cortex.semantic_facts")
 
@@ -90,6 +91,24 @@ PlannerValidationCode = Literal[
     "MODEL_ORIGINATED_ENTITY_ID",
     "INVALID_PLAN",
 ]
+
+_CONTEXT_ENTITY_TYPES = {
+    "self": "person",
+    "assistant": "person",
+    "current_household": "address",
+}
+
+
+@dataclass(frozen=True)
+class AgentRequestContext:
+    """Trusted identities and clock used to resolve semantic references."""
+
+    caller_entity_id: str | None
+    assistant_id: str
+    assistant_display_name: str
+    household_id: str | None
+    current_time: datetime
+    locale: str | None = None
 
 
 class _SemanticModel(BaseModel):
@@ -204,8 +223,6 @@ class SemanticFactRequest(_SemanticModel):
     def validate_operation(self) -> "SemanticFactRequest":
         if self.operation not in OPERATORS:
             raise ValueError("operation is not in the generic operator registry")
-        if self.operation == "completed_years" and self.property is None:
-            object.__setattr__(self, "property", "birth_date")
         return self
 
 
@@ -324,6 +341,7 @@ class SemanticSchemaRegistry:
     ) -> None:
         self.catalog = catalog
         self.ontology = ontology or SemanticOntology.load_default()
+        self.edge_registry = catalog.edge_registry or EdgeSchemaRegistry.load_default()
         self._aliased_physical_properties = frozenset(
             physical
             for definition in self.ontology.properties.values()
@@ -347,20 +365,14 @@ class SemanticSchemaRegistry:
         public_name = self.ontology.base_relations.get(semantic)
         if public_name is None:
             return None
-        direct = self.catalog.relations.get(public_name)
-        if direct is not None:
-            return direct.name, None if direct.symmetric else "out"
-        inverse = next(
-            (
-                schema
-                for schema in self.catalog.relations.values()
-                if schema.inverse_name == public_name
-            ),
-            None,
-        )
-        if inverse is not None:
-            return inverse.name, "in"
-        return None
+        try:
+            resolved = self.edge_registry.resolve(public_name)
+        except UnknownEdgeSchemaError:
+            return None
+        if resolved.schema.id not in self.catalog.relations:
+            return None
+        direction = None if resolved.schema.symmetric else "in" if resolved.inverse else "out"
+        return resolved.schema.id, direction
 
     def relation_property(self, relation: str, semantic: str) -> str | None:
         schema = self.catalog.relations.get(relation)
@@ -526,11 +538,7 @@ class SemanticSchemaRegistry:
         references = (request.subject,) + ((request.other,) if request.other else ())
         final_types: dict[int, frozenset[str]] = {}
         for reference in references:
-            contextual_type = {
-                "self": "person",
-                "assistant": "person",
-                "current_household": "address",
-            }.get(reference.kind)
+            contextual_type = _CONTEXT_ENTITY_TYPES.get(reference.kind)
             if (
                 contextual_type is not None
                 and reference.entity_type is not None
@@ -704,10 +712,8 @@ class SemanticSchemaRegistry:
         )
 
     def _base_entity_types(self, reference: SemanticReference) -> frozenset[str]:
-        if reference.kind in {"self", "assistant"}:
-            return frozenset({"person"})
-        if reference.kind == "current_household":
-            return frozenset({"address"})
+        if contextual_type := _CONTEXT_ENTITY_TYPES.get(reference.kind):
+            return frozenset({contextual_type})
         if reference.kind == "entity_id" and reference.value is not None:
             return frozenset({reference.value.partition(":")[0]})
         if reference.entity_type is not None:
@@ -1010,11 +1016,7 @@ class SemanticFactPlanner:
     def _normalize_context_reference(
         reference: SemanticReference,
     ) -> SemanticReference:
-        entity_type = {
-            "self": "person",
-            "assistant": "person",
-            "current_household": "address",
-        }.get(reference.kind)
+        entity_type = _CONTEXT_ENTITY_TYPES.get(reference.kind)
         return (
             reference.model_copy(update={"entity_type": entity_type})
             if entity_type is not None and reference.entity_type != entity_type
@@ -1151,9 +1153,9 @@ class EntityResolver:
                 }
             ]
         elif reference.kind == "self":
-            if context.speaker.speaker_id is None:
+            if context.caller_entity_id is None:
                 raise _FactFailure("caller_context_missing")
-            entities = [{"id": context.speaker.speaker_id}]
+            entities = [{"id": context.caller_entity_id}]
         elif reference.kind == "current_household":
             if context.household_id is None:
                 raise _FactFailure("entity_not_found")
@@ -1167,8 +1169,8 @@ class EntityResolver:
                     "text": reference.value,
                     "entity_type": reference.entity_type,
                     "limit": self.max_records,
-                    "speaker_id": context.speaker.speaker_id,
-                    "household_id": context.speaker.household_id,
+                    "speaker_id": context.caller_entity_id,
+                    "household_id": context.household_id,
                 },
             )
             if not records:
@@ -1211,7 +1213,6 @@ class EntityResolver:
                     "entity_id": entity_id,
                     "relation": relation,
                     "include_ended": False,
-                    "include_residents": False,
                     "limit": self.max_records,
                 }
                 if direction is not None:
@@ -1349,11 +1350,10 @@ class HouseholdFactEngine:
         schema: SemanticSchemaRegistry,
         *,
         max_records: int = 25,
-        resolver: EntityResolver | None = None,
     ) -> None:
         self.dispatcher = dispatcher
         self.schema = schema
-        self.resolver = resolver or EntityResolver(
+        self.resolver = EntityResolver(
             schema,
             max_records=max_records,
         )
@@ -2114,7 +2114,7 @@ class SemanticFactService:
         request_id: str = "-",
     ) -> FactAnswer | None:
         started = perf_counter()
-        latest = _latest_user_text(messages)
+        latest = latest_user_message(messages)
         routing_started = perf_counter()
         parse_started = perf_counter()
         request = self.parser.parse(latest) if self.tier_zero_enabled else None
@@ -2285,13 +2285,7 @@ class _FactExecution:
             if cached is not None:
                 return [dict(cached)]
         self.query_count += 1
-        dispatch = (
-            self.dispatcher.dispatch_internal
-            if tool == "resolve_entity_alias"
-            and hasattr(self.dispatcher, "dispatch_internal")
-            else self.dispatcher.dispatch
-        )
-        response = await dispatch(
+        response = await self.dispatcher.dispatch_internal(
             tool,
             arguments,
             caller_entity_id=self.caller_entity_id,
@@ -2337,18 +2331,6 @@ class _FactFailure(RuntimeError):
         self.evidence = evidence
         self.missing = missing
         self.candidates = candidates
-
-
-def _latest_user_text(messages: Sequence[Mapping[str, Any]]) -> str:
-    return next(
-        (
-            str(message.get("content"))
-            for message in reversed(messages)
-            if message.get("role") == "user"
-            and isinstance(message.get("content"), str)
-        ),
-        "",
-    )
 
 
 def planner_input_summary(capabilities: Mapping[str, Any]) -> dict[str, Any]:

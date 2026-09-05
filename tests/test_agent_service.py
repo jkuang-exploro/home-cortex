@@ -87,6 +87,8 @@ class FakeDispatcher:
             await asyncio.sleep(self.delay)
         return self.result
 
+    dispatch_internal = dispatch
+
 
 def _chat_response(
     content: str = "", *, tool_calls: list[dict[str, Any]] | None = None
@@ -154,7 +156,7 @@ async def test_non_grounded_loop_exposes_no_household_graph_tools() -> None:
     await _agent(ollama, FakeDispatcher()).answer("Hello")
 
     assert set(ollama.tool_names[0]).isdisjoint(
-        {"search_entities", "get_entity", "get_relationships"}
+        {"get_entity", "get_relationships", "resolve_entity_alias"}
     )
     assert "calculate" in ollama.tool_names[0]
 

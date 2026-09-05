@@ -52,78 +52,6 @@ class MemoryDatabase:
 
 
 @pytest.mark.asyncio
-async def test_search_entities_queries_known_tables_and_sorts_globally() -> None:
-    database = FakeDatabase(
-        {
-            "address": [
-                {
-                    "id": RecordID("address", "fort_cerritos"),
-                    "name": ["Fort Cerritos", "喜瑞都堡"],
-                }
-            ],
-            "person": [{"id": RecordID("person", "jian"), "first_name": "Jian"}],
-        }
-    )
-    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
-
-    result = await service.search_entities("  CERRITOS  ")
-
-    assert [record["id"] for record in result] == [
-        "address:fort_cerritos",
-        "person:jian",
-    ]
-    assert [variables["table"] for _, variables in database.queries] == [
-        "address",
-        "item",
-        "person",
-        "space",
-    ]
-    assert all(variables["text"] == "cerritos" for _, variables in database.queries)
-    assert "type::table($table)" in database.queries[0][0]
-    assert "type::string(name)" in database.queries[0][0]
-    assert "type::string($this)" not in database.queries[0][0]
-
-
-@pytest.mark.asyncio
-async def test_search_prefers_exact_name_over_incidental_partial_match() -> None:
-    database = FakeDatabase(
-        {
-            "person": [
-                {"id": RecordID("person", "about_jian"), "name": ["About Jian"]},
-                {"id": RecordID("person", "jian_kuang"), "name": ["Jian Kuang"]},
-            ]
-        }
-    )
-    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
-
-    result = await service.search_entities("Jian Kuang", entity_type="person")
-
-    assert [record["id"] for record in result] == [
-        "person:jian_kuang",
-        "person:about_jian",
-    ]
-
-
-@pytest.mark.asyncio
-async def test_search_entities_can_restrict_entity_type_and_limit() -> None:
-    database = FakeDatabase(
-        {
-            "person": [
-                {"id": RecordID("person", "b")},
-                {"id": RecordID("person", "a")},
-            ]
-        }
-    )
-    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
-
-    result = await service.search_entities("person", entity_type="person", limit=1)
-
-    assert result == [{"id": "person:a"}]
-    assert len(database.queries) == 1
-    assert database.queries[0][1]["limit"] == 1
-
-
-@pytest.mark.asyncio
 async def test_resolve_entity_alias_is_exact_normalized_and_database_backed() -> None:
     database = FakeDatabase(
         {
@@ -213,49 +141,6 @@ async def test_scoped_appellation_requires_matching_speaker_and_household() -> N
     assert unscoped == []
     assert wrong_speaker == []
     assert [record["id"] for record in resolved] == ["person:parent"]
-
-
-@pytest.mark.asyncio
-async def test_search_entity_summaries_exclude_private_profile_fields() -> None:
-    database = FakeDatabase(
-        {
-            "person": [
-                {
-                    "id": RecordID("person", "alex"),
-                    "name": ["Alex", "艾力克斯"],
-                    "gender": "male",
-                    "dob": "1980-01-02",
-                    "address": {"street": "123 Private Street"},
-                }
-            ]
-        }
-    )
-    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
-
-    result = await service.search_entities("Alex", entity_type="person")
-
-    assert result == [
-        {
-            "id": "person:alex",
-            "name": ["Alex", "艾力克斯"],
-            "gender": "male",
-        }
-    ]
-
-
-@pytest.mark.asyncio
-async def test_search_entities_rejects_unknown_type_empty_text_and_bad_limit() -> None:
-    database = FakeDatabase({})
-    service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
-
-    with pytest.raises(ValueError, match="cannot be empty"):
-        await service.search_entities("  ")
-    with pytest.raises(ValueError, match="Unknown entity type"):
-        await service.search_entities("test", entity_type="secret_table")
-    with pytest.raises(ValueError, match="between 1 and 10"):
-        await service.search_entities("test", limit=11)
-
-    assert database.queries == []
 
 
 @pytest.mark.asyncio
@@ -410,7 +295,6 @@ async def test_relationship_entity_summaries_exclude_dob_and_address() -> None:
     result = await service.get_relationships(
         "address:main",
         relation="lives_in",
-        include_residents=False,
     )
 
     assert result[0]["related_entity"] == {
@@ -453,17 +337,6 @@ def test_table_names_come_from_static_test_data() -> None:
     )
 
 
-@pytest.mark.asyncio
-async def test_legacy_location_is_not_a_searchable_entity_type() -> None:
-    service = RetrievalService(  # type: ignore[arg-type]
-        FakeDatabase({}),
-        data_dir=STATIC_TEST_DATA,
-    )
-
-    with pytest.raises(ValueError, match="Unknown entity type 'location'"):
-        await service.search_entities("home", entity_type="location")
-
-
 def test_record_id_is_serialized() -> None:
     assert to_json_value(RecordID("person", "alice")) == "person:alice"
     assert (
@@ -487,22 +360,10 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
             data_dir=STATIC_TEST_DATA,
         )
 
-        entities = await service.search_entities(
-            "test house",
-            entity_type="address",
+        chinese_people = await service.resolve_entity_alias(
+            "艾力克斯", entity_type="person"
         )
-        chinese_entities = await service.search_entities(
-            "测试之家",
-            entity_type="address",
-        )
-        chinese_people = await service.search_entities(
-            "艾力克斯",
-            entity_type="person",
-        )
-        kitchens = await service.search_entities(
-            "厨房",
-            entity_type="space",
-        )
+        kitchens = await service.resolve_entity_alias("厨房", entity_type="space")
         relationships = await service.get_relationships(
             "address:test_house",
             relation="lives_in",
@@ -515,14 +376,9 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
             "person:alex_example",
             relation="spouse_of",
         )
-        context = await service.retrieve("test house")
     finally:
         await database.close()
 
-    assert [entity["id"] for entity in entities] == ["address:test_house"]
-    assert [entity["id"] for entity in chinese_entities] == [
-        "address:test_house"
-    ]
     assert [entity["id"] for entity in chinese_people] == [
         "person:alex_example"
     ]
@@ -535,28 +391,14 @@ async def test_queries_execute_against_embedded_surrealdb() -> None:
     ]
     assert all(edge["out"] == "address:test_house" for edge in relationships)
     assert all(edge["direction"] == "incoming" for edge in relationships)
-    assert "residents" not in relationships[0]
-    assert [person["id"] for person in alex_home[0]["residents"]] == [
-        "person:alex_example",
-        "person:blair_example",
-    ]
+    assert alex_home[0]["related_entity"]["id"] == "address:test_house"
     assert [edge["out"] for edge in marriage] == ["person:blair_example"]
-    assert "residents" not in marriage[0]
     assert marriage[0]["relation"] == "spouse_of"
     assert marriage[0]["start"] == "2011-03-15"
     assert marriage[0].get("end") in {None}
     assert sorted(
         edge["related_entity"]["first_name"] for edge in relationships
     ) == ["Alex", "Blair"]
-    assert sorted(person["first_name"] for person in context.nodes["person"]) == [
-        "Alex",
-        "Blair",
-    ]
-    assert all(
-        "related_entity" not in edge for edge in context.edges["lives_in"]
-    )
-
-
 @pytest.mark.asyncio
 async def test_registry_drives_symmetric_directed_and_inverse_traversal() -> None:
     database = MemoryDatabase()
@@ -684,17 +526,11 @@ async def test_get_entity_ignores_colliding_searchable_records() -> None:
         )
         service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
 
-        colliding = await service.search_entities(
-            "person:jian_kuang",
-            entity_type="person",
-            limit=1,
-        )
         exact = await service.get_entity("person:jian_kuang")
         missing = await service.get_entity("person:does_not_exist")
     finally:
         await database.close()
 
-    assert [record["id"] for record in colliding] == ["person:jian_kuang"]
     assert exact is not None
     assert exact["id"] == "person:jian_kuang"
     assert exact["name"] == ["Jian Kuang"]

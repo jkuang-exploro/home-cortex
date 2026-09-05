@@ -57,9 +57,6 @@ def test_steward_receives_only_its_configured_tools() -> None:
     )
 
     assert steward.allowed_tools == (
-        "get_entity",
-        "search_entities",
-        "get_relationships",
         "calculate",
         "calendar.list_events",
         "calendar.check_availability",

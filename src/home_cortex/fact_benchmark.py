@@ -17,7 +17,6 @@ from .agents import get_agent
 from .config import get_settings
 from .db import Database
 from .edge_schema import EdgeSchemaRegistry
-from .grounding import AgentRequestContext
 from .ollama import OllamaService
 from .retrieval import RetrievalService
 from .schema_catalog import (
@@ -28,12 +27,13 @@ from .schema_catalog import (
 )
 from .semantic_facts import (
     HouseholdFactEngine,
+    AgentRequestContext,
     SemanticFactPlanner,
     SemanticFactService,
     SemanticSchemaRegistry,
     _failure_stage,
 )
-from .tools import GRAPH_TOOL_NAMES, ToolDispatcher
+from .tools import ToolDispatcher
 
 QUESTIONS = (
     "我是谁",
@@ -113,7 +113,7 @@ async def benchmark_runtime(
             settings.data_dir,
             edge_registry,
         )
-        dispatcher = ToolDispatcher(retrieval, sorted(GRAPH_TOOL_NAMES))
+        dispatcher = ToolDispatcher(retrieval, ())
         schema = SemanticSchemaRegistry(catalog)
         llm = OllamaService(settings.ollama_url, settings.ollama_model)
         service = SemanticFactService(
@@ -397,17 +397,19 @@ class _JsonGraphDispatcher:
             path.stem: json.loads(path.read_text(encoding="utf-8"))
             for path in (data_dir / "edges").glob("*.json")
         }
+        self.calls: list[tuple[str, dict[str, Any]]] = []
 
-    async def dispatch(
+    async def dispatch_internal(
         self,
         tool_name: str,
         arguments: dict[str, Any],
         **_: Any,
     ) -> dict[str, Any]:
+        self.calls.append((tool_name, arguments))
         if tool_name == "get_entity":
             entity = self.entities.get(arguments["entity_id"])
             records = [entity] if entity is not None else []
-        elif tool_name in {"search_entities", "resolve_entity_alias"}:
+        elif tool_name == "resolve_entity_alias":
             query = normalize_entity_alias(arguments["text"])
             expected = arguments.get("entity_type")
             candidates = [

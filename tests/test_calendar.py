@@ -1158,19 +1158,12 @@ async def test_unplanned_relationship_lookup_cannot_bypass_grounding() -> None:
             self.calls.append((tool_name, arguments, caller_entity_id))
             if tool_name == "get_relationships":
                 return {
-                    "ok": True,
+                    "ok": False,
                     "tool": tool_name,
-                    "result": [
-                        {
-                            "id": "parent_of:jian_evelyn",
-                            "relation": "parent_of",
-                            "related_entity": {
-                                "id": "person:evelyn_kuang",
-                                "name": ["Evelyn Kuang"],
-                                "gender": "female",
-                            },
-                        }
-                    ],
+                    "error": {
+                        "code": "unknown_tool",
+                        "message": "Tool 'get_relationships' is not available",
+                    },
                 }
             if tool_name == "calendar.list_events":
                 return {
@@ -1234,9 +1227,9 @@ async def test_unplanned_relationship_lookup_cannot_bypass_grounding() -> None:
         "calendar.list_events",
         "calendar.check_availability",
     )
-    assert dispatcher.calls == []
+    assert [name for name, _, _ in dispatcher.calls] == ["get_relationships"]
     blocked = json.loads(ollama.calls[1][-1]["content"])
-    assert blocked["error"]["code"] == "tool_not_available"
+    assert blocked["error"]["code"] == "unknown_tool"
     assert all(
         caller == "person:jian_kuang" for _, _, caller in dispatcher.calls
     )

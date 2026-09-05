@@ -9,15 +9,13 @@ from pydantic import ValidationError
 
 from home_cortex.agent_service import AgentService
 from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.grounding import AgentRequestContext
+from home_cortex.fact_benchmark import _JsonGraphDispatcher
 from home_cortex.operator_registry import OPERATORS
 from home_cortex.schema_catalog import (
     RuntimeSchemaCatalog,
-    matches_scoped_appellation,
-    normalize_entity_alias,
-    record_aliases,
 )
 from home_cortex.semantic_facts import (
+    AgentRequestContext,
     HouseholdFactEngine,
     SemanticFactRequest,
     SemanticFactService,
@@ -34,105 +32,13 @@ from home_cortex.tools import get_tool_definitions
 DATA_DIR = Path(__file__).parents[1] / "data"
 
 
-class FixtureGraphDispatcher:
-    def __init__(self) -> None:
-        self.registry = EdgeSchemaRegistry.load_default(DATA_DIR)
-        self.entities = {
-            record["id"]: record
-            for path in (DATA_DIR / "nodes").glob("*.json")
-            for record in json.loads(path.read_text(encoding="utf-8"))
-        }
-        self.edges = {
-            path.stem: json.loads(path.read_text(encoding="utf-8"))
-            for path in (DATA_DIR / "edges").glob("*.json")
-        }
-        self.calls: list[tuple[str, dict[str, Any]]] = []
-
-    async def dispatch(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        **_: Any,
-    ) -> dict[str, Any]:
-        self.calls.append((tool_name, arguments))
-        if tool_name == "get_entity":
-            record = self.entities.get(arguments["entity_id"])
-            records = [record] if record else []
-        elif tool_name in {"search_entities", "resolve_entity_alias"}:
-            query = arguments["text"].casefold()
-            expected = arguments.get("entity_type")
-            candidates = [
-                record
-                for record in self.entities.values()
-                if expected is None or record["id"].startswith(f"{expected}:")
-            ]
-            aliases = [
-                self._summary(record)
-                for record in candidates
-                if any(
-                    normalize_entity_alias(query) == normalize_entity_alias(alias)
-                    for alias in record_aliases(record)
-                )
-            ]
-            appellations = [
-                self._summary(record)
-                for record in candidates
-                if matches_scoped_appellation(
-                    record,
-                    arguments["text"],
-                    speaker_id=arguments.get("speaker_id"),
-                    household_id=arguments.get("household_id"),
-                )
-            ]
-            records = (aliases or appellations)[: arguments.get("limit", 25)]
-        elif tool_name == "get_relationships":
-            records = self._relationships(arguments)
-        else:
-            raise AssertionError(f"unexpected tool: {tool_name}")
-        return {"ok": True, "tool": tool_name, "result": records}
-
-    def _relationships(self, arguments: dict[str, Any]) -> list[dict[str, Any]]:
-        entity_id = arguments["entity_id"]
-        resolved = self.registry.resolve(arguments["relation"])
-        schema = resolved.schema
-        requested = arguments.get("direction")
-        if resolved.inverse and requested in {"in", "out"}:
-            requested = "out" if requested == "in" else "in"
-        records: list[dict[str, Any]] = []
-        for raw in self.edges.get(schema.id, []):
-            if not arguments.get("include_ended") and raw.get("end") is not None:
-                continue
-            is_out = raw.get("from") == entity_id
-            is_in = raw.get("to") == entity_id
-            if schema.symmetric:
-                matches = is_out or is_in
-            elif requested == "out":
-                matches = is_out
-            elif requested == "in":
-                matches = is_in
-            else:
-                matches = is_out or is_in
-            if not matches:
-                continue
-            related_id = raw["to"] if is_out else raw["from"]
-            edge = dict(raw)
-            edge["relation"] = schema.id
-            edge["related_entity"] = self._summary(self.entities[related_id])
-            records.append(edge)
-        return records[: arguments.get("limit", 25)]
-
-    @staticmethod
-    def _summary(record: dict[str, Any]) -> dict[str, Any]:
-        return {
-            key: value
-            for key, value in record.items()
-            if key in {"id", "name", "display_name", "gender"}
-        }
+FixtureGraphDispatcher = _JsonGraphDispatcher
 
 
 @pytest.fixture
 def dispatcher() -> FixtureGraphDispatcher:
-    return FixtureGraphDispatcher()
+    registry = EdgeSchemaRegistry.load_default(DATA_DIR)
+    return FixtureGraphDispatcher(DATA_DIR, registry)
 
 
 def _fixture_plan(text: str) -> SemanticFactRequest:
@@ -977,6 +883,19 @@ def test_semantic_ir_rejects_non_allowlisted_operation() -> None:
         )
 
 
+def test_completed_years_does_not_inject_an_age_specific_property(
+    dispatcher: FixtureGraphDispatcher,
+) -> None:
+    catalog = RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
+    request = SemanticFactRequest(
+        operation="completed_years",
+        subject=SemanticReference(kind="self", entity_type="person"),
+    )
+
+    assert request.property is None
+    assert SemanticSchemaRegistry(catalog).validates(request) is False
+
+
 @pytest.mark.asyncio
 async def test_agent_service_reported_queries_use_semantic_planner(
     dispatcher: FixtureGraphDispatcher,
@@ -1000,7 +919,7 @@ async def test_agent_service_reported_queries_use_semantic_planner(
         SemanticPlannerOnly(),  # type: ignore[arg-type]
         dispatcher,  # type: ignore[arg-type]
         system_prompt="You are the household steward.",
-        tools=get_tool_definitions(("get_entity",)),
+        tools=get_tool_definitions(("calculate",)),
         schema_catalog=catalog,
         localized_identity={"zh": "老管家"},
         assistant_id="steward",

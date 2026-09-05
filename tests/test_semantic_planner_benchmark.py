@@ -6,9 +6,9 @@ import pytest
 
 from home_cortex.edge_schema import EdgeSchemaRegistry
 from home_cortex.fact_benchmark import _JsonGraphDispatcher
-from home_cortex.grounding import AgentRequestContext
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
 from home_cortex.semantic_facts import (
+    AgentRequestContext,
     HouseholdFactEngine,
     SemanticFactPlanner,
     SemanticFactService,

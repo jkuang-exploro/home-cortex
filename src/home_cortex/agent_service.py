@@ -13,7 +13,6 @@ from .display import (
     conversation_language,
     internal_ids_requested,
 )
-from .grounding import AgentRequestContext
 from .model_loop import (
     MAX_AGENT_STEPS,
     MAX_TOOL_CALLS_PER_STEP,
@@ -29,6 +28,7 @@ from .ollama import OllamaService
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_facts import (
     FactAnswer,
+    AgentRequestContext,
     HouseholdFactEngine,
     SemanticFactPlanner,
     SemanticFactService,

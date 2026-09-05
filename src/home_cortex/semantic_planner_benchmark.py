@@ -20,10 +20,10 @@ from .agents import get_agent
 from .config import get_settings
 from .edge_schema import EdgeSchemaRegistry
 from .fact_benchmark import _JsonGraphDispatcher, _percentile
-from .grounding import AgentRequestContext
 from .ollama import OllamaService
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_facts import (
+    AgentRequestContext,
     HouseholdFactEngine,
     SemanticFactPlanner,
     SemanticFactRequest,

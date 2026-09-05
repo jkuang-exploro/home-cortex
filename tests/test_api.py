@@ -19,7 +19,6 @@ from home_cortex.api import (
 )
 from home_cortex.greetings import GreetingService
 from home_cortex.ingestion import IngestionResult
-from home_cortex.retrieval import RetrievedContext
 
 
 class FakeAgent:
@@ -105,10 +104,8 @@ class FakeIdentityRetrieval:
                 "name": ["Fort Cerritos", "喜瑞匡家"],
             }
         ]
-        self.calls: list[tuple[str, str | None, int | None]] = []
         self.entity_calls: list[str] = []
         self.relationship_calls: list[str] = []
-        self.retrieve_calls: list[str] = []
 
     async def get_entity(self, record_id: str) -> dict[str, Any] | None:
         self.entity_calls.append(record_id)
@@ -116,26 +113,6 @@ class FakeIdentityRetrieval:
             if record.get("id") == record_id:
                 return record
         return None
-
-    async def search_entities(
-        self,
-        text: str,
-        entity_type: str | None = None,
-        limit: int | None = None,
-    ) -> list[dict[str, Any]]:
-        self.calls.append((text, entity_type, limit))
-        if entity_type == "address":
-            return list(self.addresses)
-        return list(self.records)
-
-    async def retrieve(self, question: str) -> RetrievedContext:
-        self.retrieve_calls.append(question)
-        return RetrievedContext(
-            question=question,
-            nodes={"person": list(self.records), "address": list(self.addresses)},
-            edges={"lives_in": []},
-            text="{}",
-        )
 
     async def get_relationships(
         self,
@@ -869,11 +846,20 @@ def test_health_maps_database_failure_to_503(
     assert response.json()["error"]["code"] == "database_unavailable"
 
 
+def test_legacy_retrieve_route_is_removed(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, _ = api_client
+
+    response = client.post("/v1/retrieve", json={"query": "Fort Cerritos"})
+
+    assert response.status_code == 404
+
+
 @pytest.mark.parametrize(
     ("method", "path", "json_body"),
     [
         ("POST", "/admin/ingest", None),
-        ("POST", "/v1/retrieve", {"query": "Fort Cerritos"}),
         ("POST", "/v1/chat", {"message": "Who lives here?"}),
         (
             "POST",
@@ -904,7 +890,6 @@ def test_protected_routes_reject_missing_or_invalid_credentials(
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "authentication_required"
     assert agent.calls == []
-    assert app.state.retrieval.retrieve_calls == []
     assert app.state.retrieval.entity_calls == []
 
 
@@ -935,23 +920,6 @@ def test_admin_ingest_accepts_household_api_key(
     assert response.json()["status"] == "ok"
     assert response.json()["nodes_upserted"] == 2
     ingest.assert_awaited_once()
-
-
-def test_retrieve_accepts_household_api_key(
-    api_client: tuple[TestClient, FakeAgent],
-) -> None:
-    client, _ = api_client
-    _protect_api()
-
-    response = client.post(
-        "/v1/retrieve",
-        headers={"Authorization": "Bearer test-cortex-key"},
-        json={"query": "Fort Cerritos"},
-    )
-
-    assert response.status_code == 200
-    assert response.json()["query"] == "Fort Cerritos"
-    assert app.state.retrieval.retrieve_calls == ["Fort Cerritos"]
 
 
 def test_chat_accepts_mapped_identity(
@@ -1044,24 +1012,6 @@ def test_identity_resolution_uses_exact_lookup_despite_search_collisions(
         },
     ]
 
-    async def colliding_search(
-        text: str,
-        entity_type: str | None = None,
-        limit: int | None = None,
-    ) -> list[dict[str, Any]]:
-        retrieval.calls.append((text, entity_type, limit))
-        matches = [
-            record
-            for record in retrieval.records
-            if text in str(record).casefold()
-        ]
-        matches.sort(key=lambda record: str(record.get("id", "")))
-        if limit is not None:
-            return matches[:limit]
-        return matches
-
-    retrieval.search_entities = colliding_search
-
     response = client.post(
         "/v1/chat/completions",
         headers=_auth_headers("webui-user-123"),
@@ -1075,7 +1025,6 @@ def test_identity_resolution_uses_exact_lookup_despite_search_collisions(
     assert response.status_code == 200
     assert agent.user_entities[0]["id"] == "person:jian_kuang"
     assert "person:jian_kuang" in retrieval.entity_calls
-    assert retrieval.calls == []
 
 
 def test_conversation_access_is_isolated_by_owner(

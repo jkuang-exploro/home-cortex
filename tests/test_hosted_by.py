@@ -300,7 +300,7 @@ async def test_item_container_lookup_chain_returns_stored_contents() -> None:
         service = RetrievalService(  # type: ignore[arg-type]
             database, limit=20, data_dir=STATIC_TEST_DATA
         )
-        containers = await service.search_entities("冰箱", entity_type="item")
+        containers = await service.resolve_entity_alias("冰箱", entity_type="item")
         hosted_spaces = await service.get_relationships(
             containers[0]["id"], relation="hosts_space"
         )

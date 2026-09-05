@@ -88,11 +88,8 @@ async def test_tool_call_response() -> None:
                     "tool_calls": [
                         {
                             "function": {
-                                "name": "search_entities",
-                                "arguments": {
-                                    "text": "Test House",
-                                    "entity_type": "address",
-                                },
+                                "name": "calculate",
+                                "arguments": {"expression": "2 + 2"},
                             }
                         }
                     ],
@@ -107,16 +104,13 @@ async def test_tool_call_response() -> None:
     )
 
     response = await service.chat_with_tools(
-        [{"role": "user", "content": "Find Test House"}],
+        [{"role": "user", "content": "Calculate 2 + 2"}],
         TOOLS,
     )
 
     call = response.message.tool_calls[0]
-    assert call.function.name == "search_entities"
-    assert call.function.arguments == {
-        "text": "Test House",
-        "entity_type": "address",
-    }
+    assert call.function.name == "calculate"
+    assert call.function.arguments == {"expression": "2 + 2"}
     assert client.calls[0]["tools"] == TOOLS
     assert client.calls[0]["stream"] is False
     assert client.calls[0]["think"] is False
