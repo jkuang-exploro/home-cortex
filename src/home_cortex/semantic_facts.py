@@ -13,7 +13,7 @@ from typing import Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .display import resolve_display_name
-from .grounding import AgentRequestContext, GroundedAnswer
+from .grounding import AgentRequestContext
 from .operator_registry import (
     OPERATORS,
     OperatorExecutionError,
@@ -1148,9 +1148,6 @@ class TierZeroSemanticParser:
     by the semantic planner evaluation suite.
     """
 
-    def __init__(self, ontology: SemanticOntology | None = None) -> None:
-        self.ontology = ontology or SemanticOntology.load_default()
-
     def parse(self, text: str) -> SemanticFactRequest | None:
         normalized = _normalize_request(text)
         if normalized in {"我是谁", "who am i"}:
@@ -1192,12 +1189,10 @@ class EntityResolver:
 
     def __init__(
         self,
-        dispatcher: Any,
         schema: SemanticSchemaRegistry,
         *,
         max_records: int = 25,
     ) -> None:
-        self.dispatcher = dispatcher
         self.schema = schema
         self.max_records = max_records
 
@@ -1219,7 +1214,7 @@ class EntityResolver:
             )
             if len(entities) > 1 and not expect_many:
                 candidates = tuple(
-                    [await self._load_if_unnamed(item, execution) for item in entities]
+                    [await execution.load_if_unnamed(item) for item in entities]
                 )
                 return ResolutionResult("ambiguous", candidates=candidates)
             entity_ids = tuple(
@@ -1426,7 +1421,7 @@ class EntityResolver:
                 physical not in entity for _, physical in mapped if physical is not None
             )
             record = (
-                await self._load(entity, execution) if needs_load else dict(entity)
+                await execution.load(entity) if needs_load else dict(entity)
             )
             predicates: list[bool] = []
             for item, physical in mapped:
@@ -1452,7 +1447,7 @@ class EntityResolver:
     ) -> Any:
         if len(anchors) != 1:
             raise _FactFailure("ambiguous", candidates=tuple(anchors))
-        anchor = await self._load(anchors[0], execution)
+        anchor = await execution.load(anchors[0])
         physical = self.schema.physical_property(
             _entity_type(anchor),
             semantic_property,
@@ -1465,29 +1460,6 @@ class EntityResolver:
             )
         return anchor[physical]
 
-    async def _load_if_unnamed(
-        self,
-        entity: Mapping[str, Any],
-        execution: "_FactExecution",
-    ) -> dict[str, Any]:
-        if any(entity.get(field) for field in ("display_name", "name", "full_name")):
-            return dict(entity)
-        return await self._load(entity, execution)
-
-    @staticmethod
-    async def _load(
-        entity: Mapping[str, Any],
-        execution: "_FactExecution",
-    ) -> dict[str, Any]:
-        entity_id = entity.get("id")
-        if not isinstance(entity_id, str):
-            raise _FactFailure("entity_not_found")
-        records = await execution.records("get_entity", {"entity_id": entity_id})
-        if not records:
-            raise _FactFailure("entity_not_found")
-        return dict(records[0])
-
-
 class HouseholdFactEngine:
     def __init__(
         self,
@@ -1499,9 +1471,7 @@ class HouseholdFactEngine:
     ) -> None:
         self.dispatcher = dispatcher
         self.schema = schema
-        self.max_records = max_records
         self.resolver = resolver or EntityResolver(
-            dispatcher,
             schema,
             max_records=max_records,
         )
@@ -1622,7 +1592,7 @@ class HouseholdFactEngine:
             value = execute_operator("count", OperatorInput(records=entities))
             return FactResult("found", value, evidence)
         if request.operation == "select" and request.property is None:
-            visible = [await self._load_if_unnamed(item, execution) for item in entities]
+            visible = [await execution.load_if_unnamed(item) for item in entities]
             return FactResult("found", visible, evidence)
         if request.operation == "resolve_reference":
             singular = await self._singular(
@@ -1684,7 +1654,7 @@ class HouseholdFactEngine:
             records = (
                 records
                 if request.property_source == "relationship"
-                else [await self._load(item, execution) for item in records]
+                else [await execution.load(item) for item in records]
             )
         normalized: list[dict[str, Any]] = []
         for record in records:
@@ -1845,7 +1815,7 @@ class HouseholdFactEngine:
         record = (
             dict(entity)
             if physical in entity
-            else await self._load(entity, execution)
+            else await execution.load(entity)
         )
         if physical not in record or record.get(physical) is None:
             raise _FactFailure("filter_input_missing", missing=(item.property,))
@@ -1916,7 +1886,7 @@ class HouseholdFactEngine:
         record = (
             dict(entity)
             if physical in entity
-            else await self._load(entity, execution)
+            else await execution.load(entity)
         )
         raw_value = record.get(physical)
         if raw_value is None:
@@ -2004,41 +1974,17 @@ class HouseholdFactEngine:
         if len(entities) > 1:
             loaded = tuple(
                 [
-                    await self._load_if_unnamed(item, execution)
+                    await execution.load_if_unnamed(item)
                     for item in entities
                 ]
             )
             return FactResult("ambiguous", candidates=loaded)
         record = (
-            await self._load(entities[0], execution)
+            await execution.load(entities[0])
             if load_full
-            else await self._load_if_unnamed(entities[0], execution)
+            else await execution.load_if_unnamed(entities[0])
         )
         return record
-
-    async def _load_if_unnamed(
-        self,
-        entity: Mapping[str, Any],
-        execution: "_FactExecution",
-    ) -> dict[str, Any]:
-        if any(entity.get(field) for field in ("display_name", "name", "full_name")):
-            return dict(entity)
-        return await self._load(entity, execution)
-
-    async def _load(
-        self,
-        entity: Mapping[str, Any],
-        execution: "_FactExecution",
-    ) -> dict[str, Any]:
-        entity_id = entity.get("id")
-        if not isinstance(entity_id, str):
-            raise _FactFailure("entity_not_found")
-        if not ":" in entity_id:
-            return dict(entity)
-        records = await execution.records("get_entity", {"entity_id": entity_id})
-        if not records:
-            raise _FactFailure("entity_not_found")
-        return dict(records[0])
 
     def _property(self, entity: Mapping[str, Any], semantic: str) -> Any | FactResult:
         entity_type = _entity_type(entity)
@@ -2273,7 +2219,7 @@ class SemanticFactService:
         tier_zero_enabled: bool = True,
     ) -> None:
         self.engine = engine
-        self.parser = parser or TierZeroSemanticParser(engine.schema.ontology)
+        self.parser = parser or TierZeroSemanticParser()
         self.renderer = renderer or FactRenderer()
         self.planner = planner
         self.tier_zero_enabled = tier_zero_enabled
@@ -2455,19 +2401,6 @@ class SemanticFactService:
             request_id=request_id,
         )).answer
 
-    async def grounded_answer(
-        self,
-        messages: Sequence[Mapping[str, Any]],
-        *,
-        context: AgentRequestContext,
-        request_id: str = "-",
-    ) -> GroundedAnswer | None:
-        answer = await self.try_answer(messages, context=context, request_id=request_id)
-        if answer is None:
-            return None
-        return GroundedAnswer(answer.text, answer.timings.db_query_count)
-
-
 class _FactExecution:
     def __init__(self, dispatcher: Any, caller_entity_id: str | None) -> None:
         self.dispatcher = dispatcher
@@ -2518,6 +2451,22 @@ class _FactExecution:
         if tool == "get_entity" and isinstance(entity_id, str) and records:
             self.entity_cache[entity_id] = dict(records[0])
         return records
+
+    async def load(self, entity: Mapping[str, Any]) -> dict[str, Any]:
+        entity_id = entity.get("id")
+        if not isinstance(entity_id, str):
+            raise _FactFailure("entity_not_found")
+        if ":" not in entity_id:
+            return dict(entity)
+        records = await self.records("get_entity", {"entity_id": entity_id})
+        if not records:
+            raise _FactFailure("entity_not_found")
+        return records[0]
+
+    async def load_if_unnamed(self, entity: Mapping[str, Any]) -> dict[str, Any]:
+        if any(entity.get(field) for field in ("display_name", "name", "full_name")):
+            return dict(entity)
+        return await self.load(entity)
 
 
 class _FactFailure(RuntimeError):

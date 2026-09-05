@@ -184,7 +184,7 @@ async def run_semantic_planner_benchmark(
 ) -> dict[str, Any]:
     if service.planner is None:
         raise ValueError("planner-only benchmark requires SemanticFactPlanner")
-    parser = TierZeroSemanticParser(service.engine.schema.ontology)
+    parser = TierZeroSemanticParser()
     rows: list[dict[str, Any]] = []
     planner_latencies: list[float] = []
     category_totals: Counter[str] = Counter()

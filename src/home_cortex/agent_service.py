@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -320,10 +320,6 @@ def _clock_context(timezone_name: str, now: datetime) -> list[dict[str, str]]:
             ),
         }
     ]
-
-
-def _household_date(timezone_name: str, now: datetime) -> date:
-    return _household_datetime(ZoneInfo(timezone_name), now).date()
 
 
 def _household_datetime(zone: ZoneInfo, now: datetime) -> datetime:
