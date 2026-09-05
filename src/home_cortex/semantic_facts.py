@@ -1056,17 +1056,6 @@ class TierZeroSemanticParser:
             )
         return None
 
-    def canonical_utterances(self) -> tuple[str, ...]:
-        """Expose the optimization surface for Tier-0/Tier-1 parity checks."""
-        return (
-            "我是谁",
-            "Who am I?",
-            "你是谁",
-            "Who are you?",
-            "家里有几个人",
-            "家里都有谁",
-        )
-
 
 class EntityResolver:
     """Authoritative resolver from semantic references to canonical entities."""
@@ -2285,12 +2274,15 @@ class _FactExecution:
             if cached is not None:
                 return [dict(cached)]
         self.query_count += 1
-        response = await self.dispatcher.dispatch_internal(
-            tool,
-            arguments,
-            caller_entity_id=self.caller_entity_id,
-        )
-        if response.get("ok") is not True:
+        try:
+            response = await self.dispatcher.dispatch_internal(
+                tool,
+                arguments,
+                caller_entity_id=self.caller_entity_id,
+            )
+        except Exception:
+            raise _FactFailure("computation_impossible") from None
+        if not isinstance(response, Mapping) or response.get("ok") is not True:
             raise _FactFailure("computation_impossible")
         value = response.get("result")
         if not isinstance(value, list):

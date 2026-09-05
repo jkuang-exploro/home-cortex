@@ -162,9 +162,9 @@ async def test_node_name_must_be_a_non_empty_string_list(tmp_path: Path) -> None
     data_dir = tmp_path / "static_test_data"
     copytree(STATIC_TEST_DATA, data_dir)
     address_path = data_dir / "nodes" / "address.json"
-    address = json.loads(address_path.read_text(encoding="utf-8"))
+    address = json.loads(address_path.read_text(encoding="utf-8"))[0]
     address["name"] = "Test House"
-    address_path.write_text(json.dumps(address), encoding="utf-8")
+    address_path.write_text(json.dumps([address]), encoding="utf-8")
 
     database = MemoryDatabase()
     await database.connect()
@@ -226,9 +226,9 @@ async def test_localized_name_object_is_accepted(tmp_path: Path) -> None:
     data_dir = tmp_path / "static_test_data"
     copytree(STATIC_TEST_DATA, data_dir)
     address_path = data_dir / "nodes" / "address.json"
-    address = json.loads(address_path.read_text(encoding="utf-8"))
+    address = json.loads(address_path.read_text(encoding="utf-8"))[0]
     address["name"] = {"en": "Test House", "zh": "测试之家"}
-    address_path.write_text(json.dumps(address), encoding="utf-8")
+    address_path.write_text(json.dumps([address]), encoding="utf-8")
 
     database = MemoryDatabase()
     await database.connect()
@@ -271,9 +271,9 @@ async def test_non_person_nodes_cannot_define_address_as(tmp_path: Path) -> None
     data_dir = tmp_path / "static_test_data"
     copytree(STATIC_TEST_DATA, data_dir)
     address_path = data_dir / "nodes" / "address.json"
-    address = json.loads(address_path.read_text(encoding="utf-8"))
+    address = json.loads(address_path.read_text(encoding="utf-8"))[0]
     address["address_as"] = {"en": "Home"}
-    address_path.write_text(json.dumps(address), encoding="utf-8")
+    address_path.write_text(json.dumps([address]), encoding="utf-8")
 
     database = MemoryDatabase()
     await database.connect()

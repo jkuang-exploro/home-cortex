@@ -1,9 +1,11 @@
-{
-  "id": "address:test_house",
-  "address_type": "home",
-  "name": ["Test House", "测试之家"],
-  "address": {
-    "city": "Testville",
-    "state": "CA"
+[
+  {
+    "id": "address:test_house",
+    "address_type": "home",
+    "name": ["Test House", "测试之家"],
+    "address": {
+      "city": "Testville",
+      "state": "CA"
+    }
   }
-}
+]

@@ -61,7 +61,14 @@ def test_semantic_planner_evaluation_is_large_and_adversarial() -> None:
         "我爱人的爸爸是谁",
     }.issubset(utterances)
     parser = TierZeroSemanticParser()
-    assert set(parser.canonical_utterances()).issubset(utterances)
+    assert {
+        "我是谁",
+        "Who am I?",
+        "你是谁",
+        "Who are you?",
+        "家里有几个人",
+        "家里都有谁",
+    }.issubset(utterances)
     assert all(
         parser.parse(utterance) is None
         for utterance in (

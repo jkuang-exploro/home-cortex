@@ -73,7 +73,7 @@ Tier 0 as a removable latency optimization.
    prefix matching helpers were also removed.
 
 7. **Which Tier-0 functions remain?** `TierZeroSemanticParser.parse`,
-   `canonical_utterances`, generic text normalization, and the
+   generic text normalization, and the
    `_household_members` semantic-IR constructor. `parse` recognizes exactly
    `我是谁`, `Who am I?`, `你是谁`, `Who are you?`, `家里有几个人`, and
    `家里都有谁`; it has no open-ended phrase tables or specialized marriage,
