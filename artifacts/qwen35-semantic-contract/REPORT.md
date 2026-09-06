@@ -73,6 +73,12 @@ Original baseline artifacts are untouched. `baseline-relevant-rows.json` contain
 
 The one-off `candidate-*.tar` snapshots that staged each variant onto the GPU host are **no longer in the repository**. They were investigation scratch: stale copies of the working tree (several including `__pycache__/*.pyc`), non-diffable, and redundant with the source in `src/` and with the per-run inputs captured in the JSON reports. The provenance that matters is the readable `*-summary.json` files and this report. Any needed snapshot remains recoverable from git history; `artifacts/qwen35-semantic-contract/*.tar` is now gitignored.
 
+For the same reason, the large per-case result JSONs (`probe-iteration*.json`, the
+`tier1-baseline/probe*.json` / `suite*.json`, and `baseline-relevant-rows.json`)
+are also untracked and gitignored; they remain on disk and in git history for
+on-demand inspection. The tracked, readable provenance is the `*-summary.json`
+files and the prose reports.
+
 The system-message hypothesis was not supported by the trials; the deployed renderer also preserves the first system message and subsequent messages ([Ollama v0.32.13 renderer](https://raw.githubusercontent.com/ollama/ollama/v0.32.13/model/renderers/qwen35.go)). Supplying schema text is recommended by [Ollama's structured-output documentation](https://docs.ollama.com/capabilities/structured-outputs), but the controlled schema-only trial did not improve this model and is not the selected production path.
 
 ## Before/after metrics

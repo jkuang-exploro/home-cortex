@@ -1,0 +1,7 @@
+# Generated benchmark result JSONs are derived output, not source. Mark them as
+# binary-for-diff (git won't show a diff) and vendored (GitHub won't count them
+# in language statistics). The readable *-summary.json files remain normal text.
+artifacts/**/*.json  -diff linguist-vendored
+
+# Benchmark dataset inputs (YAML) are data, not code.
+benchmarks/*.yaml  linguist-generated
