@@ -831,6 +831,57 @@ async def test_scoped_appellation_is_grounded_by_resolver_context(
 
 
 @pytest.mark.asyncio
+async def test_stored_alias_and_full_name_resolve_to_the_same_person(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+) -> None:
+    full, _ = await _execute(service, _resolve(_named("匡德伦")), context)
+    alias, _ = await _execute(service, _resolve(_named("德伦")), context)
+    unknown, _ = await _execute(service, _resolve(_named("不存在的小名")), context)
+
+    assert full.status == "found"
+    assert alias.status == "found"
+    assert full.evidence.entity_ids == alias.evidence.entity_ids == (
+        "person:dylan_kuang",
+    )
+    assert unknown.status == "entity_not_found"
+
+
+@pytest.mark.asyncio
+async def test_德伦_is_unresolved_without_a_stored_alias(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: _JsonGraphDispatcher,
+) -> None:
+    dispatcher.entities["person:dylan_kuang"].pop("aliases", None)
+    dispatcher.entities["person:dylan_kuang"].pop("appellations", None)
+
+    missing, _ = await _execute(service, _resolve(_named("德伦")), context)
+    full, _ = await _execute(service, _resolve(_named("匡德伦")), context)
+
+    assert missing.status == "entity_not_found"
+    assert full.status == "found"
+    assert full.evidence.entity_ids == ("person:dylan_kuang",)
+
+
+@pytest.mark.asyncio
+async def test_duplicate_stored_alias_stays_ambiguous(
+    service: SemanticFactService,
+    context: AgentRequestContext,
+    dispatcher: _JsonGraphDispatcher,
+) -> None:
+    dispatcher.entities["person:evelyn_kuang"]["aliases"] = ["德伦"]
+
+    result, _ = await _execute(service, _resolve(_named("德伦")), context)
+
+    assert result.status == "ambiguous"
+    assert set(result.evidence.entity_ids) == {
+        "person:dylan_kuang",
+        "person:evelyn_kuang",
+    }
+
+
+@pytest.mark.asyncio
 async def test_empty_household_list_has_a_clear_response(
     service: SemanticFactService,
     context: AgentRequestContext,

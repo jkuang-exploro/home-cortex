@@ -11,6 +11,16 @@ Settings: think=false, temperature=0, num_predict=384, keep_alive=24h.
 
 JSON artifacts contain household records. Use them locally; do not treat stdout logs as the source of truth.
 
+Do not copy the eval YAML onto a `.py` path. `utterance: 咱家最晚出生的是谁？` is YAML
+(line 174 of `benchmarks/semantic_planner_eval.yaml`). The runner is
+`scripts/tier1_latency_bench.py` (Python, ~110 lines, no Chinese as syntax).
+
+From `docker/cortex`:
+
+```bash
+../../scripts/copy_tier1_bench_into_api.sh .
+```
+
 ## Commands
 
 Full 119-case suite:

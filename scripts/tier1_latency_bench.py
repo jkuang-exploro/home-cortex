@@ -46,6 +46,8 @@ async def run(args: argparse.Namespace) -> dict:
         warmup=args.warmup,
         repeat=args.repeat,
         verified_cold=args.verified_cold,
+        data_dir=args.data_dir,
+        schema_dir=args.schema_dir,
     )
     report["model"] = args.model
     report["collected_at"] = datetime.now().isoformat()

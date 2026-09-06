@@ -19,11 +19,13 @@ from home_cortex.semantic_facts import (
 )
 from home_cortex.semantic_planner_benchmark import (
     DEFAULT_EVAL_PATH,
+    SCORING_REVISION,
     classify_failure_stage,
     evaluate_planner_case,
     load_probe_dataset,
     load_semantic_eval_cases,
     request_phase,
+    rescore_saved_row,
     run_semantic_planner_benchmark,
     run_tier1_probe,
     score_structured_result,
@@ -232,6 +234,13 @@ def test_score_denominators_reconcile_plan_and_answer() -> None:
         plan_match=False,
         executor_status="not_run",
     ) == "planner_validation"
+    assert classify_failure_stage(
+        runtime_failure=None,
+        validation_result="VALID",
+        plan_match=True,
+        executor_status="found",
+        answer_correct=False,
+    ) == "answer_mismatch"
 
 
 def test_structured_result_scoring_uses_canonical_ids_not_status_alone() -> None:
@@ -250,6 +259,116 @@ def test_structured_result_scoring_uses_canonical_ids_not_status_alone() -> None
 
     assert score_structured_result(found_wrong, youngest) is False
     assert score_structured_result(found_right, youngest) is True
+
+
+def _daughter_name_case():
+    return next(
+        case
+        for case in load_probe_dataset().cases
+        if case.case_id == "daughter_given_name_jian"
+    )
+
+
+def test_daughter_name_accepts_given_name_and_stored_identity_names() -> None:
+    case = _daughter_name_case()
+    evidence = FactEvidence(entity_ids=("person:evelyn_kuang",))
+    given_name = FactResult("found", "Evelyn", evidence)
+    stored_names = FactResult(
+        "found",
+        ["Evelyn Kuang", "匡悠然"],
+        evidence,
+    )
+    identity = FactResult(
+        "found",
+        {"id": "person:evelyn_kuang", "name": ["Evelyn Kuang", "匡悠然"]},
+        evidence,
+    )
+
+    assert case.expected_names == ("Evelyn", "Evelyn Kuang", "匡悠然")
+    assert score_structured_result(given_name, case) is True
+    assert score_structured_result(stored_names, case) is True
+    assert score_structured_result(identity, case) is True
+
+
+def test_daughter_name_rejects_wrong_person_names_and_status() -> None:
+    case = _daughter_name_case()
+    evelyn = FactEvidence(entity_ids=("person:evelyn_kuang",))
+    wrong_person = FactResult(
+        "found",
+        "Evelyn",
+        FactEvidence(entity_ids=("person:zhigang_ba",)),
+    )
+    unrelated_names = FactResult("found", ["Pu Ba", "巴璞"], evelyn)
+    missing_value = FactResult("found", None, evelyn)
+    empty_names = FactResult("found", [], evelyn)
+    wrong_status = FactResult(
+        "entity_not_found",
+        None,
+        FactEvidence(),
+    )
+
+    assert score_structured_result(wrong_person, case) is False
+    assert score_structured_result(unrelated_names, case) is False
+    assert score_structured_result(missing_value, case) is False
+    assert score_structured_result(empty_names, case) is False
+    assert score_structured_result(wrong_status, case) is False
+
+
+def test_rescoring_production_daughter_identity_is_an_evaluation_correction() -> None:
+    case = _daughter_name_case()
+    row = {
+        "case_id": "daughter_given_name_jian",
+        "plan_match": True,
+        "answer_correct": False,
+        "failure_stage": None,
+        "validation_result": "VALID",
+        "executor_status": "found",
+        "runtime_failure": None,
+        "executor": {
+            "status": "found",
+            "value": ["Evelyn Kuang", "匡悠然"],
+            "entity_ids": ["person:evelyn_kuang"],
+            "primary_entity_ids": ["person:evelyn_kuang"],
+            "relationship": "child",
+            "semantic_property": "display_name",
+            "missing_requirements": [],
+            "candidates": [],
+        },
+    }
+
+    rescored = rescore_saved_row(row, case)
+
+    assert row["answer_correct"] is False
+    assert row["failure_stage"] is None
+    assert rescored["answer_correct"] is True
+    assert rescored["failure_stage"] is None
+    assert rescored["scoring_revision"] == SCORING_REVISION
+
+
+def test_scored_incorrect_answer_cannot_have_null_failure_stage() -> None:
+    case = _daughter_name_case()
+    row = {
+        "case_id": "daughter_given_name_jian",
+        "plan_match": True,
+        "answer_correct": True,
+        "failure_stage": None,
+        "validation_result": "VALID",
+        "executor_status": "found",
+        "runtime_failure": None,
+        "executor": {
+            "status": "found",
+            "value": "Pu Ba",
+            "entity_ids": ["person:evelyn_kuang"],
+            "primary_entity_ids": ["person:evelyn_kuang"],
+            "missing_requirements": [],
+            "candidates": [],
+        },
+    }
+
+    rescored = rescore_saved_row(row, case)
+
+    assert rescored["answer_correct"] is False
+    assert rescored["failure_stage"] == "answer_mismatch"
 
 
 def test_request_phase_labels_first_request_unless_verified_cold() -> None:

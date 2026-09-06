@@ -1,0 +1,6 @@
+{
+  "entity_id": "person:dylan_kuang",
+  "aliases": ["Dylan", "德伦"],
+  "live_data_change": "Do not apply from this ticket. Stage only under /tmp/tier1-bench/data for isolated benchmarking.",
+  "required_live_change_if_later_approved": "On the dylan_kuang person record, store aliases [\"Dylan\", \"德伦\"] using the existing aliases field. Appellations such as 大宝 are not required for 德伦 lookup."
+}

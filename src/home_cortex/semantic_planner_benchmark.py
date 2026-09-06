@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
+import os
 import platform
 import statistics
 import subprocess
@@ -28,6 +30,7 @@ from .ollama import PLANNER_KEEP_ALIVE, PLANNER_NUM_PREDICT, OllamaService
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_facts import (
     AgentRequestContext,
+    FactEvidence,
     FactResult,
     HouseholdFactEngine,
     SemanticFactPlanner,
@@ -40,6 +43,7 @@ from .semantic_facts import (
 )
 
 FROZEN_EVAL_TIME = "2026-09-03T12:00:00-07:00"
+SCORING_REVISION = "2026-09-06.1-daughter-names-answer-mismatch"
 
 def _default_eval_path() -> Path:
     candidates = (
@@ -66,6 +70,7 @@ class SemanticEvalCase:
     expected_status: str | None = None
     expected_entity_ids: tuple[str, ...] | None = None
     expected_value: Any = None
+    expected_names: tuple[str, ...] | None = None
     expected_equal: bool | None = None
     notes: str | None = None
 
@@ -191,6 +196,15 @@ def load_probe_dataset(path: Path = DEFAULT_EVAL_PATH) -> ProbeDataset:
             if isinstance(entity_ids, list)
             else None
         )
+        raw_names = item.get("expected_names")
+        if raw_names is None:
+            expected_names = None
+        elif isinstance(raw_names, list) and all(
+            isinstance(value, (str, int)) for value in raw_names
+        ):
+            expected_names = tuple(str(value) for value in raw_names)
+        else:
+            raise ValueError(f"probe case {case_id} has invalid expected_names")
         cases.append(
             SemanticEvalCase(
                 utterance,
@@ -210,6 +224,7 @@ def load_probe_dataset(path: Path = DEFAULT_EVAL_PATH) -> ProbeDataset:
                 ),
                 expected_entity_ids=expected_entity_ids,
                 expected_value=item.get("expected_value"),
+                expected_names=expected_names,
                 expected_equal=item.get("expected_equal"),
                 notes=str(item["notes"]) if item.get("notes") is not None else None,
             )
@@ -301,6 +316,7 @@ def classify_failure_stage(
     validation_result: str | None,
     plan_match: bool | None,
     executor_status: str | None,
+    answer_correct: bool | None = None,
 ) -> str | None:
     if runtime_failure:
         return "transport"
@@ -317,6 +333,8 @@ def classify_failure_stage(
         return "entity_resolution"
     if executor_status not in {None, "found", "not_run"}:
         return "execution"
+    if answer_correct is False:
+        return "answer_mismatch"
     return None
 
 
@@ -349,6 +367,29 @@ def values_match(actual: Any, expected: Any) -> bool:
     return actual == expected
 
 
+def extract_result_names(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str) and value.strip():
+        return (value,)
+    if isinstance(value, Mapping):
+        names: list[str] = []
+        for key in ("name", "display_name", "given_name", "first_name"):
+            if key in value:
+                names.extend(extract_result_names(value[key]))
+        return tuple(names)
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray, str)):
+        names = []
+        for item in value:
+            names.extend(extract_result_names(item))
+        return tuple(names)
+    return ()
+
+
+def names_match(actual: Any, expected_names: Sequence[str]) -> bool:
+    allowed = {name for name in expected_names if name}
+    extracted = extract_result_names(actual)
+    return bool(allowed) and bool(extracted) and all(name in allowed for name in extracted)
+
+
 def score_structured_result(result: FactResult, case: SemanticEvalCase) -> bool | None:
     has_expectation = any(
         item is not None
@@ -356,6 +397,7 @@ def score_structured_result(result: FactResult, case: SemanticEvalCase) -> bool 
             case.expected_status,
             case.expected_entity_ids,
             case.expected_value,
+            case.expected_names,
             case.expected_equal,
         )
     )
@@ -366,9 +408,21 @@ def score_structured_result(result: FactResult, case: SemanticEvalCase) -> bool 
     if case.expected_entity_ids is not None:
         if set(primary_entity_ids(result)) != set(case.expected_entity_ids):
             return False
-    if case.expected_value is not None and not values_match(
-        result.value, case.expected_value
-    ):
+    value_ok = True
+    if case.expected_value is not None or case.expected_names:
+        exact = case.expected_value is not None and values_match(
+            result.value, case.expected_value
+        )
+        names = case.expected_names is not None and names_match(
+            result.value, case.expected_names
+        )
+        if case.expected_value is not None and case.expected_names is not None:
+            value_ok = exact or names
+        elif case.expected_names is not None:
+            value_ok = names
+        else:
+            value_ok = exact
+    if not value_ok:
         return False
     if case.expected_equal is not None:
         if not isinstance(result.value, Mapping):
@@ -376,6 +430,107 @@ def score_structured_result(result: FactResult, case: SemanticEvalCase) -> bool 
         if bool(result.value.get("equal")) != bool(case.expected_equal):
             return False
     return True
+
+
+def fact_result_from_serialized(payload: Mapping[str, Any] | None) -> FactResult | None:
+    if not payload:
+        return None
+    status = payload.get("status")
+    if not isinstance(status, str) or not status:
+        return None
+    candidates = tuple(
+        item
+        for item in (payload.get("candidates") or ())
+        if isinstance(item, Mapping)
+    )
+    return FactResult(
+        status,  # type: ignore[arg-type]
+        payload.get("value"),
+        FactEvidence(
+            entity_ids=tuple(
+                str(item) for item in (payload.get("entity_ids") or ()) if item
+            ),
+            relationship=payload.get("relationship"),
+            semantic_property=payload.get("semantic_property"),
+        ),
+        missing_requirements=tuple(
+            str(item) for item in (payload.get("missing_requirements") or ())
+        ),
+        candidates=candidates,
+    )
+
+
+def rescore_saved_row(row: Mapping[str, Any], case: SemanticEvalCase) -> dict[str, Any]:
+    updated = dict(row)
+    result = fact_result_from_serialized(
+        row.get("executor") if isinstance(row.get("executor"), Mapping) else None
+    )
+    if result is not None:
+        answer_correct = score_structured_result(result, case)
+    else:
+        answer_correct = False if case.expected_status is not None else None
+    updated["answer_correct"] = answer_correct
+    updated["failure_stage"] = classify_failure_stage(
+        runtime_failure=row.get("runtime_failure")
+        if isinstance(row.get("runtime_failure"), str)
+        else None,
+        validation_result=row.get("validation_result")
+        if isinstance(row.get("validation_result"), str)
+        else None,
+        plan_match=row.get("plan_match")
+        if isinstance(row.get("plan_match"), bool)
+        else None,
+        executor_status=row.get("executor_status")
+        if isinstance(row.get("executor_status"), str)
+        else None,
+        answer_correct=answer_correct,
+    )
+    updated["scoring_revision"] = SCORING_REVISION
+    return updated
+
+
+def rescore_probe_report(
+    report: Mapping[str, Any],
+    dataset: ProbeDataset,
+) -> dict[str, Any]:
+    cases = {case.case_id: case for case in dataset.cases}
+    updated = dict(report)
+    queries = [
+        rescore_saved_row(row, cases[row["case_id"]])
+        if isinstance(row, Mapping) and row.get("case_id") in cases
+        else dict(row) if isinstance(row, Mapping) else row
+        for row in report.get("queries") or ()
+    ]
+    updated["queries"] = queries
+    measured = [row for row in queries if row.get("phase") == "measured"]
+    first_pass = [row for row in measured if row.get("sample_index") == 0]
+    updated["measured"] = measured
+    updated["scores_original"] = report.get("scores")
+    updated["scores_all_measured_samples_original"] = report.get(
+        "scores_all_measured_samples"
+    )
+    updated["scores"] = summarize_scores(first_pass)
+    updated["scores_all_measured_samples"] = summarize_scores(measured)
+    updated["failure_table"] = [
+        {
+            "case_id": row["case_id"],
+            "utterance": row["utterance"],
+            "failure_stage": row["failure_stage"],
+            "validation_result": row.get("validation_result"),
+            "plan_match": row.get("plan_match"),
+            "answer_correct": row.get("answer_correct"),
+            "executor_status": row.get("executor_status"),
+            "expected_semantic_plan": row.get("expected_semantic_plan"),
+            "normalized_semantic_plan": row.get("normalized_semantic_plan"),
+            "planner_output": row.get("planner_output"),
+            "executor": row.get("executor"),
+        }
+        for row in first_pass
+        if not row.get("plan_match") or row.get("answer_correct") is False
+    ]
+    updated["scoring_revision"] = SCORING_REVISION
+    updated["score_change_kind"] = "evaluation_correction"
+    return updated
 
 
 def jsonable(value: Any) -> Any:
@@ -485,6 +640,33 @@ def summarize_scores(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _sha256_file(path: Path) -> str:
+    try:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except OSError:
+        return "unavailable"
+
+
+def _sha256_tree(root: Path | None) -> str:
+    if root is None:
+        return "unavailable"
+    try:
+        digest = hashlib.sha256()
+        files = sorted(path for path in root.rglob("*") if path.is_file())
+        for path in files:
+            digest.update(str(path.relative_to(root)).encode())
+            digest.update(b"\0")
+            digest.update(_sha256_file(path).encode())
+            digest.update(b"\n")
+        return digest.hexdigest()
+    except OSError:
+        return "unavailable"
+
+
 def collect_provenance(
     *,
     root: Path,
@@ -496,14 +678,27 @@ def collect_provenance(
     warmup: int,
     repeat: int,
     verified_cold: bool,
+    data_dir: Path | None = None,
+    schema_dir: Path | None = None,
 ) -> dict[str, Any]:
     git = _git_provenance(root)
     ollama = _ollama_provenance(ollama_url, ollama_model)
+    package_path = Path(__file__).resolve()
     return {
         "git_commit": git.get("commit", "unavailable"),
         "git_dirty": git.get("dirty", "unavailable"),
+        "host_git_commit": os.environ.get("HOST_GIT_COMMIT", "unavailable"),
+        "host_git_dirty": os.environ.get("HOST_GIT_DIRTY", "unavailable"),
         "dataset_path": str(eval_path),
         "dataset_version": 1,
+        "eval_sha256": _sha256_file(eval_path),
+        "data_tree_sha256": _sha256_tree(data_dir),
+        "schema_tree_sha256": _sha256_tree(schema_dir),
+        "imported_package_path": str(package_path),
+        "copied_package_sha256": os.environ.get(
+            "COPIED_PACKAGE_SHA256", _sha256_tree(package_path.parent)
+        ),
+        "scoring_revision": SCORING_REVISION,
         "model_name": ollama_model,
         "model_digest": ollama.get("digest", "unavailable"),
         "ollama_version": ollama.get("version", "unavailable"),
@@ -574,6 +769,15 @@ def _ollama_provenance(ollama_url: str, model: str) -> dict[str, Any]:
             if isinstance(item, Mapping) and item.get("name") == model:
                 processor = item.get("processor") or processor
                 digest = item.get("digest") or digest
+                size = item.get("size")
+                size_vram = item.get("size_vram")
+                if isinstance(size, int) and isinstance(size_vram, int):
+                    if size > 0 and size_vram == size:
+                        processor = "100% GPU"
+                    elif size_vram:
+                        processor = f"GPU {size_vram}/{size}"
+                    else:
+                        processor = "CPU"
                 break
     return {
         "version": (
@@ -717,7 +921,9 @@ async def evaluate_planner_case(
             validation_result=validation_result,
             plan_match=plan_match,
             executor_status=executor_status,
+            answer_correct=answer_correct,
         ),
+        "scoring_revision": SCORING_REVISION,
         "notes": case.notes,
         "tier": 1,
         "runtime_failure": runtime_failure,
@@ -783,14 +989,7 @@ async def run_semantic_planner_benchmark(
             for category, count in sorted(category_totals.items())
         },
         "failure_reasons": dict(sorted(failure_reasons.items())),
-        "planner_latency_ms": {
-            "p50": round(statistics.median(planner_latencies), 3)
-            if planner_latencies
-            else None,
-            "p95": round(_percentile(planner_latencies, 0.95), 3)
-            if planner_latencies
-            else None,
-        },
+        "planner_latency_ms": summarize_latencies(planner_latencies),
         "tier0_parity": {
             "compared": tier0_comparisons,
             "equivalent": tier0_equivalent,
@@ -978,6 +1177,8 @@ async def _benchmark_cases(
             warmup=0,
             repeat=1,
             verified_cold=False,
+            data_dir=data_dir,
+            schema_dir=schema_dir,
         )
         report["model"] = ollama_model
         return report

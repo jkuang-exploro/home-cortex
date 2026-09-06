@@ -256,7 +256,16 @@ probe:
       expected_status: found
       expected_entity_ids: [person:evelyn_kuang]
       expected_value: Evelyn
-      notes: "Probe speaker is Jian, not the eval-group speaker zhigang_ba. given_name -> first_name."
+      expected_names:
+        - Evelyn
+        - Evelyn Kuang
+        - 匡悠然
+      notes: >-
+        Probe speaker is Jian, not the eval-group speaker zhigang_ba.
+        The question asks for the daughter's name. given_name/first_name "Evelyn"
+        and identity/display-name output for person:evelyn_kuang with stored names
+        Evelyn / Evelyn Kuang / 匡悠然 are both accepted. Wrong person, unrelated
+        names, missing values, and non-found statuses remain incorrect.
     - id: marriage_start
       utterance: 我们什么时候结婚的
       plan: marriage_start
