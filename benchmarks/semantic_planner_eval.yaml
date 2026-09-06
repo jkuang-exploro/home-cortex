@@ -147,6 +147,157 @@ plans:
       entity_type: person
       path: [{relation: residence}]
     property: full_address
+  named_dylan_identity:
+    operation: resolve_reference
+    subject: {kind: named_entity, value: 匡德伦, entity_type: person}
+  pairwise_older_wife:
+    operation: argmin
+    subject: {kind: self, entity_type: person}
+    other: *wife
+    property: birth_date
+  pairwise_older_spouse:
+    operation: argmin
+    subject: {kind: self, entity_type: person}
+    other: *spouse
+    property: birth_date
+
+# 20-question Tier-1 probe. Utterances are scored by stable case id, not
+# punctuation-stripped lookup. Result expectations are for the JSON household
+# graph at frozen_time with default_speaker_id. given_name is the deployed
+# first_name field. Duration/countdown day counts use calendar dates only.
+probe:
+  frozen_time: "2026-09-03T12:00:00-07:00"
+  default_speaker_id: person:jian_kuang
+  household_id: address:fort_cerritos
+  cases:
+    - id: youngest_za_paraphrase
+      utterance: 咱家最晚出生的是谁？
+      plan: youngest_member
+      expected_status: found
+      expected_entity_ids: [person:evelyn_kuang]
+    - id: adult_count_paraphrase
+      utterance: 家里已经成年的有多少位？
+      plan: adult_count
+      expected_status: found
+      expected_value: 3
+    - id: father_in_law_lover_dad
+      utterance: 我爱人的爸爸是谁？
+      plan: father_in_law
+      expected_status: found
+      expected_entity_ids: [person:zhigang_ba]
+    - id: named_dylan_birthday_countdown
+      utterance: 德伦再过多久过生日？
+      plan: named_dylan_birthday_countdown
+      expected_status: found
+      expected_entity_ids: [person:dylan_kuang]
+      expected_value: 57
+      notes: "Days from 2026-09-03 to 2026-10-30. Alias 德伦 -> person:dylan_kuang."
+    - id: marriage_duration_wife
+      utterance: 我和我老婆结婚多久了？
+      plan: marriage_duration
+      expected_status: found
+      expected_entity_ids: [person:pu_ba]
+      expected_value: 4505
+      notes: "Days from spouse_of.start 2014-05-04 to frozen 2026-09-03."
+    - id: wife_birth_date
+      utterance: 我老婆生日是哪天
+      plan: wife_birth_date
+      expected_status: found
+      expected_entity_ids: [person:pu_ba]
+      expected_value: "1988-02-26"
+    - id: son_birth_date
+      utterance: 我儿子哪天出生
+      plan: son_birth_date
+      expected_status: found
+      expected_entity_ids: [person:dylan_kuang]
+      expected_value: "2016-10-30"
+    - id: oldest_member
+      utterance: 家里最年长的是谁
+      plan: oldest_member
+      expected_status: found
+      expected_entity_ids: [person:zhigang_ba]
+    - id: minor_count
+      utterance: 有几个孩子
+      plan: minor_count
+      expected_status: found
+      expected_value: 2
+    - id: father_in_law
+      utterance: 我岳父是谁
+      plan: father_in_law
+      expected_status: found
+      expected_entity_ids: [person:zhigang_ba]
+    - id: residence_address
+      utterance: 我家住哪里
+      plan: residence_address
+      expected_status: found
+      expected_value:
+        street: 12745 Droxford St
+        city: Cerritos
+        state: CA
+        zip: "90703"
+    - id: pairwise_older_wife
+      utterance: 我和我老婆谁年龄大
+      plan: pairwise_older_wife
+      acceptable_plans: [pairwise_older_spouse]
+      expected_status: found
+      expected_entity_ids: [person:pu_ba]
+      expected_equal: false
+      notes: "Older = argmin(birth_date). Pu 1988-02-26 vs Jian 1988-11-11."
+    - id: named_dylan_identity
+      utterance: 匡德伦是谁
+      plan: named_dylan_identity
+      expected_status: found
+      expected_entity_ids: [person:dylan_kuang]
+    - id: daughter_given_name_jian
+      utterance: 我的女儿叫什么
+      plan: daughter_given_name
+      acceptable_plans: [daughter_identity]
+      speaker_id: person:jian_kuang
+      expected_status: found
+      expected_entity_ids: [person:evelyn_kuang]
+      expected_value: Evelyn
+      notes: "Probe speaker is Jian, not the eval-group speaker zhigang_ba. given_name -> first_name."
+    - id: marriage_start
+      utterance: 我们什么时候结婚的
+      plan: marriage_start
+      expected_status: found
+      expected_entity_ids: [person:pu_ba]
+      expected_value: "2014-05-04"
+    - id: household_list
+      utterance: 请列出家庭成员
+      plan: household_list
+      expected_status: found
+      expected_entity_ids:
+        - person:jian_kuang
+        - person:pu_ba
+        - person:dylan_kuang
+        - person:evelyn_kuang
+        - person:zhigang_ba
+    - id: youngest_member
+      utterance: 谁年纪最小
+      plan: youngest_member
+      expected_status: found
+      expected_entity_ids: [person:evelyn_kuang]
+    - id: minor_count_under_eighteen
+      utterance: 家中未满十八岁的有几位
+      plan: minor_count
+      expected_status: found
+      expected_value: 2
+    - id: wife_father_given_name
+      utterance: 我妻子的父亲叫什么
+      plan: wife_father_given_name
+      acceptable_plans: [wife_father]
+      expected_status: found
+      expected_entity_ids: [person:zhigang_ba]
+      expected_value: Zhigang
+      notes: "given_name -> first_name on person:zhigang_ba. resolve_reference is an accepted alternative."
+    - id: son_birthday_countdown
+      utterance: 从今天到我儿子生日相隔几天
+      plan: son_birthday_countdown
+      expected_status: found
+      expected_entity_ids: [person:dylan_kuang]
+      expected_value: 57
+      notes: "Days from 2026-09-03 to 2026-10-30. This is annual_occurrence mode=days, not date_difference from 2016-10-30."
 
 groups:
   - plan: self_identity
@@ -215,6 +366,7 @@ groups:
       - 家里最年轻的是谁
       - 咱家岁数最小的是哪一位
       - 最晚出生的是谁
+      - 咱家最晚出生的是谁？
       - 家里出生日期最晚的人是谁
       - 咱们家最晚出生的那个人是谁
       - Who is the youngest person at home?
@@ -224,6 +376,7 @@ groups:
       - 有几个成年人
       - 家里成年人有多少
       - 家里已经成年的一共有多少位
+      - 家里已经成年的有多少位？
       - 算一下当前成人成员数量
       - 咱家满十八岁的有几人
       - How many adults are in the household?
@@ -275,6 +428,7 @@ groups:
     category: temporal_operation
     utterances:
       - 我们结婚多久了
+      - 我和我老婆结婚多久了？
       - 我和配偶已经结婚多少天
       - 我们成为夫妻多长时间了
       - 从结婚到现在过了几天
@@ -318,11 +472,13 @@ groups:
     category: temporal_operation
     utterances:
       - 德伦再过多久过生日
+      - 德伦再过多久过生日？
   - plan: father_in_law
     category: multi_hop_kinship
     utterances:
       - 我岳父是谁
       - 我爱人的爸爸是谁
+      - 我爱人的爸爸是谁？
       - 配偶的男性家长是哪位
       - Who is my father-in-law?
   - plan: wife_father
@@ -343,3 +499,13 @@ groups:
       - 我目前居住地的完整地址是什么
       - 咱家的街道地址在哪里
       - What is my home address?
+  - plan: named_dylan_identity
+    category: entity_reference
+    utterances:
+      - 匡德伦是谁
+  - plan: pairwise_older_wife
+    acceptable_plans: [pairwise_older_spouse]
+    category: aggregation
+    utterances:
+      - 我和我老婆谁年龄大
+      - 我老婆和我谁年龄大

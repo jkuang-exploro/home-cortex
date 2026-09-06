@@ -9,12 +9,14 @@ Tier 0 as a removable latency optimization.
 
 ## Measurement method
 
-- Planner-only dataset: 111 utterances, 26 canonical plans, and 9 capability
-  categories in `benchmarks/semantic_planner_eval.yaml`.
+- Planner-only dataset: 119 utterances, 28 canonical plans, and 9 capability
+  categories in `benchmarks/semantic_planner_eval.yaml`, plus a 20-question
+  scored Tier-1 probe with frozen-time result expectations.
 - Required canonical and adversarial Chinese queries are included, but only six
   exact utterances are retained in Tier 0.
-- The deterministic CI test uses an oracle semantic planner and executes all 111
-  plans with Tier 0 disabled. It also verifies Tier-0/Planner semantic parity.
+- The deterministic CI test uses an oracle semantic planner and executes all
+  dataset plans with Tier 0 disabled. It also verifies Tier-0/Planner semantic
+  parity. The 20-question probe is scored separately by stable case id.
 - The local real-model run used the available `qwen3:8b` model: 8.2B parameters,
   Q4_K_M quantization, temperature 0. The workstation did not have a separate
   9B model installed, so these numbers must not be represented as a 9B-model
