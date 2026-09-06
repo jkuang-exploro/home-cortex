@@ -75,9 +75,10 @@ The one-off `candidate-*.tar` snapshots that staged each variant onto the GPU ho
 
 For the same reason, the large per-case result JSONs (`probe-iteration*.json`, the
 `tier1-baseline/probe*.json` / `suite*.json`, and `baseline-relevant-rows.json`)
-are also untracked and gitignored; they remain on disk and in git history for
-on-demand inspection. The tracked, readable provenance is the `*-summary.json`
-files and the prose reports.
+are also untracked, gitignored, and **not kept in the working tree**. If you need
+one, restore it from git history with `git show <commit>:<path>` (they were added
+in `45b8761`; find the exact commit with `git log --all -- <path>`). The tracked,
+readable provenance is the `*-summary.json` files and the prose reports.
 
 The system-message hypothesis was not supported by the trials; the deployed renderer also preserves the first system message and subsequent messages ([Ollama v0.32.13 renderer](https://raw.githubusercontent.com/ollama/ollama/v0.32.13/model/renderers/qwen35.go)). Supplying schema text is recommended by [Ollama's structured-output documentation](https://docs.ollama.com/capabilities/structured-outputs), but the controlled schema-only trial did not improve this model and is not the selected production path.
 

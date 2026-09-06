@@ -10,7 +10,10 @@ active source code.**
   `REPORT.md` / `REPORT-qwen35-9b.md` prose. Prefer these.
 - The large per-case JSONs (e.g. `probe-iteration*.json`, `probe.json`,
   `suite.json`, `baseline-relevant-rows.json`) are **derived output**. They are
-  gitignored (see `.gitignore`) and should **not** be read wholesale; they are
-  preserved on disk and in git history only for on-demand deep inspection.
+  **not in the working tree** (gitignored and removed). Do not read them wholesale.
+  If you need one, restore it from git history:
+  `git log --all -- <path>` to find a commit, then
+  `git show <commit>:<path>` (e.g.
+  `git show 45b8761:artifacts/tier1-baseline/probe.json`).
 - Do not write new benchmark output here by default; keep generated results out
   of version control and summarize them in a small `*-summary.json` instead.

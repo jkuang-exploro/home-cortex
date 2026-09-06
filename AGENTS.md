@@ -31,8 +31,10 @@ reasoning*, not a catalog of expected questions.
 - `artifacts/` — **generated benchmark result JSONs** plus prose reports. Read only
   the `*-summary.json` files and `REPORT.md` / `REPORT-qwen35-9b.md`. The large
   per-case JSONs (`probe-iteration*.json`, `probe.json`, `suite.json`,
-  `baseline-relevant-rows.json`) are derived output, gitignored, and should **not**
-  be read in full; they are kept on disk / in history only for on-demand inspection.
+  `baseline-relevant-rows.json`) are derived output, **not in the working tree**
+  (gitignored and removed), and should **not** be read in full. If you need one,
+  restore it from git history: `git log --all -- <path>` to find a commit, then
+  `git show <commit>:<path>` (e.g. `git show 45b8761:artifacts/tier1-baseline/probe.json`).
 - `benchmarks/` — **benchmark dataset inputs** (YAML + fixtures). Data consumed at
   fixed paths by the benchmark harness and tests; keep those paths stable. Never
   copy benchmark wording into the interpreter examples.

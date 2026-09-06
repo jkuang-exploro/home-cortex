@@ -11,7 +11,8 @@ artifacts/qwen35-semantic-contract/*.tar
 
 # Generated benchmark results: keep only the readable *-summary.json files and
 # prose reports. The large per-case JSONs are derived output, not source, and are
-# preserved on disk (and in git history) but not tracked going forward.
+# removed from the working tree. If needed, restore them from git history with
+# `git show <commit>:<path>` (added in 45b8761).
 artifacts/**/probe-*.json
 artifacts/**/suite-*.json
 artifacts/tier1-baseline/probe.json
