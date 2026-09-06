@@ -75,7 +75,7 @@ TEMPORAL_OPERATIONS = frozenset(
     {"date_difference", "completed_years", "duration", "annual_occurrence"}
 )
 
-BenchmarkMode = Literal["tier0_enabled", "tier0_disabled"]
+BenchmarkMode = Literal["semantic"]
 
 
 @dataclass(frozen=True)
@@ -96,7 +96,7 @@ SPEAKER_CASES = (
 async def benchmark_runtime(
     caller_entity_id: str,
     repeat: int,
-    mode: BenchmarkMode = "tier0_enabled",
+    mode: BenchmarkMode = "semantic",
     questions: Sequence[str] = QUESTIONS,
 ) -> dict[str, Any]:
     settings = get_settings()
@@ -119,7 +119,6 @@ async def benchmark_runtime(
         service = SemanticFactService(
             HouseholdFactEngine(dispatcher, schema, max_records=settings.retrieval_limit),
             planner=SemanticFactPlanner(llm, schema),
-            tier_zero_enabled=mode == "tier0_enabled",
         )
         localized = steward.settings.get("localized_identity", {})
         context = AgentRequestContext(
@@ -150,7 +149,7 @@ async def benchmark_json(
     repeat: int,
     data_dir: Path,
     schema_dir: Path,
-    mode: BenchmarkMode = "tier0_enabled",
+    mode: BenchmarkMode = "semantic",
     questions: Sequence[str] = QUESTIONS,
 ) -> dict[str, Any]:
     steward = get_agent("steward")
@@ -163,7 +162,6 @@ async def benchmark_json(
     service = SemanticFactService(
         HouseholdFactEngine(dispatcher, schema),
         planner=SemanticFactPlanner(llm, schema),
-        tier_zero_enabled=mode == "tier0_enabled",
     )
     localized = steward.settings.get("localized_identity", {})
     context = AgentRequestContext(
@@ -496,12 +494,9 @@ def main() -> None:
     parser.add_argument("--repeat", type=int, default=5)
     parser.add_argument(
         "--mode",
-        choices=("tier0_enabled", "tier0_disabled"),
-        default=os.environ.get("MODE", "tier0_enabled"),
-        help=(
-            "Enable the deterministic fast parser or force every query through "
-            "the configured semantic planner. May also be set with MODE."
-        ),
+        choices=("semantic",),
+        default=os.environ.get("MODE", "semantic"),
+        help="Use the semantic planner. May also be set with MODE.",
     )
     parser.add_argument(
         "--backend",

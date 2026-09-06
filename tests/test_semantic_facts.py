@@ -28,7 +28,6 @@ from home_cortex.semantic_facts import (
     SemanticReference,
     SemanticRelationStep,
     SemanticSchemaRegistry,
-    TierZeroSemanticParser,
 )
 from home_cortex.tools import ToolDispatcher, get_tool_definitions
 
@@ -269,8 +268,6 @@ def _service(
     *,
     data_dir: Path = DATA_DIR,
     schema: SemanticSchemaRegistry | None = None,
-    tier_zero_enabled: bool = True,
-    parser: Any = None,
     error: Exception | None = None,
 ) -> SemanticFactService:
     schema = schema or _schema(data_dir)
@@ -285,8 +282,6 @@ def _service(
             ),
             schema,
         ),
-        parser=parser,
-        tier_zero_enabled=tier_zero_enabled,
     )
 
 
@@ -364,7 +359,7 @@ async def _execute(
 async def test_graph_dispatcher_failure_is_computation_impossible(
     failing: _FailingDispatcher,
 ) -> None:
-    service = _service(failing, data_dir=STATIC_TEST_DATA)
+    service = _service(failing, _resolve(_self()), data_dir=STATIC_TEST_DATA)
     answer = await _ask(service, _static_context(), "我是谁")
 
     assert answer.result.status == "computation_impossible"
@@ -384,7 +379,7 @@ async def test_graph_dispatcher_failure_is_computation_impossible(
 async def test_graph_dispatcher_failure_does_not_fall_through_to_chat(
     failing: _FailingDispatcher,
 ) -> None:
-    ollama = _ChatOllama({"requires_fact": False, "request": None})
+    ollama = _ChatOllama(_resolve(_self()))
     result = await _agent(ollama, failing).answer(
         "我是谁",
         user_entity={"id": "person:alex_example", "name": ["Alex Example"]},
@@ -432,7 +427,7 @@ async def test_malformed_planner_output_is_unsupported_and_skips_graph_and_chat(
 
     ollama = _ChatOllama("not-a-plan")
     failing_unused = _FailingDispatcher()
-    result = await _agent(ollama, failing_unused, disable_tier0=True).answer(
+    result = await _agent(ollama, failing_unused).answer(
         "今天天气怎么样",
         user_entity={"id": "person:alex_example", "name": ["Alex Example"]},
     )
@@ -446,7 +441,7 @@ async def test_malformed_planner_output_is_unsupported_and_skips_graph_and_chat(
 
 
 @pytest.mark.asyncio
-async def test_planner_classifies_invalid_plan_without_retry_or_graph(
+async def test_planner_retries_invalid_plan_without_querying_graph(
     dispatcher: _JsonGraphDispatcher,
 ) -> None:
     request = SemanticFactRequest(
@@ -464,8 +459,8 @@ async def test_planner_classifies_invalid_plan_without_retry_or_graph(
         )
 
     assert captured.value.diagnostics.validation_result == "INVALID_PLAN"
-    assert captured.value.diagnostics.attempt_count == 1
-    assert interpreter.calls == 1
+    assert captured.value.diagnostics.attempt_count == 2
+    assert interpreter.calls == 2
     assert dispatcher.calls == []
 
     service = _service(dispatcher, request)
@@ -514,13 +509,11 @@ async def test_not_a_fact_is_the_conversation_fallback(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("tier_zero_enabled", (True, False))
 @pytest.mark.parametrize(
     "speaker_id",
     ("person:alex_example", "person:blair_example"),
 )
 async def test_speaker_relative_self_uses_canonical_ids(
-    tier_zero_enabled: bool,
     speaker_id: str,
 ) -> None:
     dispatcher = _JsonGraphDispatcher(
@@ -530,14 +523,12 @@ async def test_speaker_relative_self_uses_canonical_ids(
         dispatcher,
         _resolve(_self()),
         data_dir=STATIC_TEST_DATA,
-        tier_zero_enabled=tier_zero_enabled,
     )
 
     answer = await _ask(service, _static_context(speaker_id), "我是谁")
 
     assert answer.result.status == "found"
     assert answer.result.evidence.entity_ids == (speaker_id,)
-    assert answer.timings.tier == (0 if tier_zero_enabled else 1)
 
 
 @pytest.mark.asyncio
@@ -630,7 +621,7 @@ async def test_planner_transport_failure_is_unsupported_without_graph_or_chat(
 
     ollama = _ChatOllama(None, error=RuntimeError("boom"))
     unused = _FailingDispatcher()
-    result = await _agent(ollama, unused, disable_tier0=True).answer(
+    result = await _agent(ollama, unused).answer(
         "今天天气怎么样",
         user_entity={"id": "person:alex_example", "name": ["Alex Example"]},
     )
@@ -1118,13 +1109,14 @@ async def test_assistant_identity_never_queries_household_graph(
     context: AgentRequestContext,
     dispatcher: _JsonGraphDispatcher,
 ) -> None:
+    service = _service(dispatcher, _resolve(SemanticReference(kind="assistant")))
     answer = await _ask(service, context, "你是谁")
 
     assert answer.result.status == "found"
     assert answer.result.evidence.entity_ids == ("steward",)
     assert dispatcher.calls == []
     assert answer.timings.db_query_count == 0
-    assert answer.timings.tier == 0
+    assert answer.timings.tier == 1
 
 
 @pytest.mark.asyncio
@@ -1180,7 +1172,7 @@ def test_capabilities_are_semantic_and_allowlisted(
     assert "parent_of" not in json.dumps(capabilities)
     assert schema.physical_property("person", "dob") is None
     assert schema.physical_relation("parent_of") is None
-    assert "filter" in capabilities["operations"]
+    assert "filter" not in capabilities["operations"]
     assert capabilities["collection_predicates"] == ["adult", "minor"]
     assert capabilities["property_sources"] == ["entity", "relationship"]
     assert capabilities["semantic_relation_properties"]["spouse"] == [
@@ -1191,10 +1183,10 @@ def test_capabilities_are_semantic_and_allowlisted(
     compact = schema.planner_capability_payload()
     compact_json = json.dumps(compact)
     assert "operation_semantics" not in compact
-    assert "operation_requirements" not in compact
+    assert "operation_requirements" in compact
     assert "dob" not in compact_json
-    assert "father_in_law" in compact["concepts"]
-    assert compact["predicates"] == ["adult", "minor"]
+    assert "father_in_law" in compact["reference_concepts"]
+    assert sorted(compact["collection_predicates"]) == ["adult", "minor"]
     invalid = SemanticFactRequest(
         operation="count",
         subject=_members(),
@@ -1375,7 +1367,6 @@ async def test_argmin_and_argmax_share_the_household_extrema_path(
     assert oldest_result.status == youngest_result.status == "found"
     assert oldest_result.value["id"] == "person:zhigang_ba"
     assert youngest_result.value["id"] == "person:evelyn_kuang"
-    assert TierZeroSemanticParser().parse("谁最年幼") is None
 
 
 @pytest.mark.asyncio
@@ -1570,7 +1561,7 @@ async def test_planner_retries_once_for_structural_failure(
     assert outcome.diagnostics.attempt_count == 2
     assert interpreter.calls == 2
     assert interpreter.messages[0] == [{"role": "user", "content": "我是谁"}]
-    assert "strict structural validation" in interpreter.messages[1][-1]["content"]
+    assert "strict structural or semantic validation" in interpreter.messages[1][-1]["content"]
 
 
 @pytest.mark.asyncio
@@ -1595,7 +1586,7 @@ async def test_planner_classifies_unsupported_operation_after_one_retry(
 
 
 @pytest.mark.asyncio
-async def test_semantic_validation_failure_is_classified_without_retry(
+async def test_semantic_validation_failure_is_classified_after_retry(
     dispatcher: _JsonGraphDispatcher,
     context: AgentRequestContext,
 ) -> None:
@@ -1609,14 +1600,13 @@ async def test_semantic_validation_failure_is_classified_without_retry(
                 "property": "raw_private_field",
             },
         },
-        tier_zero_enabled=False,
     )
     answer = await _ask(service, context, "读取一个不存在的字段")
 
     assert answer.result.status == "semantic_plan_unsupported"
     assert answer.planner_diagnostics is not None
     assert answer.planner_diagnostics.validation_result == "UNKNOWN_PROPERTY"
-    assert answer.planner_diagnostics.attempt_count == 1
+    assert answer.planner_diagnostics.attempt_count == 2
     assert dispatcher.calls == []
 
 
@@ -1627,7 +1617,7 @@ def test_semantic_validation_classifies_unknown_relation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_planner_schema_excludes_entity_ids_and_normalizes_status_filter_shape(
+async def test_planner_rejects_wrong_scope_and_predicate_shape_without_repair(
     context: AgentRequestContext,
 ) -> None:
     schema = _schema(DATA_DIR)
@@ -1649,19 +1639,14 @@ async def test_planner_schema_excludes_entity_ids_and_normalizes_status_filter_s
             },
         }
     )
-    outcome = await SemanticFactPlanner(interpreter, schema).plan([], context)
-    plan = outcome.plan
-
+    with pytest.raises(SemanticPlannerFailure):
+        await SemanticFactPlanner(interpreter, schema).plan([], context)
     assert interpreter.output_schema is not None
     kinds = interpreter.output_schema["$defs"]["SemanticReference"]["properties"][
         "kind"
     ]["enum"]
     assert "entity_id" not in kinds
-    assert plan.request is not None
-    assert plan.request.subject.entity_type == "address"
-    assert plan.request.subject.path[-1].relation == "member"
-    assert plan.request.filters == (SemanticFilter(predicate="adult"),)
-    assert schema.validates(plan.request) is True
+    assert interpreter.calls == 2
 
 
 @pytest.mark.asyncio
@@ -1744,12 +1729,12 @@ async def test_tier_one_rejects_unadvertised_semantic_property(
     answer = await _ask(service, context, "我有什么秘密家庭属性")
 
     assert answer.result.status == "semantic_plan_unsupported"
-    assert answer.timings.llm_call_count == 1
+    assert answer.timings.llm_call_count == 2
     assert dispatcher.calls == []
 
 
 @pytest.mark.asyncio
-async def test_tier_zero_disabled_bypasses_parser_for_core_plans(
+async def test_all_core_plans_require_interpretation(
     dispatcher: _JsonGraphDispatcher,
     context: AgentRequestContext,
 ) -> None:
@@ -1762,15 +1747,9 @@ async def test_tier_zero_disabled_bypasses_parser_for_core_plans(
         "家里有几个人": SemanticFactRequest(operation="count", subject=_members()),
     }
 
-    class DisabledParser:
-        def parse(self, _text: str) -> None:
-            raise AssertionError("Tier 0 must be bypassed")
-
     service = _service(
         dispatcher,
         lambda _calls, messages: plans[messages[-1]["content"]],
-        parser=DisabledParser(),
-        tier_zero_enabled=False,
     )
     answers = {
         question: await _ask(service, context, question) for question in plans
@@ -1804,7 +1783,6 @@ async def test_tier_one_open_world_paraphrases_use_resolver_not_entity_ids(
     service = _service(
         dispatcher,
         lambda _calls, messages: _resolve(outputs[messages[-1]["content"]]),
-        tier_zero_enabled=False,
     )
     answers = [await _ask(service, context, question) for question in outputs]
 
@@ -1842,7 +1820,7 @@ async def test_semantic_planner_rejects_model_originated_entity_id(
         )
 
     assert captured.value.diagnostics.validation_result == "MODEL_ORIGINATED_ENTITY_ID"
-    assert captured.value.diagnostics.attempt_count == 1
+    assert captured.value.diagnostics.attempt_count == 2
 
 
 # --- Optional high-value cases ---------------------------------------------------

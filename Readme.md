@@ -62,8 +62,8 @@ Target: deliver high-level intents in **<3–4 seconds** on modest always-on har
 
 ### Household fact benchmark
 
-Run the Tier-0-first semantic fact suite (with Tier-1 fallback for open-world
-queries) directly against the source JSON:
+Run the semantic fact suite against the source JSON. All questions pass
+through the interpreter:
 
 ```bash
 python -m home_cortex.fact_benchmark --backend json --repeat 20
@@ -74,8 +74,8 @@ To include the configured SurrealDB runtime latency, use
 LLM-call count, graph/DB-query count, and aggregate P50/P95 latency.
 
 Use the planner-only benchmark to measure language-to-IR accuracy independently
-of Tier 0. Its 100+ paraphrase dataset reports raw and normalized plans,
-validation/executor outcomes, P50/P95 planner latency, Tier-0 parity, and accuracy
+of conversational rendering. Its 100+ paraphrase dataset reports raw and normalized plans,
+validation/executor outcomes, P50/P95 planner latency and accuracy
 by semantic capability:
 
 ```bash

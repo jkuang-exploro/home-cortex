@@ -14,6 +14,9 @@ properties:
     fields: [form_of_address, address_as]
     aliases: [称呼, form of address]
   birth_date:
+    ordering:
+      minimum: [年长, 年纪大, 年龄最大, 出生最早, older, oldest, earliest born]
+      maximum: [年幼, 年纪小, 年龄最小, 出生最晚, younger, youngest, latest born]
     fields: [birth_date, birthday, dob, date_of_birth]
     aliases: [生日, 出生日期, 出生时间, 哪天出生, birthday, birth date, date of birth, born]
   full_address:
@@ -74,6 +77,14 @@ base_relations:
     edge: lives_in
 
 reference_concepts:
+  member:
+    aliases: [家庭成员, household member, resident]
+    path:
+      - relation: member
+  residence:
+    aliases: [居住地, 住址, residence, home address]
+    path:
+      - relation: residence
   spouse:
     aliases: [配偶, 爱人, spouse, partner]
     path:
@@ -95,13 +106,13 @@ reference_concepts:
     path:
       - relation: child
   son:
-    aliases: [儿子, son]
+    aliases: [儿子, 公子, 男性子女, 男孩后代, son, male child]
     path:
       - relation: child
         filters:
           - {property: gender, value: male}
   daughter:
-    aliases: [女儿, daughter]
+    aliases: [女儿, 千金, 女性子女, daughter]
     path:
       - relation: child
         filters:
@@ -111,7 +122,7 @@ reference_concepts:
     path:
       - relation: parent
   father:
-    aliases: [爸爸, 父亲, father]
+    aliases: [爸爸, 父亲, 男性家长, father]
     path:
       - relation: parent
         filters:

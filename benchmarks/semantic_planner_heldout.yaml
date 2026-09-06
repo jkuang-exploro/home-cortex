@@ -1,0 +1,206 @@
+version: 1
+plans:
+  wife_father:
+    operation: resolve_reference
+    subject: &id001
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+  marriage_duration:
+    operation: duration
+    subject: &id002
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+    property: start_date
+    property_source: relationship
+    mode: days
+  wife_father_given_name:
+    operation: select
+    subject: *id001
+    property: given_name
+  marriage_start:
+    operation: select
+    subject: *id002
+    property: start_date
+    property_source: relationship
+  father_in_law:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+  son_birth_date:
+    operation: select
+    subject: &id005
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+        filters:
+        - property: gender
+          value: male
+    property: birth_date
+  pairwise_older_wife:
+    operation: argmin
+    subject: &id004
+      kind: self
+      entity_type: person
+    other: &id003
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+  wife_birth_date:
+    operation: select
+    subject: *id003
+    property: birth_date
+  pairwise_younger_wife:
+    operation: argmax
+    subject: *id004
+    other: *id003
+    property: birth_date
+  son_birthday_countdown:
+    operation: annual_occurrence
+    subject: *id005
+    property: birth_date
+    mode: days
+  adult_count:
+    operation: count
+    subject: &id006
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    filters:
+    - predicate: adult
+  minor_count:
+    operation: count
+    subject: *id006
+    filters:
+    - predicate: minor
+  pairwise_older_spouse:
+    operation: argmin
+    subject:
+      kind: self
+      entity_type: person
+    other: *id002
+    property: birth_date
+probe:
+  frozen_time: '2026-09-03T12:00:00-07:00'
+  default_speaker_id: person:jian_kuang
+  household_id: address:fort_cerritos
+  cases:
+  - id: heldout_0
+    utterance: 这段配偶关系的起始日能查到吗？
+    plan: marriage_start
+    expected_status: found
+    expected_entity_ids:
+    - person:pu_ba
+    expected_value: '2014-05-04'
+  - id: heldout_1
+    utterance: 从结为夫妻那天算起，迄今过了多少天？
+    plan: marriage_duration
+    expected_status: found
+    expected_entity_ids:
+    - person:pu_ba
+    expected_value: 4505
+    notes: Days from spouse_of.start 2014-05-04 to frozen 2026-09-03.
+  - id: heldout_2
+    utterance: 想查一下儿子的出生年月日。
+    plan: son_birth_date
+    expected_status: found
+    expected_entity_ids:
+    - person:dylan_kuang
+    expected_value: '2016-10-30'
+  - id: heldout_3
+    utterance: 请查妻子的出生年月日。
+    plan: wife_birth_date
+    expected_status: found
+    expected_entity_ids:
+    - person:pu_ba
+    expected_value: '1988-02-26'
+  - id: heldout_4
+    utterance: 妻子那边的父亲叫什么名字呢？
+    plan: wife_father_given_name
+    acceptable_plans:
+    - wife_father
+    expected_status: found
+    expected_entity_ids:
+    - person:zhigang_ba
+    expected_value: Zhigang
+    expected_names:
+    - Zhigang
+    - Zhigang Ba
+    - 巴志刚
+    notes: given_name -> first_name on person:zhigang_ba. resolve_reference is an
+      accepted alternative.
+  - id: heldout_5
+    utterance: 爱人的父亲是哪一个人呢？
+    plan: father_in_law
+    expected_status: found
+    expected_entity_ids:
+    - person:zhigang_ba
+  - id: heldout_6
+    utterance: 儿子下一回生日距今剩下几天呢？
+    plan: son_birthday_countdown
+    expected_status: found
+    expected_entity_ids:
+    - person:dylan_kuang
+    expected_value: 57
+    notes: Days from 2026-09-03 to 2026-10-30. This is annual_occurrence mode=days,
+      not date_difference from 2016-10-30.
+  - id: heldout_7
+    utterance: 本户年满18周岁的成员总共多少？
+    plan: adult_count
+    expected_status: found
+    expected_value: 3
+  - id: heldout_8
+    utterance: 请数数家中尚未达到十八周岁的成员。
+    plan: minor_count
+    expected_status: found
+    expected_value: 2
+  - id: heldout_9
+    utterance: 妻子和我相较，出生更早的是哪一位？
+    plan: pairwise_older_wife
+    acceptable_plans:
+    - pairwise_older_spouse
+    expected_status: found
+    expected_entity_ids:
+    - person:pu_ba
+    expected_equal: false
+    notes: Older = argmin(birth_date). Pu 1988-02-26 vs Jian 1988-11-11.
+  - id: heldout_other_speaker
+    utterance: 能查到我这段婚姻始于哪一天吗？
+    plan: marriage_start
+    expected_status: found
+    expected_entity_ids:
+    - person:jian_kuang
+    expected_value: '2014-05-04'
+    speaker_id: person:pu_ba
+  - id: heldout_younger
+    utterance: 我和妻子两人，谁出生得更晚一些？
+    plan: pairwise_younger_wife
+    expected_status: found
+    expected_entity_ids:
+    - person:jian_kuang
+    expected_equal: false
+    notes: Older = argmin(birth_date). Pu 1988-02-26 vs Jian 1988-11-11.

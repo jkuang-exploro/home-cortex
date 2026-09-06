@@ -40,6 +40,7 @@ class OntologyProperty:
     name: str
     fields: tuple[str, ...]
     aliases: tuple[str, ...]
+    ordering: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -180,7 +181,11 @@ class SemanticOntology:
         """Compact declarative vocabulary for a small-context local planner."""
         return {
             "properties": {
-                name: list(definition.aliases)
+                name: (
+                    {"aliases": list(definition.aliases),
+                     "ordering": {key: list(values) for key, values in definition.ordering}}
+                    if definition.ordering else list(definition.aliases)
+                )
                 for name, definition in self.properties.items()
             },
             "base_relations": sorted(self.base_relations),
@@ -237,6 +242,12 @@ class SemanticOntology:
                 name: {
                     "aliases": list(definition.aliases),
                     "scope_relation": definition.default_scope_relation,
+                    "definition_only": {
+                        "property": definition.fallback.property,
+                        "transform": definition.fallback.transform,
+                        "operator": definition.fallback.operator,
+                        "value": self.policy_values[definition.fallback.value_from_policy],
+                    },
                 }
                 for name, definition in self.collection_predicates.items()
             },
@@ -347,13 +358,17 @@ def _parse_properties(raw: Any, path: Path) -> dict[str, OntologyProperty]:
     result: dict[str, OntologyProperty] = {}
     for name, definition in values.items():
         item = _mapping(definition, f"properties.{name}", path)
-        extra = sorted(set(item) - {"fields", "aliases"})
+        extra = sorted(set(item) - {"fields", "aliases", "ordering"})
         if extra:
             raise ValueError(f"Unknown properties.{name} fields: {', '.join(extra)}")
+        ordering = _mapping(item.get("ordering", {}), f"properties.{name}.ordering", path)
+        if set(ordering) - {"minimum", "maximum"}:
+            raise ValueError(f"Invalid properties.{name}.ordering directions")
         result[name] = OntologyProperty(
             name,
             _strings(item.get("fields"), f"properties.{name}.fields", path),
             _strings(item.get("aliases", []), f"properties.{name}.aliases", path),
+            tuple((key, _strings(values, f"properties.{name}.ordering.{key}", path)) for key, values in ordering.items()),
         )
     return result
 

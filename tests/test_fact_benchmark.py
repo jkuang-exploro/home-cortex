@@ -34,7 +34,9 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
             "entity_type": "address",
             "path": [{"relation": "member"}],
         }
-        if text == "谁最年长":
+        if text == "家里有几个人":
+            request = {"operation": "count", "subject": members}
+        elif text == "谁最年长":
             request = {
                 "operation": "argmin",
                 "subject": members,
@@ -89,14 +91,14 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
             1,
             ROOT / "data",
             ROOT / "schemas" / "edge",
-            "tier0_enabled",
+            "semantic",
             questions,
         )
     finally:
         OllamaService.plan_semantic_fact = original  # type: ignore[method-assign]
 
-    assert result["mode"] == "tier0_enabled"
-    assert result["aggregate"]["llm_call_count"] == 5
+    assert result["mode"] == "semantic"
+    assert result["aggregate"]["llm_call_count"] == 6
     assert result["diagnostic_comparisons"]["age_extrema"]["谁最年长"][
         "operation"
     ] == "argmin"
@@ -119,8 +121,8 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
 
 
 @pytest.mark.asyncio
-async def test_disabled_mode_benchmark_does_not_require_tier_zero() -> None:
-    class TierOneOnlyService:
+async def test_semantic_mode_benchmark_uses_interpreter_service() -> None:
+    class SemanticOnlyService:
         async def try_answer(self, *_: Any, **__: Any) -> FactAnswer:
             request = SemanticFactRequest(
                 operation="resolve_reference",
@@ -138,7 +140,7 @@ async def test_disabled_mode_benchmark_does_not_require_tier_zero() -> None:
             )
 
     result = await _run_suite(
-        TierOneOnlyService(),  # type: ignore[arg-type]
+        SemanticOnlyService(),  # type: ignore[arg-type]
         AgentRequestContext(
             caller_entity_id="person:jian_kuang",
             assistant_id="steward",
@@ -149,9 +151,9 @@ async def test_disabled_mode_benchmark_does_not_require_tier_zero() -> None:
         ),
         1,
         backend="fake",
-        mode="tier0_disabled",
+        mode="semantic",
     )
 
-    assert result["mode"] == "tier0_disabled"
+    assert result["mode"] == "semantic"
     assert result["aggregate"]["llm_call_count"] == len(result["queries"])
     assert all(row["tier"] == 1 for row in result["queries"])

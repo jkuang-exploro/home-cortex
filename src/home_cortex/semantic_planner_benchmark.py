@@ -1,4 +1,4 @@
-"""Planner-only semantic-IR quality benchmark and Tier-0 parity report."""
+"""Planner-only semantic-IR quality benchmark."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 import yaml
@@ -26,7 +26,7 @@ from .agents import get_agent
 from .config import get_settings
 from .edge_schema import EdgeSchemaRegistry
 from .fact_benchmark import _JsonGraphDispatcher, _percentile
-from .ollama import PLANNER_KEEP_ALIVE, PLANNER_NUM_PREDICT, OllamaService
+from .ollama import PLANNER_KEEP_ALIVE, PLANNER_NUM_PREDICT, PLANNER_SEED, OllamaService
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_facts import (
     AgentRequestContext,
@@ -38,12 +38,11 @@ from .semantic_facts import (
     SemanticFactService,
     SemanticPlannerFailure,
     SemanticSchemaRegistry,
-    TierZeroSemanticParser,
     planner_input_summary,
 )
 
 FROZEN_EVAL_TIME = "2026-09-03T12:00:00-07:00"
-SCORING_REVISION = "2026-09-06.1-daughter-names-answer-mismatch"
+SCORING_REVISION = "2026-09-06.3-wife-filtered-marriage-edge"
 
 def _default_eval_path() -> Path:
     candidates = (
@@ -712,8 +711,9 @@ def collect_provenance(
             "think": False,
             "temperature": 0,
             "num_predict": PLANNER_NUM_PREDICT,
+            "seed": PLANNER_SEED,
             "keep_alive": PLANNER_KEEP_ALIVE,
-            "tier_zero_enabled": False,
+            "natural_language_path": "semantic_interpreter",
         },
         "backend": backend,
         "frozen_evaluation_time": frozen_time.isoformat(),
@@ -935,14 +935,11 @@ async def run_semantic_planner_benchmark(
     context: AgentRequestContext,
     cases: Sequence[SemanticEvalCase],
 ) -> dict[str, Any]:
-    parser = TierZeroSemanticParser()
     rows: list[dict[str, Any]] = []
     planner_latencies: list[float] = []
     category_totals: Counter[str] = Counter()
     category_correct: Counter[str] = Counter()
     failure_reasons: Counter[str] = Counter()
-    tier0_comparisons = 0
-    tier0_equivalent = 0
     capability_summary = planner_input_summary(
         service.engine.schema.capability_payload()
     )
@@ -958,15 +955,6 @@ async def run_semantic_planner_benchmark(
         if row["planner_latency_ms"] is not None:
             planner_latencies.append(float(row["planner_latency_ms"]))
 
-        tier0 = parser.parse(case.utterance)
-        tier0_plan = normalize_semantic_request(tier0) if tier0 is not None else None
-        tier0_matches_planner: bool | None = None
-        if tier0 is not None:
-            tier0_comparisons += 1
-            tier0_matches_planner = tier0_plan == row["normalized_semantic_plan"]
-            tier0_equivalent += int(bool(tier0_matches_planner))
-        row["tier0_plan"] = tier0_plan
-        row["tier0_matches_planner"] = tier0_matches_planner
         if not row.get("planner_input_capabilities"):
             row["planner_input_capabilities"] = capability_summary
         rows.append(row)
@@ -990,15 +978,6 @@ async def run_semantic_planner_benchmark(
         },
         "failure_reasons": dict(sorted(failure_reasons.items())),
         "planner_latency_ms": summarize_latencies(planner_latencies),
-        "tier0_parity": {
-            "compared": tier0_comparisons,
-            "equivalent": tier0_equivalent,
-            "accuracy": (
-                round(tier0_equivalent / tier0_comparisons, 4)
-                if tier0_comparisons
-                else None
-            ),
-        },
     }
 
 
@@ -1010,6 +989,7 @@ async def run_tier1_probe(
     warmup: int = 1,
     repeat: int = 5,
     verified_cold: bool = False,
+    on_result: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     if warmup < 0 or repeat < 1:
         raise ValueError("warmup must be >= 0 and repeat must be >= 1")
@@ -1036,6 +1016,8 @@ async def run_tier1_probe(
             sample_index=-1,
         )
         rows.append(row)
+        if on_result is not None:
+            on_result(row)
         request_index += 1
     for sample_index in range(repeat):
         for case in cases:
@@ -1047,6 +1029,8 @@ async def run_tier1_probe(
                 sample_index=sample_index,
             )
             rows.append(row)
+            if on_result is not None:
+                on_result(row)
             request_index += 1
     measured = [row for row in rows if row["phase"] == "measured"]
     first_pass = [row for row in measured if row["sample_index"] == 0]
@@ -1135,7 +1119,6 @@ def build_json_fact_service(
     service = SemanticFactService(
         HouseholdFactEngine(_JsonGraphDispatcher(data_dir, registry), schema),
         planner=SemanticFactPlanner(ollama, schema),
-        tier_zero_enabled=False,
     )
     steward = get_agent("steward")
     localized = steward.settings.get("localized_identity", {})

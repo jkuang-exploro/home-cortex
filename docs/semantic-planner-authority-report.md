@@ -1,3 +1,5 @@
+> Historical report: the six Tier-0 shortcuts described below have since been removed. All natural-language requests now use semantic interpretation; see [current architecture](../src/README.md).
+
 # Semantic planner authority report
 
 Date: 2026-09-04

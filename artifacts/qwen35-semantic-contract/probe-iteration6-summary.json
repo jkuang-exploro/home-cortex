@@ -1,0 +1,460 @@
+{
+  "mode": "tier1_probe",
+  "dataset_size": 20,
+  "warmup": 1,
+  "repeat": 1,
+  "verified_cold": false,
+  "scores": {
+    "plan_accuracy": {
+      "correct": 17,
+      "scored": 20,
+      "unscored": 0,
+      "rate": 0.85
+    },
+    "answer_correctness": {
+      "correct": 18,
+      "scored": 20,
+      "unscored": 0,
+      "rate": 0.9
+    },
+    "executor_status": {
+      "ambiguous": 2,
+      "found": 18
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "scores_all_measured_samples": {
+    "plan_accuracy": {
+      "correct": 17,
+      "scored": 20,
+      "unscored": 0,
+      "rate": 0.85
+    },
+    "answer_correctness": {
+      "correct": 18,
+      "scored": 20,
+      "unscored": 0,
+      "rate": 0.9
+    },
+    "executor_status": {
+      "ambiguous": 2,
+      "found": 18
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "planner_latency_ms": {
+    "n": 20,
+    "p50": 2071.246,
+    "p95": 2232.689
+  },
+  "end_to_end_latency_ms": {
+    "n": 20,
+    "p50": 2071.447,
+    "p95": 2232.821
+  },
+  "accuracy_by_capability": {
+    "aggregation": {
+      "correct": 3,
+      "total": 4,
+      "accuracy": 0.75
+    },
+    "entity_reference": {
+      "correct": 1,
+      "total": 1,
+      "accuracy": 1.0
+    },
+    "filtering": {
+      "correct": 3,
+      "total": 3,
+      "accuracy": 1.0
+    },
+    "multi_hop_kinship": {
+      "correct": 3,
+      "total": 3,
+      "accuracy": 1.0
+    },
+    "property_selection": {
+      "correct": 3,
+      "total": 4,
+      "accuracy": 0.75
+    },
+    "relationship_property_lookup": {
+      "correct": 1,
+      "total": 1,
+      "accuracy": 1.0
+    },
+    "relationship_traversal": {
+      "correct": 1,
+      "total": 1,
+      "accuracy": 1.0
+    },
+    "temporal_operation": {
+      "correct": 2,
+      "total": 3,
+      "accuracy": 0.6667
+    }
+  },
+  "failure_table": [
+    {
+      "case_id": "son_birth_date",
+      "utterance": "我儿子哪天出生",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "ambiguous",
+      "expected_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "child",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "male",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "child",
+              "filters": []
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "self",
+            "value": null,
+            "entity_type": "person",
+            "path": [
+              {
+                "concept": "child"
+              }
+            ]
+          },
+          "property": "birth_date",
+          "property_source": "entity"
+        }
+      },
+      "executor": {
+        "status": "ambiguous",
+        "value": null,
+        "entity_ids": [],
+        "primary_entity_ids": [],
+        "relationship": null,
+        "semantic_property": null,
+        "missing_requirements": [],
+        "candidates": [
+          {
+            "id": "person:dylan_kuang",
+            "gender": "male",
+            "name": [
+              "Dylan Kuang",
+              "匡德伦"
+            ]
+          },
+          {
+            "id": "person:evelyn_kuang",
+            "gender": "female",
+            "name": [
+              "Evelyn Kuang",
+              "匡悠然"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "pairwise_older_wife",
+      "utterance": "我和我老婆谁年龄大",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": true,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "argmin",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": []
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": [],
+        "other": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "spouse",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "female",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "normalized_semantic_plan": {
+        "operation": "argmin",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "spouse",
+              "filters": []
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": [],
+        "other": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": []
+        }
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "argmin",
+          "subject": {
+            "kind": "self",
+            "value": null,
+            "entity_type": "person",
+            "path": [
+              {
+                "concept": "spouse"
+              }
+            ]
+          },
+          "property": "birth_date",
+          "property_source": "entity",
+          "other": {
+            "kind": "self",
+            "value": null,
+            "entity_type": "person",
+            "path": []
+          }
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": {
+          "selected": {
+            "id": "person:pu_ba",
+            "first_name": "Pu",
+            "last_name": "Ba",
+            "gender": "female",
+            "name": [
+              "Pu Ba",
+              "巴璞"
+            ],
+            "address_as": {
+              "en": "Mrs. Ba",
+              "zh": "太太"
+            },
+            "dob": "1988-02-26"
+          },
+          "other": {
+            "id": "person:jian_kuang",
+            "first_name": "Jian",
+            "last_name": "Kuang",
+            "gender": "male",
+            "name": [
+              "Jian Kuang",
+              "匡健"
+            ],
+            "address_as": {
+              "en": "Mr. Kuang",
+              "zh": "先生"
+            },
+            "dob": "1988-11-11"
+          },
+          "equal": false
+        },
+        "entity_ids": [
+          "person:pu_ba",
+          "person:jian_kuang"
+        ],
+        "primary_entity_ids": [
+          "person:pu_ba"
+        ],
+        "relationship": "spouse",
+        "semantic_property": "birth_date",
+        "missing_requirements": [],
+        "candidates": []
+      }
+    },
+    {
+      "case_id": "son_birthday_countdown",
+      "utterance": "从今天到我儿子生日相隔几天",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "ambiguous",
+      "expected_semantic_plan": {
+        "operation": "annual_occurrence",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "child",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "male",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": [],
+        "mode": "days"
+      },
+      "normalized_semantic_plan": {
+        "operation": "annual_occurrence",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "child",
+              "filters": []
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": [],
+        "mode": "days"
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "annual_occurrence",
+          "subject": {
+            "kind": "self",
+            "value": null,
+            "entity_type": "person",
+            "path": [
+              {
+                "concept": "child"
+              }
+            ]
+          },
+          "property": "birth_date",
+          "property_source": "entity",
+          "mode": "days"
+        }
+      },
+      "executor": {
+        "status": "ambiguous",
+        "value": null,
+        "entity_ids": [],
+        "primary_entity_ids": [],
+        "relationship": null,
+        "semantic_property": null,
+        "missing_requirements": [],
+        "candidates": [
+          {
+            "id": "person:dylan_kuang",
+            "gender": "male",
+            "name": [
+              "Dylan Kuang",
+              "匡德伦"
+            ]
+          },
+          {
+            "id": "person:evelyn_kuang",
+            "gender": "female",
+            "name": [
+              "Evelyn Kuang",
+              "匡悠然"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/qwen35-semantic-contract/benchmarks/semantic_planner_eval.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "fdfbaa3c386a26602dd6c4d47258ff97ad7c7e7fa99528db74ea4b204ee57f3d",
+    "data_tree_sha256": "b13cf0dfb5102b07dbfbad4d9e8103d0257646cb7a33e797612643081907b36c",
+    "schema_tree_sha256": "4144c93ae28d050851b302e676e1a29fa1095aab4b978eebaa25cd53b4b3a3eb",
+    "imported_package_path": "/tmp/qwen35-semantic-contract/pkg/home_cortex/semantic_planner_benchmark.py",
+    "copied_package_sha256": "81c20eb977e579afff0404b84153e7b33836d62d9daa8197f7c89ecd3a7c7e71",
+    "scoring_revision": "2026-09-06.1-daughter-names-answer-mismatch",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.13",
+    "hardware": {
+      "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_predict": 384,
+      "keep_alive": "24h",
+      "tier_zero_enabled": false
+    },
+    "backend": "json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 1,
+    "verified_cold": false,
+    "planner_contract_sha256": "24674cd13ce1633fc7f0eb8cbb1b13deedeea6ab1d7b7b2df298d3e6d891c089"
+  },
+  "output": "/tmp/qwen35-semantic-contract/probe-iteration6.json"
+}

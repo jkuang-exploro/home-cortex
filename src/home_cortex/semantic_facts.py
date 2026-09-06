@@ -1,4 +1,4 @@
-"""Semantic household fact IR, deterministic execution, and Tier-0 parsing."""
+"""Semantic household fact IR, interpretation, and deterministic execution."""
 
 from __future__ import annotations
 
@@ -172,6 +172,13 @@ class SemanticFilter(_SemanticModel):
         return self
 
 
+class SemanticConceptUse(_SemanticModel):
+    """Explicit ontology path alias in model output; lowered before execution."""
+
+    concept: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    filters: tuple[SemanticFilter, ...] = ()
+
+
 class SemanticRelationStep(_SemanticModel):
     relation: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
     filters: tuple[SemanticFilter, ...] = Field(
@@ -188,6 +195,8 @@ class SemanticReference(_SemanticModel):
 
     @model_validator(mode="after")
     def validate_value(self) -> "SemanticReference":
+        if self.kind in _CONTEXT_ENTITY_TYPES and self.value is not None:
+            raise ValueError("contextual references do not accept a literal value")
         if self.kind in {"named_entity", "entity_id"} and not self.value:
             raise ValueError(f"{self.kind} requires value")
         if self.kind == "entity_id" and self.value is not None and not re.fullmatch(
@@ -357,6 +366,8 @@ class SemanticSchemaRegistry:
         )
         self._property_cache: dict[tuple[str, str], str | None] = {}
         self._capability_cache: dict[str, Any] | None = None
+        self._planner_capability_cache: dict[str, Any] | None = None
+        self._planner_schema_cache: dict[str, Any] | None = None
 
     def physical_property(self, entity_type: str, semantic: str) -> str | None:
         marker = (entity_type, semantic)
@@ -401,7 +412,7 @@ class SemanticSchemaRegistry:
         if self._capability_cache is not None:
             return self._capability_cache
         fact_operations = set(get_args(FactOperation))
-        plan_operations = fact_operations | {"filter", "traverse"}
+        plan_operations = fact_operations
         semantic_properties = {
             entity_type: sorted(self.semantic_properties(entity_type))
             for entity_type in self.catalog.entities
@@ -427,8 +438,8 @@ class SemanticSchemaRegistry:
             },
             "operations": sorted(plan_operations),
             "operation_requirements": {
-                "argmin": "collection + ordered property; returns entity",
-                "argmax": "collection + ordered property; returns entity",
+                "argmin": "ordered property required; collection subject OR two references subject and other; returns entity",
+                "argmax": "ordered property required; collection subject OR two references subject and other; returns entity",
                 "completed_years": "date property; reference=household_now",
                 "duration": "date property + mode days|seconds",
                 "annual_occurrence": "date property; mode=days only for countdown",
@@ -440,9 +451,9 @@ class SemanticSchemaRegistry:
             "property_sources": ["entity", "relationship"],
             "operation_semantics": {
                 "list": "select with property=null over a collection reference",
-                "get_property": "select with property set and source=entity",
+                "get_property": "select with property set and property_source=entity",
                 "get_relation_property": (
-                    "select with property set and source=relationship"
+                    "select with property set and property_source=relationship"
                 ),
                 "compare": "argmin or argmax with subject and other",
                 "days_until": "annual_occurrence with mode=days",
@@ -451,21 +462,118 @@ class SemanticSchemaRegistry:
         return self._capability_cache
 
     def planner_capability_payload(self) -> dict[str, Any]:
-        """Compact catalog sent to the LLM; omits diagnostic prose."""
-        full = self.capability_payload()
-        ontology = full.get("reference_ontology", {})
-        return {
-            "references": full["references"],
-            "operations": full["operations"],
-            "properties": full["semantic_properties"],
-            "relations": full["semantic_relations"],
-            "relation_properties": full["semantic_relation_properties"],
-            "predicates": full["collection_predicates"],
-            "property_sources": full["property_sources"],
-            "property_aliases": ontology.get("properties", {}),
-            "concepts": ontology.get("reference_concepts", {}),
-            "predicate_aliases": ontology.get("collection_predicates", {}),
-        }
+        """Serialize the executable grammar, without storage or redundant aliases."""
+        if self._planner_capability_cache is None:
+            full = self.capability_payload()
+            ontology = full["reference_ontology"]
+            self._planner_capability_cache = {
+                "references": full["references"],
+                "entity_types": full["entity_types"],
+                "operations": full["operations"],
+                "operation_requirements": full["operation_requirements"],
+                "property_ownership": {
+                    "entity": full["semantic_properties"],
+                    "relationship": full["semantic_relation_properties"],
+                },
+                "relations": full["semantic_relations"],
+                "relation_signatures": {
+                    relation: {
+                        source: sorted(targets)
+                        for source in self.catalog.entities
+                        if (targets := self._traversal_target_types(relation, frozenset({source}))) is not None
+                    }
+                    for relation in full["semantic_relations"]
+                },
+                "property_aliases": ontology["properties"],
+                "reference_concepts": ontology["reference_concepts"],
+                "collection_predicates": ontology["collection_predicates"],
+            }
+        return self._planner_capability_cache
+
+    def planner_output_schema(self) -> dict[str, Any]:
+        """Constrain model output to this deployment's semantic vocabulary.
+
+        Ownership is an explicit choice; predicates and field comparisons have
+        separate productions. Runtime validation still checks types and paths.
+        """
+        if self._planner_schema_cache is None:
+            schema = _planner_output_schema()
+            definitions = schema["$defs"]
+            full = self.capability_payload()
+            properties = sorted({
+                prop
+                for group in (full["semantic_properties"], full["semantic_relation_properties"])
+                for values in group.values()
+                for prop in values
+            })
+            definitions["SemanticRelationStep"]["properties"]["relation"] = {
+                "type": "string", "enum": full["semantic_relations"]
+            }
+            definitions["SemanticReference"]["properties"]["path"]["items"] = {
+                "type": "object", "additionalProperties": False,
+                "properties": {
+                    "concept": {"type": "string", "enum": sorted(self.ontology.reference_concepts)},
+                    "filters": {"type": "array", "items": {"$ref": "#/$defs/SemanticFilter"}},
+                },
+                "required": ["concept"],
+            }
+            field_filter = definitions["SemanticFilter"]
+            field_filter["properties"].pop("predicate")
+            field_filter["properties"]["property"] = {"type": "string", "enum": properties}
+            field_filter["required"] = ["property"]
+            definitions["SemanticFilter"] = {"anyOf": [
+                field_filter,
+                {
+                    "type": "object", "additionalProperties": False,
+                    "properties": {"predicate": {
+                        "type": "string", "enum": full["collection_predicates"]
+                    }},
+                    "required": ["predicate"],
+                },
+            ]}
+            request = definitions["SemanticFactRequest"]
+            request["properties"]["property"] = {
+                "anyOf": [{"type": "string", "enum": properties}, {"type": "null"}]
+            }
+            request["required"].extend(["property", "property_source"])
+            self._planner_schema_cache = schema
+        return self._planner_schema_cache
+
+    def expand_planner_concepts(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Expand only explicitly selected ontology aliases, without interpreting text.
+
+        Base relations and their filters pass through unchanged. A concept use
+        cannot override or drop part of its declared meaning.
+        """
+        raw = payload.get("request")
+        if not isinstance(raw, Mapping):
+            return payload
+        request = dict(raw)
+        concepts = self.ontology.planner_payload()["reference_concepts"]
+        for key in ("subject", "other"):
+            reference = request.get(key)
+            if not isinstance(reference, Mapping):
+                continue
+            path = reference.get("path", [])
+            if not isinstance(path, (list, tuple)):
+                continue  # ordinary structural validation reports the error
+            expanded = []
+            for step in path:
+                if isinstance(step, Mapping) and "concept" in step:
+                    use = SemanticConceptUse.model_validate(step)
+                    if use.concept not in concepts:
+                        raise ValueError("unknown reference concept")
+                    steps = [dict(item) for item in concepts[use.concept]["path"]]
+                    if use.filters:
+                        steps[-1]["filters"] = [
+                            *steps[-1].get("filters", []),
+                            *(item.model_dump(mode="json", exclude_none=True) for item in use.filters),
+                        ]
+                    expanded.extend(steps)
+                else:
+                    expanded.append(step)
+            request[key] = {**reference, "path": expanded}
+        return {**payload, "request": request}
 
     def semantic_properties(self, entity_type: str) -> frozenset[str]:
         schema = self.catalog.entities.get(entity_type)
@@ -841,14 +949,15 @@ class SemanticFactPlanner:
     ) -> SemanticPlannerOutcome:
         started = perf_counter()
         build_started = perf_counter()
-        output_schema = _planner_output_schema()
-        capabilities = self.schema.capability_payload()
-        input_summary = planner_input_summary(capabilities)
+        output_schema = self.schema.planner_output_schema()
+        capabilities = self.schema.planner_capability_payload()
+        input_summary = planner_input_summary(self.schema.capability_payload())
         utterance = latest_user_message(messages)
         prompt_build_ms = (perf_counter() - build_started) * 1000
         payload: Mapping[str, Any] | None = None
         plan: SemanticPlan | None = None
         structural_error: Exception | None = None
+        validation: PlannerValidationCode | None = None
         attempts = 0
         request_ms = 0.0
         validation_ms = 0.0
@@ -858,14 +967,17 @@ class SemanticFactPlanner:
                 {"role": "user", "content": utterance}
             ]
             if attempts == 2:
+                previous = validation or _structural_validation_code(structural_error)
                 planner_messages.append(
                     {
                         "role": "system",
                         "content": (
-                            "Your previous response failed strict structural "
-                            "validation. Return exactly one JSON object conforming "
-                            "to the supplied output schema. Do not change the "
-                            "meaning of the original user request."
+                            "Your previous response failed strict structural or "
+                            f"semantic validation ({previous}). Recompile the "
+                            "original meaning using only the advertised grammar; "
+                            "check reference path, operands, property ownership, "
+                            "and operation requirements. Return exactly one JSON "
+                            "object conforming to the supplied output schema."
                         ),
                     }
                 )
@@ -879,8 +991,25 @@ class SemanticFactPlanner:
                 )
                 runtime = getattr(self.ollama, "last_planner_runtime", {}) or {}
                 validate_started = perf_counter()
-                plan = SemanticPlan.model_validate(payload)
+                candidate = SemanticPlan.model_validate(
+                    self.schema.expand_planner_concepts(payload)
+                    if isinstance(payload, Mapping) else payload
+                )
+                validation = "NOT_A_FACT"
+                if candidate.request is not None and any(
+                    reference.kind == "entity_id"
+                    for reference in (candidate.request.subject, candidate.request.other)
+                    if reference is not None
+                ):
+                    validation = "MODEL_ORIGINATED_ENTITY_ID"
+                elif candidate.request is not None:
+                    validation = self.schema.validation_code(candidate.request)
                 validation_ms += (perf_counter() - validate_started) * 1000
+                if validation not in {"VALID", "NOT_A_FACT"}:
+                    plan = None
+                    structural_error = ValueError(validation)
+                    continue
+                plan = candidate
                 structural_error = None
                 break
             except (ValueError, TypeError) as error:
@@ -896,7 +1025,7 @@ class SemanticFactPlanner:
             **_planner_runtime_fields(runtime),
         }
         if plan is None:
-            code = _structural_validation_code(structural_error)
+            code = validation or _structural_validation_code(structural_error)
             raise SemanticPlannerFailure(
                 PlannerDiagnostics(
                     input_summary=input_summary,
@@ -912,43 +1041,7 @@ class SemanticFactPlanner:
                     **timing,
                 )
             )
-        if plan.request is not None:
-            plan = plan.model_copy(
-                update={"request": self._normalize_collection_predicates(plan.request)}
-            )
-        if plan.request is not None and any(
-            reference.kind == "entity_id"
-            for reference in (plan.request.subject, plan.request.other)
-            if reference is not None
-        ):
-            raise SemanticPlannerFailure(
-                PlannerDiagnostics(
-                    input_summary=input_summary,
-                    output_raw=payload,
-                    normalized_plan=plan.model_dump(mode="json"),
-                    validation_result="MODEL_ORIGINATED_ENTITY_ID",
-                    failure_detail="The semantic planner cannot originate entity IDs",
-                    attempt_count=attempts,
-                    latency_ms=latency_ms,
-                    **timing,
-                )
-            )
-        validation: PlannerValidationCode = "NOT_A_FACT"
-        if plan.request is not None:
-            validation = self.schema.validation_code(plan.request)
-            if validation != "VALID":
-                raise SemanticPlannerFailure(
-                    PlannerDiagnostics(
-                        input_summary=input_summary,
-                        output_raw=payload,
-                        normalized_plan=plan.model_dump(mode="json"),
-                        validation_result=validation,
-                        failure_detail="semantic request violates advertised capabilities",
-                        attempt_count=attempts,
-                        latency_ms=latency_ms,
-                        **timing,
-                    )
-                )
+        assert validation is not None
         diagnostics = PlannerDiagnostics(
             input_summary=input_summary,
             output_raw=payload,
@@ -959,147 +1052,6 @@ class SemanticFactPlanner:
             **timing,
         )
         return SemanticPlannerOutcome(plan, latency_ms, diagnostics)
-
-    def _normalize_collection_predicates(
-        self,
-        request: SemanticFactRequest,
-    ) -> SemanticFactRequest:
-        """Canonicalize a model's semantic predicate without interpreting language."""
-        predicates = self.schema.ontology.collection_predicates
-
-        def normalized(item: SemanticFilter) -> SemanticFilter:
-            predicate = (
-                self.schema.ontology.resolve_collection_predicate(item.predicate)
-                if item.predicate is not None
-                else None
-            )
-            if predicate is not None:
-                return SemanticFilter(predicate=predicate)
-            property_predicate = (
-                self.schema.ontology.resolve_collection_predicate(item.property)
-                if item.property is not None
-                else None
-            )
-            if (
-                item.predicate is None
-                and property_predicate in predicates
-                and item.operator == "eq"
-                and item.value is None
-                and item.source == "entity"
-                and item.value_from is None
-            ):
-                return SemanticFilter(predicate=property_predicate)
-            return item
-
-        collection_filters = tuple(normalized(item) for item in request.filters)
-        subject = self._normalize_context_reference(request.subject)
-        if subject.path:
-            final_step = subject.path[-1]
-            moved = tuple(
-                normalized(item)
-                for item in final_step.filters
-                if normalized(item).predicate is not None
-            )
-            retained = tuple(
-                item
-                for item in final_step.filters
-                if normalized(item).predicate is None
-            )
-            if moved:
-                final_step = final_step.model_copy(update={"filters": retained})
-                subject = subject.model_copy(
-                    update={"path": (*subject.path[:-1], final_step)}
-                )
-                collection_filters = (*collection_filters, *moved)
-        default_scope_relations = {
-            definition.default_scope_relation
-            for item in collection_filters
-            if item.predicate is not None
-            and (
-                definition := self.schema.ontology.collection_predicates.get(
-                    item.predicate
-                )
-            )
-            is not None
-            and definition.default_scope_relation is not None
-        }
-        if (
-            subject.kind == "current_household"
-            and len(default_scope_relations) == 1
-            and (
-                not subject.path
-                or (
-                    len(subject.path) == 1
-                    and not subject.path[0].filters
-                    and subject.path[0].relation not in default_scope_relations
-                )
-            )
-        ):
-            subject = subject.model_copy(
-                update={
-                    "path": (
-                        SemanticRelationStep(
-                            relation=next(iter(default_scope_relations))
-                        ),
-                    )
-                }
-            )
-        return request.model_copy(
-            update={
-                "subject": subject,
-                "filters": collection_filters,
-                "other": (
-                    self._normalize_context_reference(request.other)
-                    if request.other is not None
-                    else None
-                ),
-            }
-        )
-
-    @staticmethod
-    def _normalize_context_reference(
-        reference: SemanticReference,
-    ) -> SemanticReference:
-        entity_type = _CONTEXT_ENTITY_TYPES.get(reference.kind)
-        return (
-            reference.model_copy(update={"entity_type": entity_type})
-            if entity_type is not None and reference.entity_type != entity_type
-            else reference
-        )
-
-
-class TierZeroSemanticParser:
-    """Recognize a deliberately tiny set of canonical, high-frequency requests.
-
-    Tier 0 is only a latency optimization. It intentionally does not attempt
-    open-ended language understanding; every plan it emits must also be covered
-    by the semantic planner evaluation suite.
-    """
-
-    def parse(self, text: str) -> SemanticFactRequest | None:
-        normalized = _normalize_request(text)
-        if normalized in {"我是谁", "who am i"}:
-            return SemanticFactRequest(
-                operation="resolve_reference",
-                subject=SemanticReference(kind="self", entity_type="person"),
-            )
-        if normalized in {"你是谁", "who are you"}:
-            return SemanticFactRequest(
-                operation="resolve_reference",
-                subject=SemanticReference(kind="assistant", entity_type="person"),
-            )
-        if normalized == "家里有几个人":
-            return SemanticFactRequest(
-                operation="count",
-                subject=_household_members(),
-            )
-        if normalized == "家里都有谁":
-            return SemanticFactRequest(
-                operation="select",
-                subject=_household_members(),
-            )
-        return None
-
 
 class EntityResolver:
     """Authoritative resolver from semantic references to canonical entities."""
@@ -2129,15 +2081,11 @@ class SemanticFactService:
         self,
         engine: HouseholdFactEngine,
         planner: SemanticFactPlanner,
-        parser: TierZeroSemanticParser | None = None,
         renderer: FactRenderer | None = None,
-        tier_zero_enabled: bool = True,
     ) -> None:
         self.engine = engine
-        self.parser = parser or TierZeroSemanticParser()
         self.renderer = renderer or FactRenderer()
         self.planner = planner
-        self.tier_zero_enabled = tier_zero_enabled
 
     async def try_answer(
         self,
@@ -2147,71 +2095,66 @@ class SemanticFactService:
         request_id: str = "-",
     ) -> FactAnswer | None:
         started = perf_counter()
-        latest = latest_user_message(messages)
         routing_started = perf_counter()
-        parse_started = perf_counter()
-        request = self.parser.parse(latest) if self.tier_zero_enabled else None
-        semantic_parse_ms = (perf_counter() - parse_started) * 1000
-        tier = 0
+        semantic_parse_ms = 0.0
         llm_ms = 0.0
         llm_call_count = 0
         planner_diagnostics: PlannerDiagnostics | None = None
-        if request is None:
-            tier = 1
-            llm_started = perf_counter()
-            try:
-                outcome = await self.planner.plan(messages, context)
-                plan = outcome.plan
-                llm_ms = outcome.latency_ms
-                planner_diagnostics = outcome.diagnostics
-                llm_call_count = outcome.diagnostics.attempt_count
-            except SemanticPlannerFailure as error:
-                planner_diagnostics = error.diagnostics
-                llm_ms = error.diagnostics.latency_ms
-                llm_call_count = error.diagnostics.attempt_count
-                logger.warning(
-                    "semantic_plan_invalid request_id=%s validation=%s attempts=%d",
-                    safe_log_token(request_id),
-                    safe_log_token(error.diagnostics.validation_result),
-                    error.diagnostics.attempt_count,
-                )
-                return self._failure_answer(
-                    context,
-                    started,
-                    request_id=request_id,
-                    llm_ms=llm_ms,
-                    llm_call_count=llm_call_count,
-                    planner_diagnostics=planner_diagnostics,
-                )
-            except Exception as error:
-                llm_ms = (perf_counter() - llm_started) * 1000
-                llm_call_count = max(llm_call_count, 1)
-                logger.warning(
-                    "semantic_plan_invalid request_id=%s error=%s",
-                    safe_log_token(request_id),
-                    safe_log_token(type(error).__name__),
-                )
-                return self._failure_answer(
-                    context,
-                    started,
-                    request_id=request_id,
-                    llm_ms=llm_ms,
-                    llm_call_count=llm_call_count,
-                    planner_diagnostics=planner_diagnostics,
-                )
-            if not plan.requires_fact:
-                return None
-            request = plan.request
-            if request is None or not self.engine.schema.validates(request):
-                return self._failure_answer(
-                    context,
-                    started,
-                    request=request,
-                    request_id=request_id,
-                    llm_ms=llm_ms,
-                    llm_call_count=llm_call_count,
-                    planner_diagnostics=planner_diagnostics,
-                )
+        tier = 1
+        llm_started = perf_counter()
+        try:
+            outcome = await self.planner.plan(messages, context)
+            plan = outcome.plan
+            llm_ms = outcome.latency_ms
+            planner_diagnostics = outcome.diagnostics
+            llm_call_count = outcome.diagnostics.attempt_count
+        except SemanticPlannerFailure as error:
+            planner_diagnostics = error.diagnostics
+            llm_ms = error.diagnostics.latency_ms
+            llm_call_count = error.diagnostics.attempt_count
+            logger.warning(
+                "semantic_plan_invalid request_id=%s validation=%s attempts=%d",
+                safe_log_token(request_id),
+                safe_log_token(error.diagnostics.validation_result),
+                error.diagnostics.attempt_count,
+            )
+            return self._failure_answer(
+                context,
+                started,
+                request_id=request_id,
+                llm_ms=llm_ms,
+                llm_call_count=llm_call_count,
+                planner_diagnostics=planner_diagnostics,
+            )
+        except Exception as error:
+            llm_ms = (perf_counter() - llm_started) * 1000
+            llm_call_count = max(llm_call_count, 1)
+            logger.warning(
+                "semantic_plan_invalid request_id=%s error=%s",
+                safe_log_token(request_id),
+                safe_log_token(type(error).__name__),
+            )
+            return self._failure_answer(
+                context,
+                started,
+                request_id=request_id,
+                llm_ms=llm_ms,
+                llm_call_count=llm_call_count,
+                planner_diagnostics=planner_diagnostics,
+            )
+        if not plan.requires_fact:
+            return None
+        request = plan.request
+        if request is None or not self.engine.schema.validates(request):
+            return self._failure_answer(
+                context,
+                started,
+                request=request,
+                request_id=request_id,
+                llm_ms=llm_ms,
+                llm_call_count=llm_call_count,
+                planner_diagnostics=planner_diagnostics,
+            )
         routing_ms = (perf_counter() - routing_started) * 1000
         assert request is not None
         query_started = perf_counter()
@@ -2409,18 +2352,12 @@ def _compact_json_schema(value: Any) -> Any:
     return value
 
 
-_PLANNER_OUTPUT_SCHEMA: dict[str, Any] | None = None
-
-
 def _planner_output_schema() -> dict[str, Any]:
-    """Cached structured-output schema with model-originated IDs removed."""
-    global _PLANNER_OUTPUT_SCHEMA
-    if _PLANNER_OUTPUT_SCHEMA is None:
-        schema = _compact_json_schema(SemanticPlan.model_json_schema())
-        kind = schema["$defs"]["SemanticReference"]["properties"]["kind"]
-        kind["enum"] = [item for item in kind["enum"] if item != "entity_id"]
-        _PLANNER_OUTPUT_SCHEMA = schema
-    return _PLANNER_OUTPUT_SCHEMA
+    """Fresh base schema; registry-specific constraints must not leak across homes."""
+    schema = _compact_json_schema(SemanticPlan.model_json_schema())
+    kind = schema["$defs"]["SemanticReference"]["properties"]["kind"]
+    kind["enum"] = [item for item in kind["enum"] if item != "entity_id"]
+    return schema
 
 
 def _planner_runtime_fields(runtime: Mapping[str, Any]) -> dict[str, Any]:
@@ -2536,21 +2473,6 @@ def _failure_stage(status: FactStatus) -> str | None:
         "computation_impossible": "computation",
         "semantic_plan_unsupported": "semantic_plan_validation",
     }[status]
-
-
-def _normalize_request(text: str) -> str:
-    normalized = text.casefold().strip()
-    normalized = re.sub(r"^(?:请问|能否|能不能|能告诉我一下|告诉我一下|麻烦)", "", normalized)
-    normalized = normalized.strip(" \t\r\n，,。.!！?？")
-    return re.sub(r"\s+", " ", normalized)
-
-
-def _household_members() -> SemanticReference:
-    return SemanticReference(
-        kind="current_household",
-        entity_type="address",
-        path=(SemanticRelationStep(relation="member"),),
-    )
 
 
 def _unique_entities(entities: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:

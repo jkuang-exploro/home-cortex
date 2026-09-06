@@ -1,0 +1,136 @@
+version: 1
+plans:
+  marriage:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+    property: start_date
+    property_source: relationship
+  wife_birth:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+  daughter_birth:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+  sons:
+    operation: annual_occurrence
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+        filters:
+        - property: gender
+          value: male
+    property: birth_date
+    mode: days
+  wife_father:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+  younger:
+    operation: argmax
+    subject:
+      kind: self
+      entity_type: person
+      path: []
+    other:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+  unknown:
+    operation: select
+    subject:
+      kind: named_entity
+      entity_type: person
+      value: NobodyZ
+    property: birth_date
+probe:
+  frozen_time: '2026-09-03T12:00:00-07:00'
+  default_speaker_id: person:a
+  household_id: address:fictional
+  cases:
+  - id: speaker_a_marriage
+    utterance: 我与配偶建立婚姻关系的日期能查到吗？
+    plan: marriage
+    expected_status: found
+    expected_value: '2005-05-06'
+    expected_entity_ids:
+    - person:b
+  - id: speaker_b_marriage
+    utterance: 我与配偶建立婚姻关系的日期能查到吗？
+    plan: marriage
+    speaker_id: person:b
+    expected_status: found
+    expected_value: '2005-05-06'
+    expected_entity_ids:
+    - person:a
+  - id: wife_birth
+    utterance: 请告诉我妻子的出生日期记录。
+    plan: wife_birth
+    expected_status: found
+    expected_value: '1982-06-01'
+    expected_entity_ids:
+    - person:b
+  - id: daughter_birth
+    utterance: 女儿是在何年何月何日出生的？
+    plan: daughter_birth
+    expected_status: found
+    expected_value: '2010-04-09'
+    expected_entity_ids:
+    - person:daughter
+  - id: ambiguous_sons
+    utterance: 儿子下一次生日距离今天有多少天？
+    plan: sons
+    expected_status: ambiguous
+  - id: wife_father
+    utterance: 我妻子的爸爸是哪位家庭成员？
+    plan: wife_father
+    expected_status: found
+    expected_entity_ids:
+    - person:father
+  - id: younger
+    utterance: 若比较我与妻子的年龄，较年轻的是谁？
+    plan: younger
+    expected_status: found
+    expected_entity_ids:
+    - person:b
+    expected_equal: false
+  - id: unknown_name
+    utterance: NobodyZ的出生日期能查到吗？
+    plan: unknown
+    expected_status: entity_not_found

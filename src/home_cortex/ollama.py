@@ -8,170 +8,67 @@ from .text import latest_user_message
 
 PLANNER_KEEP_ALIVE = "24h"
 PLANNER_NUM_PREDICT = 384
+PLANNER_SEED = 0
 
-_PLANNER_INSTRUCTIONS = (
-    "You are Home Cortex's semantic interpreter. Map the latest user "
-    "request to exactly one supported semantic request. Household member "
-    "identity, the authenticated speaker's identity, and this assistant's "
-    "identity are facts in this domain. Only ordinary conversation emits "
-    "requires_fact=false and request=null. Return only "
-    "the strict structured output; never calculate or phrase the answer.\n\n"
-    "Identity and name questions are always facts here: compile 'who am I' "
-    "as resolve_reference(self), 'who are you' as "
-    "resolve_reference(assistant), and 'who is my son/spouse' as "
-    "resolve_reference(self followed by the declared relation path). In "
-    "every such case requires_fact=true and leave property=null. Questions for "
-    "the assistant's name are also resolve_reference(assistant), never "
-    "ordinary conversation.\n\n"
-    "References: self is always the authenticated speaker, assistant is "
-    "this assistant, current_household is the configured home, and "
-    "named_entity contains only a literal stored name or appellation from "
-    "the user. "
-    "Never emit entity_id or put pronouns/relationship phrases in a "
-    "named_entity. For speaker-relative phrases choose kind=self. Expand each "
-    "declared reference concept by copying its complete ontology path and "
-    "filters; compose multi-hop relationships by appending paths.\n\n"
-    "Canonical disambiguation: household member list/count uses "
-    "current_household->member with no filters. Unqualified household "
-    "adults/minors use exactly one adult/minor request filter. Unqualified "
-    "adult/minor predicate filters contain only predicate=adult/minor; do "
-    "not attach an age value or property. "
-    "'有几个孩子' means household minors; '我有几个孩子' means self->child. "
-    "Chinese 最年长/最老/最早出生 = argmin(birth_date); "
-    "最年幼/最年轻/年纪最小/最晚出生 = argmax(birth_date). "
-    "老婆/妻子 means self->spouse[gender=female]. A literal personal name "
-    "such as 德伦 must be named_entity using exactly that text; do not infer "
-    "a family relationship for a name. Address questions use "
-    "self->residence and property=full_address.\n\n"
-    "Use only advertised semantic relations, properties, predicates and "
-    "operations—never storage fields, SQL, file names, or code. Use "
-    "resolve_reference for identity and leave property=null; use select for "
-    "a property or list, count "
-    "for size, completed_years for age, and argmin/argmax for extrema. "
-    "Earlier birth_date is older: oldest=argmin, youngest=argmax. Collection "
-    "predicates adult/minor belong in request.filters after traversing "
-    "current_household->member; a speaker's children instead traverse "
-    "self->child.\n\n"
-    "A birthday date is select(birth_date); its next occurrence is "
-    "annual_occurrence(birth_date); a birthday countdown adds mode=days. "
-    "Phrasing such as 'from today until the birthday' is still the next "
-    "annual occurrence, not date_difference from the original birth date. "
-    "A person's home address is self->residence then full_address. Metadata "
-    "owned by the final edge uses property_source=relationship. Marriage "
-    "start is select(self->spouse, start_date, relationship); marriage "
-    "duration uses duration on that same relationship property with a mode. "
-    "A spouse's birth_date is an entity property and must keep "
-    "property_source=entity; only relationship metadata such as start_date "
-    "or end_date uses relationship. "
-    "Do not solve the factual question."
-)
+_PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用户问题编译成一个 JSON 语义请求，不计算或表述答案。家庭事实、身份和姓名问题 requires_fact=true；只有普通闲聊才是 false 且 request=null。
+
+引用语法：
+- self 是已认证的当前说话人，assistant 是本助手，二者 entity_type=person、value=null。用户对助手说“你”并询问身份、名字或称呼时必须引用 assistant，仍是事实请求。current_household 是配置的家庭，entity_type=address、value=null。named_entity.value 只能逐字复制用户说出的姓名或称呼；不得猜测 ID 或把亲属短语当姓名。
+- path 是概念的有序组合，每步 {"concept":"名称"}，可附加 filters。reference_concepts 是权威定义；完整短语匹配某个 aliases 时，path 只放该最具体概念一次，不拆解或追加近义概念。son 不能简化为 child，wife 不能简化为 spouse，father 不能简化为 parent。本体会完整展开概念的关系和过滤条件。
+- 只有嵌套亲属才增加一跳。性别等形容词约束同一个目标，不增加一跳；额外 filters 与概念原有条件取 AND。说话人的亲属始终从 self 开始，“我家的儿子”也不先遍历全家。
+- 家庭成员列表、计数和极值是 current_household 后接 member。无所属限定的成年人/未成年人/孩子是家庭 member 加对应 predicate；明确“我的孩子”才是 self 后接 child。任何住址或家庭地址查询都从 self 接 residence，再取 full_address；current_household 只用于成员集合，不直接投影地址。遵守 relation_signatures 的起点与终点类型。
+
+外层操作：
+- 问一个人是谁、身份或叫什么，以及“哪个人是我的某亲属”，用 resolve_reference 且 property=null；明确问名或姓的组成部分才用 select(given_name/family_name)。列出集合用 select 且 property=null；计数用 count 且 property=null。
+- 属性值用 select；年龄用 completed_years(birth_date)。生日日期用 select(birth_date)；下一次生日用 annual_occurrence(birth_date)；从今天到生日还有/相隔多少天也必须用 annual_occurrence，mode=days，绝不用原始出生日期做 duration/date_difference。
+- argmin 返回属性值最小者，argmax 返回最大者。birth_date 越早值越小，所以“年龄最大”也和年长、最早出生一样只能用 argmin；年幼、年龄小、最晚出生用 argmax。问人是谁时不用 earliest/latest 或数值 min/max。
+- 两人比较必须提供 property 和两个完整引用 subject、other；说话人参与时 subject=self，另一人在 other。集合极值没有 other。
+- 从起始日期到现在的时间用 duration，mode=days（明确问秒才 seconds）。配偶身份和配偶属性都把 spouse 概念放在 subject.path。关系开始日期和持续时间也只有一个经该关系的 subject，不把两端人物拆成 subject 和 other，不在 request.filters 放人物谓词。
+
+属性所有权：
+- 必须根据 property_ownership 明确选择 property_source。entity 是最终实体属性；relationship 是最后一条关系边的属性，要求非空 path，且没有 other。
+- 配偶的 birth_date 属于 entity。婚姻 start_date 属于 spouse 关系；婚姻 duration 使用同一关系 start_date。property=null 时 property_source=entity。不得静默改变错误的所有者。
+
+过滤语法：
+- 字段条件是 {"property":名称,"value":值}，可带 operator/source/value_from/value_property；source=entity 约束人或地点，source=relation 约束边。
+- 集合谓词只能是 {"predicate":声明名称}，放在 request.filters。definition_only 只解释含义，不输出为附加条件；completed_years 等操作不是谓词。
+- 只用已声明的操作、属性、关系、概念和谓词。不得丢弃不支持的限定、发明词汇、猜身份或修补事实答案。只返回严格结构化输出。
+"""
 
 def _semantic_planner_examples() -> list[dict[str, str]]:
-    examples: tuple[tuple[str, dict[str, Any]], ...] = (
-        (
-            "家里有几个人",
-            {
-                "operation": "count",
-                "subject": {
-                    "kind": "current_household",
-                    "entity_type": "address",
-                    "path": [{"relation": "member"}],
-                },
-            },
-        ),
-        (
-            "谁最年长",
-            {
-                "operation": "argmin",
-                "subject": {
-                    "kind": "current_household",
-                    "entity_type": "address",
-                    "path": [{"relation": "member"}],
-                },
-                "property": "birth_date",
-            },
-        ),
-        (
-            "谁最年幼",
-            {
-                "operation": "argmax",
-                "subject": {
-                    "kind": "current_household",
-                    "entity_type": "address",
-                    "path": [{"relation": "member"}],
-                },
-                "property": "birth_date",
-            },
-        ),
-        (
-            "有几个成年人",
-            {
-                "operation": "count",
-                "subject": {
-                    "kind": "current_household",
-                    "entity_type": "address",
-                    "path": [{"relation": "member"}],
-                },
-                "filters": [{"predicate": "adult"}],
-            },
-        ),
-        (
-            "我老婆是谁",
-            {
-                "operation": "resolve_reference",
-                "subject": {
-                    "kind": "self",
-                    "entity_type": "person",
-                    "path": [
-                        {
-                            "relation": "spouse",
-                            "filters": [{"property": "gender", "value": "female"}],
-                        }
-                    ],
-                },
-            },
-        ),
-        (
-            "我家住哪里",
-            {
-                "operation": "select",
-                "subject": {
-                    "kind": "self",
-                    "entity_type": "person",
-                    "path": [{"relation": "residence"}],
-                },
-                "property": "full_address",
-            },
-        ),
-        (
-            "德伦再过多久过生日",
-            {
-                "operation": "annual_occurrence",
-                "subject": {
-                    "kind": "named_entity",
-                    "value": "德伦",
-                    "entity_type": "person",
-                },
-                "property": "birth_date",
-                "mode": "days",
-            },
-        ),
+    """Illustrate reusable grammar without evaluation wording or household facts."""
+    def reference(kind: str, *concepts: str) -> dict[str, Any]:
+        return {"kind": kind, "value": None,
+                "entity_type": "address" if kind == "current_household" else "person",
+                **({"path": [{"concept": name} for name in concepts]} if concepts else {})}
+
+    examples = (
+        ("应该怎样称呼这位助手？", "resolve_reference", reference("assistant"), None, "entity", {}),
+        ("在本户成员中找出出生日期最靠前的人。", "argmin", reference("current_household", "member"), "birth_date", "entity", {}),
+        ("本户符合成年条件的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"predicate": "adult"}]}),
+        ("本户未成年成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"predicate": "minor"}]}),
+        ("我的男孩后代是哪一位？", "resolve_reference", reference("self", "son"), None, "entity", {}),
+        ("请列出我的女性后代。", "select", reference("self", "daughter"), None, "entity", {}),
+        ("我母亲的丈夫是哪位？", "resolve_reference", reference("self", "mother", "husband"), None, "entity", {}),
+        ("我的丈夫出生于哪天？", "select", reference("self", "husband"), "birth_date", "entity", {}),
+        ("请提供这个家庭的完整地址。", "select", reference("self", "residence"), "full_address", "entity", {}),
+        ("我的居住关系从哪天开始？", "select", reference("self", "residence"), "start_date", "relationship", {}),
+        ("住进现居所至今有多少天？", "duration", reference("self", "residence"), "start_date", "relationship", {"mode": "days"}),
+        ("女儿下个生日距今有多少天？", "annual_occurrence", reference("self", "daughter"), "birth_date", "entity", {"mode": "days"}),
+        ("我与母亲相比，出生较早的是谁？", "argmin", reference("self"), "birth_date", "entity", {"other": reference("self", "mother")}),
+        ("林青下次生日还要几天？", "annual_occurrence", {"kind": "named_entity", "value": "林青", "entity_type": "person"}, "birth_date", "entity", {"mode": "days"}),
     )
     messages: list[dict[str, str]] = []
-    for utterance, request in examples:
-        messages.extend(
-            (
-                {"role": "user", "content": utterance},
-                {
-                    "role": "assistant",
-                    "content": json.dumps(
-                        {"requires_fact": True, "request": request},
-                        ensure_ascii=False,
-                        separators=(",", ":"),
-                    ),
-                },
-            )
-        )
+    for utterance, operation, subject, prop, owner, extra in examples:
+        request = {"operation": operation, "subject": subject, "property": prop,
+                   "property_source": owner, **extra}
+        messages.extend((
+            {"role": "user", "content": utterance},
+            {"role": "assistant", "content": json.dumps(
+                {"requires_fact": True, "request": request},
+                ensure_ascii=False, separators=(",", ":"),
+            )},
+        ))
     return messages
 
 
@@ -246,25 +143,31 @@ class OllamaService:
         forwarded: list[dict[str, Any]] = [
             {"role": "user", "content": latest_user_message(messages)}
         ]
-        forwarded.extend(
-            dict(message)
-            for message in messages
+        validation_feedback = "\n".join(
+            str(message.get("content", "")) for message in messages
             if message.get("role") == "system"
-            and "strict structural validation" in str(message.get("content", ""))
+            and "strict structural" in str(message.get("content", ""))
         )
         response = await self.client.chat(
             model=self.model,
             messages=[
-                {"role": "system", "content": self._planner_system_prompt(capabilities)},
+                {"role": "system", "content": (
+                    self._planner_system_prompt(capabilities)
+                    + f"\nHousehold now: {household_now}"
+                    + ("\n" + validation_feedback if validation_feedback else "")
+                )},
                 *_semantic_planner_examples(),
-                {"role": "system", "content": f"Household now: {household_now}"},
                 *forwarded,
             ],
             stream=False,
             think=False,
             keep_alive=PLANNER_KEEP_ALIVE,
             format=dict(output_schema),
-            options={"temperature": 0, "num_predict": PLANNER_NUM_PREDICT},
+            options={
+                "temperature": 0,
+                "num_predict": PLANNER_NUM_PREDICT,
+                "seed": PLANNER_SEED,
+            },
         )
         self.last_planner_runtime = _ollama_runtime_metrics(response)
         parsed = json.loads(response.message.content or "")

@@ -180,31 +180,22 @@ the same spouse traversal to resolve either the partner entity or the
 relationship start date. The executor validates all operations, filters,
 predicate names, property sources, and types before it reads or computes data.
 
-Tier 0 is a removable latency optimization. It recognizes only six exact,
-canonical utterances covering speaker identity, assistant identity,
-household-member count, and household-member list. Kinship, age extrema, adult/minor filters,
-marriage, birthdays, and addresses are owned by the semantic planner. To
-exercise the authoritative planner and entity resolver without Tier 0, set:
+All natural-language fact requests pass through the semantic interpreter,
+including identity and household lists/counts. Sentence-based Tier-0 dispatch
+and its configuration switch have been removed. Structured callers can pass a
+`SemanticFactRequest` directly to `HouseholdFactEngine.execute`.
 
-```dotenv
-HOME_CORTEX_DISABLE_TIER0=1
-```
-
-The fact benchmark supports both execution modes and records speaker ID,
-utterance, semantic plan, scope, filters, operators, relationship references,
-entity/relationship properties, failure stage, canonical IDs, LLM/DB calls,
-timing, and answer. `MODE` and `--mode` are equivalent; repeat `--question` to
-run a focused Tier-1 suite:
+The fact benchmark records semantic plans, speaker scope, validation, execution,
+and latency. Run it on the production GPU host:
 
 ```sh
-MODE=tier0_enabled home-cortex-fact-benchmark --backend surrealdb
-MODE=tier0_disabled home-cortex-fact-benchmark --backend surrealdb --repeat 1
-home-cortex-fact-benchmark --backend surrealdb --mode tier0_disabled \
+home-cortex-fact-benchmark --backend surrealdb --repeat 1
+home-cortex-fact-benchmark --backend surrealdb \
   --question 谁最年幼 --question 我们什么时候结婚的
 ```
 
 The separate planner-quality benchmark loads more than 100 paraphrases from
-`benchmarks/semantic_planner_eval.yaml`. It bypasses Tier 0, executes every valid
+`benchmarks/semantic_planner_eval.yaml`. It invokes the interpreter, executes every valid
 plan against the deterministic engine, compares normalized semantic meaning,
 and reports accuracy by entity reference, traversal, multi-hop kinship,
 property selection, filtering, aggregation, temporal operation,
@@ -216,20 +207,15 @@ home-cortex-semantic-planner-benchmark \
 home-cortex-semantic-planner-benchmark --one-per-plan
 ```
 
-All currently retained Tier-0 forms are included in that dataset and must remain
-semantically equivalent to planner output. Before adding any new fast path,
-first inspect the prompt, capability payload, strict output schema, examples,
-model quantization, and runtime. A new path is justified only when the expression
-is stable and unambiguous, materially frequent in measured traffic, the planner
-still passes the same planner-only case, and the measured latency saving matters
-to the deployment SLO. A category accuracy below 95% is a signal to improve the
-planner path, not permission to add a phrase handler.
+Interpretation resources describe reusable grammar and ontology concepts.
+The model explicitly chooses property ownership and supplies both operands for
+pairwise comparisons. It selects declared reference concepts through path steps
+such as `{"concept":"wife"}`; the ontology expands these into the existing IR
+relation paths with all declared filters. Extra step filters are conjunctive and
+can only narrow the selected concept. No utterance is examined during expansion.
+Validation rejects invalid scope, properties and predicates without semantic
+repair. Evaluation alternatives do not change production interpretation.
 
-The six retained forms are intentionally narrow: `我是谁` / `Who am I?` and
-`你是谁` / `Who are you?` are common session diagnostics with immutable
-reference semantics; `家里有几个人` and `家里都有谁` are common dashboard
-queries with a single declared `current_household -> member` plan. Variants and
-paraphrases always go through the planner.
 
 The ingestion endpoint rejects unknown relationship files, invalid endpoint
 types, references to nodes missing from the source data, temporal fields on

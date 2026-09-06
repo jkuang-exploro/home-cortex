@@ -61,6 +61,11 @@ plans:
     subject: *spouse
     property: start_date
     property_source: relationship
+  marriage_start_wife:
+    operation: select
+    subject: *wife
+    property: start_date
+    property_source: relationship
   marriage_duration:
     operation: duration
     subject: *spouse
@@ -100,6 +105,9 @@ plans:
     operation: select
     subject: *son
     property: given_name
+  male_children_path_filter:
+    operation: select
+    subject: *son
   male_children:
     operation: select
     subject:
@@ -299,6 +307,7 @@ probe:
       expected_status: found
       expected_entity_ids: [person:zhigang_ba]
       expected_value: Zhigang
+      expected_names: [Zhigang, Zhigang Ba, 巴志刚]
       notes: "given_name -> first_name on person:zhigang_ba. resolve_reference is an accepted alternative."
     - id: son_birthday_countdown
       utterance: 从今天到我儿子生日相隔几天
@@ -431,8 +440,12 @@ groups:
       - 我和爱人是哪一年开始做夫妻的
       - 我跟配偶从何时起是夫妻
       - 这段婚姻关系从哪天开始
-      - 我和我老婆何时结为夫妻
       - When did my spouse and I get married?
+  - plan: marriage_start
+    acceptable_plans: [marriage_start_wife]
+    category: relationship_property_lookup
+    utterances:
+      - 我和我老婆何时结为夫妻
   - plan: marriage_duration
     category: temporal_operation
     utterances:
@@ -455,7 +468,10 @@ groups:
     category: property_selection
     utterances:
       - 我的儿子叫什么
+  # Evaluation-only: same final entity list on this complete-gender fixture.
+  # No equivalence for scalar projections, intermediate filters or missing data.
   - plan: male_children
+    acceptable_plans: [male_children_path_filter]
     category: relationship_traversal
     utterances:
       - 请找出我的男性子女

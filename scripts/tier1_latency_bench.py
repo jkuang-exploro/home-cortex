@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
-"""Reproducible 20-question Tier-1 probe. JSON graph. Tier-0 disabled."""
+"""Reproducible semantic-planner probe over the JSON graph."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
+import sys
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
-from home_cortex.ollama import OllamaService
+from home_cortex.ollama import OllamaService, _semantic_planner_examples
 from home_cortex.semantic_planner_benchmark import (
     DEFAULT_EVAL_PATH,
     build_json_fact_service,
     collect_provenance,
     load_probe_dataset,
+    load_semantic_eval_cases,
     run_tier1_probe,
 )
 
@@ -23,8 +27,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 async def run(args: argparse.Namespace) -> dict:
     dataset = load_probe_dataset(args.eval)
+    if args.suite:
+        dataset = replace(dataset, cases=load_semantic_eval_cases(args.eval))
     ollama = OllamaService(args.ollama_url, args.model)
     service, context = build_json_fact_service(args.data_dir, args.schema_dir, ollama)
+
+    def progress(row):
+        if args.progress and args.output is not None:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            with args.output.with_suffix(".jsonl").open("a") as handle:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
     try:
         report = await run_tier1_probe(
             service,
@@ -33,6 +46,7 @@ async def run(args: argparse.Namespace) -> dict:
             warmup=args.warmup,
             repeat=args.repeat,
             verified_cold=args.verified_cold,
+            on_result=progress,
         )
     finally:
         await ollama.close()
@@ -49,6 +63,19 @@ async def run(args: argparse.Namespace) -> dict:
         data_dir=args.data_dir,
         schema_dir=args.schema_dir,
     )
+    contract = {
+        "examples": _semantic_planner_examples(),
+        "capabilities": service.engine.schema.planner_capability_payload(),
+        "output_schema": service.engine.schema.planner_output_schema(),
+        "system_prompt": ollama._planner_system_prompt(
+            service.engine.schema.planner_capability_payload()
+        ),
+    }
+    report["planner_contract"] = contract
+    report["provenance"]["planner_contract_sha256"] = hashlib.sha256(
+        json.dumps(contract, ensure_ascii=False, sort_keys=True).encode()
+    ).hexdigest()
+    report["command"] = sys.argv
     report["model"] = args.model
     report["collected_at"] = datetime.now().isoformat()
     if args.output is not None:
@@ -79,6 +106,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data")
     parser.add_argument("--schema-dir", type=Path, default=ROOT / "schemas" / "edge")
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="Append each completed row to an adjacent .jsonl checkpoint.",
+    )
+    parser.add_argument(
+        "--suite",
+        action="store_true",
+        help="Measure every fixed suite case on each pass.",
+    )
     parser.add_argument("--eval", type=Path, default=DEFAULT_EVAL_PATH)
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     parser.add_argument("--model", default="qwen3:8b")

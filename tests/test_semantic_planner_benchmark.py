@@ -15,7 +15,6 @@ from home_cortex.semantic_facts import (
     SemanticFactPlanner,
     SemanticFactService,
     SemanticSchemaRegistry,
-    TierZeroSemanticParser,
 )
 from home_cortex.semantic_planner_benchmark import (
     DEFAULT_EVAL_PATH,
@@ -75,27 +74,10 @@ def test_semantic_planner_evaluation_is_large_and_adversarial() -> None:
         "匡德伦是谁",
         "我和我老婆谁年龄大",
     }.issubset(utterances)
-    parser = TierZeroSemanticParser()
-    assert {
-        "我是谁",
-        "Who am I?",
-        "你是谁",
-        "Who are you?",
-        "家里有几个人",
-        "家里都有谁",
-    }.issubset(utterances)
-    assert all(
-        parser.parse(utterance) is None
-        for utterance in (
-            "咱家岁数最小的是哪一位",
-            "我和爱人是哪一年开始做夫妻的",
-            "德伦再过多久过生日",
-        )
-    )
 
 
 @pytest.mark.asyncio
-async def test_planner_only_oracle_executes_full_eval_and_checks_tier0_parity() -> None:
+async def test_planner_only_oracle_executes_full_eval() -> None:
     cases = load_semantic_eval_cases()
     expected = {case.utterance: case.expected for case in cases}
 
@@ -118,7 +100,6 @@ async def test_planner_only_oracle_executes_full_eval_and_checks_tier0_parity() 
     service = SemanticFactService(
         HouseholdFactEngine(_JsonGraphDispatcher(ROOT / "data", registry), schema),
         planner=SemanticFactPlanner(OracleInterpreter(), schema),
-        tier_zero_enabled=False,
     )
     report = await run_semantic_planner_benchmark(
         service,
@@ -137,11 +118,6 @@ async def test_planner_only_oracle_executes_full_eval_and_checks_tier0_parity() 
     assert report["dataset_size"] >= 100
     assert report["accuracy"] == 1
     assert report["failure_reasons"] == {}
-    assert report["tier0_parity"] == {
-        "compared": 6,
-        "equivalent": 6,
-        "accuracy": 1,
-    }
     assert all(
         row["tier"] == 1
         and row["validation_result"] == "VALID"
@@ -385,7 +361,7 @@ def test_warmup_is_excluded_from_latency_aggregation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_evaluate_records_planner_failure_without_aborting() -> None:
+async def test_evaluate_records_semantic_retry_without_aborting() -> None:
     dataset = load_probe_dataset()
     case = dataset.cases[0]
     remaining = dataset.cases[1]
@@ -416,7 +392,6 @@ async def test_evaluate_records_planner_failure_without_aborting() -> None:
     service = SemanticFactService(
         HouseholdFactEngine(_JsonGraphDispatcher(ROOT / "data", registry), schema),
         planner=SemanticFactPlanner(FailingThenOracle(), schema),
-        tier_zero_enabled=False,
     )
     context = AgentRequestContext(
         caller_entity_id="person:jian_kuang",
@@ -430,10 +405,10 @@ async def test_evaluate_records_planner_failure_without_aborting() -> None:
     recovered = await evaluate_planner_case(service, context, remaining)
 
     assert failed["planner_output"] is not None
-    assert failed["validation_result"] == "UNKNOWN_PROPERTY"
+    assert failed["validation_result"] == "VALID"
     assert failed["plan_match"] is False
-    assert failed["failure_stage"] == "planner_validation"
-    assert failed["executor_status"] == "not_run"
+    assert failed["failure_stage"] == "plan_mismatch"
+    assert failed["executor_status"] == "found"
     assert recovered["plan_match"] is True
     assert recovered["executor_status"] == "found"
 
@@ -459,7 +434,6 @@ async def test_probe_warmup_and_repeats_are_counted_separately() -> None:
     service = SemanticFactService(
         HouseholdFactEngine(_JsonGraphDispatcher(ROOT / "data", registry), schema),
         planner=SemanticFactPlanner(Oracle(), schema),
-        tier_zero_enabled=False,
     )
     context = AgentRequestContext(
         caller_entity_id="person:jian_kuang",
