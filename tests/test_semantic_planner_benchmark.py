@@ -464,3 +464,55 @@ async def test_probe_warmup_and_repeats_are_counted_separately() -> None:
     assert report["scores"]["answer_correctness"]["correct"] == 20
     assert all(row["phase"] == "measured" for row in measured)
     assert {row["sample_index"] for row in measured} == {0, 1}
+
+
+@pytest.mark.asyncio
+async def test_synthetic_probe_contrasting_concepts_execute() -> None:
+    """The synthetic household validates contrasting concepts and different speakers."""
+    fixture = ROOT / "benchmarks" / "fixtures" / "semantic-contract"
+    dataset = load_probe_dataset(
+        ROOT / "benchmarks" / "semantic_planner_synthetic.yaml"
+    )
+    expected = {case.utterance: case.expected for case in dataset.cases}
+
+    class Oracle:
+        async def plan_semantic_fact(
+            self,
+            messages: list[dict[str, Any]],
+            *_: Any,
+            **__: Any,
+        ) -> dict[str, Any]:
+            request = expected[messages[-1]["content"]]
+            return {"requires_fact": True, "request": request.model_dump(mode="json")}
+
+    registry = EdgeSchemaRegistry.from_directory(ROOT / "schemas" / "edge")
+    catalog = RuntimeSchemaCatalog.from_data_dir(fixture, registry)
+    schema = SemanticSchemaRegistry(catalog)
+    service = SemanticFactService(
+        HouseholdFactEngine(_JsonGraphDispatcher(fixture, registry), schema),
+        planner=SemanticFactPlanner(Oracle(), schema),
+    )
+    context = AgentRequestContext(
+        caller_entity_id=dataset.default_speaker_id,
+        assistant_id="steward",
+        assistant_display_name="Helper",
+        household_id=dataset.household_id,
+        current_time=dataset.frozen_time,
+        locale="zh",
+    )
+    report = await run_tier1_probe(
+        service, context, dataset, warmup=0, repeat=1, verified_cold=False
+    )
+
+    assert report["scores"]["plan_accuracy"]["correct"] == len(dataset.cases)
+    assert report["scores"]["answer_correctness"]["correct"] == len(dataset.cases)
+    ids = {case.case_id for case in dataset.cases}
+    # Contrasting concepts across speakers: father vs mother, husband vs wife,
+    # daughter (unique) vs the ambiguous son count.
+    assert {
+        "father_identity_b",
+        "mother_identity_b",
+        "husband_identity_b",
+        "wife_identity_a",
+        "daughter_identity_a",
+    } <= ids

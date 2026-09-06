@@ -72,6 +72,56 @@ plans:
         - property: gender
           value: female
     property: birth_date
+  father_identity:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+  mother_identity:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: parent
+        filters:
+        - property: gender
+          value: female
+  husband_identity:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: male
+  wife_identity:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+  daughter_identity:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+        filters:
+        - property: gender
+          value: female
   unknown:
     operation: select
     subject:
@@ -130,6 +180,39 @@ probe:
     expected_entity_ids:
     - person:b
     expected_equal: false
+  - id: father_identity_b
+    utterance: 我父亲是哪位家庭成员？
+    plan: father_identity
+    speaker_id: person:b
+    expected_status: found
+    expected_entity_ids:
+    - person:father
+  - id: mother_identity_b
+    utterance: 我母亲是哪位家庭成员？
+    plan: mother_identity
+    speaker_id: person:b
+    expected_status: found
+    expected_entity_ids:
+    - person:mother
+  - id: husband_identity_b
+    utterance: 我的丈夫是哪位家庭成员？
+    plan: husband_identity
+    speaker_id: person:b
+    expected_status: found
+    expected_entity_ids:
+    - person:a
+  - id: wife_identity_a
+    utterance: 我的妻子是哪位家庭成员？
+    plan: wife_identity
+    expected_status: found
+    expected_entity_ids:
+    - person:b
+  - id: daughter_identity_a
+    utterance: 我女儿是哪位家庭成员？
+    plan: daughter_identity
+    expected_status: found
+    expected_entity_ids:
+    - person:daughter
   - id: unknown_name
     utterance: NobodyZ的出生日期能查到吗？
     plan: unknown

@@ -1,4 +1,12 @@
-> Historical report: the six Tier-0 shortcuts described below have since been removed. All natural-language requests now use semantic interpretation; see [current architecture](../src/README.md).
+> **Historical report.** The body below describes the state at the date shown,
+> when the six exact-question Tier-0 shortcuts were still retained (see items 7, 8,
+> and 13). Those shortcuts have since been removed: sentence-based Tier-0 dispatch
+> and its configuration switch no longer exist in the source, and every
+> natural-language request—including identity and household list/count—now passes
+> through the semantic interpreter. Latency optimization is intentionally deferred
+> to a separate work item and is not a reason to reintroduce sentence dispatch.
+> See the [current architecture](../src/README.md) and the
+> [semantic planner contract repair report](../artifacts/qwen35-semantic-contract/REPORT.md).
 
 # Semantic planner authority report
 

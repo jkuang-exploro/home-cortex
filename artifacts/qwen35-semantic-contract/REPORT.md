@@ -1,8 +1,13 @@
-# Semantic planner contract repair — validation in progress
+# Semantic planner contract repair
 
 Starting revision: `ffdaf4cfdfe68689a34d2e2ffb9de121654d86f7`. No deployment or live household data change.
 
-Acceptance has not yet been established. Final repeated measurements will replace this status.
+**Status: code and deterministic validation are complete. Real-LLM acceptance on the
+production GPU machine is the only remaining gate.** The deterministic CI suite is
+green (see [Deterministic validation](#deterministic-validation)); the architectural
+invariants are locked by `tests/test_semantic_contract.py` and the benchmark datasets.
+Final real-LLM repeated measurements on the production GPU host will replace the
+pending numbers below.
 
 ## Architecture and root causes
 
@@ -28,9 +33,27 @@ No new execution operation, question handler, answer cache, household identity m
 
 Final metrics will show the original and adjusted evaluation contracts separately. Missing kinship filters remain plan errors.
 
+## Deterministic validation
+
+Run locally with `.venv/bin/python -m pytest -q` (359 tests) and the planner-only
+oracle benchmark. The oracle supplies the expected semantic request for every
+dataset utterance, then runs it through the real `SemanticFactPlanner ->
+SemanticFactRequest -> HouseholdFactEngine` path, so this measures downstream IR
+and executor correctness independent of model quality.
+
+- Fixed suite (`benchmarks/semantic_planner_eval.yaml`): **119/119 plans (100%)**;
+  every capability category is 100% (aggregation 23/23, entity_reference 7/7,
+  filtering 13/13, multi_hop_kinship 7/7, property_selection 20/20,
+  relationship_property_lookup 8/8, relationship_traversal 17/17,
+  speaker_relative_reference 9/9, temporal_operation 15/15). No failure reasons.
+- Tier-1 probe (20 questions, deterministic): **20/20 plans and 20/20 answers (100%)**.
+- Synthetic probe (`benchmarks/semantic_planner_synthetic.yaml`): **13/13 plans and
+  answers (100%)**, including two speakers, parent gender contrast, husband/wife
+  contrast, a unique daughter versus an ambiguous two-son count, and an unknown name.
+
 ## Local validation
 
-The full software suite is run locally with `.venv/bin/python -m pytest -q`. Synthetic households cover two speakers, changed people/dates, two sons plus a daughter, parent gender contrasts, relationship/entity property ownership, older/younger with reversed operands and ties, adulthood at the eighteenth birthday, ambiguity, and strict unsupported-plan rejection. Dedicated tests cover ontology expansion without mutation or dropped filters.
+The full software suite is run locally with `.venv/bin/python -m pytest -q`. Synthetic households cover two speakers, changed people/dates, two sons plus a daughter, parent gender contrasts (father vs mother), relationship/entity property ownership, husband/wife contrast, older/younger with reversed operands and ties, adulthood at the eighteenth birthday, ambiguity, and strict unsupported-plan rejection. Dedicated tests cover ontology expansion without mutation or dropped filters.
 
 Held-out interpretation resources are `benchmarks/semantic_planner_heldout.yaml` and `benchmarks/semantic_planner_synthetic.yaml`. Their wording is tested for separation from prompt examples and the fixed suite. The latter uses invented records under `benchmarks/fixtures/semantic-contract`.
 
@@ -52,8 +75,27 @@ The system-message hypothesis was not supported by the trials; the deployed rend
 
 ## Before/after metrics
 
-Pending final measurements. Baseline: fixed suite 95/119 plans (answers unscored); probe 75/100 plans and answers. Probe planner P50/P95 1922/2085 ms; suite 1900/2114 ms.
+Real-LLM baseline on `qwen3.5:9b` (pre-repair): fixed suite **95/119 plans** (answers
+unscored); probe **75/100 plans and answers**. Probe planner P50/P95 1922/2085 ms;
+suite 1900/2114 ms.
+
+Deterministic post-repair: fixed suite **119/119 plans**, probe **20/20 plans and
+answers**, synthetic probe **13/13**. The post-repair real-LLM numbers are pending
+the production GPU run described in [Remaining failures and acceptance](#remaining-failures-and-acceptance).
 
 ## Remaining failures and acceptance
 
-Pending final measurements. A successful single 20-question trial does not establish the required 100/100 probe result or five-pass reliability.
+Deterministic acceptance is met: the full fixed suite, the 20-question probe, and the
+synthetic contrasting-concept probe all execute with 100% plan and answer correctness
+through the real interpreter/executor path, and the architectural invariants are locked
+by `tests/test_semantic_contract.py`.
+
+Real-LLM acceptance is **not yet established**. The remaining step is to run the
+deterministic suite, the 20-question probe, and the held-out/synthetic probes on the
+production GPU host (`qwen3.5:9b`, temperature 0, JSON graph, no Tier 0) from an
+isolated benchmark package, with the data/schema/package fingerprints recorded. A
+successful single 20-question trial does not establish the required repeated
+100/100 probe result or five-pass reliability. Passing the known questions is
+necessary but insufficient: completion requires preserving the layer boundaries and
+demonstrating compositional generalization on unseen phrasing, different speakers,
+and synthetic households.
