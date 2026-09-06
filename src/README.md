@@ -461,3 +461,12 @@ with:
 ```sh
 docker compose logs -f cortex-api
 ```
+
+```sh
+docker cp   ~/Workspace/home-cortex/scripts/tier1_latency_bench.py   "$(docker compose ps -q cortex-api)":/tmp/tier1_latency_bench.py
+
+docker compose exec cortex-api \
+  python /tmp/tier1_latency_bench.py \
+  --ollama-url http://ollama:11434 \
+  --model qwen3.5:9b
+```
