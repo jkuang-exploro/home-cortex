@@ -69,7 +69,9 @@ Baseline constants:
 - Frozen time: `2026-09-03T12:00:00-07:00`.
 - `think=false`, temperature 0, 384 output tokens, keep-alive 24h, JSON graph, no Tier 0.
 
-Original baseline artifacts are untouched. `baseline-relevant-rows.json` contains only the relevant baseline rows. Candidate tar snapshots and complete per-case JSON reports preserve the investigation. Reports contain source/data/schema fingerprints; later reports also capture the actual capability payload, output schema, system prompt, examples, and command arguments. Temporary 8192-context/schema-grounding experiments are explicitly separate from baseline-setting measurements.
+Original baseline artifacts are untouched. `baseline-relevant-rows.json` contains only the relevant baseline rows. Complete per-case JSON reports and probe summaries preserve the investigation. Reports contain source/data/schema fingerprints; later reports also capture the actual capability payload, output schema, system prompt, examples, and command arguments. Temporary 8192-context/schema-grounding experiments are explicitly separate from baseline-setting measurements.
+
+The one-off `candidate-*.tar` snapshots that staged each variant onto the GPU host are **no longer in the repository**. They were investigation scratch: stale copies of the working tree (several including `__pycache__/*.pyc`), non-diffable, and redundant with the source in `src/` and with the per-run inputs captured in the JSON reports. The provenance that matters is the readable `*-summary.json` files and this report. Any needed snapshot remains recoverable from git history; `artifacts/qwen35-semantic-contract/*.tar` is now gitignored.
 
 The system-message hypothesis was not supported by the trials; the deployed renderer also preserves the first system message and subsequent messages ([Ollama v0.32.13 renderer](https://raw.githubusercontent.com/ollama/ollama/v0.32.13/model/renderers/qwen35.go)). Supplying schema text is recommended by [Ollama's structured-output documentation](https://docs.ollama.com/capabilities/structured-outputs), but the controlled schema-only trial did not improve this model and is not the selected production path.
 

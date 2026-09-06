@@ -5,3 +5,6 @@ data/edges/*
 .venv/
 __pycache__/
 .pytest_cache/
+# Experiment snapshots used only on the production GPU host; reproduce from the
+# JSON reports in artifacts/qwen35-semantic-contract instead of committing blobs.
+artifacts/qwen35-semantic-contract/*.tar
