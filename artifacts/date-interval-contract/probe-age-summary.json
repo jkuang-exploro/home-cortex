@@ -1,0 +1,105 @@
+{
+  "mode": "tier1_probe",
+  "dataset_size": 24,
+  "warmup": 1,
+  "repeat": 1,
+  "verified_cold": false,
+  "scores": {
+    "plan_accuracy": {
+      "correct": 24,
+      "scored": 24,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "answer_correctness": {
+      "correct": 24,
+      "scored": 24,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "executor_status": {
+      "found": 24
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "scores_all_measured_samples": {
+    "plan_accuracy": {
+      "correct": 24,
+      "scored": 24,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "answer_correctness": {
+      "correct": 24,
+      "scored": 24,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "executor_status": {
+      "found": 24
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "planner_latency_ms": {
+    "n": 24,
+    "p50": 2182.114,
+    "p95": 2845.486
+  },
+  "end_to_end_latency_ms": {
+    "n": 24,
+    "p50": 2182.293,
+    "p95": 2845.696
+  },
+  "accuracy_by_capability": {
+    "unspecified": {
+      "correct": 24,
+      "total": 24,
+      "accuracy": 1.0
+    }
+  },
+  "failure_table": [],
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "benchmarks/semantic_planner_age_filters.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "7557e7b13a396666a2bcd4bdd6c70bc3dd18215f9e223c5deeaf7b9b492dbc0b",
+    "data_tree_sha256": "94d2e554023019f0c53bcaa4cbbd06d06caace6612bef34e93f7ff545f18fd48",
+    "schema_tree_sha256": "4144c93ae28d050851b302e676e1a29fa1095aab4b978eebaa25cd53b4b3a3eb",
+    "imported_package_path": "/tmp/hc-date-intervals/src/home_cortex/semantic_planner_benchmark.py",
+    "copied_package_sha256": "335327c434be80ccdf9bb315011517e9a6decf58edf8200b1e6fab48e97f43cf",
+    "scoring_revision": "2026-09-07.1-explicit-date-interval-units",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.13",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "json",
+    "frozen_evaluation_time": "2026-09-07T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 1,
+    "verified_cold": false,
+    "planner_contract_sha256": "e90a4c286b8a58f1707b1a6212fb241f3e5f3866336cea452994c907c901d7cc"
+  },
+  "output": "/tmp/hc-date-intervals/probe-age.json"
+}

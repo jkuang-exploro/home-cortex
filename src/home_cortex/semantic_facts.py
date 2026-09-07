@@ -224,7 +224,7 @@ class SemanticFactRequest(_SemanticModel):
         description="Collection filters evaluated before count/aggregation/selection.",
     )
     other: SemanticReference | None = None
-    mode: Literal["days", "seconds"] | None = None
+    mode: Literal["years", "months", "days", "seconds"] | None = None
     from_unit: str | None = Field(default=None, max_length=16)
     to_unit: str | None = Field(default=None, max_length=16)
 
@@ -276,6 +276,7 @@ class FactResult:
     evidence: FactEvidence = FactEvidence()
     missing_requirements: tuple[str, ...] = ()
     candidates: tuple[Mapping[str, Any], ...] = ()
+    unit: str | None = None
 
 
 @dataclass(frozen=True)
@@ -434,10 +435,10 @@ class SemanticSchemaRegistry:
                 "resolve_reference": "returns exactly one entity; not a list of matching entities",
                 "argmin": "ordered property required; collection subject OR two references subject and other; returns entity",
                 "argmax": "ordered property required; collection subject OR two references subject and other; returns entity",
-                "completed_years": "one date property -> integer number of fully elapsed years at household_now, accounting for month/day; returns years, not the original date",
+                "completed_years": "legacy structured-call alias; interpreter uses date_difference with mode=years",
                 "duration": "date property + mode days|seconds",
                 "annual_occurrence": "date property; mode=days only for countdown",
-                "date_difference": "date property + mode days|seconds",
+                "date_difference": "one entity OR relationship date to household_now; mode explicitly chooses years|months|days|seconds. Calendar years/months count full anniversaries, signed toward zero; never divide days by a fixed ratio. Age, tenure and elapsed relationship time use this same operation.",
                 "unit_conversion": "numeric property + from_unit + to_unit",
             },
             "reference_ontology": self.ontology.planner_payload(),
@@ -454,8 +455,8 @@ class SemanticSchemaRegistry:
             self._planner_capability_cache = {
                 "references": full["references"],
                 "entity_types": full["entity_types"],
-                "operations": full["operations"],
-                "operation_requirements": full["operation_requirements"],
+                "operations": [name for name in full["operations"] if name not in {"duration", "completed_years"}],
+                "operation_requirements": {name: value for name, value in full["operation_requirements"].items() if name not in {"duration", "completed_years"}},
                 "filter_requirements": {
                     "composition": "request.filters restricts the resolved collection before select/count/aggregation; all conditions are AND. The outer property selects the output, not the field used by a filter.",
                     "date_range": "date/datetime property with value=[inclusive_start, exclusive_end]; use ISO dates. A calendar year Y is [Y-01-01, (Y+1)-01-01).",
@@ -537,6 +538,7 @@ class SemanticSchemaRegistry:
                 definitions["SemanticFilter"]["anyOf"][1],
             ]}
             request = definitions["SemanticFactRequest"]
+            request["properties"]["operation"]["enum"] = self.planner_capability_payload()["operations"]
             request["properties"]["filters"]["items"] = {
                 "$ref": "#/$defs/SemanticCollectionFilter"
             }
@@ -1627,7 +1629,12 @@ class HouseholdFactEngine:
                     evidence,
                 )
             value = selected
-        return FactResult("found", value, evidence)
+        unit = (
+            "years" if request.operation == "completed_years"
+            else request.mode if request.operation in {"date_difference", "duration", "annual_occurrence"}
+            else request.to_unit if request.operation == "unit_conversion" else None
+        )
+        return FactResult("found", value, evidence, unit=unit)
 
     async def _filter_collection(
         self,
@@ -1773,11 +1780,16 @@ class HouseholdFactEngine:
             )
         normalized = {"value": raw_value}
         try:
+            if fallback.require_past and execute_operator(
+                "date_difference",
+                OperatorInput(records=[normalized],field="value",mode="seconds",now=context.current_time),
+            ) < 0:
+                raise OperatorExecutionError("predicate requires a past date")
             transform = OPERATORS[fallback.transform]
             transform.validate(
                 field="value",
                 field_kind=infer_field_kind([raw_value]),
-                parameters={"reference": "household_now"},
+                parameters={"reference": "household_now", "mode": fallback.mode},
             )
             derived = execute_operator(
                 fallback.transform,
@@ -1786,6 +1798,7 @@ class HouseholdFactEngine:
                     field="value",
                     reference="household_now",
                     now=context.current_time,
+                    mode=fallback.mode,
                 ),
             )
         except (OperatorValidationError, OperatorExecutionError, TypeError, ValueError):
@@ -1974,8 +1987,15 @@ class FactRenderer:
             if request.property == "full_address":
                 return f"您的具体住址是{_format_address(result.value)}。"
             return f"查询到的值是{result.value}。"
-        if request.operation == "completed_years":
-            return f"{_subject_nominative(request.subject)}今年{result.value}岁。"
+        if request.operation in {"date_difference", "duration", "completed_years"}:
+            unit = result.unit or ("years" if request.operation == "completed_years" else request.mode)
+            if unit == "years" and request.property == "birth_date" and request.property_source == "entity":
+                return f"{_subject_nominative(request.subject)}今年{result.value}岁。"
+            label = {"years": "年", "months": "个月", "days": "天", "seconds": "秒"}[unit]
+            if result.value >= 0:
+                prefix = "已满" if unit in {"years", "months"} else "已过"
+                return f"从记录的日期到现在{prefix}{result.value}{label}。"
+            return f"该日期与现在的间隔为{result.value}{label}。"
         if request.operation == "annual_occurrence":
             if request.mode == "days":
                 days = int(result.value)
@@ -1998,11 +2018,9 @@ class FactRenderer:
         if request.operation in {"sum", "average", "min", "max"}:
             return f"计算结果是{result.value}。"
         if request.operation in {
-            "date_difference",
-            "duration",
             "unit_conversion",
         }:
-            return f"换算结果是{result.value}。"
+            return f"换算结果是{result.value} {result.unit or request.to_unit}。"
         if request.operation in {"first", "last", "latest", "earliest"}:
             return f"符合条件的是{_name(result.value, 'zh')}。"
         if request.subject.kind == "assistant":
@@ -2055,8 +2073,11 @@ class FactRenderer:
             if request.property == "full_address":
                 return f"Your street address is {_format_address(result.value)}."
             return f"The requested value is {result.value}."
-        if request.operation == "completed_years":
-            return f"The completed age is {result.value}."
+        if request.operation in {"date_difference", "duration", "completed_years"}:
+            unit = result.unit or ("years" if request.operation == "completed_years" else request.mode)
+            if unit == "years" and request.property == "birth_date" and request.property_source == "entity":
+                return f"The age is {result.value} years."
+            return f"The interval from the recorded date to now is {result.value} {unit}."
         if request.operation == "annual_occurrence":
             if request.mode == "days":
                 days = int(result.value)
@@ -2078,11 +2099,9 @@ class FactRenderer:
         if request.operation in {"sum", "average", "min", "max"}:
             return f"The computed result is {result.value}."
         if request.operation in {
-            "date_difference",
-            "duration",
             "unit_conversion",
         }:
-            return f"The converted result is {result.value}."
+            return f"The converted result is {result.value} {result.unit or request.to_unit}."
         if request.operation in {"first", "last", "latest", "earliest"}:
             return f"The matching result is {_name(result.value, 'en')}."
         if request.subject.kind == "assistant":

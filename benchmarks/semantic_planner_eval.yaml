@@ -67,7 +67,7 @@ plans:
     property: start_date
     property_source: relationship
   marriage_duration:
-    operation: duration
+    operation: date_difference
     subject: *spouse
     property: start_date
     property_source: relationship

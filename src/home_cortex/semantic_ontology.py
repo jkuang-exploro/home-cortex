@@ -49,6 +49,8 @@ class OntologyPredicateFallback:
     transform: str
     operator: str
     value_from_policy: str
+    mode: str | None = None
+    require_past: bool = False
 
 
 @dataclass(frozen=True)
@@ -245,6 +247,8 @@ class SemanticOntology:
                     "definition_only": {
                         "property": definition.fallback.property,
                         "transform": definition.fallback.transform,
+                        **({"mode": definition.fallback.mode} if definition.fallback.mode is not None else {}),
+                        **({"require_past": True} if definition.fallback.require_past else {}),
                         "operator": definition.fallback.operator,
                         "value": self.policy_values[definition.fallback.value_from_policy],
                     },
@@ -311,7 +315,7 @@ def _parse_collection_predicates(
         if not set(matching).issubset(recognized):
             raise ValueError(f"{label}.matching_values must be recognized values")
         fallback_raw = _mapping(item.get("fallback"), f"{label}.fallback", path)
-        if set(fallback_raw) != {
+        if set(fallback_raw) - {"mode", "require_past"} != {
             "property",
             "transform",
             "operator",
@@ -329,6 +333,14 @@ def _parse_collection_predicates(
             raise ValueError(f"{label}.fallback values must be strings")
         if transform not in OPERATORS or OPERATORS[transform].implementation is None:
             raise ValueError(f"{label}.fallback transform is not executable")
+        mode = fallback_raw.get("mode")
+        require_past = fallback_raw.get("require_past", False)
+        if not isinstance(require_past, bool):
+            raise ValueError(f"{label}.fallback require_past must be boolean")
+        if mode is not None and mode not in {"years", "months", "days", "seconds"}:
+            raise ValueError(f"{label}.fallback mode is not supported")
+        if transform in {"date_difference", "duration"} and mode is None:
+            raise ValueError(f"{label}.fallback interval requires mode")
         if operator not in PREDICATE_OPERATORS:
             raise ValueError(f"{label}.fallback operator is not allowlisted")
         if value_from_policy not in policy_values:
@@ -347,6 +359,8 @@ def _parse_collection_predicates(
                 transform=transform,
                 operator=operator,
                 value_from_policy=value_from_policy,
+                mode=mode,
+                require_past=require_past,
             ),
             default_scope_relation=default_scope_relation,
         )

@@ -1,0 +1,105 @@
+{
+  "mode": "tier1_probe",
+  "dataset_size": 5,
+  "warmup": 1,
+  "repeat": 3,
+  "verified_cold": false,
+  "scores": {
+    "plan_accuracy": {
+      "correct": 5,
+      "scored": 5,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "answer_correctness": {
+      "correct": 5,
+      "scored": 5,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "executor_status": {
+      "found": 5
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "scores_all_measured_samples": {
+    "plan_accuracy": {
+      "correct": 15,
+      "scored": 15,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "answer_correctness": {
+      "correct": 15,
+      "scored": 15,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "executor_status": {
+      "found": 15
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "planner_latency_ms": {
+    "n": 15,
+    "p50": 2141.077,
+    "p95": 2202.097
+  },
+  "end_to_end_latency_ms": {
+    "n": 15,
+    "p50": 2141.278,
+    "p95": 2202.267
+  },
+  "accuracy_by_capability": {
+    "unspecified": {
+      "correct": 5,
+      "total": 5,
+      "accuracy": 1.0
+    }
+  },
+  "failure_table": [],
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "production-smoke.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "03d3c4b4742cde99ea1a3fdc42732cc8734082d20a24a06c552ea11ca5d14bcd",
+    "data_tree_sha256": "5d065b8e4c99544412e068a5a8f7d619a92e8e8c94d308c45e7fa7bfd035142a",
+    "schema_tree_sha256": "4144c93ae28d050851b302e676e1a29fa1095aab4b978eebaa25cd53b4b3a3eb",
+    "imported_package_path": "/tmp/hc-date-intervals/src/home_cortex/semantic_planner_benchmark.py",
+    "copied_package_sha256": "335327c434be80ccdf9bb315011517e9a6decf58edf8200b1e6fab48e97f43cf",
+    "scoring_revision": "2026-09-07.1-explicit-date-interval-units",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.13",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "json",
+    "frozen_evaluation_time": "2026-09-07T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 3,
+    "verified_cold": false,
+    "planner_contract_sha256": "3db4f77e8ba74bdf024621b98be0fd10c3f38872cb8fa8e1cec9ba7111c76fcd"
+  },
+  "output": "/tmp/hc-date-intervals/probe-production.json"
+}

@@ -170,7 +170,7 @@ The semantic fact IR is a bounded algebra backed by the explicit operator
 registry. Collection filters compose with operations such as `count`, `argmin`,
 and `argmax`; `adult` and `minor` are declarative ontology predicates rather
 than fact handlers. Their policy prefers a recognized `household_role` on the
-membership edge and falls back to `completed_years(birth_date)` using the one
+membership edge and falls back to `date_difference(birth_date, mode=years)` using the one
 `adulthood_years` value in `schemas/semantic/ontology.yaml`. A person's `child`
 relationship remains distinct from a minor household member.
 
@@ -218,7 +218,7 @@ repair. Evaluation alternatives do not change production interpretation.
 
 The interpreter distinguishes an output projection from a filter operand:
 `select` with `property=null` returns the matching entity set, while
-`select(birth_date)` returns a stored date and `completed_years(birth_date)`
+`select(birth_date)` returns a stored date and `date_difference(birth_date, mode=years)`
 returns a computed integer age. Calendar-year constraints use the existing
 half-open `date_range` predicate, composed with a list or count operation.
 Request-level field filters have literal operands; anchor-relative comparisons
@@ -229,6 +229,27 @@ rejected before graph access, never interpreted as an empty result.
 the invented household under `benchmarks/fixtures/semantic-contract`. Its
 question wording is kept separate from interpreter examples. Run deterministic
 tests locally and real-model evaluations on the isolated production GPU path.
+
+The interpreter exposes one elapsed-date operation: `date_difference`, from
+an entity or relationship date to the trusted household clock. `mode` selects
+`years`, `months`, `days`, or `seconds`; the structured result carries `unit`
+alongside its numeric `value`. Age, relationship tenure, and residence tenure
+are different property/reference compositions of this same operation. Renderers
+retain the unit instead of showing a bare conversion result.
+
+Years and months count complete calendar periods, truncated toward zero for
+negative intervals, rather than using a fixed number of days. A February 29
+year anniversary is complete on March 1 in a non-leap year; a month starting
+on the 31st is not complete on the last day of a shorter month. Date-only
+values use local calendar dates; datetime calendar periods also respect the
+local time of day. Days/seconds retain the existing interval semantics.
+The adulthood ontology explicitly requires a past input date, so a future
+date cannot silently classify a person as a minor.
+
+`duration` and `completed_years` remain compatibility entry points for existing
+structured callers; they delegate to the generic implementation and are absent
+from the model-facing operation vocabulary. Existing benchmark expectations
+use the canonical syntax; historical result artifacts are not rescored.
 
 
 The ingestion endpoint rejects unknown relationship files, invalid endpoint

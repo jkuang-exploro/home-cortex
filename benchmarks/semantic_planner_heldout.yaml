@@ -15,7 +15,7 @@ plans:
         - property: gender
           value: male
   marriage_duration:
-    operation: duration
+    operation: date_difference
     subject: &id002
       kind: self
       entity_type: person

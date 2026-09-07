@@ -42,7 +42,7 @@ from .semantic_facts import (
 )
 
 FROZEN_EVAL_TIME = "2026-09-03T12:00:00-07:00"
-SCORING_REVISION = "2026-09-06.3-wife-filtered-marriage-edge"
+SCORING_REVISION = "2026-09-07.1-explicit-date-interval-units"
 
 def _default_eval_path() -> Path:
     candidates = (
@@ -72,6 +72,7 @@ class SemanticEvalCase:
     expected_names: tuple[str, ...] | None = None
     expected_equal: bool | None = None
     notes: str | None = None
+    expected_unit: str | None = None
 
     def __post_init__(self) -> None:
         if not self.case_id:
@@ -216,6 +217,7 @@ def load_probe_dataset(path: Path = DEFAULT_EVAL_PATH) -> ProbeDataset:
                     for key in alternative_keys
                 ),
                 case_id=case_id,
+                expected_unit=item.get("expected_unit"),
                 expected_status=(
                     str(item["expected_status"])
                     if item.get("expected_status") is not None
@@ -398,11 +400,14 @@ def score_structured_result(result: FactResult, case: SemanticEvalCase) -> bool 
             case.expected_value,
             case.expected_names,
             case.expected_equal,
+            case.expected_unit,
         )
     )
     if not has_expectation:
         return None
     if case.expected_status is not None and result.status != case.expected_status:
+        return False
+    if case.expected_unit is not None and result.unit != case.expected_unit:
         return False
     if case.expected_entity_ids is not None:
         if set(primary_entity_ids(result)) != set(case.expected_entity_ids):
@@ -456,6 +461,7 @@ def fact_result_from_serialized(payload: Mapping[str, Any] | None) -> FactResult
             str(item) for item in (payload.get("missing_requirements") or ())
         ),
         candidates=candidates,
+        unit=payload.get("unit"),
     )
 
 
@@ -548,6 +554,7 @@ def serialize_fact_result(result: FactResult | None) -> dict[str, Any] | None:
     return {
         "status": result.status,
         "value": jsonable(result.value),
+        "unit": result.unit,
         "entity_ids": list(result.evidence.entity_ids),
         "primary_entity_ids": list(primary_entity_ids(result)),
         "relationship": result.evidence.relationship,

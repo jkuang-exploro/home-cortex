@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
 from types import MappingProxyType
 from typing import Any, Literal
@@ -124,6 +124,10 @@ class OperatorDefinition:
             raise OperatorValidationError(
                 f"{self.name} requires {', '.join(missing)}"
             )
+        if self.name in {"date_difference", "duration"} and parameters.get("mode") not in {"years", "months", "days", "seconds"}:
+            raise OperatorValidationError("date interval requires a supported unit")
+        if self.name == "annual_occurrence" and parameters.get("mode") not in {None, "days"}:
+            raise OperatorValidationError("annual occurrence only supports a date or days")
 
     def execute(self, values: OperatorInput) -> Any:
         if self.implementation is None:
@@ -327,6 +331,32 @@ def _date_difference(values: OperatorInput) -> int | float:
     value = _only_value(values)
     now = _required_now(values)
     parsed_date, parsed_datetime = _temporal_value(value)
+    if values.mode not in {"years", "months", "days", "seconds"}:
+        raise OperatorExecutionError("date interval requires a supported unit")
+    if values.mode in {"years", "months"}:
+        if parsed_date is not None:
+            start, end = parsed_date, now.date()
+        elif parsed_datetime is not None:
+            start, end = parsed_datetime.astimezone(now.tzinfo), now
+        else:
+            raise OperatorExecutionError("date_difference requires date|datetime")
+        sign = 1 if end >= start else -1
+        if sign < 0:
+            start, end = end, start
+        # Calendar anniversaries, truncated toward zero. A Feb 29 anniversary
+        # is not complete on Feb 28; a month starting on the 31st is not
+        # complete in a shorter month. No fixed day/year or day/month ratio.
+        if values.mode == "years":
+            count = end.year - start.year
+            start_tail = (start.month, start.day)
+            end_tail = (end.month, end.day)
+        else:
+            count = (end.year - start.year) * 12 + end.month - start.month
+            start_tail, end_tail = (start.day,), (end.day,)
+        if isinstance(start, datetime):
+            start_tail += (start.hour, start.minute, start.second, start.microsecond)
+            end_tail += (end.hour, end.minute, end.second, end.microsecond)
+        return sign * (count - (end_tail < start_tail))
     if parsed_date is not None:
         delta = now.date() - parsed_date
         return delta.days if values.mode == "days" else delta.total_seconds()
@@ -343,8 +373,9 @@ def _completed_years(values: OperatorInput) -> int:
     start = parsed_date or (parsed_datetime.date() if parsed_datetime else None)
     if start is None or start > now.date():
         raise OperatorExecutionError("completed_years requires a past date")
-    passed = (now.month, now.day) >= (start.month, start.day)
-    return now.year - start.year - (not passed)
+    # Compatibility for structured callers. The interpreter uses the generic
+    # interval operation; preserve the old past-date and date-only contract.
+    return int(_date_difference(replace(values, records=[{"value": start.isoformat()}], field="value", mode="years")))
 
 
 def _duration(values: OperatorInput) -> int | float:
@@ -352,6 +383,8 @@ def _duration(values: OperatorInput) -> int | float:
 
 
 def _annual_occurrence(values: OperatorInput) -> str | int:
+    if values.mode not in {None, "days"}:
+        raise OperatorExecutionError("annual occurrence only supports a date or days")
     value = _only_value(values)
     now = _required_now(values)
     stored, parsed_datetime = _temporal_value(value)

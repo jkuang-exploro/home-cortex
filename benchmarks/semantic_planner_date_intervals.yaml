@@ -1,0 +1,184 @@
+# Invented household; no evaluation wording is used in interpreter examples.
+version: 1
+plans:
+  marriage_years:
+    operation: date_difference
+    subject: &id001
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+    property: start_date
+    property_source: relationship
+    mode: years
+  marriage_months:
+    operation: date_difference
+    subject: *id001
+    property: start_date
+    property_source: relationship
+    mode: months
+  marriage_days:
+    operation: date_difference
+    subject: *id001
+    property: start_date
+    property_source: relationship
+    mode: days
+  marriage_seconds:
+    operation: date_difference
+    subject: *id001
+    property: start_date
+    property_source: relationship
+    mode: seconds
+  residence_years:
+    operation: date_difference
+    subject: &id002
+      kind: self
+      entity_type: person
+      path:
+      - relation: residence
+    property: start_date
+    property_source: relationship
+    mode: years
+  residence_months:
+    operation: date_difference
+    subject: *id002
+    property: start_date
+    property_source: relationship
+    mode: months
+  wife_age:
+    operation: date_difference
+    subject: &id003
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+    property_source: entity
+    mode: years
+  self_age:
+    operation: date_difference
+    subject:
+      kind: self
+      entity_type: person
+    property: birth_date
+    property_source: entity
+    mode: years
+  marriage_date:
+    operation: select
+    subject: *id001
+    property: start_date
+    property_source: relationship
+  wife_marriage_date:
+    operation: select
+    subject: *id003
+    property: start_date
+    property_source: relationship
+  wife_birth:
+    operation: select
+    subject: *id003
+    property: birth_date
+probe:
+  frozen_time: '2026-09-07T12:00:00-07:00'
+  default_speaker_id: person:a
+  household_id: address:fictional
+  cases:
+  - id: marriage_years_0
+    utterance: 我结婚多少年了
+    plan: marriage_years
+    expected_status: found
+    expected_value: 21
+    expected_unit: years
+  - id: marriage_years_1
+    utterance: 我们的婚姻持续了几年
+    plan: marriage_years
+    expected_status: found
+    expected_value: 21
+    expected_unit: years
+  - id: marriage_years_2
+    utterance: How many years have we been married?
+    plan: marriage_years
+    expected_status: found
+    expected_value: 21
+    expected_unit: years
+  - id: marriage_months_0
+    utterance: 我们结婚多少个月了
+    plan: marriage_months
+    expected_status: found
+    expected_value: 256
+    expected_unit: months
+  - id: marriage_months_1
+    utterance: 从结为夫妻那天起算，到今天满几个月
+    plan: marriage_months
+    expected_status: found
+    expected_value: 256
+    expected_unit: months
+  - id: marriage_days_0
+    utterance: 结婚到现在过了几天
+    plan: marriage_days
+    expected_status: found
+    expected_value: 7794
+    expected_unit: days
+  - id: marriage_seconds_0
+    utterance: 我们的婚姻关系持续了多少秒
+    plan: marriage_seconds
+    expected_status: found
+    expected_value: 673401600
+    expected_unit: seconds
+  - id: residence_years_0
+    utterance: 我住在现在的地址多少年了
+    plan: residence_years
+    expected_status: found
+    expected_value: 8
+    expected_unit: years
+  - id: residence_years_1
+    utterance: 我搬进这个家的时间距今几年了
+    plan: residence_years
+    expected_status: found
+    expected_value: 8
+    expected_unit: years
+  - id: residence_months_0
+    utterance: 我在现住址住了几个月
+    plan: residence_months
+    expected_status: found
+    expected_value: 104
+    expected_unit: months
+  - id: wife_age_0
+    utterance: 我老婆多大岁数
+    plan: wife_age
+    expected_status: found
+    expected_value: 44
+    expected_unit: years
+  - id: wife_age_1
+    utterance: 我老婆的年龄是多少
+    plan: wife_age
+    expected_status: found
+    expected_value: 44
+    expected_unit: years
+  - id: self_age_0
+    utterance: 我现在几周岁
+    plan: self_age
+    expected_status: found
+    expected_value: 46
+    expected_unit: years
+  - id: marriage_date_0
+    utterance: 我跟我老婆什么时候结婚的
+    plan: marriage_date
+    acceptable_plans:
+    - wife_marriage_date
+    expected_status: found
+    expected_value: '2005-05-06'
+  - id: marriage_date_1
+    utterance: 我和配偶结婚的日期是什么
+    plan: marriage_date
+    acceptable_plans:
+    - wife_marriage_date
+    expected_status: found
+    expected_value: '2005-05-06'
+  - id: wife_birth_date
+    utterance: 我老婆哪天出生
+    plan: wife_birth
+    expected_status: found
+    expected_value: '1982-06-01'

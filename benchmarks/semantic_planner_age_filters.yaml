@@ -2,7 +2,8 @@
 version: 1
 plans:
   wife_age:
-    operation: completed_years
+    operation: date_difference
+    mode: years
     subject:
       kind: self
       entity_type: person
@@ -13,7 +14,8 @@ plans:
           value: female
     property: birth_date
   inlaw_age:
-    operation: completed_years
+    operation: date_difference
+    mode: years
     subject:
       kind: self
       entity_type: person
@@ -25,14 +27,16 @@ plans:
           value: male
     property: birth_date
   self_age:
-    operation: completed_years
+    operation: date_difference
+    mode: years
     subject:
       kind: self
       entity_type: person
       path: []
     property: birth_date
   daughter_age:
-    operation: completed_years
+    operation: date_difference
+    mode: years
     subject:
       kind: self
       entity_type: person

@@ -48,7 +48,9 @@ collection_predicates:
     matching_values: [owner, adult_dependent]
     fallback:
       property: birth_date
-      transform: completed_years
+      transform: date_difference
+      mode: years
+      require_past: true
       operator: gte
       value_from_policy: adulthood_years
   minor:
@@ -60,7 +62,9 @@ collection_predicates:
     matching_values: [minor_dependent]
     fallback:
       property: birth_date
-      transform: completed_years
+      transform: date_difference
+      mode: years
+      require_past: true
       operator: lt
       value_from_policy: adulthood_years
 

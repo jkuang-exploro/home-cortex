@@ -56,6 +56,35 @@ def test_operator_contracts_are_machine_readable() -> None:
     assert OPERATORS["annual_occurrence"].field_kinds == {"date", "datetime"}
 
 
+@pytest.mark.parametrize('stored,now,unit,expected', [
+    ('2014-05-04','2026-05-03','years',11),
+    ('2014-05-04','2026-05-04','years',12),
+    ('2014-05-04','2026-09-07','years',12),
+    ('2014-05-04','2026-09-07','months',148),
+    ('2014-05-04','2026-09-07','days',4509),
+    ('2014-05-04','2026-09-07','seconds',4509*86400),
+    ('2020-02-29','2021-02-28','years',0),
+    ('2020-02-29','2021-03-01','years',1),
+    ('2026-01-31','2026-02-28','months',0),
+    ('2026-01-31','2026-03-01','months',1),
+    ('2027-05-04','2026-05-04','years',-1),
+    ('2027-05-04','2026-05-05','years',0),
+    ('2014-05-04T13:00:00-07:00','2026-05-04','years',11),
+])
+def test_date_interval_uses_calendar_units_and_explicit_direction(stored,now,unit,expected):
+    result=execute_operator('date_difference',OperatorInput(
+        records=[{'start':stored}],field='start',mode=unit,
+        now=datetime.fromisoformat(now+'T12:00:00-07:00'),
+    ))
+    assert result==expected
+
+
+@pytest.mark.parametrize('unit', [None,'weeks','invalid'])
+def test_interval_rejects_unspecified_or_unknown_units(unit):
+    with pytest.raises(OperatorExecutionError):
+        execute_operator('date_difference',OperatorInput(records=[{'start':'2000-01-01'}],field='start',mode=unit,now=datetime.fromisoformat('2026-09-07T12:00:00-07:00')))
+
+
 @pytest.mark.parametrize(
     ("stored", "now", "mode", "expected"),
     (

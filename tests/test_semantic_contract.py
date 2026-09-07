@@ -55,13 +55,43 @@ def ref(*steps):
 async def test_age_is_completed_years_not_birth_date(household, day, expected):
     engine,ctx,_=household
     ctx=replace(ctx,current_time=datetime.fromisoformat(day+'T12:00:00-07:00'),locale='zh')
-    age=SemanticFactRequest(operation='completed_years',subject=ref(step('spouse','female')),property='birth_date')
+    age=SemanticFactRequest(operation='date_difference',mode='years',subject=ref(step('spouse','female')),property='birth_date')
     result,*_=await engine.execute(age,ctx)
     assert result.status=='found' and result.value==expected
+    assert result.unit=='years'
     assert f'{expected}岁' in FactRenderer().render(age,result,ctx)
-    birth=age.model_copy(update={'operation':'select'})
+    birth=age.model_copy(update={'operation':'select','mode':None})
     result,*_=await engine.execute(birth,ctx)
     assert result.value=='1982-06-01'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('relation,unit,expected', [('spouse','years',21),('spouse','months',255),('residence','years',8)])
+async def test_one_date_interval_contract_for_relationships_and_units(household,relation,unit,expected):
+    from home_cortex.semantic_planner_benchmark import serialize_fact_result, fact_result_from_serialized, SemanticEvalCase, score_structured_result
+    engine,ctx,_=household
+    query=SemanticFactRequest(operation='date_difference',subject=ref(step(relation)),property='start_date',property_source='relationship',mode=unit)
+    result,*_=await engine.execute(query,ctx)
+    assert result.status=='found' and result.value==expected and result.unit==unit
+    zh=FactRenderer().render(query,result,replace(ctx,locale='zh'))
+    assert str(expected) in zh and ('个月' if unit=='months' else '年') in zh
+    assert '岁' not in zh and '换算' not in zh
+    en=FactRenderer().render(query,result,replace(ctx,locale='en'))
+    assert f'{expected} {unit}' in en
+    restored=fact_result_from_serialized(serialize_fact_result(result))
+    assert restored.unit==unit
+    case=SemanticEvalCase('synthetic','person:a','temporal','interval',query,expected_value=expected,expected_unit=unit)
+    assert score_structured_result(restored,case)
+    assert not score_structured_result(replace(restored,unit='seconds'),case)
+    assert not engine.schema.validates(query.model_copy(update={'property_source':'entity'}))
+
+
+def test_interpreter_exposes_one_interval_operation(household):
+    engine,ctx,_=household
+    operations=engine.schema.planner_capability_payload()['operations']
+    assert 'date_difference' in operations
+    assert not set(operations).intersection({'duration','completed_years'})
+    assert engine.schema.planner_output_schema()['$defs']['SemanticFactRequest']['properties']['operation']['enum']==operations
 
 
 @pytest.mark.asyncio
@@ -91,16 +121,30 @@ async def test_date_filtered_set_preserves_bounds_scope_and_cardinality(househol
 
 
 @pytest.mark.asyncio
-async def test_age_and_date_filter_eval_expectations_on_invented_household(household):
+@pytest.mark.parametrize('filename', ['semantic_planner_age_filters.yaml','semantic_planner_date_intervals.yaml'])
+async def test_age_and_date_filter_eval_expectations_on_invented_household(household,filename):
     from home_cortex.semantic_planner_benchmark import load_probe_dataset, score_structured_result
     engine,ctx,_=household
-    dataset=load_probe_dataset(Path(__file__).parents[1]/'benchmarks/semantic_planner_age_filters.yaml')
+    dataset=load_probe_dataset(Path(__file__).parents[1]/'benchmarks'/filename)
     ctx=replace(ctx,current_time=dataset.frozen_time)
     example_texts={message['content'] for message in _semantic_planner_examples() if message['role']=='user'}
     for case in dataset.cases:
         assert case.utterance not in example_texts
         result,*_=await engine.execute(case.expected,replace(ctx,caller_entity_id=case.speaker_id))
         assert score_structured_result(result,case), case.case_id
+
+
+@pytest.mark.asyncio
+async def test_future_date_is_signed_interval_but_not_valid_age_predicate(household):
+    engine,ctx,dispatcher=household
+    dispatcher.entities['person:daughter']['dob']='2026-10-01'
+    query=SemanticFactRequest(operation='date_difference',subject=ref(step('child','female')),property='birth_date',mode='days')
+    result,*_=await engine.execute(query,ctx)
+    assert result.value==-28 and result.unit=='days'
+    members=SemanticReference(kind='current_household',entity_type='address',path=(SemanticRelationStep(relation='member'),))
+    query=SemanticFactRequest(operation='count',subject=members,filters=(SemanticFilter(predicate='minor'),))
+    result,*_=await engine.execute(query,ctx)
+    assert result.status=='filter_input_missing'
 
 
 @pytest.mark.asyncio
@@ -246,7 +290,7 @@ def test_model_contract_and_examples_are_semantic_and_separate(household):
     assert 'property_source' in contract['SemanticFactRequest']['required']
     assert contract['SemanticFilter']['anyOf'][1]['properties']['predicate']['enum']==['adult','minor']
     payload=engine.schema.planner_capability_payload()
-    assert payload['collection_predicates']['adult']['definition_only']=={'property':'birth_date','transform':'completed_years','operator':'gte','value':18}
+    assert payload['collection_predicates']['adult']['definition_only']=={'property':'birth_date','transform':'date_difference','mode':'years','require_past':True,'operator':'gte','value':18}
     assert set(payload['operations']).isdisjoint({'filter','traverse','adult','minor'})
     assert 'dob' not in json.dumps(payload)
     assert 'person:a' not in json.dumps(payload)
