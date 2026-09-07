@@ -398,19 +398,21 @@ def test_wire_grammar_requires_ownership_and_runtime_types_context(household):
     engine,_,_=household
     defs=engine.schema.planner_output_schema()['$defs']
     refs=defs['SemanticReference']['anyOf']
-    kinds=[
-        item['properties']['kind']['const']
-        for item in refs
-        if 'const' in item['properties']['kind']
-    ]
+    kinds=[]
+    for item in refs:
+        kind=item['properties']['kind']
+        kinds.extend(kind.get('enum', [kind['const']] if 'const' in kind else []))
     assert 'self' in kinds and 'assistant' in kinds
     assert 'entity_id' not in kinds
-    self_ref=next(item for item in refs if item['properties']['kind'].get('const')=='self')
-    assistant_ref=next(item for item in refs if item['properties']['kind'].get('const')=='assistant')
-    assert 'turn_offset' not in self_ref['properties']
-    assert 'cardinality' not in self_ref['properties']
-    assert set(self_ref['required'])==set(self_ref['properties'])
-    assert 'second-person' in assistant_ref['description'].casefold()
+    ordinary=next(
+        item for item in refs
+        if set(item['properties']['kind'].get('enum', ())) >= {'self', 'assistant'}
+    )
+    assert 'turn_offset' not in ordinary['properties']
+    assert 'cardinality' not in ordinary['properties']
+    assert set(ordinary['required'])==set(ordinary['properties'])
+    assert 'second person' in ordinary['description'].casefold()
+    assert ordinary['properties']['kind']['enum']==['self','assistant','current_household']
     assert defs['SemanticFactRequest']['properties']['property']['anyOf'][0]=={'type':'null'}
     assert defs['SemanticFactRequest']['properties']['amount']['anyOf'][0]=={'type':'null'}
     request=defs['SemanticFactRequest']

@@ -603,44 +603,40 @@ class SemanticSchemaRegistry:
             request["required"].extend(["property", "property_source"])
             path_schema = definitions["SemanticReference"]["properties"]["path"]
             entity_types = sorted(self.catalog.entities)
-            contextual = [
+            definitions["SemanticReference"] = {"anyOf": [
                 {
                     "type": "object",
                     "additionalProperties": False,
-                    "description": description,
+                    "description": (
+                        "Contextual reference. kind=self is the authenticated "
+                        "speaker (first person). kind=assistant is this helper "
+                        "when the user addresses it (second person). "
+                        "kind=current_household is the configured home."
+                    ),
                     "properties": {
-                        "kind": {"type": "string", "const": kind},
+                        "kind": {
+                            "type": "string",
+                            "enum": ["self", "assistant", "current_household"],
+                            "description": (
+                                "self: first-person speaker. assistant: this "
+                                "helper under second-person address. "
+                                "current_household: configured home."
+                            ),
+                        },
                         "value": {"type": "null"},
                         "entity_type": {
                             "anyOf": [
                                 {"type": "null"},
-                                {"type": "string", "const": entity_type},
+                                {
+                                    "type": "string",
+                                    "enum": ["person", "address"],
+                                },
                             ]
                         },
                         "path": path_schema,
                     },
                     "required": ["kind", "value", "entity_type", "path"],
-                }
-                for kind, entity_type, description in (
-                    (
-                        "self",
-                        "person",
-                        "Authenticated current speaker. First-person identity only.",
-                    ),
-                    (
-                        "assistant",
-                        "person",
-                        "This household assistant. Second-person identity when the user addresses the agent.",
-                    ),
-                    (
-                        "current_household",
-                        "address",
-                        "The configured household address.",
-                    ),
-                )
-            ]
-            definitions["SemanticReference"] = {"anyOf": [
-                *contextual,
+                },
                 {
                     "type": "object",
                     "additionalProperties": False,
