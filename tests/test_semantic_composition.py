@@ -214,8 +214,15 @@ async def test_named_then_pronoun_through_both_history_layers_and_authoritative_
     ], user_entity_id='person:a',conversation_id='test')
     assert '2019-09-03' in two.answer
     forwarded=client.calls[-1]['messages']
-    assert forwarded[-2:] == [{'role':'user','content':'How old is son1?'},
-                              {'role':'user','content':'When is his tenth birthday?'}]
+    assert forwarded[-3:] == [
+        {'role':'user','content':'How old is son1?'},
+        {'role':'assistant','content':(
+            '[End of earlier user turn. Its assistant answer is omitted. '
+            'Compile only the following user message; use this earlier turn '
+            'solely for discourse antecedents.]'
+        )},
+        {'role':'user','content':'When is his tenth birthday?'},
+    ]
     serialized=json.dumps(forwarded)
     assert 'person:a' not in serialized and 'person:son1' not in serialized and '9999' not in serialized
 

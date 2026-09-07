@@ -26,7 +26,13 @@ from .agents import get_agent
 from .config import get_settings
 from .edge_schema import EdgeSchemaRegistry
 from .fact_benchmark import _JsonGraphDispatcher, _percentile
-from .ollama import PLANNER_KEEP_ALIVE, PLANNER_NUM_PREDICT, PLANNER_SEED, OllamaService
+from .ollama import (
+    PLANNER_KEEP_ALIVE,
+    PLANNER_NUM_CTX,
+    PLANNER_NUM_PREDICT,
+    PLANNER_SEED,
+    OllamaService,
+)
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_facts import (
     AgentRequestContext,
@@ -759,6 +765,7 @@ def collect_provenance(
         "request_settings": {
             "think": False,
             "temperature": 0,
+            "num_ctx": PLANNER_NUM_CTX,
             "num_predict": PLANNER_NUM_PREDICT,
             "seed": PLANNER_SEED,
             "keep_alive": PLANNER_KEEP_ALIVE,

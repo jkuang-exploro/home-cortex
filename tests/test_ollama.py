@@ -139,6 +139,8 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
     await service.plan_semantic_fact(
         [
             {"role": "assistant", "content": "prior household chatter"},
+            {"role": "user", "content": "earlier user wording"},
+            {"role": "assistant", "content": "invented assistant fact"},
             {"role": "user", "content": "a speaker-relative relation"},
         ],
         {"concepts": {}, "relations": ["spouse"]},
@@ -158,7 +160,12 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
         for message in call["messages"]
         if message["role"] == "user"
     ]
-    assert call["options"] == {"temperature": 0, "num_predict": 384, "seed": 0}
+    assert call["options"] == {
+        "temperature": 0,
+        "num_ctx": 8192,
+        "num_predict": 384,
+        "seed": 0,
+    }
     assert call["keep_alive"] == "24h"
     assert call["think"] is False
     assert clock == []
@@ -168,9 +175,23 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
     assert "逐字复制用户说出的姓名或称呼" in prompt
     assert "property=null" in prompt
     assert "不计算或表述答案" in prompt
+    assert "只编译最后一条 user 消息" in prompt
     assert "person:dylan_kuang" not in prompt
     assert "prior household chatter" not in json.dumps(call["messages"])
+    assert "invented assistant fact" not in json.dumps(call["messages"])
     assert user_contents[-1] == "a speaker-relative relation"
+    assert call["messages"][-3:] == [
+        {"role": "user", "content": "earlier user wording"},
+        {
+            "role": "assistant",
+            "content": (
+                "[End of earlier user turn. Its assistant answer is omitted. "
+                "Compile only the following user message; use this earlier "
+                "turn solely for discourse antecedents.]"
+            ),
+        },
+        {"role": "user", "content": "a speaker-relative relation"},
+    ]
 
 
 @pytest.mark.asyncio

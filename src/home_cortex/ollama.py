@@ -6,8 +6,14 @@ from ollama import AsyncClient, ChatResponse
 
 
 PLANNER_KEEP_ALIVE = "24h"
+PLANNER_NUM_CTX = 8192
 PLANNER_NUM_PREDICT = 384
 PLANNER_SEED = 0
+_PLANNER_HISTORY_BOUNDARY = (
+    "[End of earlier user turn. Its assistant answer is omitted. Compile only "
+    "the following user message; use this earlier turn solely for discourse "
+    "antecedents.]"
+)
 
 _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用户问题编译成一个 JSON 语义请求，不计算或表述答案。家庭事实、身份和姓名问题 requires_fact=true；只有普通闲聊才是 false 且 request=null。
 
@@ -16,6 +22,7 @@ _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用�
 - exclude 是要从集合中排除的完整引用列表，与比较用的 other 不同。“其他”由语境决定排除 self 还是 discourse；无法确定时引用 unresolved，不猜。
 - date_add 使用 amount（有符号整数）和 mode=years/months/days 给实体或关系日期加日历偏移。指定第 N 周年直接加 N 年，即使已过去；不能替换成 annual_occurrence。目标月不存在该日时使用下个月第一天：闰日加一年为三月一日。
 - 前文仅供理解话语，不是事实来源。代词或前文对象用 kind=discourse、turn_offset=1..8（倒数第几个用户轮次）、entity_type、cardinality=single|collection，value=null。由可信上下文解析身份；单数不能从多人前文中猜选一人。需要澄清的指代用 kind=unresolved。path 可从前文实体继续组合。不要把代词改写成猜测姓名或 ID。
+- 只编译最后一条 user 消息。更早的 user 消息仅用于判断最后一条消息中指代语的先行词；固定的 assistant 省略标记只划分用户轮次，不包含事实。最后一条消息中的第一人称使用 self，第二人称使用 assistant；它们不引用更早轮次。只有必须从更早 user 消息取得对象的第三人称、指示词或明确前文引用才使用 discourse。
 
 引用语法：
 - self 是已认证的当前说话人，assistant 是本助手，二者 entity_type=person、value=null。用户对助手说“你”并询问身份、名字或称呼时必须引用 assistant，仍是事实请求。current_household 是配置的家庭，entity_type=address、value=null。named_entity.value 只能逐字复制用户说出的姓名或称呼；不得猜测 ID 或把亲属短语当姓名。
@@ -80,6 +87,40 @@ def _semantic_planner_examples() -> list[dict[str, str]]:
                 ensure_ascii=False, separators=(",", ":"),
             )},
         ))
+    messages.extend((
+        {"role": "user", "content": "周岚现在多大？"},
+        {"role": "assistant", "content": json.dumps({
+            "requires_fact": True,
+            "request": {
+                "operation": "date_difference",
+                "subject": {
+                    "kind": "named_entity",
+                    "value": "周岚",
+                    "entity_type": "person",
+                },
+                "property": "birth_date",
+                "property_source": "entity",
+                "mode": "years",
+            },
+        }, ensure_ascii=False, separators=(",", ":"))},
+        {"role": "user", "content": "他的二十岁生日是哪天？"},
+        {"role": "assistant", "content": json.dumps({
+            "requires_fact": True,
+            "request": {
+                "operation": "date_add",
+                "subject": {
+                    "kind": "discourse",
+                    "entity_type": "person",
+                    "turn_offset": 1,
+                    "cardinality": "single",
+                },
+                "property": "birth_date",
+                "property_source": "entity",
+                "amount": 20,
+                "mode": "years",
+            },
+        }, ensure_ascii=False, separators=(",", ":"))},
+    ))
     return messages
 
 
@@ -151,10 +192,19 @@ class OllamaService:
         household_now: str,
     ) -> Mapping[str, Any]:
         """Interpret an open-ended request without exposing physical storage."""
-        forwarded: list[dict[str, Any]] = [
-            {"role": "user", "content": str(message.get("content", ""))}
-            for message in messages if message.get("role") == "user"
-        ]
+        forwarded: list[dict[str, Any]] = []
+        for message in messages:
+            if message.get("role") != "user":
+                continue
+            if forwarded:
+                forwarded.append({
+                    "role": "assistant",
+                    "content": _PLANNER_HISTORY_BOUNDARY,
+                })
+            forwarded.append({
+                "role": "user",
+                "content": str(message.get("content", "")),
+            })
         validation_feedback = "\n".join(
             str(message.get("content", "")) for message in messages
             if message.get("role") == "system"
@@ -177,6 +227,7 @@ class OllamaService:
             format=dict(output_schema),
             options={
                 "temperature": 0,
+                "num_ctx": PLANNER_NUM_CTX,
                 "num_predict": PLANNER_NUM_PREDICT,
                 "seed": PLANNER_SEED,
             },
