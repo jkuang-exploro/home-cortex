@@ -23,9 +23,10 @@ _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用�
 - date_add 使用 amount（有符号整数）和 mode=years/months/days 给实体或关系日期加日历偏移。指定第 N 周年直接加 N 年，即使已过去；不能替换成 annual_occurrence。目标月不存在该日时使用下个月第一天：闰日加一年为三月一日。
 - 前文仅供理解话语，不是事实来源。代词或前文对象用 kind=discourse、turn_offset=1..8（倒数第几个用户轮次）、entity_type、cardinality=single|collection，value=null。由可信上下文解析身份；单数不能从多人前文中猜选一人。需要澄清的指代用 kind=unresolved。path 可从前文实体继续组合。不要把代词改写成猜测姓名或 ID。
 - 只编译最后一条 user 消息。更早的 user 消息仅用于判断最后一条消息中指代语的先行词；固定的 assistant 省略标记只划分用户轮次，不包含事实。最后一条消息中的第一人称使用 self，第二人称使用 assistant；它们不引用更早轮次。只有必须从更早 user 消息取得对象的第三人称、指示词或明确前文引用才使用 discourse。
+- 身份问句看人称，不看“谁”。第一人称（我、I、me、my）问身份、姓名或称呼 → kind=self。第二人称（你、您、you、your）问身份、姓名、角色或自我介绍 → kind=assistant。不要把第二人称问句编成 self，也不要把第一人称问句编成 assistant。
 
 引用语法：
-- self 是已认证的当前说话人，assistant 是本助手，二者 entity_type=person、value=null。用户对助手说“你”并询问身份、名字或称呼时必须引用 assistant，仍是事实请求。current_household 是配置的家庭，entity_type=address、value=null。named_entity.value 只能逐字复制用户说出的姓名或称呼；不得猜测 ID 或把亲属短语当姓名。
+- self 是已认证的当前说话人，assistant 是本助手，二者 entity_type=person、value=null。对助手的第二人称身份问题仍是事实请求，subject 必须是 assistant。current_household 是配置的家庭，entity_type=address、value=null。named_entity.value 只能逐字复制用户说出的姓名或称呼；不得猜测 ID 或把亲属短语当姓名。
 - path 是概念的有序组合，每步 {"concept":"名称"}，可附加 filters。reference_concepts 是权威定义；完整短语匹配某个 aliases 时，path 只放该最具体概念一次，不拆解或追加近义概念。son 不能简化为 child，wife 不能简化为 spouse，father 不能简化为 parent。本体会完整展开概念的关系和过滤条件。
 - 只有嵌套亲属才增加一跳。性别等形容词约束同一个目标，不增加一跳；额外 filters 与概念原有条件取 AND。说话人的亲属始终从 self 开始，“我家的儿子”也不先遍历全家。
 - 家庭成员列表、计数和极值是 current_household 后接 member。无所属限定的成年人/未成年人/孩子是家庭 member 加对应 predicate；明确“我的孩子”才是 self 后接 child。任何住址或家庭地址查询都从 self 接 residence，再取 full_address；current_household 只用于成员集合，不直接投影地址。遵守 relation_signatures 的起点与终点类型。
@@ -57,6 +58,7 @@ def _semantic_planner_examples() -> list[dict[str, str]]:
                 **({"path": [{"concept": name} for name in concepts]} if concepts else {})}
 
     examples = (
+        ("请介绍一下你自己。", "resolve_reference", reference("assistant"), None, "entity", {}),
         ("当前已认证的说话人是哪一位？", "resolve_reference", reference("self"), None, "entity", {}),
         ("应该怎样称呼这位助手？", "resolve_reference", reference("assistant"), None, "entity", {}),
         ("在本户成员中找出出生日期最靠前的人。", "argmin", reference("current_household", "member"), "birth_date", "entity", {}),

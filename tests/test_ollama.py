@@ -172,6 +172,8 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
     assert "Household now: 2026-09-03T12:00:00-07:00" in prompt
     assert sum(m["role"] == "system" for m in call["messages"]) == 1
     assert "self 是已认证的当前说话人" in prompt
+    assert "kind=assistant" in prompt
+    assert "请介绍一下你自己。" in json.dumps(call["messages"], ensure_ascii=False)
     assert "逐字复制用户说出的姓名或称呼" in prompt
     assert "property=null" in prompt
     assert "不计算或表述答案" in prompt

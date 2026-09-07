@@ -697,9 +697,14 @@ def test_unexpected_error_is_json_and_does_not_log_private_message(
 
     previous_agent = getattr(app.state, "agent", None)
     previous_agents = getattr(app.state, "agents", None)
+    previous_settings = getattr(app.state, "settings", None)
     exploding_agent = ExplodingAgent()
     app.state.agent = exploding_agent
     app.state.agents = {"steward": exploding_agent}
+    app.state.settings = SimpleNamespace(
+        cortex_api_key=None,
+        cortex_identity_map={},
+    )
     client = TestClient(app, raise_server_exceptions=False)
     try:
         with caplog.at_level(logging.INFO):
@@ -721,6 +726,11 @@ def test_unexpected_error_is_json_and_does_not_log_private_message(
             del app.state.agents
         else:
             app.state.agents = previous_agents
+        if previous_settings is None:
+            if hasattr(app.state, "settings"):
+                del app.state.settings
+        else:
+            app.state.settings = previous_settings
 
     assert response.status_code == 500
     assert response.json() == {

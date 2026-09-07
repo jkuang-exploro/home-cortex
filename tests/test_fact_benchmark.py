@@ -74,9 +74,12 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
         return {"requires_fact": True, "request": request}
 
     from home_cortex.ollama import OllamaService
+    from home_cortex.openrouter import OpenRouterService
 
     original = OllamaService.plan_semantic_fact
+    original_openrouter = OpenRouterService.plan_semantic_fact
     OllamaService.plan_semantic_fact = plan_semantic_fact  # type: ignore[method-assign]
+    OpenRouterService.plan_semantic_fact = plan_semantic_fact  # type: ignore[method-assign]
     questions = (
         "家里有几个人",
         "谁最年长",
@@ -96,6 +99,7 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
         )
     finally:
         OllamaService.plan_semantic_fact = original  # type: ignore[method-assign]
+        OpenRouterService.plan_semantic_fact = original_openrouter  # type: ignore[method-assign]
 
     assert result["mode"] == "semantic"
     assert result["aggregate"]["llm_call_count"] == 6

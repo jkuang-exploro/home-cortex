@@ -295,11 +295,15 @@ def test_model_contract_and_examples_are_semantic_and_separate(household):
     assert 'dob' not in json.dumps(payload)
     assert 'person:a' not in json.dumps(payload)
     utterances={c.utterance for c in load_semantic_eval_cases()}
+    identity_kinds=[]
     for message in _semantic_planner_examples():
         if message['role']=='user': assert message['content'] not in utterances
         else:
             request=SemanticFactRequest.model_validate(engine.schema.expand_planner_concepts(json.loads(message['content']))['request'])
             assert engine.schema.validates(request)
+            if request.operation=='resolve_reference' and not request.subject.path:
+                identity_kinds.append(request.subject.kind)
+    assert identity_kinds[:2]==['assistant','self']
 
 
 @pytest.mark.asyncio
