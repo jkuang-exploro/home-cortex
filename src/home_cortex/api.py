@@ -34,7 +34,7 @@ from .text import latest_user_message
 from .greetings import GreetingService
 from .ingestion import ingest_directory
 from .identity import resolve_user_entity_id
-from .ollama import OllamaService
+from .ollama import language_model_from_settings
 from .retrieval import RetrievalService
 from .calendar import calendar_service_from_settings
 from .tools import ToolDispatcher
@@ -150,17 +150,18 @@ async def lifespan(app: FastAPI):
     calendar = calendar_service_from_settings(settings)
     app.state.calendar = calendar
     runtimes: dict[str, AgentService] = {}
-    ollama_services: list[OllamaService] = []
+    language_models = []
     for definition in list_agents():
-        if definition.model.provider != "ollama":
+        if definition.model.provider not in {"ollama", "openrouter"}:
             raise RuntimeError(
                 f"Unsupported model provider {definition.model.provider!r}"
             )
-        model_name = definition.model.name or settings.ollama_model
-        ollama = OllamaService(settings.ollama_url, model_name)
-        ollama_services.append(ollama)
+        language_model = language_model_from_settings(
+            settings, definition.model.name
+        )
+        language_models.append(language_model)
         runtimes[definition.id] = AgentService(
-            ollama,
+            language_model,
             ToolDispatcher(
                 retrieval,
                 definition.allowed_tools,
@@ -180,8 +181,8 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        for ollama in ollama_services:
-            await ollama.close()
+        for language_model in language_models:
+            await language_model.close()
         await database.close()
 
 

@@ -327,10 +327,12 @@ system messages are discarded before the trusted Cortex policy is applied.
 
 From `docker/cortex` on the server:
 
-Copy `.env.example` to `.env`, then set `SURREAL_PASS`, `OLLAMA_MODEL`,
-`CORTEX_API_KEY`, and `CORTEX_IDENTITY_MAP` in that file. `OLLAMA_MODEL` is the
-single deployment setting used by the Cortex API when selecting an Ollama
-model. Map the email used to sign in to Open WebUI to Jian's graph record:
+Copy `.env.example` to `.env`, then set `SURREAL_PASS`, `CORTEX_API_KEY`, and
+`CORTEX_IDENTITY_MAP` in that file. `LLM_PROVIDER` selects the steward's
+language-model backend (`ollama` by default, or `openrouter`). For Ollama, set
+`OLLAMA_MODEL`. For OpenRouter, set `OPENROUTER_API_KEY` and `OPENROUTER_MODEL`
+to a model id such as `anthropic/claude-sonnet-4`. Map the email used to sign
+in to Open WebUI to Jian's graph record:
 
 ```dotenv
 CORTEX_API_KEY=replace-with-a-long-random-secret
@@ -439,7 +441,8 @@ on top of it. The `steward` definition lives under
 settings, and tool allowlist. The public coordinator remains in
 `agent_service.py`, and the generic Ollama loop lives in `model_loop.py`.
 
-The steward's model is `OLLAMA_MODEL` when its `config.yaml` model name is null.
+The steward's model is `OLLAMA_MODEL` or `OPENROUTER_MODEL` when its
+`config.yaml` model name is null, according to `LLM_PROVIDER`.
 A future specialized agent can select a different model and tools without
 changing the shared runtime. For example, a future `accountant` directory can
 define `账房` and finance-only tools; those tools will not be granted to

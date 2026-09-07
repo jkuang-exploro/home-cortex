@@ -73,6 +73,38 @@ def test_calendar_bindings_parse_from_environment(monkeypatch: pytest.MonkeyPatc
     assert settings.google_calendar_client_secret is None
 
 
+def test_openrouter_provider_requires_key_and_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_MODEL", raising=False)
+    monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+    with pytest.raises(ValidationError, match="OPENROUTER_API_KEY"):
+        Settings(_env_file=None, llm_provider="openrouter", openrouter_model="openai/gpt-4.1")
+    with pytest.raises(ValidationError, match="OPENROUTER_MODEL"):
+        Settings(
+            _env_file=None,
+            llm_provider="openrouter",
+            openrouter_api_key="sk-or-test",
+        )
+    settings = Settings(
+        _env_file=None,
+        llm_provider="openrouter",
+        openrouter_api_key="sk-or-test",
+        openrouter_model="anthropic/claude-sonnet-4",
+    )
+    assert settings.llm_provider == "openrouter"
+    assert settings.ollama_model is None
+    assert settings.openrouter_model == "anthropic/claude-sonnet-4"
+
+
+def test_ollama_provider_still_requires_a_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    with pytest.raises(ValidationError, match="OLLAMA_MODEL"):
+        Settings(_env_file=None)
+
+
 def test_unknown_calendar_timezone_is_rejected() -> None:
     with pytest.raises(ValidationError, match="Unknown calendar timezone"):
         Settings(

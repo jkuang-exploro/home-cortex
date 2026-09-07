@@ -124,6 +124,50 @@ def _semantic_planner_examples() -> list[dict[str, str]]:
     return messages
 
 
+def planner_system_prompt(capabilities: Mapping[str, Any]) -> str:
+    return (
+        _PLANNER_INSTRUCTIONS
+        + "\nCapabilities:\n"
+        + json.dumps(capabilities, ensure_ascii=False, separators=(",", ":"))
+    )
+
+
+def planner_chat_messages(
+    messages: Sequence[Mapping[str, Any]],
+    capabilities: Mapping[str, Any],
+    *,
+    household_now: str,
+) -> list[dict[str, Any]]:
+    """Build planner messages: examples plus user turns, no assistant answers."""
+    forwarded: list[dict[str, Any]] = []
+    for message in messages:
+        if message.get("role") != "user":
+            continue
+        if forwarded:
+            forwarded.append({
+                "role": "assistant",
+                "content": _PLANNER_HISTORY_BOUNDARY,
+            })
+        forwarded.append({
+            "role": "user",
+            "content": str(message.get("content", "")),
+        })
+    validation_feedback = "\n".join(
+        str(message.get("content", "")) for message in messages
+        if message.get("role") == "system"
+        and "strict structural" in str(message.get("content", ""))
+    )
+    return [
+        {"role": "system", "content": (
+            planner_system_prompt(capabilities)
+            + f"\nHousehold now: {household_now}"
+            + ("\n" + validation_feedback if validation_feedback else "")
+        )},
+        *_semantic_planner_examples(),
+        *forwarded,
+    ]
+
+
 class OllamaService:
     """Make individual Ollama chat calls for the Cortex agent."""
 
@@ -138,8 +182,6 @@ class OllamaService:
         self._owns_client = client is None
         self.client = client or AsyncClient(host=self.base_url)
         self.last_planner_runtime: dict[str, Any] = {}
-        self._cached_planner_system: str | None = None
-        self._cached_planner_capabilities_id: int | None = None
 
     async def chat(
         self,
@@ -167,22 +209,6 @@ class OllamaService:
             think=False,
         )
 
-    def _planner_system_prompt(self, capabilities: Mapping[str, Any]) -> str:
-        marker = id(capabilities)
-        if (
-            self._cached_planner_system is not None
-            and self._cached_planner_capabilities_id == marker
-        ):
-            return self._cached_planner_system
-        prompt = (
-            _PLANNER_INSTRUCTIONS
-            + "\nCapabilities:\n"
-            + json.dumps(capabilities, ensure_ascii=False, separators=(",", ":"))
-        )
-        self._cached_planner_system = prompt
-        self._cached_planner_capabilities_id = marker
-        return prompt
-
     async def plan_semantic_fact(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -192,35 +218,11 @@ class OllamaService:
         household_now: str,
     ) -> Mapping[str, Any]:
         """Interpret an open-ended request without exposing physical storage."""
-        forwarded: list[dict[str, Any]] = []
-        for message in messages:
-            if message.get("role") != "user":
-                continue
-            if forwarded:
-                forwarded.append({
-                    "role": "assistant",
-                    "content": _PLANNER_HISTORY_BOUNDARY,
-                })
-            forwarded.append({
-                "role": "user",
-                "content": str(message.get("content", "")),
-            })
-        validation_feedback = "\n".join(
-            str(message.get("content", "")) for message in messages
-            if message.get("role") == "system"
-            and "strict structural" in str(message.get("content", ""))
-        )
         response = await self.client.chat(
             model=self.model,
-            messages=[
-                {"role": "system", "content": (
-                    self._planner_system_prompt(capabilities)
-                    + f"\nHousehold now: {household_now}"
-                    + ("\n" + validation_feedback if validation_feedback else "")
-                )},
-                *_semantic_planner_examples(),
-                *forwarded,
-            ],
+            messages=planner_chat_messages(
+                messages, capabilities, household_now=household_now
+            ),
             stream=False,
             think=False,
             keep_alive=PLANNER_KEEP_ALIVE,
@@ -279,3 +281,31 @@ def _ollama_runtime_metrics(response: ChatResponse) -> dict[str, Any]:
         "eval_duration_ms": _ns_to_ms(getattr(response, "eval_duration", None)),
         "load_duration_ms": _ns_to_ms(getattr(response, "load_duration", None)),
     }
+
+
+def language_model_from_settings(
+    settings: Any,
+    model_name: str | None = None,
+) -> OllamaService:
+    """Construct the deployment LLM client. OpenRouter is returned duck-typed."""
+    if getattr(settings, "llm_provider", "ollama") == "openrouter":
+        from .openrouter import OpenRouterService
+
+        name = model_name or settings.openrouter_model
+        secret = settings.openrouter_api_key
+        if not name or secret is None:
+            raise ValueError(
+                "OPENROUTER_API_KEY and OPENROUTER_MODEL are required "
+                "when LLM_PROVIDER=openrouter"
+            )
+        return OpenRouterService(  # type: ignore[return-value]
+            settings.openrouter_base_url,
+            name,
+            api_key=secret.get_secret_value(),
+            http_referer=settings.openrouter_http_referer,
+            app_title=settings.openrouter_app_title,
+        )
+    name = model_name or settings.ollama_model
+    if not name:
+        raise ValueError("OLLAMA_MODEL is required when LLM_PROVIDER=ollama")
+    return OllamaService(settings.ollama_url, name)

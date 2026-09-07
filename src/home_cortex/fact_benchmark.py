@@ -17,7 +17,7 @@ from .agents import get_agent
 from .config import get_settings
 from .db import Database
 from .edge_schema import EdgeSchemaRegistry
-from .ollama import OllamaService
+from .ollama import language_model_from_settings
 from .retrieval import ENTITY_SUMMARY_FIELDS, RetrievalService
 from .schema_catalog import (
     RuntimeSchemaCatalog,
@@ -102,7 +102,7 @@ async def benchmark_runtime(
     settings = get_settings()
     steward = get_agent("steward")
     database = Database(settings)
-    llm: OllamaService | None = None
+    llm = None
     await database.connect()
     try:
         edge_registry = EdgeSchemaRegistry.from_directory(settings.edge_schema_dir)
@@ -115,7 +115,7 @@ async def benchmark_runtime(
         )
         dispatcher = ToolDispatcher(retrieval, ())
         schema = SemanticSchemaRegistry(catalog)
-        llm = OllamaService(settings.ollama_url, settings.ollama_model)
+        llm = language_model_from_settings(settings)
         service = SemanticFactService(
             HouseholdFactEngine(dispatcher, schema, max_records=settings.retrieval_limit),
             planner=SemanticFactPlanner(llm, schema),
@@ -158,7 +158,7 @@ async def benchmark_json(
     dispatcher = _JsonGraphDispatcher(data_dir, edge_registry)
     schema = SemanticSchemaRegistry(catalog)
     settings = get_settings()
-    llm = OllamaService(settings.ollama_url, settings.ollama_model)
+    llm = language_model_from_settings(settings)
     service = SemanticFactService(
         HouseholdFactEngine(dispatcher, schema),
         planner=SemanticFactPlanner(llm, schema),

@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
@@ -50,7 +51,13 @@ class Settings(BaseSettings):
     surreal_namespace: str = "home_cortex"
     surreal_database: str = "home_cortex"
     ollama_url: str = "http://ollama:11434"
-    ollama_model: str
+    ollama_model: str | None = None
+    llm_provider: Literal["ollama", "openrouter"] = "ollama"
+    openrouter_api_key: SecretStr | None = None
+    openrouter_model: str | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_http_referer: str | None = None
+    openrouter_app_title: str = "home-cortex"
     data_dir: Path = Path("/app/data")
     edge_schema_dir: Path = Path("/app/schemas/edge")
     retrieval_limit: int = Field(default=100, ge=1, le=1000)
@@ -65,6 +72,9 @@ class Settings(BaseSettings):
     @field_validator(
         "cortex_api_key",
         "google_calendar_client_id",
+        "openrouter_http_referer",
+        "openrouter_model",
+        "ollama_model",
         mode="before",
     )
     @classmethod
@@ -76,6 +86,7 @@ class Settings(BaseSettings):
     @field_validator(
         "google_calendar_client_secret",
         "google_calendar_refresh_token",
+        "openrouter_api_key",
         mode="before",
     )
     @classmethod
@@ -130,6 +141,17 @@ class Settings(BaseSettings):
             raise ValueError(
                 "CORTEX_API_KEY is required when CORTEX_IDENTITY_MAP is set"
             )
+        if self.llm_provider == "ollama" and not self.ollama_model:
+            raise ValueError("OLLAMA_MODEL is required when LLM_PROVIDER=ollama")
+        if self.llm_provider == "openrouter":
+            if self.openrouter_api_key is None:
+                raise ValueError(
+                    "OPENROUTER_API_KEY is required when LLM_PROVIDER=openrouter"
+                )
+            if not self.openrouter_model:
+                raise ValueError(
+                    "OPENROUTER_MODEL is required when LLM_PROVIDER=openrouter"
+                )
         credentials = (
             self.google_calendar_client_id,
             self.google_calendar_client_secret,
