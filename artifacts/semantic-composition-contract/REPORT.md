@@ -23,17 +23,25 @@ preserve household wall time and explicitly reject DST gaps/folds.
 
 Both history truncation sites now preserve user discourse. Session bindings are
 produced only by deterministic execution and reloaded through the resolver.
-Explicit sessions check ownership and serialize turns. Stateless history is
-reinterpreted/re-grounded request-locally, with no shared focus or assistant-prose
-facts. Topic changes, failed turns, eviction, and absent/ambiguous antecedents
-cannot silently fall back to an earlier person.
+Explicit sessions check ownership and serialize turns. Stateless antecedents are
+interpreted and re-grounded on demand in request-local context, with no shared
+focus or assistant-prose facts. Topic changes, failed turns, eviction, and
+absent/ambiguous antecedents cannot silently fall back to an earlier person.
+
+The first deployed UI integration stored the Cortex conversation ID on the
+greeting message but did not put it on completion requests. Open WebUI therefore
+always selected the stateless replay path. The follow-up fix persists the ID in
+`params.custom_params.conversation_id`; the pinned Open WebUI OpenAI payload
+builder promotes custom parameters to the upstream request body. The API then
+authorizes that ID against agent and speaker before using session focus.
 
 ## Deterministic validation
 
-Local command: `.venv/bin/python -m pytest -q` — **438 passed**, including
-52 new compositional checks. Only the interpreter transport is mocked in service
-and HTTP tests; the planner, validation, resolver, graph dispatcher, executor,
-renderer and conversation coordinator run normally against invented graph data.
+Local command: `UV_CACHE_DIR=/tmp/home-cortex-uv-cache uv run pytest -q` —
+**439 passed**, including 53 new compositional checks. Only the interpreter
+transport is mocked in service and HTTP tests; the planner, validation, resolver,
+graph dispatcher, executor, renderer and conversation coordinator run normally
+against invented graph data.
 JSON and streaming HTTP requests pass the named-person/anniversary follow-up;
 cross-owner conversation access is rejected. Tests cover partial/empty collections,
 edge-specific filters and multiple residence edges, ambiguity, topic changes,
@@ -96,6 +104,6 @@ new contract still needs Grok's isolated GPU run before any production accuracy
 claim: both observed chains through the normal service, unseen compositions,
 warm-up 1/repeat 5, then the fixed 119, age/filter 24 and date-interval 16 suites.
 Record all fingerprints and score plans, bindings, membership, row values/units/
-statuses, and presentation separately. Measure stateless replay latency as well
-as explicit-session latency; replay may add eight interpreter calls. Process-local
+statuses, and presentation separately. Measure demand-driven antecedent latency as
+well as explicit-session latency; a chain may add eight interpreter calls. Process-local
 session state requires consistent worker routing or a future shared store.

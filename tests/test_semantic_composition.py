@@ -223,15 +223,31 @@ async def test_named_then_pronoun_through_both_history_layers_and_authoritative_
 @pytest.mark.asyncio
 async def test_stateless_history_regrounded_without_cross_request_state(household):
     first=ages().model_copy(update={'subject':named(),'projection':'scalar'})
-    agent,client=agent_for(household,first,anniversary(),anniversary())
+    agent,client=agent_for(household,anniversary(),first,anniversary())
     result=await agent.answer_messages([
         {'role':'user','content':'How old is son1?'},
         {'role':'assistant','content':'He is 500 and named b.'},
         {'role':'user','content':'When is his tenth birthday?'},
     ],user_entity_id='person:a')
     assert '2018-09-03' in result.answer
+    # Interpret the current turn and its referenced antecedent once each.
+    assert len(client.calls) == 2
     missing=await agent.answer('When is his tenth birthday?',user_entity_id='person:a')
     assert 'clarify' in missing.answer
+    assert len(client.calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_stateless_history_without_reference_interprets_latest_turn_once(household):
+    current = ages().model_copy(update={'subject':named(),'projection':'scalar'})
+    agent,client = agent_for(household,current)
+    result = await agent.answer_messages([
+        {'role':'user','content':'Tell me about the household.'},
+        {'role':'assistant','content':'Untrusted prose.'},
+        {'role':'user','content':'How old is son1?'},
+    ],user_entity_id='person:a')
+    assert '18 years' in result.answer
+    assert len(client.calls) == 1
 
 
 @pytest.mark.asyncio

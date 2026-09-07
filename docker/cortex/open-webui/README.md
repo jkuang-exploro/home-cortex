@@ -8,9 +8,11 @@ adds:
 
 - an authenticated Open WebUI backend proxy for Cortex conversation creation;
 - a frontend hook that requests a greeting when `老管家` is selected in a
-  blank chat; and
+  blank chat;
 - persistence of that greeting as the root assistant message in normal Open
-  WebUI chat history.
+  WebUI chat history; and
+- forwarding of the returned Cortex conversation ID as an OpenAI-compatible
+  custom parameter on every subsequent steward request.
 
 The browser sends its existing Open WebUI session token to the proxy. The
 proxy, not the browser, adds `CORTEX_API_KEY` and forwards the verified Open

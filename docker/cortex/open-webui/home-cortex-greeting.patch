@@ -185,7 +185,7 @@ index 751c49b..005dbf0 100644
  	};
  
  	const resetInput = async () => {
-@@ -1105,6 +1113,59 @@
+@@ -1105,6 +1113,66 @@
  	// Web functions
  	//////////////////////////
  
@@ -211,6 +211,13 @@ index 751c49b..005dbf0 100644
 +				$i18n.language ?? 'en'
 +			);
 +			if (!conversation?.greeting || history.currentId) return;
++			params = {
++				...params,
++				custom_params: {
++					...params?.custom_params,
++					conversation_id: conversation.id
++				}
++			};
 +
 +			const messageId = uuidv4();
 +			history.messages[messageId] = {
@@ -245,7 +252,7 @@ index 751c49b..005dbf0 100644
  	const initNewChat = async () => {
  		console.log('initNewChat');
  		if ($user?.role !== 'admin' && $user?.permissions?.chat?.temporary_enforced) {
-@@ -1228,6 +1289,7 @@
+@@ -1228,6 +1296,7 @@
  			messages: {},
  			currentId: null
  		};
@@ -253,7 +260,7 @@ index 751c49b..005dbf0 100644
  
  		chatFiles = [];
  		params = {};
-@@ -1336,6 +1398,7 @@
+@@ -1336,6 +1405,7 @@
  		selectedModels = selectedModels.map((modelId) =>
  			$models.map((m) => m.id).includes(modelId) ? modelId : ''
  		);

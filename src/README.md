@@ -287,13 +287,15 @@ a singular antecedent; unsuccessful and non-fact turns have no focus.
 For persistent discourse, create a conversation using the existing
 `POST /agent/steward/conversations` endpoint, then send its `id` as
 `conversation_id` on `/agent/steward/chat`, `/v1/chat`, or
-`/v1/chat/completions` (including streaming). The API checks ownership. The
-semantic coordinator scopes state by conversation, speaker, household and agent,
+`/v1/chat/completions` (including streaming). The Open WebUI integration carries
+that ID through its persisted `params.custom_params`, which the OpenAI-compatible
+provider path emits as the top-level `conversation_id`. The API checks ownership.
+The semantic coordinator scopes state by conversation, speaker, household and agent,
 serializes concurrent turns, and retains eight user turns in at most 1,000
 process-local sessions. Restart/eviction loses focus and requires clarification.
-Requests without an ID re-ground up to eight supplied earlier user turns in
-request-local context; this can add up to eight interpreter calls. Clients that
-send only the latest message need a conversation ID for cross-request references.
+Requests without an ID interpret the current turn once, then re-ground only the
+earlier user turns explicitly referenced by its discourse plan. Clients that send
+only the latest message need a conversation ID for cross-request references.
 Unauthenticated requests never persist discourse state.
 
 

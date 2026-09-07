@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 FROM node:22-alpine3.20 AS open-webui-build
 
 # Pin the exact commit behind Open WebUI v0.9.5 so the patch cannot silently

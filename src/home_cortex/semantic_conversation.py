@@ -5,10 +5,17 @@ import asyncio
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
-from .semantic_facts import AgentRequestContext, DiscourseContext, FactAnswer, SemanticFactService
+from .semantic_facts import (
+    AgentRequestContext,
+    DiscourseContext,
+    FactAnswer,
+    SemanticFactRequest,
+    SemanticFactService,
+)
 
 MAX_DISCOURSE_TURNS = 8
 
@@ -72,14 +79,76 @@ class SemanticConversationService:
     async def _replay(
         self, users: Sequence[Mapping[str, str]], context: AgentRequestContext, request_id: str,
     ) -> FactAnswer | None:
+        started = perf_counter()
         context = replace(context, conversation_id=uuid4().hex, discourse=None)
-        turns: tuple[tuple[str, ...], ...] = ()
-        answer = None
-        for index in range(len(users)):
-            answer = await self.facts.try_answer(users[:index + 1],
-                                                context=self._context(context, turns), request_id=request_id)
-            turns = (*turns, self._focus(answer))[-MAX_DISCOURSE_TURNS:]
-        return answer
+        return await self._answer_prefix(
+            users,
+            len(users),
+            context,
+            request_id,
+            {},
+            {},
+            started,
+        )
+
+    async def _answer_prefix(
+        self,
+        users: Sequence[Mapping[str, str]],
+        end: int,
+        context: AgentRequestContext,
+        request_id: str,
+        memo: dict[int, FactAnswer | None],
+        planner_metrics: dict[int, tuple[float, int]],
+        started: float,
+    ) -> FactAnswer | None:
+        """Interpret one turn, resolving only antecedents its plan actually uses."""
+        if end in memo:
+            return memo[end]
+        empty_turns = ((),) * max(0, end - 1)
+        answer = await self.facts.try_answer(
+            users[:end],
+            context=self._context(context, empty_turns),
+            request_id=request_id,
+        )
+        memo[end] = answer
+        if answer is not None:
+            planner_metrics[end] = (
+                answer.timings.llm_ms,
+                answer.timings.llm_call_count,
+            )
+        offsets = _discourse_offsets(answer.request) if answer is not None else ()
+        if not offsets:
+            return answer
+
+        turns: list[tuple[str, ...]] = list(empty_turns)
+        for offset in offsets:
+            target = end - 1 - offset
+            if target < 0:
+                continue
+            antecedent = await self._answer_prefix(
+                users,
+                target + 1,
+                context,
+                request_id,
+                memo,
+                planner_metrics,
+                started,
+            )
+            turns[target] = self._focus(antecedent)
+        if answer is None:
+            return None
+        trusted = self._context(context, tuple(turns[-MAX_DISCOURSE_TURNS:]))
+        resolved = await self.facts.answer_request(
+            answer.request,
+            context=trusted,
+            request_id=request_id,
+            started=started,
+            llm_ms=sum(item[0] for item in planner_metrics.values()),
+            llm_call_count=sum(item[1] for item in planner_metrics.values()),
+            planner_diagnostics=answer.planner_diagnostics,
+        )
+        memo[end] = resolved
+        return resolved
 
     @staticmethod
     def _context(context: AgentRequestContext, turns: tuple[tuple[str, ...], ...]) -> AgentRequestContext:
@@ -94,3 +163,14 @@ class SemanticConversationService:
         if answer is None or answer.result.status != "found":
             return ()
         return answer.result.focus_entity_ids
+
+
+def _discourse_offsets(request: SemanticFactRequest) -> tuple[int, ...]:
+    references = (request.subject, *request.exclude)
+    if request.other is not None:
+        references = (*references, request.other)
+    return tuple(sorted({
+        reference.turn_offset
+        for reference in references
+        if reference.kind == "discourse" and reference.turn_offset is not None
+    }))

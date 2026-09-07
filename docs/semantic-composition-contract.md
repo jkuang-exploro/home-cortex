@@ -50,7 +50,8 @@ remain explicit. No utterance is inspected after interpretation.
   state keyed by conversation, authenticated speaker, household, and agent.
   API IDs must belong to the caller/agent. State keeps eight user turns and expires
   on eviction/restart; missing state clarifies. Calls without an ID are request-local:
-  up to eight supplied prior user turns are reinterpreted and re-grounded in order.
+  the current turn is interpreted once, and only prior user turns explicitly
+  addressed by its discourse references are reinterpreted and re-grounded.
   They never reuse another request's focus. Assistant prose is not forwarded as
   evidence or replayed. The model sees user discourse but no bindings or canonical
   IDs. The resolver reloads bound entities from authoritative storage each turn.

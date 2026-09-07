@@ -2357,8 +2357,43 @@ class SemanticFactService:
                 llm_call_count=llm_call_count,
                 planner_diagnostics=planner_diagnostics,
             )
+        return await self.answer_request(
+            request,
+            context=context,
+            request_id=request_id,
+            started=started,
+            routing_started=routing_started,
+            llm_ms=llm_ms,
+            llm_call_count=llm_call_count,
+            planner_diagnostics=planner_diagnostics,
+        )
+
+    async def answer_request(
+        self,
+        request: SemanticFactRequest,
+        *,
+        context: AgentRequestContext,
+        request_id: str = "-",
+        started: float | None = None,
+        routing_started: float | None = None,
+        llm_ms: float = 0.0,
+        llm_call_count: int = 0,
+        planner_diagnostics: PlannerDiagnostics | None = None,
+    ) -> FactAnswer:
+        """Execute a previously validated semantic request without another LLM call."""
+        started = perf_counter() if started is None else started
+        routing_started = started if routing_started is None else routing_started
+        if not self.engine.schema.validates(request):
+            return self._failure_answer(
+                context,
+                started,
+                request=request,
+                request_id=request_id,
+                llm_ms=llm_ms,
+                llm_call_count=llm_call_count,
+                planner_diagnostics=planner_diagnostics,
+            )
         routing_ms = (perf_counter() - routing_started) * 1000
-        assert request is not None
         query_started = perf_counter()
         result, query_count, resolution_ms, computation_ms = await self.engine.execute(
             request,
