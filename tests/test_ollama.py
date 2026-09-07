@@ -168,8 +168,14 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
     }
     assert call["keep_alive"] == "24h"
     assert call["think"] is False
-    assert clock == []
-    assert "Household now: 2026-09-03T12:00:00-07:00" in prompt
+    assert "Household now:" not in prompt
+    assert clock == [
+        "Household now: 2026-09-03T12:00:00-07:00\n"
+        "Person deixis for identity: first person → kind=self; "
+        "second person addressing this helper → kind=assistant. "
+        "Do not add path, filters, or amount unless the utterance "
+        "requires them."
+    ]
     assert sum(m["role"] == "system" for m in call["messages"]) == 2
     assert "second person addressing this helper" in json.dumps(call["messages"])
     assert "self 是已认证的当前说话人" in prompt
@@ -195,6 +201,51 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
         },
         {"role": "user", "content": "a speaker-relative relation"},
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("utterance", "kind_note"),
+    (
+        ("你是谁", "subject.kind must be assistant"),
+        ("我是谁", "subject.kind must be self"),
+    ),
+)
+async def test_planner_prompt_keeps_stable_prefix_and_identity_note(
+    utterance: str,
+    kind_note: str,
+) -> None:
+    client = FakeOllamaClient(
+        [
+            _chat_response(
+                {
+                    "role": "assistant",
+                    "content": json.dumps(
+                        {"requires_fact": False, "request": None}
+                    ),
+                }
+            )
+        ]
+    )
+    service = OllamaService(
+        "http://ollama:11434",
+        "qwen3:8b",
+        client=client,  # type: ignore[arg-type]
+    )
+    await service.plan_semantic_fact(
+        [{"role": "user", "content": utterance}],
+        {"relations": ["spouse"]},
+        {"type": "object"},
+        household_now="2026-09-07T15:00:00-07:00",
+    )
+
+    messages = client.calls[0]["messages"]
+    assert messages[0]["role"] == "system"
+    assert "Household now:" not in messages[0]["content"]
+    assert messages[-2] == {"role": "user", "content": utterance}
+    assert messages[-1]["role"] == "system"
+    assert messages[-1]["content"].startswith("Household now:") is False
+    assert kind_note in messages[-1]["content"]
 
 
 @pytest.mark.asyncio

@@ -60,6 +60,7 @@ def _semantic_planner_examples() -> list[dict[str, str]]:
     examples = (
         ("请介绍一下你自己。", "resolve_reference", reference("assistant"), None, "entity", {}),
         ("当前已认证的说话人是哪一位？", "resolve_reference", reference("self"), None, "entity", {}),
+        ("请说明你的身份。", "resolve_reference", reference("assistant"), None, "entity", {}),
         ("应该怎样称呼这位助手？", "resolve_reference", reference("assistant"), None, "entity", {}),
         ("在本户成员中找出出生日期最靠前的人。", "argmin", reference("current_household", "member"), "birth_date", "entity", {}),
         ("本户符合成年条件的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"predicate": "adult"}]}),
@@ -154,28 +155,35 @@ def planner_chat_messages(
             "role": "user",
             "content": str(message.get("content", "")),
         })
-    validation_feedback = "\n".join(
+    from .semantic_facts import _identity_person_hint
+
+    notes = [
         str(message.get("content", "")) for message in messages
-        if message.get("role") == "system"
-        and "strict structural" in str(message.get("content", ""))
+        if message.get("role") == "system" and str(message.get("content", "")).strip()
+    ]
+    last_user = next(
+        (item["content"] for item in reversed(forwarded) if item["role"] == "user"),
+        "",
     )
+    hint = _identity_person_hint(last_user)
+    if hint and not any(hint in note for note in notes):
+        notes.append(hint)
     reminder = (
+        f"Household now: {household_now}\n"
         "Person deixis for identity: first person → kind=self; "
         "second person addressing this helper → kind=assistant. "
         "Do not add path, filters, or amount unless the utterance "
         "requires them."
     )
-    if validation_feedback:
-        reminder = f"{reminder}\n{validation_feedback}"
-    return [
-        {"role": "system", "content": (
-            planner_system_prompt(capabilities)
-            + f"\nHousehold now: {household_now}"
-        )},
+    built = [
+        {"role": "system", "content": planner_system_prompt(capabilities)},
         *_semantic_planner_examples(),
         {"role": "system", "content": reminder},
         *forwarded,
     ]
+    if notes:
+        built.append({"role": "system", "content": "\n".join(notes)})
+    return built
 
 
 class OllamaService:

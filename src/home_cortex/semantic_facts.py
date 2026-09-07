@@ -1166,7 +1166,7 @@ class SemanticFactPlanner:
                     planner_messages,
                     capabilities,
                     output_schema,
-                    household_now=context.current_time.isoformat(),
+                    household_now=_planner_clock(context.current_time),
                 )
                 runtime = getattr(self.ollama, "last_planner_runtime", {}) or {}
                 validate_started = perf_counter()
@@ -2729,13 +2729,18 @@ def _identity_person_mismatch(
     return None
 
 
+def _planner_clock(moment: datetime) -> str:
+    """Hour-precision clock so the planner prefix stays cacheable within an hour."""
+    return moment.replace(minute=0, second=0, microsecond=0).isoformat()
+
+
 def _compact_json_schema(value: Any) -> Any:
     """Remove model-irrelevant prose while preserving JSON Schema constraints."""
     if isinstance(value, Mapping):
         return {
             key: _compact_json_schema(item)
             for key, item in value.items()
-            if key not in {"title", "default"}
+            if key not in {"title", "default", "description"}
         }
     if isinstance(value, list):
         return [_compact_json_schema(item) for item in value]
