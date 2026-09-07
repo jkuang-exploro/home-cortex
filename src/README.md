@@ -216,6 +216,20 @@ can only narrow the selected concept. No utterance is examined during expansion.
 Validation rejects invalid scope, properties and predicates without semantic
 repair. Evaluation alternatives do not change production interpretation.
 
+The interpreter distinguishes an output projection from a filter operand:
+`select` with `property=null` returns the matching entity set, while
+`select(birth_date)` returns a stored date and `completed_years(birth_date)`
+returns a computed integer age. Calendar-year constraints use the existing
+half-open `date_range` predicate, composed with a list or count operation.
+Request-level field filters have literal operands; anchor-relative comparisons
+are supported only on traversal steps. Invalid dynamic collection filters are
+rejected before graph access, never interpreted as an empty result.
+
+`benchmarks/semantic_planner_age_filters.yaml` exercises these distinctions on
+the invented household under `benchmarks/fixtures/semantic-contract`. Its
+question wording is kept separate from interpreter examples. Run deterministic
+tests locally and real-model evaluations on the isolated production GPU path.
+
 
 The ingestion endpoint rejects unknown relationship files, invalid endpoint
 types, references to nodes missing from the source data, temporal fields on

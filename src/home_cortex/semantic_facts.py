@@ -430,9 +430,11 @@ class SemanticSchemaRegistry:
             },
             "operations": sorted(get_args(FactOperation)),
             "operation_requirements": {
+                "select": "property=null returns all matching entities, including zero or many; property set returns a single stored property value. Filter properties are not output projections.",
+                "resolve_reference": "returns exactly one entity; not a list of matching entities",
                 "argmin": "ordered property required; collection subject OR two references subject and other; returns entity",
                 "argmax": "ordered property required; collection subject OR two references subject and other; returns entity",
-                "completed_years": "date property; reference=household_now",
+                "completed_years": "one date property -> integer number of fully elapsed years at household_now, accounting for month/day; returns years, not the original date",
                 "duration": "date property + mode days|seconds",
                 "annual_occurrence": "date property; mode=days only for countdown",
                 "date_difference": "date property + mode days|seconds",
@@ -454,6 +456,10 @@ class SemanticSchemaRegistry:
                 "entity_types": full["entity_types"],
                 "operations": full["operations"],
                 "operation_requirements": full["operation_requirements"],
+                "filter_requirements": {
+                    "composition": "request.filters restricts the resolved collection before select/count/aggregation; all conditions are AND. The outer property selects the output, not the field used by a filter.",
+                    "date_range": "date/datetime property with value=[inclusive_start, exclusive_end]; use ISO dates. A calendar year Y is [Y-01-01, (Y+1)-01-01).",
+                },
                 "property_ownership": {
                     "entity": full["semantic_properties"],
                     "relationship": full["semantic_relation_properties"],
@@ -503,6 +509,9 @@ class SemanticSchemaRegistry:
             field_filter = definitions["SemanticFilter"]
             field_filter["properties"].pop("predicate")
             field_filter["properties"]["property"] = {"type": "string", "enum": properties}
+            field_filter["properties"]["value_property"] = {
+                "anyOf": [{"type": "string", "enum": properties}, {"type": "null"}]
+            }
             field_filter["required"] = ["property"]
             definitions["SemanticFilter"] = {"anyOf": [
                 field_filter,
@@ -514,7 +523,23 @@ class SemanticSchemaRegistry:
                     "required": ["predicate"],
                 },
             ]}
+            # Anchor-relative comparisons belong to a traversal step. Collection
+            # filters have no anchor operand in their executor contract.
+            definitions["SemanticCollectionFilter"] = {"anyOf": [
+                {
+                    **field_filter,
+                    "properties": {
+                        key: value for key, value in field_filter["properties"].items()
+                        if key not in {"value_from", "value_property"}
+                    },
+                    "required": ["property", "operator", "value"],
+                },
+                definitions["SemanticFilter"]["anyOf"][1],
+            ]}
             request = definitions["SemanticFactRequest"]
+            request["properties"]["filters"]["items"] = {
+                "$ref": "#/$defs/SemanticCollectionFilter"
+            }
             request["properties"]["property"] = {
                 "anyOf": [{"type": "string", "enum": properties}, {"type": "null"}]
             }
@@ -704,6 +729,8 @@ class SemanticSchemaRegistry:
         if request.filters and not request.subject.path:
             return "INVALID_PLAN"
         for item in request.filters:
+            if item.value_from is not None:
+                return "INVALID_PLAN"
             if item.predicate is not None:
                 definition = self.ontology.collection_predicates.get(item.predicate)
                 if definition is None or not final_types[id(request.subject)].issubset(
@@ -1929,6 +1956,8 @@ class FactRenderer:
         if request.operation == "select" and request.property is None:
             values = result.value if isinstance(result.value, list) else []
             if not values:
+                if request.filters or any(step.filters for step in request.subject.path):
+                    return "没有找到符合筛选条件的记录。"
                 return "家庭资料中目前没有记录当前家庭成员。"
             names = "、".join(_name(item, "zh") for item in values)
             return f"家里目前的成员有：{names}。"
@@ -2016,6 +2045,8 @@ class FactRenderer:
             return f"The current count is {result.value}."
         if request.operation == "select" and request.property is None:
             if not result.value:
+                if request.filters or any(step.filters for step in request.subject.path):
+                    return "No records match the filters."
                 return "The household data has no current member records."
             return "Current household members: " + ", ".join(
                 _name(item, "en") for item in result.value

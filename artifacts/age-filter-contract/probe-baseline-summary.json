@@ -1,0 +1,1610 @@
+{
+  "mode": "tier1_probe",
+  "dataset_size": 21,
+  "warmup": 1,
+  "repeat": 1,
+  "verified_cold": false,
+  "scores": {
+    "plan_accuracy": {
+      "correct": 5,
+      "scored": 21,
+      "unscored": 0,
+      "rate": 0.2381
+    },
+    "answer_correctness": {
+      "correct": 6,
+      "scored": 21,
+      "unscored": 0,
+      "rate": 0.2857
+    },
+    "executor_status": {
+      "ambiguous": 3,
+      "found": 17,
+      "not_run": 1
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "scores_all_measured_samples": {
+    "plan_accuracy": {
+      "correct": 5,
+      "scored": 21,
+      "unscored": 0,
+      "rate": 0.2381
+    },
+    "answer_correctness": {
+      "correct": 6,
+      "scored": 21,
+      "unscored": 0,
+      "rate": 0.2857
+    },
+    "executor_status": {
+      "ambiguous": 3,
+      "found": 17,
+      "not_run": 1
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "planner_latency_ms": {
+    "n": 21,
+    "p50": 2504.5,
+    "p95": 5961.725
+  },
+  "end_to_end_latency_ms": {
+    "n": 21,
+    "p50": 2504.71,
+    "p95": 5961.725
+  },
+  "accuracy_by_capability": {
+    "unspecified": {
+      "correct": 5,
+      "total": 21,
+      "accuracy": 0.2381
+    }
+  },
+  "failure_table": [
+    {
+      "case_id": "wife_age_0",
+      "utterance": "我老婆多大岁数了",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "completed_years",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "spouse",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "female",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "spouse",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "female",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "self",
+            "value": null,
+            "entity_type": "person",
+            "path": [
+              {
+                "concept": "wife"
+              }
+            ]
+          },
+          "property": "birth_date",
+          "property_source": "entity"
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": "1982-06-01",
+        "entity_ids": [
+          "person:b"
+        ],
+        "primary_entity_ids": [
+          "person:b"
+        ],
+        "relationship": "spouse",
+        "semantic_property": "birth_date",
+        "missing_requirements": [],
+        "candidates": []
+      }
+    },
+    {
+      "case_id": "wife_age_1",
+      "utterance": "我妻子现在几周岁",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "completed_years",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "spouse",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "female",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "spouse",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "female",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "self",
+            "value": null,
+            "entity_type": "person",
+            "path": [
+              {
+                "concept": "wife"
+              }
+            ]
+          },
+          "property": "birth_date",
+          "property_source": "entity"
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": "1982-06-01",
+        "entity_ids": [
+          "person:b"
+        ],
+        "primary_entity_ids": [
+          "person:b"
+        ],
+        "relationship": "spouse",
+        "semantic_property": "birth_date",
+        "missing_requirements": [],
+        "candidates": []
+      }
+    },
+    {
+      "case_id": "wife_age_2",
+      "utterance": "How old is my wife?",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "completed_years",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "spouse",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "female",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "spouse",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "female",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "self",
+            "value": null,
+            "entity_type": "person",
+            "path": [
+              {
+                "concept": "wife"
+              }
+            ]
+          },
+          "property": "birth_date",
+          "property_source": "entity"
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": "1982-06-01",
+        "entity_ids": [
+          "person:b"
+        ],
+        "primary_entity_ids": [
+          "person:b"
+        ],
+        "relationship": "spouse",
+        "semantic_property": "birth_date",
+        "missing_requirements": [],
+        "candidates": []
+      }
+    },
+    {
+      "case_id": "inlaw_age_0",
+      "utterance": "我岳父年龄是多少岁",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "completed_years",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "spouse",
+              "filters": []
+            },
+            {
+              "relation": "parent",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "male",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "spouse",
+              "filters": []
+            },
+            {
+              "relation": "parent",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "male",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "self",
+            "value": null,
+            "entity_type": "person",
+            "path": [
+              {
+                "concept": "father_in_law"
+              }
+            ]
+          },
+          "property": "birth_date",
+          "property_source": "entity"
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": "1955-01-01",
+        "entity_ids": [
+          "person:father"
+        ],
+        "primary_entity_ids": [
+          "person:father"
+        ],
+        "relationship": "parent",
+        "semantic_property": "birth_date",
+        "missing_requirements": [],
+        "candidates": []
+      }
+    },
+    {
+      "case_id": "self_age_0",
+      "utterance": "我今年几岁了",
+      "failure_stage": "planner_validation",
+      "validation_result": "INVALID_PLAN",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "not_run",
+      "expected_semantic_plan": {
+        "operation": "completed_years",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": []
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "normalized_semantic_plan": null,
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "self",
+            "value": null,
+            "entity_type": "person"
+          },
+          "property": "display_name",
+          "property_source": "entity",
+          "filters": [
+            {
+              "predicate": "adult"
+            }
+          ]
+        }
+      },
+      "executor": null
+    },
+    {
+      "case_id": "self_age_1",
+      "utterance": "我的年龄是多大",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "completed_years",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": []
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "normalized_semantic_plan": {
+        "operation": "resolve_reference",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": []
+        },
+        "property_source": "entity",
+        "filters": []
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "self",
+            "value": null,
+            "entity_type": "person"
+          },
+          "property": "display_name",
+          "property_source": "entity"
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": "a",
+        "entity_ids": [
+          "person:a"
+        ],
+        "primary_entity_ids": [
+          "person:a"
+        ],
+        "relationship": null,
+        "semantic_property": "display_name",
+        "missing_requirements": [],
+        "candidates": []
+      }
+    },
+    {
+      "case_id": "daughter_age_0",
+      "utterance": "女儿现在多大年纪",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "completed_years",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "child",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "female",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "child",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "female",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "self",
+            "value": null,
+            "entity_type": "person",
+            "path": [
+              {
+                "concept": "daughter"
+              }
+            ]
+          },
+          "property": "birth_date",
+          "property_source": "entity"
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": "2010-04-09",
+        "entity_ids": [
+          "person:daughter"
+        ],
+        "primary_entity_ids": [
+          "person:daughter"
+        ],
+        "relationship": "child",
+        "semantic_property": "birth_date",
+        "missing_requirements": [],
+        "candidates": []
+      }
+    },
+    {
+      "case_id": "daughter_age_1",
+      "utterance": "How old is my daughter?",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "completed_years",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "child",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "female",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "self",
+          "entity_type": "person",
+          "path": [
+            {
+              "relation": "child",
+              "filters": [
+                {
+                  "property": "gender",
+                  "operator": "eq",
+                  "value": "female",
+                  "source": "entity"
+                }
+              ]
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": []
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "self",
+            "value": null,
+            "entity_type": "person",
+            "path": [
+              {
+                "concept": "daughter"
+              }
+            ]
+          },
+          "property": "birth_date",
+          "property_source": "entity"
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": "2010-04-09",
+        "entity_ids": [
+          "person:daughter"
+        ],
+        "primary_entity_ids": [
+          "person:daughter"
+        ],
+        "relationship": "child",
+        "semantic_property": "birth_date",
+        "missing_requirements": [],
+        "candidates": []
+      }
+    },
+    {
+      "case_id": "born_1988_0",
+      "utterance": "我们家哪些人是1988年出生的",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "ambiguous",
+      "expected_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "date_range",
+            "value": [
+              "1988-01-01",
+              "1989-01-01"
+            ],
+            "source": "entity"
+          }
+        ]
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "eq",
+            "value": "1988-01-01",
+            "source": "entity"
+          }
+        ]
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "current_household",
+            "value": null,
+            "entity_type": "address",
+            "path": [
+              {
+                "concept": "member"
+              }
+            ]
+          },
+          "property": "birth_date",
+          "property_source": "entity",
+          "filters": [
+            {
+              "property": "birth_date",
+              "operator": "eq",
+              "value": "1988-01-01"
+            }
+          ]
+        }
+      },
+      "executor": {
+        "status": "ambiguous",
+        "value": null,
+        "entity_ids": [],
+        "primary_entity_ids": [],
+        "relationship": null,
+        "semantic_property": null,
+        "missing_requirements": [],
+        "candidates": [
+          {
+            "id": "person:a",
+            "name": "a",
+            "gender": "male"
+          },
+          {
+            "id": "person:b",
+            "name": "b",
+            "gender": "female"
+          },
+          {
+            "id": "person:son1",
+            "name": "son1",
+            "gender": "male"
+          },
+          {
+            "id": "person:son2",
+            "name": "son2",
+            "gender": "male"
+          },
+          {
+            "id": "person:daughter",
+            "name": "daughter",
+            "gender": "female"
+          },
+          {
+            "id": "person:father",
+            "name": "father",
+            "gender": "male"
+          },
+          {
+            "id": "person:mother",
+            "name": "mother",
+            "gender": "female"
+          },
+          {
+            "id": "person:grandson",
+            "name": "grandson",
+            "gender": "male"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "born_1988_1",
+      "utterance": "列出本户出生于1988年的成员",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": true,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "date_range",
+            "value": [
+              "1988-01-01",
+              "1989-01-01"
+            ],
+            "source": "entity"
+          }
+        ]
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "eq",
+            "value": "1988-01-01T00:00:00Z",
+            "source": "entity"
+          }
+        ]
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "current_household",
+            "value": null,
+            "entity_type": "address",
+            "path": [
+              {
+                "concept": "member"
+              }
+            ]
+          },
+          "property": null,
+          "property_source": "entity",
+          "filters": [
+            {
+              "property": "birth_date",
+              "operator": "eq",
+              "value": "1988-01-01T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": [],
+        "entity_ids": [],
+        "primary_entity_ids": [],
+        "relationship": "member",
+        "semantic_property": null,
+        "missing_requirements": [],
+        "candidates": []
+      }
+    },
+    {
+      "case_id": "born_1980_0",
+      "utterance": "我们家哪些人是1980年出生的",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "ambiguous",
+      "expected_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "date_range",
+            "value": [
+              "1980-01-01",
+              "1981-01-01"
+            ],
+            "source": "entity"
+          }
+        ]
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "eq",
+            "value": "1980-01-01",
+            "source": "entity"
+          }
+        ]
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "current_household",
+            "value": null,
+            "entity_type": "address",
+            "path": [
+              {
+                "concept": "member"
+              }
+            ]
+          },
+          "property": "birth_date",
+          "property_source": "entity",
+          "filters": [
+            {
+              "property": "birth_date",
+              "operator": "eq",
+              "value": "1980-01-01"
+            }
+          ]
+        }
+      },
+      "executor": {
+        "status": "ambiguous",
+        "value": null,
+        "entity_ids": [],
+        "primary_entity_ids": [],
+        "relationship": null,
+        "semantic_property": null,
+        "missing_requirements": [],
+        "candidates": [
+          {
+            "id": "person:a",
+            "name": "a",
+            "gender": "male"
+          },
+          {
+            "id": "person:b",
+            "name": "b",
+            "gender": "female"
+          },
+          {
+            "id": "person:son1",
+            "name": "son1",
+            "gender": "male"
+          },
+          {
+            "id": "person:son2",
+            "name": "son2",
+            "gender": "male"
+          },
+          {
+            "id": "person:daughter",
+            "name": "daughter",
+            "gender": "female"
+          },
+          {
+            "id": "person:father",
+            "name": "father",
+            "gender": "male"
+          },
+          {
+            "id": "person:mother",
+            "name": "mother",
+            "gender": "female"
+          },
+          {
+            "id": "person:grandson",
+            "name": "grandson",
+            "gender": "male"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "born_1980_1",
+      "utterance": "列出本户出生于1980年的成员",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "date_range",
+            "value": [
+              "1980-01-01",
+              "1981-01-01"
+            ],
+            "source": "entity"
+          }
+        ]
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "eq",
+            "value": "1980-01-01T00:00:00Z",
+            "source": "entity"
+          }
+        ]
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "current_household",
+            "value": null,
+            "entity_type": "address",
+            "path": [
+              {
+                "concept": "member"
+              }
+            ]
+          },
+          "property": null,
+          "property_source": "entity",
+          "filters": [
+            {
+              "property": "birth_date",
+              "operator": "eq",
+              "value": "1980-01-01T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": [],
+        "entity_ids": [],
+        "primary_entity_ids": [],
+        "relationship": "member",
+        "semantic_property": null,
+        "missing_requirements": [],
+        "candidates": []
+      }
+    },
+    {
+      "case_id": "born_1982_0",
+      "utterance": "我们家哪些人是1982年出生的",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "ambiguous",
+      "expected_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "date_range",
+            "value": [
+              "1982-01-01",
+              "1983-01-01"
+            ],
+            "source": "entity"
+          }
+        ]
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property": "birth_date",
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "eq",
+            "value": "1982-01-01",
+            "source": "entity"
+          }
+        ]
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "current_household",
+            "value": null,
+            "entity_type": "address",
+            "path": [
+              {
+                "concept": "member"
+              }
+            ]
+          },
+          "property": "birth_date",
+          "property_source": "entity",
+          "filters": [
+            {
+              "property": "birth_date",
+              "operator": "eq",
+              "value": "1982-01-01"
+            }
+          ]
+        }
+      },
+      "executor": {
+        "status": "ambiguous",
+        "value": null,
+        "entity_ids": [],
+        "primary_entity_ids": [],
+        "relationship": null,
+        "semantic_property": null,
+        "missing_requirements": [],
+        "candidates": [
+          {
+            "id": "person:a",
+            "name": "a",
+            "gender": "male"
+          },
+          {
+            "id": "person:b",
+            "name": "b",
+            "gender": "female"
+          },
+          {
+            "id": "person:son1",
+            "name": "son1",
+            "gender": "male"
+          },
+          {
+            "id": "person:son2",
+            "name": "son2",
+            "gender": "male"
+          },
+          {
+            "id": "person:daughter",
+            "name": "daughter",
+            "gender": "female"
+          },
+          {
+            "id": "person:father",
+            "name": "father",
+            "gender": "male"
+          },
+          {
+            "id": "person:mother",
+            "name": "mother",
+            "gender": "female"
+          },
+          {
+            "id": "person:grandson",
+            "name": "grandson",
+            "gender": "male"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "born_1982_1",
+      "utterance": "列出本户出生于1982年的成员",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "date_range",
+            "value": [
+              "1982-01-01",
+              "1983-01-01"
+            ],
+            "source": "entity"
+          }
+        ]
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "eq",
+            "value": "1982-01-01T00:00:00Z",
+            "source": "entity"
+          }
+        ]
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "current_household",
+            "value": null,
+            "entity_type": "address",
+            "path": [
+              {
+                "concept": "member"
+              }
+            ]
+          },
+          "property": null,
+          "property_source": "entity",
+          "filters": [
+            {
+              "property": "birth_date",
+              "operator": "eq",
+              "value": "1982-01-01T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": [],
+        "entity_ids": [],
+        "primary_entity_ids": [],
+        "relationship": "member",
+        "semantic_property": null,
+        "missing_requirements": [],
+        "candidates": []
+      }
+    },
+    {
+      "case_id": "born_range_0",
+      "utterance": "找出家中出生于1980年至1982年之间的人，包含首尾年份",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "date_range",
+            "value": [
+              "1980-01-01",
+              "1983-01-01"
+            ],
+            "source": "entity"
+          }
+        ]
+      },
+      "normalized_semantic_plan": {
+        "operation": "select",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "gte",
+            "value": 1980,
+            "source": "entity"
+          },
+          {
+            "property": "birth_date",
+            "operator": "lte",
+            "value": 1982,
+            "source": "entity"
+          }
+        ]
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "select",
+          "subject": {
+            "kind": "current_household",
+            "value": null,
+            "entity_type": "address",
+            "path": [
+              {
+                "concept": "member"
+              }
+            ]
+          },
+          "property": null,
+          "property_source": "entity",
+          "filters": [
+            {
+              "property": "birth_date",
+              "operator": "gte",
+              "value": 1980
+            },
+            {
+              "property": "birth_date",
+              "operator": "lte",
+              "value": 1982
+            }
+          ]
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": [],
+        "entity_ids": [],
+        "primary_entity_ids": [],
+        "relationship": "member",
+        "semantic_property": null,
+        "missing_requirements": [],
+        "candidates": []
+      }
+    },
+    {
+      "case_id": "born_count_0",
+      "utterance": "家里1982年出生的有几个人",
+      "failure_stage": "plan_mismatch",
+      "validation_result": "VALID",
+      "plan_match": false,
+      "answer_correct": false,
+      "executor_status": "found",
+      "expected_semantic_plan": {
+        "operation": "count",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "property": "birth_date",
+            "operator": "date_range",
+            "value": [
+              "1982-01-01",
+              "1983-01-01"
+            ],
+            "source": "entity"
+          }
+        ]
+      },
+      "normalized_semantic_plan": {
+        "operation": "count",
+        "subject": {
+          "kind": "current_household",
+          "entity_type": "address",
+          "path": [
+            {
+              "relation": "member",
+              "filters": []
+            }
+          ]
+        },
+        "property_source": "entity",
+        "filters": [
+          {
+            "predicate": "adult",
+            "operator": "eq",
+            "source": "entity"
+          },
+          {
+            "property": "birth_date",
+            "operator": "eq",
+            "value": "1982-01-01",
+            "source": "entity"
+          }
+        ]
+      },
+      "planner_output": {
+        "requires_fact": true,
+        "request": {
+          "operation": "count",
+          "subject": {
+            "kind": "current_household",
+            "value": null,
+            "entity_type": "address",
+            "path": [
+              {
+                "concept": "member"
+              }
+            ]
+          },
+          "property": null,
+          "property_source": "entity",
+          "filters": [
+            {
+              "predicate": "adult"
+            },
+            {
+              "property": "birth_date",
+              "operator": "eq",
+              "value": "1982-01-01"
+            }
+          ]
+        }
+      },
+      "executor": {
+        "status": "found",
+        "value": 0,
+        "entity_ids": [],
+        "primary_entity_ids": [],
+        "relationship": "member",
+        "semantic_property": null,
+        "missing_requirements": [],
+        "candidates": []
+      }
+    }
+  ],
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "benchmarks/semantic_planner_age_filters.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "f3e493c250626a0cf30101511284377fcd76af1744037e20d927b8b6ddab1888",
+    "data_tree_sha256": "94d2e554023019f0c53bcaa4cbbd06d06caace6612bef34e93f7ff545f18fd48",
+    "schema_tree_sha256": "4144c93ae28d050851b302e676e1a29fa1095aab4b978eebaa25cd53b4b3a3eb",
+    "imported_package_path": "/tmp/hc-age-baseline/src/home_cortex/semantic_planner_benchmark.py",
+    "copied_package_sha256": "a628dc3e3450898885566a97de8740ca71f9aa1bc05721ca73bd29f3398eee07",
+    "scoring_revision": "2026-09-06.3-wife-filtered-marriage-edge",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.13",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "json",
+    "frozen_evaluation_time": "2026-09-07T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 1,
+    "verified_cold": false,
+    "planner_contract_sha256": "49828d78d0060dd9caa7a1c0b535222c70963a7aa866690c0ba67e79e0d1804f"
+  },
+  "output": "/tmp/hc-age-baseline/probe-baseline.json"
+}

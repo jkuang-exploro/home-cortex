@@ -1,0 +1,250 @@
+# Synthetic household only; held out from interpreter examples.
+version: 1
+plans:
+  wife_age:
+    operation: completed_years
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+  inlaw_age:
+    operation: completed_years
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property: birth_date
+  self_age:
+    operation: completed_years
+    subject:
+      kind: self
+      entity_type: person
+      path: []
+    property: birth_date
+  daughter_age:
+    operation: completed_years
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+  wife_birth:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+  born_1988:
+    operation: select
+    subject: &id001
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    filters:
+    - property: birth_date
+      operator: date_range
+      value:
+      - '1988-01-01'
+      - '1989-01-01'
+  born_1980:
+    operation: select
+    subject: *id001
+    filters:
+    - property: birth_date
+      operator: date_range
+      value:
+      - '1980-01-01'
+      - '1981-01-01'
+  born_1982:
+    operation: select
+    subject: *id001
+    filters:
+    - property: birth_date
+      operator: date_range
+      value:
+      - '1982-01-01'
+      - '1983-01-01'
+  born_range:
+    operation: select
+    subject: *id001
+    filters:
+    - property: birth_date
+      operator: date_range
+      value:
+      - '1980-01-01'
+      - '1983-01-01'
+  born_count:
+    operation: count
+    subject: *id001
+    filters:
+    - property: birth_date
+      operator: date_range
+      value:
+      - '1982-01-01'
+      - '1983-01-01'
+  oldest:
+    operation: argmin
+    subject: *id001
+    property: birth_date
+  daughter_countdown:
+    operation: annual_occurrence
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+    mode: days
+probe:
+  frozen_time: '2026-09-07T12:00:00-07:00'
+  default_speaker_id: person:a
+  household_id: address:fictional
+  cases:
+  - id: wife_age_0
+    utterance: 我老婆多大岁数了
+    plan: wife_age
+    expected_status: found
+    expected_value: 44
+  - id: wife_age_1
+    utterance: 我妻子现在几周岁
+    plan: wife_age
+    expected_status: found
+    expected_value: 44
+  - id: wife_age_2
+    utterance: How old is my wife?
+    plan: wife_age
+    expected_status: found
+    expected_value: 44
+  - id: inlaw_age_0
+    utterance: 我岳父年龄是多少岁
+    plan: inlaw_age
+    expected_status: found
+    expected_value: 71
+  - id: inlaw_age_1
+    utterance: 配偶的爸爸活了多少个整年
+    plan: inlaw_age
+    expected_status: found
+    expected_value: 71
+  - id: self_age_0
+    utterance: 我今年几岁了
+    plan: self_age
+    expected_status: found
+    expected_value: 46
+  - id: self_age_1
+    utterance: 我的年龄是多大
+    plan: self_age
+    expected_status: found
+    expected_value: 46
+  - id: daughter_age_0
+    utterance: 女儿现在多大年纪
+    plan: daughter_age
+    expected_status: found
+    expected_value: 16
+  - id: daughter_age_1
+    utterance: How old is my daughter?
+    plan: daughter_age
+    expected_status: found
+    expected_value: 16
+  - id: wife_birth_0
+    utterance: 我老婆哪年哪月哪日出生
+    plan: wife_birth
+    expected_status: found
+    expected_value: '1982-06-01'
+  - id: wife_birth_1
+    utterance: 我妻子的出生日期是什么
+    plan: wife_birth
+    expected_status: found
+    expected_value: '1982-06-01'
+  - id: born_1988_0
+    utterance: 我们家哪些人是1988年出生的
+    plan: born_1988
+    expected_status: found
+    expected_entity_ids: &id002 []
+  - id: born_1988_1
+    utterance: 列出本户出生于1988年的成员
+    plan: born_1988
+    expected_status: found
+    expected_entity_ids: *id002
+  - id: born_1980_0
+    utterance: 我们家哪些人是1980年出生的
+    plan: born_1980
+    expected_status: found
+    expected_entity_ids: &id003
+    - person:a
+  - id: born_1980_1
+    utterance: 列出本户出生于1980年的成员
+    plan: born_1980
+    expected_status: found
+    expected_entity_ids: *id003
+  - id: born_1982_0
+    utterance: 我们家哪些人是1982年出生的
+    plan: born_1982
+    expected_status: found
+    expected_entity_ids: &id004
+    - person:b
+  - id: born_1982_1
+    utterance: 列出本户出生于1982年的成员
+    plan: born_1982
+    expected_status: found
+    expected_entity_ids: *id004
+  - id: born_range_0
+    utterance: 找出家中出生于1980年至1982年之间的人，包含首尾年份
+    plan: born_range
+    expected_status: found
+    expected_entity_ids:
+    - person:a
+    - person:b
+  - id: born_count_0
+    utterance: 家里1982年出生的有几个人
+    plan: born_count
+    expected_status: found
+    expected_value: 1
+  - id: oldest_0
+    utterance: 我们家谁最年长
+    plan: oldest
+    expected_status: found
+    expected_entity_ids:
+    - person:father
+  - id: daughter_countdown_0
+    utterance: 我女儿还有几天过生日
+    plan: daughter_countdown
+    expected_status: found
+    expected_value: 214
+  - id: wife_age_followup_21
+    utterance: 我老婆多大岁数
+    plan: wife_age
+    expected_status: found
+    expected_value: 44
+  - id: wife_age_followup_22
+    utterance: 我老婆的年龄是多少
+    plan: wife_age
+    expected_status: found
+    expected_value: 44
+  - id: born_1988_followup_23
+    utterance: 我们家哪些人是1988年出生的？
+    plan: born_1988
+    expected_status: found
+    expected_entity_ids: *id002

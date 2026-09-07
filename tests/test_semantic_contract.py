@@ -50,6 +50,73 @@ def ref(*steps):
     return SemanticReference(kind='self', entity_type='person', path=tuple(SemanticRelationStep.model_validate(s) for s in steps))
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('day,expected', [('2026-05-31',43), ('2026-06-01',44), ('2026-06-02',44)])
+async def test_age_is_completed_years_not_birth_date(household, day, expected):
+    engine,ctx,_=household
+    ctx=replace(ctx,current_time=datetime.fromisoformat(day+'T12:00:00-07:00'),locale='zh')
+    age=SemanticFactRequest(operation='completed_years',subject=ref(step('spouse','female')),property='birth_date')
+    result,*_=await engine.execute(age,ctx)
+    assert result.status=='found' and result.value==expected
+    assert f'{expected}岁' in FactRenderer().render(age,result,ctx)
+    birth=age.model_copy(update={'operation':'select'})
+    result,*_=await engine.execute(birth,ctx)
+    assert result.value=='1982-06-01'
+
+
+@pytest.mark.asyncio
+async def test_date_filtered_set_preserves_bounds_scope_and_cardinality(household):
+    engine,ctx,dispatcher=household
+    dispatcher.entities['person:a']['dob']='1988-01-01'
+    dispatcher.entities['person:b']['dob']='1988-12-31'
+    dispatcher.entities['person:son1']['dob']='1989-01-01'
+    dispatcher.entities['person:son2']['dob']='1987-12-31'
+    dispatcher.entities['person:outsider']={'id':'person:outsider','name':'Outside','dob':'1988-06-01','gender':'male'}
+    members=SemanticReference(kind='current_household',entity_type='address',path=(SemanticRelationStep(relation='member'),))
+    condition=SemanticFilter(property='birth_date',operator='date_range',value=('1988-01-01','1989-01-01'))
+    query=SemanticFactRequest(operation='select',subject=members,filters=(condition,))
+    result,*_=await engine.execute(query,ctx)
+    assert result.status=='found'
+    assert {item['id'] for item in result.value}=={'person:a','person:b'}
+    count,*_=await engine.execute(query.model_copy(update={'operation':'count'}),ctx)
+    assert count.value==2
+    empty=query.model_copy(update={'filters':(condition.model_copy(update={'value':('1900-01-01','1901-01-01')}),)})
+    result,*_=await engine.execute(empty,ctx)
+    assert result.status=='found' and result.value==[]
+    assert FactRenderer().render(empty,result,replace(ctx,locale='zh'))=='没有找到符合筛选条件的记录。'
+    assert FactRenderer().render(empty,result,replace(ctx,locale='en'))=='No records match the filters.'
+    dispatcher.entities['person:b'].pop('dob')
+    result,*_=await engine.execute(query,ctx)
+    assert result.status=='filter_input_missing'
+
+
+@pytest.mark.asyncio
+async def test_age_and_date_filter_eval_expectations_on_invented_household(household):
+    from home_cortex.semantic_planner_benchmark import load_probe_dataset, score_structured_result
+    engine,ctx,_=household
+    dataset=load_probe_dataset(Path(__file__).parents[1]/'benchmarks/semantic_planner_age_filters.yaml')
+    ctx=replace(ctx,current_time=dataset.frozen_time)
+    example_texts={message['content'] for message in _semantic_planner_examples() if message['role']=='user'}
+    for case in dataset.cases:
+        assert case.utterance not in example_texts
+        result,*_=await engine.execute(case.expected,replace(ctx,caller_entity_id=case.speaker_id))
+        assert score_structured_result(result,case), case.case_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('value_property', ['birth_date', 'year_of_birth'])
+async def test_collection_filter_cannot_silently_ignore_dynamic_operand(household,value_property):
+    engine,ctx,_=household
+    query=SemanticFactRequest(
+        operation='select',
+        subject=SemanticReference(kind='current_household',entity_type='address',path=(SemanticRelationStep(relation='member'),)),
+        filters=(SemanticFilter(property='birth_date',value_from='anchor',value_property=value_property),),
+    )
+    assert engine.schema.validation_code(query)=='INVALID_PLAN'
+    result,queries,*_=await engine.execute(query,ctx)
+    assert result.status=='semantic_plan_unsupported' and queries==0
+
+
 def step(relation, gender=None):
     return {'relation':relation, **({'filters':[{'property':'gender','value':gender}]} if gender else {})}
 

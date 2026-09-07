@@ -1,0 +1,105 @@
+{
+  "mode": "tier1_probe",
+  "dataset_size": 4,
+  "warmup": 1,
+  "repeat": 3,
+  "verified_cold": false,
+  "scores": {
+    "plan_accuracy": {
+      "correct": 4,
+      "scored": 4,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "answer_correctness": {
+      "correct": 4,
+      "scored": 4,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "executor_status": {
+      "found": 4
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "scores_all_measured_samples": {
+    "plan_accuracy": {
+      "correct": 12,
+      "scored": 12,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "answer_correctness": {
+      "correct": 12,
+      "scored": 12,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "executor_status": {
+      "found": 12
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "planner_latency_ms": {
+    "n": 12,
+    "p50": 2105.007,
+    "p95": 2822.919
+  },
+  "end_to_end_latency_ms": {
+    "n": 12,
+    "p50": 2105.159,
+    "p95": 2823.186
+  },
+  "accuracy_by_capability": {
+    "unspecified": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    }
+  },
+  "failure_table": [],
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "production-smoke.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "570c82524b14c5b340a0a3900385ef9e57163f7abdc469b56c0e5f137b0678f8",
+    "data_tree_sha256": "5d065b8e4c99544412e068a5a8f7d619a92e8e8c94d308c45e7fa7bfd035142a",
+    "schema_tree_sha256": "4144c93ae28d050851b302e676e1a29fa1095aab4b978eebaa25cd53b4b3a3eb",
+    "imported_package_path": "/tmp/hc-age-final/src/home_cortex/semantic_planner_benchmark.py",
+    "copied_package_sha256": "8019700a861cddb43a58bdb76ebddfa876e9ede0d6c3fc4082aeaa50e4a00f86",
+    "scoring_revision": "2026-09-06.3-wife-filtered-marriage-edge",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.13",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "json",
+    "frozen_evaluation_time": "2026-09-07T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 3,
+    "verified_cold": false,
+    "planner_contract_sha256": "59eea71aad732a2b847aea241476054ac8a9e587881bbb25267a012706203831"
+  },
+  "output": "/tmp/hc-age-final/probe-production-smoke.json"
+}

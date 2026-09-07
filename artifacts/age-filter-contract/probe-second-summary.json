@@ -1,0 +1,105 @@
+{
+  "mode": "tier1_probe",
+  "dataset_size": 21,
+  "warmup": 1,
+  "repeat": 1,
+  "verified_cold": false,
+  "scores": {
+    "plan_accuracy": {
+      "correct": 21,
+      "scored": 21,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "answer_correctness": {
+      "correct": 21,
+      "scored": 21,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "executor_status": {
+      "found": 21
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "scores_all_measured_samples": {
+    "plan_accuracy": {
+      "correct": 21,
+      "scored": 21,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "answer_correctness": {
+      "correct": 21,
+      "scored": 21,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "executor_status": {
+      "found": 21
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "planner_latency_ms": {
+    "n": 21,
+    "p50": 2152.031,
+    "p95": 2868.217
+  },
+  "end_to_end_latency_ms": {
+    "n": 21,
+    "p50": 2152.347,
+    "p95": 2868.555
+  },
+  "accuracy_by_capability": {
+    "unspecified": {
+      "correct": 21,
+      "total": 21,
+      "accuracy": 1.0
+    }
+  },
+  "failure_table": [],
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "benchmarks/semantic_planner_age_filters.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "f3e493c250626a0cf30101511284377fcd76af1744037e20d927b8b6ddab1888",
+    "data_tree_sha256": "94d2e554023019f0c53bcaa4cbbd06d06caace6612bef34e93f7ff545f18fd48",
+    "schema_tree_sha256": "4144c93ae28d050851b302e676e1a29fa1095aab4b978eebaa25cd53b4b3a3eb",
+    "imported_package_path": "/tmp/hc-age-candidate2/src/home_cortex/semantic_planner_benchmark.py",
+    "copied_package_sha256": "8019700a861cddb43a58bdb76ebddfa876e9ede0d6c3fc4082aeaa50e4a00f86",
+    "scoring_revision": "2026-09-06.3-wife-filtered-marriage-edge",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.13",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "json",
+    "frozen_evaluation_time": "2026-09-07T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 1,
+    "verified_cold": false,
+    "planner_contract_sha256": "894bfcd3499abc94591512f681c3905714c98e3ff91708c21029ef70c1594948"
+  },
+  "output": "/tmp/hc-age-candidate2/probe-second.json"
+}

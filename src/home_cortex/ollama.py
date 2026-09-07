@@ -20,7 +20,7 @@ _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用�
 
 外层操作：
 - 问一个人是谁、身份或叫什么，以及“哪个人是我的某亲属”，用 resolve_reference 且 property=null；明确问名或姓的组成部分才用 select(given_name/family_name)。列出集合用 select 且 property=null；计数用 count 且 property=null。
-- 属性值用 select；年龄用 completed_years(birth_date)。生日日期用 select(birth_date)；下一次生日用 annual_occurrence(birth_date)；从今天到生日还有/相隔多少天也必须用 annual_occurrence，mode=days，绝不用原始出生日期做 duration/date_difference。
+- 先区分返回实体集合、原始属性值还是计算值。年龄是已满整年数，用 completed_years(birth_date)，返回整数而不是日期；原始出生日期才用 select(birth_date)。下一次生日用 annual_occurrence(birth_date)；从今天到生日的天数用 annual_occurrence，mode=days。
 - argmin 返回属性值最小者，argmax 返回最大者。birth_date 越早值越小，所以“年龄最大”也和年长、最早出生一样只能用 argmin；年幼、年龄小、最晚出生用 argmax。问人是谁时不用 earliest/latest 或数值 min/max。
 - 两人比较必须提供 property 和两个完整引用 subject、other；说话人参与时 subject=self，另一人在 other。集合极值没有 other。
 - 从起始日期到现在的时间用 duration，mode=days（明确问秒才 seconds）。配偶身份和配偶属性都把 spouse 概念放在 subject.path。关系开始日期和持续时间也只有一个经该关系的 subject，不把两端人物拆成 subject 和 other，不在 request.filters 放人物谓词。
@@ -30,7 +30,9 @@ _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用�
 - 配偶的 birth_date 属于 entity。婚姻 start_date 属于 spouse 关系；婚姻 duration 使用同一关系 start_date。property=null 时 property_source=entity。不得静默改变错误的所有者。
 
 过滤语法：
-- 字段条件是 {"property":名称,"value":值}，可带 operator/source/value_from/value_property；source=entity 约束人或地点，source=relation 约束边。
+- 集合字段条件是 {"property":名称,"operator":比较符,"value":字面值}，source=entity 约束人或地点，source=relation 约束边。只有 path 步骤中的比较可以用 value_from=anchor 引用遍历起点的属性；它不是年份提取，request.filters 不允许动态引用。
+- 查询符合条件的实体集合用 select、property=null，条件完整放入 request.filters；条件引用的属性不等于要输出的属性。集合可以有零个、一个或多个结果，不能用单人 resolve_reference 代替。统计同一集合则用 count。
+- 日期条件遵循 filter_requirements：date_range 的 value=[含起点,不含终点]，用 ISO 日期表达完整区间；年份限定是该年年初至下一年年初，不是日期与年份数字相等。不得把日期限定丢掉或变成出生日期投影。
 - 集合谓词只能是 {"predicate":声明名称}，放在 request.filters。definition_only 只解释含义，不输出为附加条件；completed_years 等操作不是谓词。
 - 只用已声明的操作、属性、关系、概念和谓词。不得丢弃不支持的限定、发明词汇、猜身份或修补事实答案。只返回严格结构化输出。
 """
@@ -51,6 +53,8 @@ def _semantic_planner_examples() -> list[dict[str, str]]:
         ("请列出我的女性后代。", "select", reference("self", "daughter"), None, "entity", {}),
         ("我母亲的丈夫是哪位？", "resolve_reference", reference("self", "mother", "husband"), None, "entity", {}),
         ("我的丈夫出生于哪天？", "select", reference("self", "husband"), "birth_date", "entity", {}),
+        ("我的母亲如今已满多少周岁？", "completed_years", reference("self", "mother"), "birth_date", "entity", {}),
+        ("列出居住关系始于2015年的本户成员。", "select", reference("current_household", "member"), None, "entity", {"filters": [{"property": "start_date", "source": "relation", "operator": "date_range", "value": ["2015-01-01", "2016-01-01"]}]}),
         ("请提供这个家庭的完整地址。", "select", reference("self", "residence"), "full_address", "entity", {}),
         ("我的居住关系从哪天开始？", "select", reference("self", "residence"), "start_date", "relationship", {}),
         ("住进现居所至今有多少天？", "duration", reference("self", "residence"), "start_date", "relationship", {"mode": "days"}),
