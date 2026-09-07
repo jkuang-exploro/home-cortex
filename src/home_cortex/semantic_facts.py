@@ -496,6 +496,14 @@ class SemanticSchemaRegistry:
             ontology = full["reference_ontology"]
             self._planner_capability_cache = {
                 "references": full["references"],
+                "reference_kinds": {
+                    "self": "authenticated speaker; first-person I/me/我 only",
+                    "assistant": "this household assistant; second-person you/你/您 addressing the agent",
+                    "current_household": "configured home address",
+                    "named_entity": "verbatim spoken name, never a pronoun",
+                    "discourse": "prior user-turn focus; not a substitute for you/I",
+                    "unresolved": "pronoun or description that cannot be grounded",
+                },
                 "composition": {
                     "projection": "each maps one scalar operation or select(property) over a collection; preserves per-entity rows including missing data",
                     "exclude": "up to eight resolved references subtracted by identity; other is only a comparison operand",
@@ -595,42 +603,65 @@ class SemanticSchemaRegistry:
             request["required"].extend(["property", "property_source"])
             path_schema = definitions["SemanticReference"]["properties"]["path"]
             entity_types = sorted(self.catalog.entities)
-            definitions["SemanticReference"] = {"anyOf": [
+            contextual = [
                 {
                     "type": "object",
                     "additionalProperties": False,
+                    "description": description,
                     "properties": {
-                        "kind": {
-                            "type": "string",
-                            "enum": [
-                                "self",
-                                "assistant",
-                                "current_household",
-                                "named_entity",
-                            ],
-                        },
-                        "value": {
-                            "anyOf": [
-                                {"type": "null"},
-                                {"maxLength": 256, "type": "string"},
-                            ]
-                        },
+                        "kind": {"type": "string", "const": kind},
+                        "value": {"type": "null"},
                         "entity_type": {
                             "anyOf": [
                                 {"type": "null"},
-                                {
-                                    "type": "string",
-                                    "pattern": r"^[A-Za-z_][A-Za-z0-9_]*$",
-                                },
+                                {"type": "string", "const": entity_type},
                             ]
                         },
                         "path": path_schema,
                     },
-                    "required": ["kind"],
+                    "required": ["kind", "value", "entity_type", "path"],
+                }
+                for kind, entity_type, description in (
+                    (
+                        "self",
+                        "person",
+                        "Authenticated current speaker. First-person identity only.",
+                    ),
+                    (
+                        "assistant",
+                        "person",
+                        "This household assistant. Second-person identity when the user addresses the agent.",
+                    ),
+                    (
+                        "current_household",
+                        "address",
+                        "The configured household address.",
+                    ),
+                )
+            ]
+            definitions["SemanticReference"] = {"anyOf": [
+                *contextual,
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "description": "A name copied verbatim from the user utterance; never a pronoun.",
+                    "properties": {
+                        "kind": {"type": "string", "const": "named_entity"},
+                        "value": {"type": "string", "maxLength": 256},
+                        "entity_type": {
+                            "anyOf": [
+                                {"type": "null"},
+                                {"type": "string", "enum": entity_types},
+                            ]
+                        },
+                        "path": path_schema,
+                    },
+                    "required": ["kind", "value", "entity_type", "path"],
                 },
                 {
                     "type": "object",
                     "additionalProperties": False,
+                    "description": "Focus of a prior user turn. Not a substitute for first- or second-person identity.",
                     "properties": {
                         "kind": {"type": "string", "const": "discourse"},
                         "entity_type": {"type": "string", "enum": entity_types},
@@ -650,11 +681,13 @@ class SemanticSchemaRegistry:
                         "entity_type",
                         "turn_offset",
                         "cardinality",
+                        "path",
                     ],
                 },
                 {
                     "type": "object",
                     "additionalProperties": False,
+                    "description": "A referring expression that cannot be grounded.",
                     "properties": {
                         "kind": {"type": "string", "const": "unresolved"},
                         "entity_type": {
@@ -664,10 +697,12 @@ class SemanticSchemaRegistry:
                             ]
                         },
                     },
-                    "required": ["kind"],
+                    "required": ["kind", "entity_type"],
                 },
             ]}
-            self._planner_schema_cache = _prefer_null_union(schema)
+            self._planner_schema_cache = _require_all_object_properties(
+                _prefer_null_union(schema)
+            )
         return self._planner_schema_cache
 
     def expand_planner_concepts(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -2655,10 +2690,26 @@ def _compact_json_schema(value: Any) -> Any:
         return {
             key: _compact_json_schema(item)
             for key, item in value.items()
-            if key not in {"title", "description", "default"}
+            if key not in {"title", "default"}
         }
     if isinstance(value, list):
         return [_compact_json_schema(item) for item in value]
+    return value
+
+
+def _require_all_object_properties(value: Any) -> Any:
+    """OpenAI-strict objects: every property is required; optionality is null."""
+    if isinstance(value, Mapping):
+        mapped = {
+            key: _require_all_object_properties(item) for key, item in value.items()
+        }
+        properties = mapped.get("properties")
+        if mapped.get("type") == "object" and isinstance(properties, dict):
+            mapped["additionalProperties"] = False
+            mapped["required"] = list(properties)
+        return mapped
+    if isinstance(value, list):
+        return [_require_all_object_properties(item) for item in value]
     return value
 
 

@@ -76,6 +76,11 @@ class OpenRouterService:
                     "json_schema": {
                         "name": "SemanticPlan",
                         "strict": True,
+                        "description": (
+                            "Compile the latest user utterance. First-person "
+                            "identity uses kind=self; second-person identity "
+                            "uses kind=assistant."
+                        ),
                         "schema": dict(output_schema),
                     },
                 },
