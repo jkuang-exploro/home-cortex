@@ -159,7 +159,7 @@ async def test_openrouter_planner_uses_json_schema_and_parses_content() -> None:
     assert body["temperature"] == 0
     assert body["response_format"]["type"] == "json_schema"
     assert body["response_format"]["json_schema"]["name"] == "SemanticPlan"
-    assert body["response_format"]["json_schema"]["strict"] is True
+    assert body["response_format"]["json_schema"]["strict"] is False
     assert body["provider"] == {"require_parameters": True}
     assert plan == {"requires_fact": False, "request": None}
     assert service.last_planner_runtime["prompt_eval_count"] == 20

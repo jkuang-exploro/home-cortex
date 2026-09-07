@@ -159,13 +159,21 @@ def planner_chat_messages(
         if message.get("role") == "system"
         and "strict structural" in str(message.get("content", ""))
     )
+    reminder = (
+        "Person deixis for identity: first person → kind=self; "
+        "second person addressing this helper → kind=assistant. "
+        "Do not add path, filters, or amount unless the utterance "
+        "requires them."
+    )
+    if validation_feedback:
+        reminder = f"{reminder}\n{validation_feedback}"
     return [
         {"role": "system", "content": (
             planner_system_prompt(capabilities)
             + f"\nHousehold now: {household_now}"
-            + ("\n" + validation_feedback if validation_feedback else "")
         )},
         *_semantic_planner_examples(),
+        {"role": "system", "content": reminder},
         *forwarded,
     ]
 

@@ -26,7 +26,7 @@ from .operator_registry import (
 )
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_ontology import SemanticOntology
-from .text import safe_log_token
+from .text import latest_user_message, safe_log_token
 
 logger = logging.getLogger("uvicorn.error.home_cortex.semantic_facts")
 
@@ -635,7 +635,7 @@ class SemanticSchemaRegistry:
                         },
                         "path": path_schema,
                     },
-                    "required": ["kind", "value", "entity_type", "path"],
+                    "required": ["kind"],
                 },
                 {
                     "type": "object",
@@ -652,7 +652,7 @@ class SemanticSchemaRegistry:
                         },
                         "path": path_schema,
                     },
-                    "required": ["kind", "value", "entity_type", "path"],
+                    "required": ["kind", "value"],
                 },
                 {
                     "type": "object",
@@ -672,13 +672,7 @@ class SemanticSchemaRegistry:
                         },
                         "path": path_schema,
                     },
-                    "required": [
-                        "kind",
-                        "entity_type",
-                        "turn_offset",
-                        "cardinality",
-                        "path",
-                    ],
+                    "required": ["kind", "entity_type", "turn_offset"],
                 },
                 {
                     "type": "object",
@@ -693,12 +687,10 @@ class SemanticSchemaRegistry:
                             ]
                         },
                     },
-                    "required": ["kind", "entity_type"],
+                    "required": ["kind"],
                 },
             ]}
-            self._planner_schema_cache = _require_all_object_properties(
-                _prefer_null_union(schema)
-            )
+            self._planner_schema_cache = _prefer_null_union(schema)
         return self._planner_schema_cache
 
     def expand_planner_concepts(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -1144,6 +1136,7 @@ class SemanticFactPlanner:
         request_ms = 0.0
         validation_ms = 0.0
         runtime: Mapping[str, Any] = {}
+        utterance = latest_user_message(messages)
         for attempts in (1, 2):
             planner_messages: list[dict[str, Any]] = [
                 {"role": "user", "content": str(message.get("content", ""))}
@@ -1151,6 +1144,7 @@ class SemanticFactPlanner:
             ]
             if attempts == 2:
                 previous = validation or _structural_validation_code(structural_error)
+                hint = _identity_person_mismatch(utterance, None)
                 planner_messages.append(
                     {
                         "role": "system",
@@ -1158,9 +1152,11 @@ class SemanticFactPlanner:
                             "Your previous response failed strict structural or "
                             f"semantic validation ({previous}). Recompile the "
                             "original meaning using only the advertised grammar; "
-                            "check reference path, operands, property ownership, "
-                            "and operation requirements. Return exactly one JSON "
-                            "object conforming to the supplied output schema."
+                            "check reference path, first vs second person, "
+                            "property ownership, and operation requirements. "
+                            + (f"{hint} " if hint else "")
+                            + "Return exactly one JSON object conforming to the "
+                            "supplied output schema."
                         ),
                     }
                 )
@@ -1187,6 +1183,12 @@ class SemanticFactPlanner:
                     validation = "MODEL_ORIGINATED_ENTITY_ID"
                 elif candidate.request is not None:
                     validation = self.schema.validation_code(candidate.request)
+                    if validation == "VALID":
+                        person_error = _identity_person_mismatch(
+                            utterance, candidate.request
+                        )
+                        if person_error:
+                            validation = "INVALID_PLAN"
                 validation_ms += (perf_counter() - validate_started) * 1000
                 if validation not in {"VALID", "NOT_A_FACT"}:
                     plan = None
@@ -2680,6 +2682,53 @@ def planner_input_summary(capabilities: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+_SECOND_PERSON_IDENTITY = re.compile(
+    r"(?is)^(?:who are you\b|what(?:'s| is) your (?:name|role)\b)|"
+    r"^(?:你|您)\s*(?:是\s*(?:谁|哪)|的名字|叫什么)"
+)
+_FIRST_PERSON_IDENTITY = re.compile(
+    r"(?is)^(?:who am i\b|what(?:'s| is) my name\b)|"
+    r"^我\s*(?:是\s*(?:谁|哪)|的名字|叫什么|的身份)"
+)
+
+
+def _identity_person_hint(utterance: str) -> str | None:
+    text = utterance.strip()
+    if _SECOND_PERSON_IDENTITY.match(text):
+        return (
+            "The latest utterance addresses this helper in the second person. "
+            "subject.kind must be assistant, path must be empty, property=null."
+        )
+    if _FIRST_PERSON_IDENTITY.match(text):
+        return (
+            "The latest utterance is first-person identity. "
+            "subject.kind must be self, path must be empty, property=null."
+        )
+    return None
+
+
+def _identity_person_mismatch(
+    utterance: str, request: SemanticFactRequest | None
+) -> str | None:
+    """Reject first/second-person identity plans that name the wrong referent."""
+    if request is None:
+        return _identity_person_hint(utterance)
+    if (
+        request.operation != "resolve_reference"
+        or request.property is not None
+        or request.subject.path
+    ):
+        return None
+    hint = _identity_person_hint(utterance)
+    if hint is None:
+        return None
+    if _SECOND_PERSON_IDENTITY.match(utterance.strip()):
+        return hint if request.subject.kind != "assistant" else None
+    if _FIRST_PERSON_IDENTITY.match(utterance.strip()):
+        return hint if request.subject.kind != "self" else None
+    return None
+
+
 def _compact_json_schema(value: Any) -> Any:
     """Remove model-irrelevant prose while preserving JSON Schema constraints."""
     if isinstance(value, Mapping):
@@ -2690,22 +2739,6 @@ def _compact_json_schema(value: Any) -> Any:
         }
     if isinstance(value, list):
         return [_compact_json_schema(item) for item in value]
-    return value
-
-
-def _require_all_object_properties(value: Any) -> Any:
-    """OpenAI-strict objects: every property is required; optionality is null."""
-    if isinstance(value, Mapping):
-        mapped = {
-            key: _require_all_object_properties(item) for key, item in value.items()
-        }
-        properties = mapped.get("properties")
-        if mapped.get("type") == "object" and isinstance(properties, dict):
-            mapped["additionalProperties"] = False
-            mapped["required"] = list(properties)
-        return mapped
-    if isinstance(value, list):
-        return [_require_all_object_properties(item) for item in value]
     return value
 
 

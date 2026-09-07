@@ -1553,6 +1553,28 @@ async def test_planner_retries_once_for_structural_failure(
 
 
 @pytest.mark.asyncio
+async def test_second_person_identity_is_not_accepted_as_self(
+    context: AgentRequestContext,
+) -> None:
+    interpreter = _Interpreter(
+        lambda calls, _messages: (
+            _resolve(_self())
+            if calls == 1
+            else _resolve(SemanticReference(kind="assistant"))
+        )
+    )
+    outcome = await SemanticFactPlanner(interpreter, _schema(DATA_DIR)).plan(
+        [{"role": "user", "content": "你是谁"}],
+        context,
+    )
+
+    assert outcome.plan.request is not None
+    assert outcome.plan.request.subject.kind == "assistant"
+    assert outcome.diagnostics.attempt_count == 2
+    assert interpreter.calls == 2
+
+
+@pytest.mark.asyncio
 async def test_planner_classifies_unsupported_operation_after_one_retry(
     context: AgentRequestContext,
 ) -> None:
