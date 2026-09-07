@@ -6,7 +6,7 @@ import json
 import logging
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from time import perf_counter
 from typing import Any, Literal, get_args
@@ -26,12 +26,13 @@ from .operator_registry import (
 )
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_ontology import SemanticOntology
-from .text import latest_user_message, safe_log_token
+from .text import safe_log_token
 
 logger = logging.getLogger("uvicorn.error.home_cortex.semantic_facts")
 
 FactStatus = Literal[
     "found",
+    "discourse_context_missing",
     "caller_context_missing",
     "entity_not_found",
     "relationship_not_found",
@@ -59,6 +60,7 @@ FactOperation = Literal[
     "max",
     "argmin",
     "argmax",
+    "date_add",
     "date_difference",
     "completed_years",
     "duration",
@@ -66,6 +68,8 @@ FactOperation = Literal[
     "unit_conversion",
 ]
 ReferenceKind = Literal[
+    "unresolved",
+    "discourse",
     "self",
     "assistant",
     "current_household",
@@ -100,6 +104,16 @@ _CONTEXT_ENTITY_TYPES = {
 
 
 @dataclass(frozen=True)
+class DiscourseContext:
+    conversation_id: str
+    caller_entity_id: str | None
+    household_id: str | None
+    assistant_id: str
+    # Oldest to newest; empty entries preserve topic-change/failed-turn boundaries.
+    turns: tuple[tuple[str, ...], ...] = ()
+
+
+@dataclass(frozen=True)
 class AgentRequestContext:
     """Trusted identities and clock used to resolve semantic references."""
 
@@ -109,6 +123,8 @@ class AgentRequestContext:
     household_id: str | None
     current_time: datetime
     locale: str | None = None
+    conversation_id: str | None = None
+    discourse: DiscourseContext | None = None
 
 
 class _SemanticModel(BaseModel):
@@ -191,10 +207,19 @@ class SemanticReference(_SemanticModel):
     kind: ReferenceKind
     value: str | None = Field(default=None, max_length=256)
     entity_type: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
-    path: tuple[SemanticRelationStep, ...] = ()
+    path: tuple[SemanticRelationStep, ...] = Field(default=(), max_length=8)
+    turn_offset: int | None = Field(default=None, strict=True, ge=1, le=8)
+    cardinality: Literal["single", "collection"] = "single"
 
     @model_validator(mode="after")
     def validate_value(self) -> "SemanticReference":
+        if self.kind == "unresolved" and (self.value is not None or self.path):
+            raise ValueError("unresolved reference cannot carry a value or path")
+        if self.kind == "discourse":
+            if self.value is not None or self.turn_offset is None or self.entity_type is None:
+                raise ValueError("discourse requires turn_offset, entity_type and no literal value")
+        elif self.turn_offset is not None or self.cardinality != "single":
+            raise ValueError("discourse options require a discourse reference")
         if self.kind in _CONTEXT_ENTITY_TYPES and self.value is not None:
             raise ValueError("contextual references do not accept a literal value")
         if self.kind in {"named_entity", "entity_id"} and not self.value:
@@ -223,6 +248,9 @@ class SemanticFactRequest(_SemanticModel):
         default=(),
         description="Collection filters evaluated before count/aggregation/selection.",
     )
+    projection: Literal["scalar", "each"] = "scalar"
+    exclude: tuple[SemanticReference, ...] = Field(default=(), max_length=8)
+    amount: int | None = Field(default=None, strict=True, ge=-120000, le=120000)
     other: SemanticReference | None = None
     mode: Literal["years", "months", "days", "seconds"] | None = None
     from_unit: str | None = Field(default=None, max_length=16)
@@ -270,6 +298,16 @@ class FactEvidence:
 
 
 @dataclass(frozen=True)
+class FactRow:
+    entity: Mapping[str, Any]
+    status: FactStatus
+    value: Any = None
+    unit: str | None = None
+    evidence: FactEvidence = FactEvidence()
+    missing_requirements: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class FactResult:
     status: FactStatus
     value: Any = None
@@ -277,6 +315,9 @@ class FactResult:
     missing_requirements: tuple[str, ...] = ()
     candidates: tuple[Mapping[str, Any], ...] = ()
     unit: str | None = None
+    shape: Literal["scalar", "entity", "entities", "rows"] = "scalar"
+    rows: tuple[FactRow, ...] = ()
+    focus_entity_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -438,6 +479,7 @@ class SemanticSchemaRegistry:
                 "completed_years": "legacy structured-call alias; interpreter uses date_difference with mode=years",
                 "duration": "date property + mode days|seconds",
                 "annual_occurrence": "date property; mode=days only for countdown",
+                "date_add": "date property + strict integer amount + mode years|months|days; invalid target day becomes the following month's first day, return specified date even in past",
                 "date_difference": "one entity OR relationship date to household_now; mode explicitly chooses years|months|days|seconds. Calendar years/months count full anniversaries, signed toward zero; never divide days by a fixed ratio. Age, tenure and elapsed relationship time use this same operation.",
                 "unit_conversion": "numeric property + from_unit + to_unit",
             },
@@ -454,6 +496,11 @@ class SemanticSchemaRegistry:
             ontology = full["reference_ontology"]
             self._planner_capability_cache = {
                 "references": full["references"],
+                "composition": {
+                    "projection": "each maps one scalar operation or select(property) over a collection; preserves per-entity rows including missing data",
+                    "exclude": "up to eight resolved references subtracted by identity; other is only a comparison operand",
+                    "discourse": "turn_offset 1..8 selects that prior user turn's trusted resolved focus; cardinality single or collection; entity_type required; never supply IDs",
+                },
                 "entity_types": full["entity_types"],
                 "operations": [name for name in full["operations"] if name not in {"duration", "completed_years"}],
                 "operation_requirements": {name: value for name, value in full["operation_requirements"].items() if name not in {"duration", "completed_years"}},
@@ -560,6 +607,11 @@ class SemanticSchemaRegistry:
             return payload
         request = dict(raw)
         concepts = self.ontology.planner_payload()["reference_concepts"]
+        if isinstance(request.get("exclude"), (list, tuple)):
+            request["exclude"] = [
+                self.expand_planner_concepts({"request": {"subject": reference}})["request"]["subject"]
+                for reference in request["exclude"]
+            ]
         for key in ("subject", "other"):
             reference = request.get(key)
             if not isinstance(reference, Mapping):
@@ -626,7 +678,7 @@ class SemanticSchemaRegistry:
 
     def validation_code(self, request: SemanticFactRequest) -> PlannerValidationCode:
         """Return a stable, non-sensitive reason for semantic-plan rejection."""
-        references = (request.subject,) + ((request.other,) if request.other else ())
+        references = (request.subject,) + ((request.other,) if request.other else ()) + request.exclude
         for reference in references:
             for step in reference.path:
                 if self.physical_relation(step.relation) is None:
@@ -728,7 +780,7 @@ class SemanticSchemaRegistry:
 
         if request.other is not None and request.filters:
             return "INVALID_PLAN"
-        if request.filters and not request.subject.path:
+        if request.filters and not request.subject.path and request.subject.cardinality != "collection":
             return "INVALID_PLAN"
         for item in request.filters:
             if item.value_from is not None:
@@ -759,7 +811,19 @@ class SemanticSchemaRegistry:
                 return "INVALID_PLAN"
 
         operation = OPERATORS[request.operation]
-        collection_input = bool(request.subject.path or request.other is not None)
+        collection_input = bool(request.subject.path or request.other is not None
+                                or request.subject.cardinality == "collection")
+        if request.amount is not None and request.operation != "date_add":
+            return "INVALID_PLAN"
+        if request.projection == "each" and (
+            not collection_input or request.other is not None or request.property is None
+            or not (operation.input_shape == "scalar" or request.operation == "select")
+        ):
+            return "INVALID_PLAN"
+        if request.exclude and (not collection_input or request.other is not None
+                                or not (request.projection == "each" or operation.input_shape == "collection"
+                                        or (request.operation == "select" and request.property is None))):
+            return "INVALID_PLAN"
         if operation.input_shape == "collection" and not collection_input:
             return "INVALID_PLAN"
         if request.operation == "resolve_reference":
@@ -774,7 +838,7 @@ class SemanticSchemaRegistry:
             if request.other is not None:
                 return "INVALID_PLAN"
             if request.property is None:
-                return "VALID" if request.subject.path else "INVALID_PLAN"
+                return "VALID" if collection_input else "INVALID_PLAN"
             valid = self._request_property_kind(
                 request,
                 final_types[id(request.subject)],
@@ -807,6 +871,7 @@ class SemanticSchemaRegistry:
         parameters = {
             "reference": "household_now",
             "mode": request.mode,
+            "amount": request.amount,
             "from_unit": request.from_unit,
             "to_unit": request.to_unit,
         }
@@ -965,7 +1030,6 @@ class SemanticFactPlanner:
         output_schema = self.schema.planner_output_schema()
         capabilities = self.schema.planner_capability_payload()
         input_summary = planner_input_summary(self.schema.capability_payload())
-        utterance = latest_user_message(messages)
         prompt_build_ms = (perf_counter() - build_started) * 1000
         payload: Mapping[str, Any] | None = None
         plan: SemanticPlan | None = None
@@ -977,7 +1041,8 @@ class SemanticFactPlanner:
         runtime: Mapping[str, Any] = {}
         for attempts in (1, 2):
             planner_messages: list[dict[str, Any]] = [
-                {"role": "user", "content": utterance}
+                {"role": "user", "content": str(message.get("content", ""))}
+                for message in messages if message.get("role") == "user"
             ]
             if attempts == 2:
                 previous = validation or _structural_validation_code(structural_error)
@@ -1011,7 +1076,7 @@ class SemanticFactPlanner:
                 validation = "NOT_A_FACT"
                 if candidate.request is not None and any(
                     reference.kind == "entity_id"
-                    for reference in (candidate.request.subject, candidate.request.other)
+                    for reference in (candidate.request.subject, candidate.request.other, *candidate.request.exclude)
                     if reference is not None
                 ):
                     validation = "MODEL_ORIGINATED_ENTITY_ID"
@@ -1142,7 +1207,23 @@ class EntityResolver:
         *,
         allow_empty_collection: bool,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        if reference.kind == "assistant":
+        if reference.kind == "unresolved":
+            raise _FactFailure("ambiguous", missing=("semantic_reference",))
+        elif reference.kind == "discourse":
+            discourse = context.discourse
+            if (discourse is None or context.conversation_id is None
+                or (discourse.conversation_id, discourse.caller_entity_id, discourse.household_id, discourse.assistant_id)
+                != (context.conversation_id, context.caller_entity_id, context.household_id, context.assistant_id)
+                or reference.turn_offset is None or reference.turn_offset > len(discourse.turns)
+                or not discourse.turns[-reference.turn_offset]):
+                raise _FactFailure("caller_context_missing", missing=("discourse_antecedent",))
+            ids = discourse.turns[-reference.turn_offset]
+            entities = [await execution.load({"id": entity_id}) for entity_id in ids]
+            if reference.cardinality == "single" and len(entities) != 1:
+                raise _FactFailure("ambiguous", candidates=tuple(entities), missing=("discourse_antecedent",))
+            if any(_entity_type(entity) != reference.entity_type for entity in entities):
+                raise _FactFailure("caller_context_missing", missing=("discourse_antecedent",))
+        elif reference.kind == "assistant":
             entities = [
                 {
                     "id": context.assistant_id,
@@ -1364,10 +1445,10 @@ class HouseholdFactEngine:
             return FactResult("semantic_plan_unsupported"), 0, 0, 0
         execution = _FactExecution(self.dispatcher, context.caller_entity_id)
         resolution_started = perf_counter()
-        allow_empty_collection = request.operation in {"count", "select"}
+        allow_empty_collection = request.operation in {"count", "select"} or request.projection == "each"
         operation = OPERATORS[request.operation]
         expect_many = request.other is None and (
-            operation.input_shape == "collection"
+            request.projection == "each" or operation.input_shape == "collection"
             or (request.operation == "select" and request.property is None)
         )
         resolution = await self.resolver.resolve(
@@ -1388,10 +1469,13 @@ class HouseholdFactEngine:
             if request.other is not None
             else ResolutionResult("resolved")
         )
+        exclusions = [await self.resolver.resolve(
+            reference, context, execution, expect_many=reference.cardinality == "collection"
+        ) for reference in request.exclude]
         failed = next(
             (
                 item
-                for item in (resolution, other_resolution)
+                for item in (resolution, other_resolution, *exclusions)
                 if item.status != "resolved"
             ),
             None,
@@ -1405,6 +1489,8 @@ class HouseholdFactEngine:
                 "relationship_not_found": "relationship_not_found",
                 "property_unavailable": "property_unavailable",
             }[failed.status]
+            if "discourse_antecedent" in failed.missing_requirements and status == "caller_context_missing":
+                status = "discourse_context_missing"
             return (
                 FactResult(
                     status,
@@ -1420,6 +1506,9 @@ class HouseholdFactEngine:
         other_entities = [dict(item) for item in other_resolution.entities]
         relationship_records = [dict(item) for item in resolution.relationship_records]
         entity_resolution_ms = (perf_counter() - resolution_started) * 1000
+        excluded_ids = {entity_id for item in exclusions for entity_id in item.entity_ids}
+        entities = [item for item in entities if item.get("id") not in excluded_ids]
+        relationship_records = [edge for edge in relationship_records if _related_entity_id(edge) not in excluded_ids]
         computation_started = perf_counter()
         try:
             if request.filters:
@@ -1430,7 +1519,7 @@ class HouseholdFactEngine:
                     context,
                     execution,
                 )
-            result = await self._operate(
+            result = await (self._project_each if request.projection == "each" else self._operate)(
                 request,
                 entities,
                 other_entities,
@@ -1445,8 +1534,61 @@ class HouseholdFactEngine:
                 missing_requirements=error.missing,
                 candidates=error.candidates,
             )
+        if result.status == "found":
+            focus = tuple(str(item["id"]) for item in (*entities, *other_entities) if item.get("id"))
+            if (request.other is None and request.property_source == "entity"
+                and isinstance(result.value, Mapping) and result.value.get("id")):
+                focus = (str(result.value["id"]),)
+            result = replace(result, focus_entity_ids=tuple(dict.fromkeys(focus)))
         computation_ms = (perf_counter() - computation_started) * 1000
         return result, execution.query_count, entity_resolution_ms, computation_ms
+
+    async def _project_each(
+        self,
+        request: SemanticFactRequest,
+        entities: list[dict[str, Any]],
+        other_entities: list[dict[str, Any]],
+        relationship_records: list[dict[str, Any]],
+        context: AgentRequestContext,
+        execution: "_FactExecution",
+    ) -> FactResult:
+        rows: list[FactRow] = []
+        scalar = request.model_copy(update={"projection": "scalar", "exclude": ()})
+        relation = _last_relation(request.subject)
+        for entity in entities:
+            edges = [
+                edge for edge in relationship_records
+                if _related_entity_id(edge) == entity.get("id")
+            ]
+            groups = (
+                [[edge] for edge in edges]
+                if request.property_source == "relationship" else [edges]
+            )
+            for group in groups or [[]]:
+                # Share loaded records, but scope relationship evidence to this row.
+                row_execution = _FactExecution(self.dispatcher, context.caller_entity_id)
+                row_execution.entity_cache = execution.entity_cache
+                for edge in group:
+                    assert relation is not None
+                    row_execution.remember_relationship(relation, edge)
+                evidence = FactEvidence(
+                    (str(entity["id"]),), relation, request.property,
+                    tuple(row_execution.relationship_evidence),
+                )
+                try:
+                    visible = await row_execution.load_if_unnamed(entity)
+                    value = await self._operate(
+                        scalar, [entity], [], group, context, row_execution,
+                    )
+                except _FactFailure as error:
+                    visible = entity
+                    value = FactResult(error.status, missing_requirements=error.missing)
+                execution.query_count += row_execution.query_count
+                rows.append(FactRow(
+                    visible, value.status, value.value, _result_unit(request),
+                    evidence, value.missing_requirements,
+                ))
+        return FactResult("found", shape="rows", rows=tuple(rows))
 
     async def _operate(
         self,
@@ -1472,7 +1614,7 @@ class HouseholdFactEngine:
             return FactResult("found", value, evidence)
         if request.operation == "select" and request.property is None:
             visible = [await execution.load_if_unnamed(item) for item in entities]
-            return FactResult("found", visible, evidence)
+            return FactResult("found", visible, evidence, shape="entities")
         if request.operation == "resolve_reference":
             singular = await self._singular(
                 entities,
@@ -1482,7 +1624,7 @@ class HouseholdFactEngine:
             )
             if isinstance(singular, FactResult):
                 return singular
-            return FactResult("found", singular, evidence)
+            return FactResult("found", singular, evidence, shape="entity")
         if request.operation == "select":
             if request.property_source == "relationship":
                 relationship = self._singular_relationship(
@@ -1567,6 +1709,7 @@ class HouseholdFactEngine:
         parameters = {
             "reference": "household_now",
             "mode": request.mode,
+            "amount": request.amount,
             "from_unit": request.from_unit,
             "to_unit": request.to_unit,
         }
@@ -1593,6 +1736,7 @@ class HouseholdFactEngine:
                     field=field,
                     order_by=field if request.operation in {"latest", "earliest"} else None,
                     mode=request.mode,
+                    amount=request.amount,
                     reference="household_now",
                     from_unit=request.from_unit,
                     to_unit=request.to_unit,
@@ -1629,12 +1773,11 @@ class HouseholdFactEngine:
                     evidence,
                 )
             value = selected
-        unit = (
-            "years" if request.operation == "completed_years"
-            else request.mode if request.operation in {"date_difference", "duration", "annual_occurrence"}
-            else request.to_unit if request.operation == "unit_conversion" else None
+        shape = (
+            "entity" if request.property_source == "entity"
+            and isinstance(value, Mapping) and value.get("id") else "scalar"
         )
-        return FactResult("found", value, evidence, unit=unit)
+        return FactResult("found", value, evidence, unit=_result_unit(request), shape=shape)
 
     async def _filter_collection(
         self,
@@ -1644,6 +1787,19 @@ class HouseholdFactEngine:
         context: AgentRequestContext,
         execution: "_FactExecution",
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        # Relationship projections have edge rows: all edge conditions bind the
+        # same final edge, rather than admitting every edge of a matching entity.
+        edge_filters = tuple(item for item in request.filters if item.source == "relation")
+        if request.projection == "each" and request.property_source == "relationship" and edge_filters:
+            relationship_records = [
+                edge for edge in relationship_records
+                if all(self._relation_filter_matches(request, item, [edge]) for item in edge_filters)
+            ]
+            retained = {_related_entity_id(edge) for edge in relationship_records}
+            entities = [entity for entity in entities if entity.get("id") in retained]
+            request = request.model_copy(update={
+                "filters": tuple(item for item in request.filters if item.source != "relation")
+            })
         matched: list[dict[str, Any]] = []
         for entity in entities:
             entity_id = entity.get("id")
@@ -1736,8 +1892,8 @@ class HouseholdFactEngine:
         if definition is None:
             raise _FactFailure("filter_unsupported", missing=(predicate,))
         relation_name = (
-            self.schema.physical_relation(request.subject.path[-1].relation)
-            or (None, None)
+            (self.schema.physical_relation(request.subject.path[-1].relation)
+             if request.subject.path else None) or (None, None)
         )[0]
         role_property = (
             self.schema.relation_property(
@@ -1899,6 +2055,21 @@ class FactRenderer:
         context: AgentRequestContext,
     ) -> str:
         language = context.locale or "en"
+        if result.status == "ambiguous" and "discourse_antecedent" in result.missing_requirements:
+            return "前文包含多个对象，请说明您指的是哪一个。" if language.startswith("zh") else "That earlier turn refers to multiple entities; please clarify which one you mean."
+        if result.status == "discourse_context_missing":
+            return "请说明您指的是谁；对应的前文对象尚未明确。" if language.startswith("zh") else "Please clarify who you mean; that earlier turn has no resolved referent."
+        if result.shape == "rows":
+            if not result.rows:
+                return "没有找到符合条件的记录。" if language.startswith("zh") else "No matching records."
+            return "\n".join(
+                f"{_name(row.entity, language)}: " + self.render(
+                    request.model_copy(update={"projection": "scalar"}),
+                    FactResult(row.status, row.value, row.evidence, row.missing_requirements, unit=row.unit), context
+                ) for row in result.rows
+            )
+        if result.status == "found" and request.operation == "date_add":
+            return f"指定日期是{result.value}。" if language.startswith("zh") else f"The specified date is {result.value}."
         if language.startswith("zh"):
             return self._zh(request, result, context)
         return self._en(request, result, context)
@@ -2486,10 +2657,21 @@ def _plan_for_log(request: SemanticFactRequest) -> dict[str, Any]:
     return payload
 
 
+def _result_unit(request: SemanticFactRequest) -> str | None:
+    if request.operation == "completed_years":
+        return "years"
+    if request.operation in {"date_difference", "duration", "annual_occurrence"}:
+        return request.mode
+    if request.operation == "unit_conversion":
+        return request.to_unit
+    return None
+
+
 def _failure_stage(status: FactStatus) -> str | None:
     return {
         "found": None,
         "caller_context_missing": "context",
+        "discourse_context_missing": "context",
         "entity_not_found": "entity_resolution",
         "relationship_not_found": "relationship_resolution",
         "property_unavailable": "entity_property",

@@ -35,6 +35,7 @@ from .semantic_facts import (
     SemanticSchemaRegistry,
 )
 from .tools import ToolDispatcher
+from .semantic_conversation import SemanticConversationService
 
 
 @dataclass
@@ -96,6 +97,8 @@ class AgentService:
             planner=SemanticFactPlanner(ollama, semantic_schema),
         )
 
+        self.semantic_conversations = SemanticConversationService(self.semantic_facts)
+
     async def answer(
         self,
         question: str,
@@ -103,6 +106,7 @@ class AgentService:
         request_id: str = "-",
         user_entity_id: str | None = None,
         user_entity: Mapping[str, Any] | None = None,
+        conversation_id: str | None = None,
     ) -> AgentResult:
         question = question.strip()
         if not question:
@@ -112,6 +116,7 @@ class AgentService:
             request_id=request_id,
             user_entity_id=user_entity_id,
             user_entity=user_entity,
+            conversation_id=conversation_id,
         )
 
     async def answer_messages(
@@ -121,12 +126,14 @@ class AgentService:
         request_id: str = "-",
         user_entity_id: str | None = None,
         user_entity: Mapping[str, Any] | None = None,
+        conversation_id: str | None = None,
     ) -> AgentResult:
         prepared = await self._prepare_request(
             messages,
             request_id=request_id,
             user_entity_id=user_entity_id,
             user_entity=user_entity,
+            conversation_id=conversation_id,
         )
         if prepared.fact_answer is not None:
             return AgentResult(
@@ -155,12 +162,14 @@ class AgentService:
         request_id: str = "-",
         user_entity_id: str | None = None,
         user_entity: Mapping[str, Any] | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncIterator[str]:
         prepared = await self._prepare_request(
             messages,
             request_id=request_id,
             user_entity_id=user_entity_id,
             user_entity=user_entity,
+            conversation_id=conversation_id,
         )
         if prepared.fact_answer is not None:
             yield prepared.fact_answer.text
@@ -184,6 +193,7 @@ class AgentService:
         request_id: str,
         user_entity_id: str | None,
         user_entity: Mapping[str, Any] | None,
+        conversation_id: str | None,
     ) -> _PreparedRequest:
         safe_messages = _conversation_messages(messages)
         language = conversation_language(safe_messages)
@@ -202,8 +212,9 @@ class AgentService:
             household_id=self.home_entity_id,
             current_time=household_now,
             locale=language,
+            conversation_id=conversation_id,
         )
-        semantic_answer = await self.semantic_facts.try_answer(
+        semantic_answer = await self.semantic_conversations.try_answer(
             safe_messages,
             context=context,
             request_id=request_id,

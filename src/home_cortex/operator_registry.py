@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import math
+from calendar import monthrange
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from types import MappingProxyType
 from typing import Any, Literal
 
@@ -56,6 +57,7 @@ class OperatorInput:
     from_unit: str | None = None
     to_unit: str | None = None
     now: datetime | None = None
+    amount: int | None = None
 
 
 OperatorImplementation = Callable[[OperatorInput], Any]
@@ -126,6 +128,12 @@ class OperatorDefinition:
             )
         if self.name in {"date_difference", "duration"} and parameters.get("mode") not in {"years", "months", "days", "seconds"}:
             raise OperatorValidationError("date interval requires a supported unit")
+        if self.name == "date_add" and (
+            type(parameters.get("amount")) is not int
+            or abs(parameters["amount"]) > 120000
+            or parameters.get("mode") not in {"years", "months", "days"}
+        ):
+            raise OperatorValidationError("date_add requires bounded integer amount and calendar unit")
         if self.name == "annual_occurrence" and parameters.get("mode") not in {None, "days"}:
             raise OperatorValidationError("annual occurrence only supports a date or days")
 
@@ -366,6 +374,40 @@ def _date_difference(values: OperatorInput) -> int | float:
     return delta.days if values.mode == "days" else delta.total_seconds()
 
 
+def _date_add(values: OperatorInput) -> str:
+    amount = values.amount
+    if type(amount) is not int or abs(amount) > 120000 or values.mode not in {"years", "months", "days"}:
+        raise OperatorExecutionError("date_add requires bounded integer amount and calendar unit")
+    stored, instant = _temporal_value(_only_value(values))
+    now = _required_now(values)
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise OperatorExecutionError("calendar offset requires a timezone-aware household clock")
+    if stored is None and instant is None:
+        raise OperatorExecutionError("date_add requires date|datetime")
+    start = stored if stored is not None else instant.astimezone(now.tzinfo)
+    try:
+        if values.mode == "days":
+            target = start + timedelta(days=amount)
+        else:
+            months = amount * 12 if values.mode == "years" else amount
+            year, month = divmod(start.year * 12 + start.month - 1 + months, 12)
+            last_day = monthrange(year, month + 1)[1]
+            target = start.replace(year=year, month=month + 1, day=min(start.day, last_day))
+            if start.day > last_day:
+                # The requested month/day does not exist. Its anniversary becomes
+                # complete on the next month's first day, as in date_difference.
+                target += timedelta(days=1)
+        if isinstance(target, datetime):
+            # A wall time must identify exactly one instant in the household zone.
+            if (target.replace(fold=0).utcoffset() != target.replace(fold=1).utcoffset()
+                or target.astimezone(timezone.utc).astimezone(target.tzinfo).replace(tzinfo=None)
+                != target.replace(tzinfo=None)):
+                raise OperatorExecutionError("calendar offset lands on an ambiguous or nonexistent wall time")
+        return target.isoformat()
+    except (ValueError, OverflowError) as error:
+        raise OperatorExecutionError("calendar offset is out of range") from error
+
+
 def _completed_years(values: OperatorInput) -> int:
     value = _only_value(values)
     now = _required_now(values)
@@ -488,6 +530,9 @@ def _definition(
 
 
 _DEFINITIONS = (
+    _definition("date_add", "transform", "scalar", "any",
+                field_requirement="required", field_kinds=TEMPORAL_KINDS,
+                required_parameters=frozenset({"amount", "mode"}), implementation=_date_add),
     _definition("select", "retrieval", "plan", "collection"),
     _definition("traverse", "retrieval", "plan", "collection"),
     _definition("resolve_reference", "retrieval", "plan", "record"),

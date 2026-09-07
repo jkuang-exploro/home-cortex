@@ -4,13 +4,18 @@ from typing import Any, cast
 
 from ollama import AsyncClient, ChatResponse
 
-from .text import latest_user_message
 
 PLANNER_KEEP_ALIVE = "24h"
 PLANNER_NUM_PREDICT = 384
 PLANNER_SEED = 0
 
 _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用户问题编译成一个 JSON 语义请求，不计算或表述答案。家庭事实、身份和姓名问题 requires_fact=true；只有普通闲聊才是 false 且 request=null。
+
+组合与对话语法：
+- projection=each 明确对集合逐项执行同一标量操作或 select(property)，保留每个实体的结果；单个人仍使用默认 scalar。count/argmin 等归约不用 each。
+- exclude 是要从集合中排除的完整引用列表，与比较用的 other 不同。“其他”由语境决定排除 self 还是 discourse；无法确定时引用 unresolved，不猜。
+- date_add 使用 amount（有符号整数）和 mode=years/months/days 给实体或关系日期加日历偏移。指定第 N 周年直接加 N 年，即使已过去；不能替换成 annual_occurrence。目标月不存在该日时使用下个月第一天：闰日加一年为三月一日。
+- 前文仅供理解话语，不是事实来源。代词或前文对象用 kind=discourse、turn_offset=1..8（倒数第几个用户轮次）、entity_type、cardinality=single|collection，value=null。由可信上下文解析身份；单数不能从多人前文中猜选一人。需要澄清的指代用 kind=unresolved。path 可从前文实体继续组合。不要把代词改写成猜测姓名或 ID。
 
 引用语法：
 - self 是已认证的当前说话人，assistant 是本助手，二者 entity_type=person、value=null。用户对助手说“你”并询问身份、名字或称呼时必须引用 assistant，仍是事实请求。current_household 是配置的家庭，entity_type=address、value=null。named_entity.value 只能逐字复制用户说出的姓名或称呼；不得猜测 ID 或把亲属短语当姓名。
@@ -146,7 +151,8 @@ class OllamaService:
     ) -> Mapping[str, Any]:
         """Interpret an open-ended request without exposing physical storage."""
         forwarded: list[dict[str, Any]] = [
-            {"role": "user", "content": latest_user_message(messages)}
+            {"role": "user", "content": str(message.get("content", ""))}
+            for message in messages if message.get("role") == "user"
         ]
         validation_feedback = "\n".join(
             str(message.get("content", "")) for message in messages

@@ -13,7 +13,7 @@ import subprocess
 import urllib.error
 import urllib.request
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
@@ -32,6 +32,8 @@ from .semantic_facts import (
     AgentRequestContext,
     FactEvidence,
     FactResult,
+    FactRow,
+    FactRelationshipEvidence,
     HouseholdFactEngine,
     SemanticFactPlanner,
     SemanticFactRequest,
@@ -42,7 +44,7 @@ from .semantic_facts import (
 )
 
 FROZEN_EVAL_TIME = "2026-09-03T12:00:00-07:00"
-SCORING_REVISION = "2026-09-07.1-explicit-date-interval-units"
+SCORING_REVISION = "2026-09-07.2-composition-shapes"
 
 def _default_eval_path() -> Path:
     candidates = (
@@ -73,6 +75,7 @@ class SemanticEvalCase:
     expected_equal: bool | None = None
     notes: str | None = None
     expected_unit: str | None = None
+    expected_rows: tuple[Mapping[str, Any], ...] | None = None
 
     def __post_init__(self) -> None:
         if not self.case_id:
@@ -218,6 +221,7 @@ def load_probe_dataset(path: Path = DEFAULT_EVAL_PATH) -> ProbeDataset:
                 ),
                 case_id=case_id,
                 expected_unit=item.get("expected_unit"),
+                expected_rows=(tuple(item["expected_rows"]) if item.get("expected_rows") is not None else None),
                 expected_status=(
                     str(item["expected_status"])
                     if item.get("expected_status") is not None
@@ -256,6 +260,8 @@ def normalize_semantic_request(request: SemanticFactRequest) -> dict[str, Any]:
         normalized.get("operation") == "select"
         and normalized.get("property") == "display_name"
         and normalized.get("property_source") == "entity"
+        and normalized.get("projection", "scalar") == "scalar"
+        and not normalized.get("exclude")
         and not normalized.get("filters")
         and "other" not in normalized
     ):
@@ -280,7 +286,7 @@ def semantic_mismatch_reason(
         return "REFERENCE_MISMATCH"
     if any(
         actual_subject.get(key) != expected_subject.get(key)
-        for key in ("kind", "value", "entity_type")
+        for key in ("kind", "value", "entity_type", "turn_offset", "cardinality")
     ):
         return "REFERENCE_MISMATCH"
     actual_relations = [
@@ -305,7 +311,7 @@ def semantic_mismatch_reason(
         return "FILTER_MISMATCH"
     if any(
         actual.get(key) != expected.get(key)
-        for key in ("other", "mode", "from_unit", "to_unit")
+        for key in ("other", "mode", "from_unit", "to_unit", "projection", "exclude", "amount")
     ):
         return "PARAMETER_MISMATCH"
     return "PLAN_MISMATCH"
@@ -330,6 +336,7 @@ def classify_failure_stage(
         "ambiguous",
         "relationship_not_found",
         "caller_context_missing",
+        "discourse_context_missing",
     }:
         return "entity_resolution"
     if executor_status not in {None, "found", "not_run"}:
@@ -340,6 +347,8 @@ def classify_failure_stage(
 
 
 def primary_entity_ids(result: FactResult) -> tuple[str, ...]:
+    if result.shape == "rows":
+        return tuple(dict.fromkeys(str(row.entity["id"]) for row in result.rows))
     value = result.value
     if isinstance(value, Mapping):
         selected = value.get("selected")
@@ -401,12 +410,31 @@ def score_structured_result(result: FactResult, case: SemanticEvalCase) -> bool 
             case.expected_names,
             case.expected_equal,
             case.expected_unit,
+            case.expected_rows,
         )
     )
     if not has_expectation:
         return None
     if case.expected_status is not None and result.status != case.expected_status:
         return False
+    if case.expected_rows is not None:
+        if result.shape != "rows" or len(result.rows) != len(case.expected_rows):
+            return False
+        actual_rows = [{
+            "entity_id": row.entity["id"], "value": row.value, "unit": row.unit,
+            "status": row.status, "evidence": jsonable(asdict(row.evidence)),
+            "missing_requirements": list(row.missing_requirements),
+        } for row in result.rows]
+        for expected in case.expected_rows:
+            # Membership alone or `found` alone is not a per-row answer oracle.
+            if not {"entity_id", "value", "unit", "status"}.issubset(expected):
+                raise ValueError("expected row requires entity_id, value, unit and status")
+            index = next((i for i, actual in enumerate(actual_rows) if values_match(actual, expected)), None)
+            if index is None:
+                return False
+            actual_rows.pop(index)
+    elif result.shape == "rows":
+        return None  # New result shape requires an explicit per-row expectation.
     if case.expected_unit is not None and result.unit != case.expected_unit:
         return False
     if case.expected_entity_ids is not None:
@@ -462,6 +490,17 @@ def fact_result_from_serialized(payload: Mapping[str, Any] | None) -> FactResult
         ),
         candidates=candidates,
         unit=payload.get("unit"),
+        shape=payload.get("shape", "scalar"),
+        focus_entity_ids=tuple(payload.get("focus_entity_ids", ())),
+        rows=tuple(FactRow(
+            entity=row["entity"], status=row["status"], value=row.get("value"), unit=row.get("unit"),
+            evidence=FactEvidence(
+                entity_ids=tuple(row["evidence"].get("entity_ids", ())),
+                relationship=row["evidence"].get("relationship"),
+                semantic_property=row["evidence"].get("semantic_property"),
+                relationships=tuple(FactRelationshipEvidence(**edge) for edge in row["evidence"].get("relationships", ())),
+            ), missing_requirements=tuple(row.get("missing_requirements", ())),
+        ) for row in payload.get("rows", ())),
     )
 
 
@@ -555,6 +594,9 @@ def serialize_fact_result(result: FactResult | None) -> dict[str, Any] | None:
         "status": result.status,
         "value": jsonable(result.value),
         "unit": result.unit,
+        "shape": result.shape,
+        "rows": [jsonable(asdict(row)) for row in result.rows],
+        "focus_entity_ids": list(result.focus_entity_ids),
         "entity_ids": list(result.evidence.entity_ids),
         "primary_entity_ids": list(primary_entity_ids(result)),
         "relationship": result.evidence.relationship,

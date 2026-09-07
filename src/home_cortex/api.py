@@ -4,7 +4,7 @@ import logging
 import secrets
 import time
 from collections import OrderedDict
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict
 from typing import Any, Literal
@@ -78,6 +78,7 @@ class ChatCompletionRequest(BaseModel):
     model: str
     messages: list[ChatMessage] = Field(min_length=1)
     stream: bool = False
+    conversation_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class ConversationCreateRequest(BaseModel):
@@ -389,11 +390,13 @@ async def _agent_chat(
     if not isinstance(question, str) or not question.strip():
         raise APIError(422, "invalid_request", "Provide a non-empty 'message'")
     user_entity = await _resolve_identity(request)
+    conversation_id = _chat_conversation_id(request, definition.id, user_entity, body.get("conversation_id"))
     try:
         result = await _agent_runtime(request, definition).answer(
             question,
             request_id=_request_id(request),
             user_entity=user_entity,
+            **({"conversation_id": conversation_id} if conversation_id else {}),
         )
     except AgentLimitError as error:
         raise APIError(502, error.stop_reason, str(error)) from error
@@ -440,6 +443,7 @@ async def chat_completions(
             "model_not_found",
             f"Model {body.model!r} was not found",
         )
+    conversation_id = _chat_conversation_id(request, definition.id, user_entity, body.conversation_id)
     agent = _agent_runtime(request, definition)
     completion_id = f"chatcmpl-{uuid4().hex}"
     created = int(time.time())
@@ -465,7 +469,7 @@ async def chat_completions(
     if not messages or not any(message["role"] == "user" for message in messages):
         raise APIError(422, "invalid_request", "Provide at least one user message")
     greeting = None
-    if _is_new_conversation(messages):
+    if _is_new_conversation(messages) and conversation_id is None:
         greeting = await _greeting_service(request).resolve(
             definition,
             user_entity,
@@ -478,7 +482,7 @@ async def chat_completions(
             if greeting is not None
             else _continued_greeting(conversation_language(messages))
         )
-    if standalone_greeting is not None:
+    if standalone_greeting is not None and conversation_id is None:
         if body.stream:
             return StreamingResponse(
                 _stream_chat_completion(
@@ -506,6 +510,7 @@ async def chat_completions(
             agent_messages,
             request_id=_request_id(request),
             user_entity=user_entity,
+            **({"conversation_id": conversation_id} if conversation_id else {}),
         )
         if greeting is not None:
             answer_stream = _prepend_answer(greeting.text, answer_stream)
@@ -529,6 +534,7 @@ async def chat_completions(
             agent_messages,
             request_id=_request_id(request),
             user_entity=user_entity,
+            **({"conversation_id": conversation_id} if conversation_id else {}),
         )
     except AgentLimitError as error:
         raise APIError(502, error.stop_reason, str(error)) from error
@@ -815,6 +821,16 @@ async def _resolve_identity(request: Request) -> dict[str, Any] | None:
         for key in ("id", "name", "address_as")
         if key in entity
     }
+
+
+def _chat_conversation_id(request: Request, agent_id: str, user_entity: Mapping[str, Any] | None, value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value or len(value) > 128:
+        raise APIError(422, "invalid_request", "Invalid conversation_id")
+    _authorize_conversation_access(_conversation_store(request).get(value), agent_id=agent_id,
+                                   person_id=str(user_entity["id"]) if user_entity else None)
+    return value
 
 
 def _authorize_conversation_access(

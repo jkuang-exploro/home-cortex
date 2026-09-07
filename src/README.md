@@ -252,6 +252,51 @@ from the model-facing operation vocabulary. Existing benchmark expectations
 use the canonical syntax; historical result artifacts are not rescored.
 
 
+## Collection projections, calendar offsets, and discourse
+
+The [bounded composition contract](../docs/semantic-composition-contract.md)
+defines validation, result shapes, missing data, and conversation ownership.
+`projection="each"` applies an existing scalar operation or property selection
+independently to a collection. The result has `shape="rows"`; each `FactRow`
+carries its entity, value, unit, evidence, status, and missing requirements.
+Missing projected values do not erase successful rows. Relationship properties
+produce one row per final edge, including multiple residence periods associated
+with the same entity. Edge filters in a relationship projection bind that same
+edge. Ordinary singular operations still report ambiguity for multiple matches.
+
+`exclude` subtracts explicitly resolved references before filtering and projection.
+The interpreter chooses self, a named entity, or a discourse reference according
+to the utterance; unresolved references clarify. The comparison operand `other`
+keeps its existing meaning.
+
+`date_add` consumes an entity or relationship date, a bounded signed integer
+`amount`, and `mode=years|months|days`. It returns the specified date even in the
+past. A nonexistent target day becomes the first day of the following month:
+February 29 plus one year and January 31 plus one month both become March 1.
+Offsets apply once, preserve date-only values, and preserve household wall time
+for datetimes. Ambiguous/nonexistent target wall times and out-of-range dates
+fail explicitly. `annual_occurrence` continues to find the next valid recurrence.
+
+`kind="discourse"` references the trusted resolved focus of a preceding user turn,
+with `turn_offset=1..8`, `entity_type`, and `cardinality=single|collection`.
+The model receives user discourse but no entity bindings or canonical IDs.
+The resolver reloads bound identities from authoritative storage. Assistant prose
+is neither replayed nor used as evidence. A plural focus cannot silently become
+a singular antecedent; unsuccessful and non-fact turns have no focus.
+
+For persistent discourse, create a conversation using the existing
+`POST /agent/steward/conversations` endpoint, then send its `id` as
+`conversation_id` on `/agent/steward/chat`, `/v1/chat`, or
+`/v1/chat/completions` (including streaming). The API checks ownership. The
+semantic coordinator scopes state by conversation, speaker, household and agent,
+serializes concurrent turns, and retains eight user turns in at most 1,000
+process-local sessions. Restart/eviction loses focus and requires clarification.
+Requests without an ID re-ground up to eight supplied earlier user turns in
+request-local context; this can add up to eight interpreter calls. Clients that
+send only the latest message need a conversation ID for cross-request references.
+Unauthenticated requests never persist discourse state.
+
+
 The ingestion endpoint rejects unknown relationship files, invalid endpoint
 types, references to nodes missing from the source data, temporal fields on
 non-temporal edges, reverse duplicates of a symmetric fact, and a registered
