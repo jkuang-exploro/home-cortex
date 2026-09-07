@@ -282,7 +282,6 @@ class FactResult:
 class FactTimings:
     tier: int
     routing_ms: float = 0
-    semantic_parse_ms: float = 0
     entity_resolution_ms: float = 0
     fact_query_ms: float = 0
     computation_ms: float = 0
@@ -339,7 +338,6 @@ class ResolutionResult:
     status: ResolutionStatus
     entities: tuple[Mapping[str, Any], ...] = ()
     entity_ids: tuple[str, ...] = ()
-    confidence: float | None = None
     evidence: FactEvidence = FactEvidence()
     candidates: tuple[Mapping[str, Any], ...] = ()
     missing_requirements: tuple[str, ...] = ()
@@ -411,12 +409,6 @@ class SemanticSchemaRegistry:
     def capability_payload(self) -> dict[str, Any]:
         if self._capability_cache is not None:
             return self._capability_cache
-        fact_operations = set(get_args(FactOperation))
-        plan_operations = fact_operations
-        semantic_properties = {
-            entity_type: sorted(self.semantic_properties(entity_type))
-            for entity_type in self.catalog.entities
-        }
         relations = {
             semantic
             for semantic in self.ontology.base_relations
@@ -424,19 +416,19 @@ class SemanticSchemaRegistry:
         }
         self._capability_cache = {
             "references": [
-                "self",
-                "assistant",
-                "current_household",
-                "named_entity",
+                kind for kind in get_args(ReferenceKind) if kind != "entity_id"
             ],
             "entity_types": sorted(self.catalog.entities),
-            "semantic_properties": semantic_properties,
+            "semantic_properties": {
+                entity_type: sorted(self.semantic_properties(entity_type))
+                for entity_type in self.catalog.entities
+            },
             "semantic_relations": sorted(relations),
             "semantic_relation_properties": {
                 relation: sorted(self.semantic_relation_properties(relation))
                 for relation in relations
             },
-            "operations": sorted(plan_operations),
+            "operations": sorted(get_args(FactOperation)),
             "operation_requirements": {
                 "argmin": "ordered property required; collection subject OR two references subject and other; returns entity",
                 "argmax": "ordered property required; collection subject OR two references subject and other; returns entity",
@@ -449,15 +441,6 @@ class SemanticSchemaRegistry:
             "reference_ontology": self.ontology.planner_payload(),
             "collection_predicates": sorted(self.ontology.collection_predicates),
             "property_sources": ["entity", "relationship"],
-            "operation_semantics": {
-                "list": "select with property=null over a collection reference",
-                "get_property": "select with property set and property_source=entity",
-                "get_relation_property": (
-                    "select with property set and property_source=relationship"
-                ),
-                "compare": "argmin or argmax with subject and other",
-                "days_until": "annual_occurrence with mode=days",
-            },
         }
         return self._capability_cache
 
@@ -664,11 +647,6 @@ class SemanticSchemaRegistry:
                 request.subject, item.property
             ) is None:
                 return "UNKNOWN_PROPERTY"
-        return "VALID" if self.validates(request) else "INVALID_PLAN"
-
-    def validates(self, request: SemanticFactRequest) -> bool:
-        """Reject model plans outside the advertised semantic protocol."""
-        references = (request.subject,) + ((request.other,) if request.other else ())
         final_types: dict[int, frozenset[str]] = {}
         for reference in references:
             contextual_type = _CONTEXT_ENTITY_TYPES.get(reference.kind)
@@ -677,61 +655,61 @@ class SemanticSchemaRegistry:
                 and reference.entity_type is not None
                 and reference.entity_type != contextual_type
             ):
-                return False
+                return "INVALID_PLAN"
             if (
                 reference.kind == "entity_id"
                 and reference.value is not None
                 and reference.entity_type is not None
                 and reference.entity_type != reference.value.partition(":")[0]
             ):
-                return False
+                return "INVALID_PLAN"
             if reference.kind == "assistant" and reference.path:
-                return False
+                return "INVALID_PLAN"
             resolved_types = self._reference_entity_types(reference)
             if resolved_types is None:
-                return False
+                return "INVALID_PLAN"
             final_types[id(reference)] = resolved_types
             anchor_types = self._base_entity_types(reference)
             step_types = anchor_types
             for step in reference.path:
                 next_types = self._traversal_target_types(step.relation, step_types)
                 if next_types is None:
-                    return False
+                    return "INVALID_PLAN"
                 for item in step.filters:
                     if item.source == "entity":
                         kind = self._semantic_kind(next_types, item.property)
                         if kind is None or not self._valid_predicate(item, kind):
-                            return False
+                            return "INVALID_PLAN"
                         if item.value_from == "anchor":
                             anchor_kind = self._semantic_kind(
                                 anchor_types,
                                 item.value_property or item.property,
                             )
                             if anchor_kind is None or anchor_kind != kind:
-                                return False
+                                return "INVALID_PLAN"
                     if item.source == "relation":
                         resolved = self.physical_relation(step.relation)
                         if resolved is None:
-                            return False
+                            return "INVALID_PLAN"
                         physical = self.relation_property(resolved[0], item.property)
                         if physical is None:
-                            return False
+                            return "INVALID_PLAN"
                         kind = self.catalog.relation_field_type(resolved[0], physical)
                         if not self._valid_predicate(item, kind):
-                            return False
+                            return "INVALID_PLAN"
                 step_types = next_types
 
         if request.other is not None and request.filters:
-            return False
+            return "INVALID_PLAN"
         if request.filters and not request.subject.path:
-            return False
+            return "INVALID_PLAN"
         for item in request.filters:
             if item.predicate is not None:
                 definition = self.ontology.collection_predicates.get(item.predicate)
                 if definition is None or not final_types[id(request.subject)].issubset(
                     definition.entity_types
                 ):
-                    return False
+                    return "INVALID_PLAN"
                 continue
             assert item.property is not None
             if item.source == "entity":
@@ -741,7 +719,7 @@ class SemanticSchemaRegistry:
             else:
                 kind = self._final_relation_kind(request.subject, item.property)
             if kind is None or not self._valid_predicate(item, kind):
-                return False
+                return "INVALID_PLAN"
 
         if request.property_source == "relationship":
             if (
@@ -749,28 +727,30 @@ class SemanticSchemaRegistry:
                 or not request.subject.path
                 or request.property is None
             ):
-                return False
+                return "INVALID_PLAN"
 
         operation = OPERATORS[request.operation]
         collection_input = bool(request.subject.path or request.other is not None)
         if operation.input_shape == "collection" and not collection_input:
-            return False
+            return "INVALID_PLAN"
         if request.operation == "resolve_reference":
-            return (
+            valid = (
                 request.property is None
                 and request.other is None
                 and not request.filters
                 and request.property_source == "entity"
             )
+            return "VALID" if valid else "INVALID_PLAN"
         if request.operation == "select":
             if request.other is not None:
-                return False
+                return "INVALID_PLAN"
             if request.property is None:
-                return bool(request.subject.path)
-            return self._request_property_kind(
+                return "VALID" if request.subject.path else "INVALID_PLAN"
+            valid = self._request_property_kind(
                 request,
                 final_types[id(request.subject)],
             ) is not None
+            return "VALID" if valid else "INVALID_PLAN"
 
         field_kind = (
             self._request_property_kind(
@@ -781,20 +761,20 @@ class SemanticSchemaRegistry:
             else "unknown"
         )
         if request.property is not None and field_kind is None:
-            return False
+            return "INVALID_PLAN"
         if (
             request.property is not None
             and field_kind == "unknown"
             and "any" not in operation.field_kinds
         ):
-            return False
+            return "INVALID_PLAN"
         if request.other is not None:
             other_kind = self._semantic_kind(
                 final_types[id(request.other)],
                 request.property,
             )
             if field_kind != other_kind:
-                return False
+                return "INVALID_PLAN"
         parameters = {
             "reference": "household_now",
             "mode": request.mode,
@@ -814,8 +794,12 @@ class SemanticSchemaRegistry:
                 parameters=parameters,
             )
         except OperatorValidationError:
-            return False
-        return True
+            return "INVALID_PLAN"
+        return "VALID"
+
+    def validates(self, request: SemanticFactRequest) -> bool:
+        """Return whether a request passes authoritative semantic validation."""
+        return self.validation_code(request) == "VALID"
 
     def _request_property_kind(
         self,
@@ -1095,7 +1079,6 @@ class EntityResolver:
                 "resolved",
                 tuple(entities),
                 entity_ids,
-                1.0,
                 FactEvidence(
                     entity_ids=entity_ids,
                     relationship=(
@@ -2096,11 +2079,9 @@ class SemanticFactService:
     ) -> FactAnswer | None:
         started = perf_counter()
         routing_started = perf_counter()
-        semantic_parse_ms = 0.0
         llm_ms = 0.0
         llm_call_count = 0
         planner_diagnostics: PlannerDiagnostics | None = None
-        tier = 1
         llm_started = perf_counter()
         try:
             outcome = await self.planner.plan(messages, context)
@@ -2168,9 +2149,8 @@ class SemanticFactService:
         render_ms = (perf_counter() - render_started) * 1000
         total_ms = (perf_counter() - started) * 1000
         timings = FactTimings(
-            tier=tier,
+            tier=1,
             routing_ms=routing_ms,
-            semantic_parse_ms=semantic_parse_ms,
             entity_resolution_ms=resolution_ms,
             fact_query_ms=fact_query_ms,
             computation_ms=computation_ms,
@@ -2393,7 +2373,7 @@ def _log_fact_query(
 ) -> None:
     logger.info(
         "fact_query request_id=%s tier=%d operation=%s semantic_plan=%s "
-        "db_queries=%d llm_calls=%d routing_ms=%.2f semantic_parse_ms=%.2f "
+        "db_queries=%d llm_calls=%d routing_ms=%.2f "
         "entity_resolution_ms=%.2f fact_query_ms=%.2f computation_ms=%.2f "
         "render_ms=%.2f llm_ms=%.2f total_ms=%.2f status=%s failure_stage=%s "
         "planner_validation=%s planner_attempts=%d "
@@ -2409,7 +2389,6 @@ def _log_fact_query(
         timings.db_query_count,
         timings.llm_call_count,
         timings.routing_ms,
-        timings.semantic_parse_ms,
         timings.entity_resolution_ms,
         timings.fact_query_ms,
         timings.computation_ms,

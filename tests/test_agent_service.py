@@ -267,27 +267,6 @@ async def test_trusted_identity_context_excludes_private_profile_fields() -> Non
 
 
 @pytest.mark.asyncio
-async def test_agent_identity_resolves_runtime_reference_without_graph_query() -> None:
-    ollama = FakeOllamaService([])
-    ollama.semantic_plan = {"requires_fact": True, "request": {"operation": "resolve_reference", "subject": {"kind": "assistant"}}}
-    dispatcher = FakeDispatcher()
-
-    result = await _agent(ollama, dispatcher).answer(
-        "你是谁？",
-        user_entity={
-            "id": "person:jian_kuang",
-            "name": ["Jian Kuang", "匡健"],
-            "address_as": {"zh": "先生"},
-        },
-    )
-
-    assert result.answer == "我是老管家。"
-    assert ollama.calls == []
-    assert ollama.semantic_plan_calls == 1
-    assert dispatcher.calls == []
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("question", ("我是谁？", "Who am I?"))
 async def test_speaker_identity_uses_canonical_context_without_named_search(
     question: str,

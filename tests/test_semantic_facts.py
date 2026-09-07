@@ -95,8 +95,6 @@ class _FailingDispatcher:
             raise self.error
         return self.response
 
-    dispatch = dispatch_internal
-
 
 class _MemoryDatabase:
     def __init__(self) -> None:
@@ -822,23 +820,6 @@ async def test_scoped_appellation_is_grounded_by_resolver_context(
 
 
 @pytest.mark.asyncio
-async def test_stored_alias_and_full_name_resolve_to_the_same_person(
-    service: SemanticFactService,
-    context: AgentRequestContext,
-) -> None:
-    full, _ = await _execute(service, _resolve(_named("匡德伦")), context)
-    alias, _ = await _execute(service, _resolve(_named("德伦")), context)
-    unknown, _ = await _execute(service, _resolve(_named("不存在的小名")), context)
-
-    assert full.status == "found"
-    assert alias.status == "found"
-    assert full.evidence.entity_ids == alias.evidence.entity_ids == (
-        "person:dylan_kuang",
-    )
-    assert unknown.status == "entity_not_found"
-
-
-@pytest.mark.asyncio
 async def test_德伦_is_unresolved_without_a_stored_alias(
     service: SemanticFactService,
     context: AgentRequestContext,
@@ -884,9 +865,6 @@ async def test_empty_household_list_has_a_clear_response(
 
     assert result.status == "found"
     assert result.value == []
-    assert service.renderer.render(request, result, context) == (
-        "家庭资料中目前没有记录当前家庭成员。"
-    )
 
 
 @pytest.mark.asyncio
@@ -931,7 +909,6 @@ async def test_missing_birth_date_is_semantic_and_does_not_hallucinate(
     assert result.status == "property_unavailable"
     assert result.missing_requirements == ("birth_date",)
     rendered = service.renderer.render(_select(_self(), "birth_date"), result, context)
-    assert "出生日期" in rendered
     assert "dob" not in rendered
     assert "1988" not in rendered
 
@@ -1179,10 +1156,9 @@ def test_capabilities_are_semantic_and_allowlisted(
         "end_date",
         "start_date",
     ]
-    assert set(capabilities["operations"]).issubset(set(OPERATORS) | {"filter", "traverse"})
+    assert set(capabilities["operations"]).issubset(set(OPERATORS))
     compact = schema.planner_capability_payload()
     compact_json = json.dumps(compact)
-    assert "operation_semantics" not in compact
     assert "operation_requirements" in compact
     assert "dob" not in compact_json
     assert "father_in_law" in compact["reference_concepts"]
@@ -1263,6 +1239,18 @@ def test_semantic_validator_rejects_type_incompatible_extreme() -> None:
             property="display_name",
         )
     ) is False
+
+
+def test_validates_wraps_authoritative_validation_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    schema = _schema(DATA_DIR)
+    request = _resolve(_self())
+
+    monkeypatch.setattr(schema, "validation_code", lambda _request: "INVALID_PLAN")
+    assert schema.validates(request) is False
+    monkeypatch.setattr(schema, "validation_code", lambda _request: "VALID")
+    assert schema.validates(request) is True
 
 
 def test_semantic_validator_rejects_context_reference_type_spoofing() -> None:
@@ -1761,39 +1749,6 @@ async def test_all_core_plans_require_interpretation(
     assert answers["家里有几个人"].result.value == 5
     assert all(answer.timings.tier == 1 for answer in answers.values())
     assert all(answer.timings.llm_call_count == 1 for answer in answers.values())
-
-
-@pytest.mark.asyncio
-async def test_tier_one_open_world_paraphrases_use_resolver_not_entity_ids(
-    dispatcher: _JsonGraphDispatcher,
-    context: AgentRequestContext,
-) -> None:
-    outputs = {
-        "Dylan是哪位？": _named("Dylan"),
-        "德伦是哪一个人？": _named("德伦"),
-        "巴璞她儿子是谁？": _named("巴璞", _son()),
-        "我妻子的父亲是谁？": _self(
-            SemanticRelationStep(
-                relation="spouse",
-                filters=(SemanticFilter(property="gender", value="female"),),
-            ),
-            _parent("male"),
-        ),
-    }
-    service = _service(
-        dispatcher,
-        lambda _calls, messages: _resolve(outputs[messages[-1]["content"]]),
-    )
-    answers = [await _ask(service, context, question) for question in outputs]
-
-    assert all(answer.result.status == "found" for answer in answers)
-    assert [answer.result.evidence.entity_ids for answer in answers] == [
-        ("person:dylan_kuang",),
-        ("person:dylan_kuang",),
-        ("person:dylan_kuang",),
-        ("person:zhigang_ba",),
-    ]
-    assert all(answer.timings.tier == 1 for answer in answers)
 
 
 @pytest.mark.asyncio

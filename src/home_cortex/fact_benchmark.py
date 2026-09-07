@@ -18,7 +18,7 @@ from .config import get_settings
 from .db import Database
 from .edge_schema import EdgeSchemaRegistry
 from .ollama import OllamaService
-from .retrieval import RetrievalService
+from .retrieval import ENTITY_SUMMARY_FIELDS, RetrievalService
 from .schema_catalog import (
     RuntimeSchemaCatalog,
     matches_scoped_appellation,
@@ -292,7 +292,6 @@ async def _run_suite(
             {
                 "speaker_id": case.speaker_id,
                 "utterance": case.utterance,
-                "question": case.utterance,
                 "answer": latest.text,
                 "semantic_plan": latest.request.model_dump(mode="json"),
                 "scope": latest.request.subject.model_dump(mode="json"),
@@ -338,7 +337,6 @@ async def _run_suite(
                 "total_latency_ms": round(statistics.median(samples), 3),
                 "stage_latency_ms": {
                     "routing": round(latest.timings.routing_ms, 3),
-                    "semantic_parse": round(latest.timings.semantic_parse_ms, 3),
                     "entity_resolution": round(
                         latest.timings.entity_resolution_ms, 3
                     ),
@@ -473,7 +471,7 @@ def _summary(entity: dict[str, Any]) -> dict[str, Any]:
     return {
         field: value
         for field, value in entity.items()
-        if field in {"id", "name", "display_name", "gender"}
+        if field in ENTITY_SUMMARY_FIELDS
     }
 
 

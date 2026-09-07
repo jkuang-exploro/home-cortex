@@ -218,16 +218,9 @@ def record_aliases(record: Mapping[str, Any]) -> tuple[str, ...]:
             and isinstance((value := item.get("value")), str)
             and value.strip()
         )
-    for field in (
-        "display_name",
-        "preferred_name",
-        "nickname",
-        "english_name",
-        "chinese_name",
-    ):
-        value = record.get(field)
-        if isinstance(value, str) and value.strip():
-            aliases.append(value)
+    display_name = record.get("display_name")
+    if isinstance(display_name, str) and display_name.strip():
+        aliases.append(display_name)
     first_name = record.get("first_name")
     last_name = record.get("last_name")
     if isinstance(first_name, str):
