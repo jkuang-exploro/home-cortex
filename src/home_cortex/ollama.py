@@ -50,6 +50,7 @@ def _semantic_planner_examples() -> list[dict[str, str]]:
                 **({"path": [{"concept": name} for name in concepts]} if concepts else {})}
 
     examples = (
+        ("当前已认证的说话人是哪一位？", "resolve_reference", reference("self"), None, "entity", {}),
         ("应该怎样称呼这位助手？", "resolve_reference", reference("assistant"), None, "entity", {}),
         ("在本户成员中找出出生日期最靠前的人。", "argmin", reference("current_household", "member"), "birth_date", "entity", {}),
         ("本户符合成年条件的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"predicate": "adult"}]}),

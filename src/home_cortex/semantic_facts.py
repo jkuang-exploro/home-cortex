@@ -68,12 +68,12 @@ FactOperation = Literal[
     "unit_conversion",
 ]
 ReferenceKind = Literal[
-    "unresolved",
-    "discourse",
     "self",
     "assistant",
     "current_household",
     "named_entity",
+    "discourse",
+    "unresolved",
     "entity_id",
 ]
 ResolutionStatus = Literal[
@@ -590,10 +590,84 @@ class SemanticSchemaRegistry:
                 "$ref": "#/$defs/SemanticCollectionFilter"
             }
             request["properties"]["property"] = {
-                "anyOf": [{"type": "string", "enum": properties}, {"type": "null"}]
+                "anyOf": [{"type": "null"}, {"type": "string", "enum": properties}]
             }
             request["required"].extend(["property", "property_source"])
-            self._planner_schema_cache = schema
+            path_schema = definitions["SemanticReference"]["properties"]["path"]
+            entity_types = sorted(self.catalog.entities)
+            definitions["SemanticReference"] = {"anyOf": [
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "kind": {
+                            "type": "string",
+                            "enum": [
+                                "self",
+                                "assistant",
+                                "current_household",
+                                "named_entity",
+                            ],
+                        },
+                        "value": {
+                            "anyOf": [
+                                {"type": "null"},
+                                {"maxLength": 256, "type": "string"},
+                            ]
+                        },
+                        "entity_type": {
+                            "anyOf": [
+                                {"type": "null"},
+                                {
+                                    "type": "string",
+                                    "pattern": r"^[A-Za-z_][A-Za-z0-9_]*$",
+                                },
+                            ]
+                        },
+                        "path": path_schema,
+                    },
+                    "required": ["kind"],
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "kind": {"type": "string", "const": "discourse"},
+                        "entity_type": {"type": "string", "enum": entity_types},
+                        "turn_offset": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 8,
+                        },
+                        "cardinality": {
+                            "type": "string",
+                            "enum": ["single", "collection"],
+                        },
+                        "path": path_schema,
+                    },
+                    "required": [
+                        "kind",
+                        "entity_type",
+                        "turn_offset",
+                        "cardinality",
+                    ],
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "kind": {"type": "string", "const": "unresolved"},
+                        "entity_type": {
+                            "anyOf": [
+                                {"type": "null"},
+                                {"type": "string", "enum": entity_types},
+                            ]
+                        },
+                    },
+                    "required": ["kind"],
+                },
+            ]}
+            self._planner_schema_cache = _prefer_null_union(schema)
         return self._planner_schema_cache
 
     def expand_planner_concepts(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -2585,6 +2659,22 @@ def _compact_json_schema(value: Any) -> Any:
         }
     if isinstance(value, list):
         return [_compact_json_schema(item) for item in value]
+    return value
+
+
+def _prefer_null_union(value: Any) -> Any:
+    """Put explicit null first so constrained decoding does not invent values."""
+    if isinstance(value, Mapping):
+        mapped = {key: _prefer_null_union(item) for key, item in value.items()}
+        options = mapped.get("anyOf")
+        if isinstance(options, list):
+            nulls = [item for item in options if item == {"type": "null"}]
+            others = [item for item in options if item != {"type": "null"}]
+            if nulls:
+                mapped["anyOf"] = [*nulls, *others]
+        return mapped
+    if isinstance(value, list):
+        return [_prefer_null_union(item) for item in value]
     return value
 
 

@@ -1630,9 +1630,10 @@ async def test_planner_rejects_wrong_scope_and_predicate_shape_without_repair(
     with pytest.raises(SemanticPlannerFailure):
         await SemanticFactPlanner(interpreter, schema).plan([], context)
     assert interpreter.output_schema is not None
-    kinds = interpreter.output_schema["$defs"]["SemanticReference"]["properties"][
-        "kind"
-    ]["enum"]
+    kinds = []
+    for option in interpreter.output_schema["$defs"]["SemanticReference"]["anyOf"]:
+        kind = option["properties"]["kind"]
+        kinds.extend(kind.get("enum", [kind["const"]] if "const" in kind else []))
     assert "entity_id" not in kinds
     assert interpreter.calls == 2
 

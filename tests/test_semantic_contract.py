@@ -393,7 +393,13 @@ async def test_relationship_filter_movement_changes_edge_property_selection(hous
 def test_wire_grammar_requires_ownership_and_runtime_types_context(household):
     engine,_,_=household
     defs=engine.schema.planner_output_schema()['$defs']
-    assert 'entity_id' not in defs['SemanticReference']['properties']['kind']['enum']
+    refs=defs['SemanticReference']['anyOf']
+    ordinary=next(item for item in refs if 'self' in item['properties']['kind'].get('enum', ()))
+    assert 'entity_id' not in ordinary['properties']['kind']['enum']
+    assert 'turn_offset' not in ordinary['properties']
+    assert 'cardinality' not in ordinary['properties']
+    assert defs['SemanticFactRequest']['properties']['property']['anyOf'][0]=={'type':'null'}
+    assert defs['SemanticFactRequest']['properties']['amount']['anyOf'][0]=={'type':'null'}
     request=defs['SemanticFactRequest']
     assert 'property_source' in request['required']
     assert request['properties']['property_source']['enum']==['entity','relationship']
