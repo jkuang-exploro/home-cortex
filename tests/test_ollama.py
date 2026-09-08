@@ -302,3 +302,27 @@ async def test_injected_client_is_not_closed_by_service() -> None:
     await service.close()
 
     assert client.closed is False
+
+
+def test_capability_serialization_ignores_mapping_order_preserves_arrays() -> None:
+    from home_cortex.ollama import planner_system_prompt
+    first = {'relations': ['parent', 'spouse'], 'ownership': {'entity': ['age'], 'relationship': ['start']}}
+    reordered = {'ownership': {'relationship': ['start'], 'entity': ['age']}, 'relations': ['parent', 'spouse']}
+    assert planner_system_prompt(first) == planner_system_prompt(reordered)
+    serialized = planner_system_prompt(first).split('\nCapabilities:\n', 1)[1]
+    assert json.loads(serialized) == first
+    assert planner_system_prompt({**first, 'relations': ['spouse', 'parent']}) != planner_system_prompt(first)
+
+
+def test_static_prefix_survives_clock_history_and_identity_notes() -> None:
+    from home_cortex.ollama import planner_chat_messages, _semantic_planner_examples
+    count = 1 + len(_semantic_planner_examples())
+    first = planner_chat_messages([{'role': 'user', 'content': 'Who am I?'}], {}, household_now='2026-09-08T10:00:00Z')
+    other = planner_chat_messages([
+        {'role': 'user', 'content': 'Who is my daughter?'},
+        {'role': 'assistant', 'content': 'Untrusted answer'},
+        {'role': 'user', 'content': 'When is her birthday?'},
+    ], {}, household_now='2026-09-08T11:00:00Z')
+    assert first[:count] == other[:count]
+    assert first[count] != other[count]
+    assert 'Untrusted answer' not in json.dumps(other)

@@ -1,0 +1,594 @@
+{
+  "0": {
+    "native": {
+      "static_prefix_sha256": "04c96d73db1536a32581bd4e7c9c00bc8e81646f10a6561a2a6571195ed56243",
+      "request_hashes": {
+        "repeat": [
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc"
+        ],
+        "vary_clock_only": [
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+          "34bd40ea13f3b5516d293115a5cd20e4e3dc17ad0d6c9534dcd0351f5cfd0d65",
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+          "34bd40ea13f3b5516d293115a5cd20e4e3dc17ad0d6c9534dcd0351f5cfd0d65"
+        ],
+        "vary_query_only": [
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+          "c1401220d54dad8e496ae8d77b8acd03416ff873c9d3e82e205a806807807ced",
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+          "c1401220d54dad8e496ae8d77b8acd03416ff873c9d3e82e205a806807807ced"
+        ],
+        "vary_query_clock": [
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+          "61e655a72bef6278f3a5a4d6d390c6a230f03433aef14492cb048c665b8e9032",
+          "b5cfd4ded685a9ab2781eee49296553f0ab29ee41257e57de0f920a40a8704be",
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc"
+        ],
+        "two_conversations": [
+          "c4f1167206116c4df85583a90be6d14c502bb3257c4737387e0e6a941d88e3a6",
+          "8cc5022224a6ee96ce8ac28551201f578f3ce9314750e4c79bdb85c73f5d50d4",
+          "8841f178b1064f62e7102de540c5f2e0ce8d3874f7b750f05ab5a629137b0db8",
+          "2750c39c657cb51ebfd53b9abdb4c37fba07645b8aac370f06fd0a16ebddf4c6"
+        ],
+        "alternating_chat": [
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248",
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248"
+        ],
+        "alternating_chat_varied": [
+          "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248",
+          "61e655a72bef6278f3a5a4d6d390c6a230f03433aef14492cb048c665b8e9032",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248"
+        ]
+      },
+      "adjacent_prefixes": {
+        "repeat": [
+          {
+            "common_message_bytes": 23190,
+            "identical_leading_messages": 48
+          },
+          {
+            "common_message_bytes": 23190,
+            "identical_leading_messages": 48
+          },
+          {
+            "common_message_bytes": 23190,
+            "identical_leading_messages": 48
+          }
+        ],
+        "vary_clock_only": [
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          },
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          },
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          }
+        ],
+        "vary_query_only": [
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          }
+        ],
+        "vary_query_clock": [
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          },
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          }
+        ],
+        "two_conversations": [
+          {
+            "common_message_bytes": 23049,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23049,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23049,
+            "identical_leading_messages": 46
+          }
+        ],
+        "alternating_chat": [
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          }
+        ],
+        "alternating_chat_varied": [
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          }
+        ]
+      }
+    },
+    "canonical": {
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": {
+        "repeat": [
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd"
+        ],
+        "vary_clock_only": [
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "9f6411c06929313f46f318a3be476a85e8d10e0328d8eaceb73ec64b00ebd415",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "9f6411c06929313f46f318a3be476a85e8d10e0328d8eaceb73ec64b00ebd415"
+        ],
+        "vary_query_only": [
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "826081faf7d5739630f086e56af880949272fe3934879dd34860f51739e0583a",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "826081faf7d5739630f086e56af880949272fe3934879dd34860f51739e0583a"
+        ],
+        "vary_query_clock": [
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "fe0f6f2009615a16f7cf505af284ff4fddc95d6562a76d1143e4117d364d9818",
+          "96ddba22a6e6f939f4647badccb33dea85ff7eb5ca9d4fc77e26da27642934ab",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd"
+        ],
+        "two_conversations": [
+          "5451072f7a456bd187074a7377aebfe3a78d54ae18c0e3cf5396dad9b9c9aacb",
+          "ca4aa207db41bcf8bf5553e4a9f6311cb6eebbbffd14e2b88d8109dcc637293e",
+          "7fd480905555ccb7c2f044171893db2ff438ba01077a32ef0f1b6ee8aae573e8",
+          "b76590267044fce9c6c0a7f3933f8e7b35c9df096ec7ae4383411c1c2ad4e5d8"
+        ],
+        "alternating_chat": [
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248"
+        ],
+        "alternating_chat_varied": [
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248",
+          "fe0f6f2009615a16f7cf505af284ff4fddc95d6562a76d1143e4117d364d9818",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248"
+        ]
+      },
+      "adjacent_prefixes": {
+        "repeat": [
+          {
+            "common_message_bytes": 23190,
+            "identical_leading_messages": 48
+          },
+          {
+            "common_message_bytes": 23190,
+            "identical_leading_messages": 48
+          },
+          {
+            "common_message_bytes": 23190,
+            "identical_leading_messages": 48
+          }
+        ],
+        "vary_clock_only": [
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          },
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          },
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          }
+        ],
+        "vary_query_only": [
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          }
+        ],
+        "vary_query_clock": [
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          },
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          }
+        ],
+        "two_conversations": [
+          {
+            "common_message_bytes": 23049,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23049,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23049,
+            "identical_leading_messages": 46
+          }
+        ],
+        "alternating_chat": [
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          }
+        ],
+        "alternating_chat_varied": [
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          }
+        ]
+      }
+    }
+  },
+  "1": {
+    "native": {
+      "static_prefix_sha256": "745898d76e66e878b13f78c3f44e5e7e670566e0e662fe275af2be034ff6306b",
+      "request_hashes": {
+        "repeat": [
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b",
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b",
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b",
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b"
+        ],
+        "vary_clock_only": [
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b",
+          "df967c56f0949bab7f3036bee52f25a2ad7f786558ad132f838fb41da12bcbae",
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b",
+          "df967c56f0949bab7f3036bee52f25a2ad7f786558ad132f838fb41da12bcbae"
+        ],
+        "vary_query_only": [
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b",
+          "564718b3d18d1dbeb168cd77c4986ab28abe5e676c2f6ba0a3a5b70eb677d2bd",
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b",
+          "564718b3d18d1dbeb168cd77c4986ab28abe5e676c2f6ba0a3a5b70eb677d2bd"
+        ],
+        "vary_query_clock": [
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b",
+          "a40df07cda6a0d9d8874e7ca79547973560e25c80d6f2534fda4c68024166dbb",
+          "922878d95f03d5052eea4ec709b2e6ae193f88a9f4e6687cd8262b21ded39f75",
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b"
+        ],
+        "two_conversations": [
+          "23c89a472f72ac98b82b34eb1d15654befd7b486bc34e65d46a11116a2d6c321",
+          "50ef79375646c911d7cd3c98358cf3adc1a96a3dbb672fb7c8634209f934eea8",
+          "28d6fa5392ec5adbaad15a28ac9f1fa9c5d8b5a02e0f92e9d0ec244e0f80c310",
+          "52e35885e9d061b0b7ddbc498b771991c56602356897ad9eb9de239f38a322de"
+        ],
+        "alternating_chat": [
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248",
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248"
+        ],
+        "alternating_chat_varied": [
+          "47bfaff3a157a18e0122d5cc863ae35bab22fd59c77cfc57c721101ac827454b",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248",
+          "a40df07cda6a0d9d8874e7ca79547973560e25c80d6f2534fda4c68024166dbb",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248"
+        ]
+      },
+      "adjacent_prefixes": {
+        "repeat": [
+          {
+            "common_message_bytes": 23190,
+            "identical_leading_messages": 48
+          },
+          {
+            "common_message_bytes": 23190,
+            "identical_leading_messages": 48
+          },
+          {
+            "common_message_bytes": 23190,
+            "identical_leading_messages": 48
+          }
+        ],
+        "vary_clock_only": [
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          },
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          },
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          }
+        ],
+        "vary_query_only": [
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          }
+        ],
+        "vary_query_clock": [
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          },
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          }
+        ],
+        "two_conversations": [
+          {
+            "common_message_bytes": 23049,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23049,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23049,
+            "identical_leading_messages": 46
+          }
+        ],
+        "alternating_chat": [
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          }
+        ],
+        "alternating_chat_varied": [
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          }
+        ]
+      }
+    },
+    "canonical": {
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": {
+        "repeat": [
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd"
+        ],
+        "vary_clock_only": [
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "9f6411c06929313f46f318a3be476a85e8d10e0328d8eaceb73ec64b00ebd415",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "9f6411c06929313f46f318a3be476a85e8d10e0328d8eaceb73ec64b00ebd415"
+        ],
+        "vary_query_only": [
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "826081faf7d5739630f086e56af880949272fe3934879dd34860f51739e0583a",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "826081faf7d5739630f086e56af880949272fe3934879dd34860f51739e0583a"
+        ],
+        "vary_query_clock": [
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "fe0f6f2009615a16f7cf505af284ff4fddc95d6562a76d1143e4117d364d9818",
+          "96ddba22a6e6f939f4647badccb33dea85ff7eb5ca9d4fc77e26da27642934ab",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd"
+        ],
+        "two_conversations": [
+          "5451072f7a456bd187074a7377aebfe3a78d54ae18c0e3cf5396dad9b9c9aacb",
+          "ca4aa207db41bcf8bf5553e4a9f6311cb6eebbbffd14e2b88d8109dcc637293e",
+          "7fd480905555ccb7c2f044171893db2ff438ba01077a32ef0f1b6ee8aae573e8",
+          "b76590267044fce9c6c0a7f3933f8e7b35c9df096ec7ae4383411c1c2ad4e5d8"
+        ],
+        "alternating_chat": [
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248",
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248"
+        ],
+        "alternating_chat_varied": [
+          "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248",
+          "fe0f6f2009615a16f7cf505af284ff4fddc95d6562a76d1143e4117d364d9818",
+          "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248"
+        ]
+      },
+      "adjacent_prefixes": {
+        "repeat": [
+          {
+            "common_message_bytes": 23190,
+            "identical_leading_messages": 48
+          },
+          {
+            "common_message_bytes": 23190,
+            "identical_leading_messages": 48
+          },
+          {
+            "common_message_bytes": 23190,
+            "identical_leading_messages": 48
+          }
+        ],
+        "vary_clock_only": [
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          },
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          },
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          }
+        ],
+        "vary_query_only": [
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          }
+        ],
+        "vary_query_clock": [
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          },
+          {
+            "common_message_bytes": 23039,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 22818,
+            "identical_leading_messages": 45
+          }
+        ],
+        "two_conversations": [
+          {
+            "common_message_bytes": 23049,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23049,
+            "identical_leading_messages": 46
+          },
+          {
+            "common_message_bytes": 23049,
+            "identical_leading_messages": 46
+          }
+        ],
+        "alternating_chat": [
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          }
+        ],
+        "alternating_chat_varied": [
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          },
+          {
+            "common_message_bytes": 29,
+            "identical_leading_messages": 0
+          }
+        ]
+      }
+    }
+  }
+}

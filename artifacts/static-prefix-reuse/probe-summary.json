@@ -1,0 +1,1660 @@
+{
+  "hash_seed": "0",
+  "experiments": [
+    {
+      "ordering": "canonical",
+      "traffic": "repeat",
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": [
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 23190,
+          "identical_leading_messages": 48
+        },
+        {
+          "common_message_bytes": 23190,
+          "identical_leading_messages": 48
+        },
+        {
+          "common_message_bytes": 23190,
+          "identical_leading_messages": 48
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 8,
+            "mean": 809.5502988835506,
+            "stdev": 6.9185995289027,
+            "min": 804.0580809756648,
+            "p50": 805.9977925149724,
+            "p95": 821.7552645131946,
+            "max": 823.1250000244472
+          },
+          "load_ms": {
+            "n": 8,
+            "mean": 1.705889875,
+            "stdev": 0.26767809876297205,
+            "min": 1.417215,
+            "p50": 1.655198,
+            "p95": 2.1640654,
+            "max": 2.288006
+          },
+          "prefill_ms": {
+            "n": 8,
+            "mean": 69.535125,
+            "stdev": 0.344317599571964,
+            "min": 68.897,
+            "p50": 69.537,
+            "p95": 69.9229,
+            "max": 69.939
+          },
+          "generation_ms": {
+            "n": 8,
+            "mean": 684.230375,
+            "stdev": 1.0098125986414423,
+            "min": 682.668,
+            "p50": 683.863,
+            "p95": 685.51965,
+            "max": 685.583
+          },
+          "eval_count": {
+            "n": 8,
+            "mean": 38.0,
+            "stdev": 0.0,
+            "min": 38.0,
+            "p50": 38.0,
+            "p95": 38.0,
+            "max": 38.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:41:11.020783549Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "canonical",
+      "traffic": "vary_clock_only",
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": [
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "9f6411c06929313f46f318a3be476a85e8d10e0328d8eaceb73ec64b00ebd415",
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "9f6411c06929313f46f318a3be476a85e8d10e0328d8eaceb73ec64b00ebd415"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        },
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        },
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 8,
+            "mean": 1243.1045191260637,
+            "stdev": 1.7823978995608032,
+            "min": 1240.9040500060655,
+            "p50": 1243.008996505523,
+            "p95": 1245.6826468958752,
+            "max": 1246.0451229999308
+          },
+          "load_ms": {
+            "n": 8,
+            "mean": 1.546152125,
+            "stdev": 0.2534691562761816,
+            "min": 1.091224,
+            "p50": 1.607985,
+            "p95": 1.8312476500000001,
+            "max": 1.884854
+          },
+          "prefill_ms": {
+            "n": 8,
+            "mean": 482.91375,
+            "stdev": 0.8594049903857942,
+            "min": 481.31,
+            "p50": 482.9465,
+            "p95": 484.1002500000001,
+            "max": 484.403
+          },
+          "generation_ms": {
+            "n": 8,
+            "mean": 689.984125,
+            "stdev": 0.40456904154298035,
+            "min": 689.478,
+            "p50": 689.9525,
+            "p95": 690.5947000000001,
+            "max": 690.811
+          },
+          "eval_count": {
+            "n": 8,
+            "mean": 38.0,
+            "stdev": 0.0,
+            "min": 38.0,
+            "p50": 38.0,
+            "p95": 38.0,
+            "max": 38.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:41:25.54598417Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "canonical",
+      "traffic": "vary_query_only",
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": [
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "826081faf7d5739630f086e56af880949272fe3934879dd34860f51739e0583a",
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "826081faf7d5739630f086e56af880949272fe3934879dd34860f51739e0583a"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 23039,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 23039,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 23039,
+          "identical_leading_messages": 46
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 8,
+            "mean": 1314.6517073728319,
+            "stdev": 92.47434433004231,
+            "min": 1220.9005170152523,
+            "p50": 1314.1404585039709,
+            "p95": 1409.037703886861,
+            "max": 1409.5784419914708
+          },
+          "load_ms": {
+            "n": 8,
+            "mean": 1.192641125,
+            "stdev": 0.20725633963369947,
+            "min": 1.019323,
+            "p50": 1.076335,
+            "p95": 1.5575273500000002,
+            "max": 1.62864
+          },
+          "prefill_ms": {
+            "n": 8,
+            "mean": 484.32325000000003,
+            "stdev": 2.7032599648387414,
+            "min": 481.305,
+            "p50": 484.33500000000004,
+            "p95": 487.75,
+            "max": 488.212
+          },
+          "generation_ms": {
+            "n": 8,
+            "mean": 778.857375,
+            "stdev": 85.53815756423784,
+            "min": 693.074,
+            "p50": 778.5805,
+            "p95": 865.07975,
+            "max": 865.134
+          },
+          "eval_count": {
+            "n": 8,
+            "mean": 42.5,
+            "stdev": 4.5,
+            "min": 38.0,
+            "p50": 42.5,
+            "p95": 47.0,
+            "max": 47.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:41:41.387314436Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "canonical",
+      "traffic": "vary_query_clock",
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": [
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "fe0f6f2009615a16f7cf505af284ff4fddc95d6562a76d1143e4117d364d9818",
+        "96ddba22a6e6f939f4647badccb33dea85ff7eb5ca9d4fc77e26da27642934ab",
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        },
+        {
+          "common_message_bytes": 23039,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 8,
+            "mean": 1224.7809465006867,
+            "stdev": 235.84852072729754,
+            "min": 836.0289929842111,
+            "p50": 1308.4829115105094,
+            "p95": 1430.5798672008677,
+            "max": 1432.3799760022666
+          },
+          "load_ms": {
+            "n": 8,
+            "mean": 1.249050625,
+            "stdev": 0.20686795810246777,
+            "min": 1.091144,
+            "p50": 1.15278,
+            "p95": 1.62410985,
+            "max": 1.709569
+          },
+          "prefill_ms": {
+            "n": 8,
+            "mean": 382.18275,
+            "stdev": 176.58810110731554,
+            "min": 75.448,
+            "p50": 482.164,
+            "p95": 488.53125,
+            "max": 488.68
+          },
+          "generation_ms": {
+            "n": 8,
+            "mean": 790.834875,
+            "stdev": 96.31138406678294,
+            "min": 694.84,
+            "p50": 781.247,
+            "p95": 905.2366499999999,
+            "max": 905.482
+          },
+          "eval_count": {
+            "n": 8,
+            "mean": 43.0,
+            "stdev": 5.049752469181039,
+            "min": 38.0,
+            "p50": 42.5,
+            "p95": 49.0,
+            "max": 49.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:41:56.526406095Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "canonical",
+      "traffic": "two_conversations",
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": [
+        "5451072f7a456bd187074a7377aebfe3a78d54ae18c0e3cf5396dad9b9c9aacb",
+        "ca4aa207db41bcf8bf5553e4a9f6311cb6eebbbffd14e2b88d8109dcc637293e",
+        "7fd480905555ccb7c2f044171893db2ff438ba01077a32ef0f1b6ee8aae573e8",
+        "b76590267044fce9c6c0a7f3933f8e7b35c9df096ec7ae4383411c1c2ad4e5d8"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 23049,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 23049,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 23049,
+          "identical_leading_messages": 46
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 8,
+            "mean": 1434.646940746461,
+            "stdev": 35.066321782906705,
+            "min": 1389.150028990116,
+            "p50": 1437.2041019960307,
+            "p95": 1477.0442918990739,
+            "max": 1477.6032019872218
+          },
+          "load_ms": {
+            "n": 8,
+            "mean": 1.238692125,
+            "stdev": 0.2066846555204555,
+            "min": 1.049733,
+            "p50": 1.1465185,
+            "p95": 1.60654195,
+            "max": 1.665784
+          },
+          "prefill_ms": {
+            "n": 8,
+            "mean": 485.9395,
+            "stdev": 7.407210254205013,
+            "min": 477.707,
+            "p50": 485.6335,
+            "p95": 493.89275,
+            "max": 494.122
+          },
+          "generation_ms": {
+            "n": 8,
+            "mean": 896.129625,
+            "stdev": 38.11854144618305,
+            "min": 849.51,
+            "p50": 896.342,
+            "p95": 942.4642000000001,
+            "max": 942.614
+          },
+          "eval_count": {
+            "n": 8,
+            "mean": 48.5,
+            "stdev": 2.0615528128088303,
+            "min": 46.0,
+            "p50": 48.5,
+            "p95": 51.0,
+            "max": 51.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:42:13.77014895Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "canonical",
+      "traffic": "alternating_chat",
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": [
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248",
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        },
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        },
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        }
+      ],
+      "by_kind": {
+        "chat": {
+          "wall_ms": {
+            "n": 4,
+            "mean": 421.3022202529828,
+            "stdev": 63.24251473208762,
+            "min": 314.88469199393876,
+            "p50": 444.54408950696234,
+            "p95": 475.8551959064789,
+            "max": 481.2360100040678
+          },
+          "load_ms": {
+            "n": 4,
+            "mean": 0.92549625,
+            "stdev": 0.1338567428472974,
+            "min": 0.814541,
+            "p50": 0.8688724999999999,
+            "p95": 1.113066,
+            "max": 1.149699
+          },
+          "prefill_ms": {
+            "n": 4,
+            "mean": 70.441,
+            "stdev": 0.2202021798257218,
+            "min": 70.252,
+            "p50": 70.35300000000001,
+            "p95": 70.7484,
+            "max": 70.806
+          },
+          "generation_ms": {
+            "n": 4,
+            "mean": 149.6865,
+            "stdev": 64.55069315855562,
+            "min": 41.252,
+            "p50": 172.988,
+            "p95": 205.76715000000002,
+            "max": 211.518
+          },
+          "eval_count": {
+            "n": 4,
+            "mean": 8.75,
+            "stdev": 3.418698582794336,
+            "min": 3.0,
+            "p50": 10.0,
+            "p95": 11.7,
+            "max": 12.0
+          }
+        },
+        "planner": {
+          "wall_ms": {
+            "n": 4,
+            "mean": 979.5856492492021,
+            "stdev": 10.772549133210708,
+            "min": 968.1405000155792,
+            "p50": 978.3896964945598,
+            "p95": 992.4176909436937,
+            "max": 993.4227039921097
+          },
+          "load_ms": {
+            "n": 4,
+            "mean": 1.2982635,
+            "stdev": 0.23159732485771511,
+            "min": 1.064932,
+            "p50": 1.285396,
+            "p95": 1.5488263500000001,
+            "max": 1.55733
+          },
+          "prefill_ms": {
+            "n": 4,
+            "mean": 71.04375,
+            "stdev": 0.25808658915178057,
+            "min": 70.661,
+            "p50": 71.0815,
+            "p95": 71.32655,
+            "max": 71.351
+          },
+          "generation_ms": {
+            "n": 4,
+            "mean": 696.816,
+            "stdev": 0.3208153674623597,
+            "min": 696.453,
+            "p50": 696.7660000000001,
+            "p95": 697.22815,
+            "max": 697.279
+          },
+          "eval_count": {
+            "n": 4,
+            "mean": 38.0,
+            "stdev": 0.0,
+            "min": 38.0,
+            "p50": 38.0,
+            "p95": 38.0,
+            "max": 38.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:42:24.056759521Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "canonical",
+      "traffic": "alternating_chat_varied",
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": [
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248",
+        "fe0f6f2009615a16f7cf505af284ff4fddc95d6562a76d1143e4117d364d9818",
+        "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        },
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        },
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        }
+      ],
+      "by_kind": {
+        "chat": {
+          "wall_ms": {
+            "n": 4,
+            "mean": 469.85909925570013,
+            "stdev": 69.39743316504583,
+            "min": 358.4891610080376,
+            "p50": 485.961070007761,
+            "p95": 540.4837433510693,
+            "max": 549.0250959992409
+          },
+          "load_ms": {
+            "n": 4,
+            "mean": 0.84374825,
+            "stdev": 0.11715777202852361,
+            "min": 0.719675,
+            "p50": 0.8168605,
+            "p95": 0.9993940000000001,
+            "max": 1.021597
+          },
+          "prefill_ms": {
+            "n": 4,
+            "mean": 70.36749999999999,
+            "stdev": 0.20659682959813458,
+            "min": 70.097,
+            "p50": 70.3985,
+            "p95": 70.5736,
+            "max": 70.576
+          },
+          "generation_ms": {
+            "n": 4,
+            "mean": 168.83825,
+            "stdev": 68.59298031641066,
+            "min": 60.049,
+            "p50": 183.24099999999999,
+            "p95": 240.37835,
+            "max": 248.822
+          },
+          "eval_count": {
+            "n": 4,
+            "mean": 9.75,
+            "stdev": 3.6314597615834874,
+            "min": 4.0,
+            "p50": 10.5,
+            "p95": 13.55,
+            "max": 14.0
+          }
+        },
+        "planner": {
+          "wall_ms": {
+            "n": 4,
+            "mean": 1483.6387632458354,
+            "stdev": 92.72230138985687,
+            "min": 1386.4086549729109,
+            "p50": 1485.3497555013746,
+            "p95": 1577.1031974058133,
+            "max": 1577.4468870076817
+          },
+          "load_ms": {
+            "n": 4,
+            "mean": 1.3809515,
+            "stdev": 0.30654209189073856,
+            "min": 1.028261,
+            "p50": 1.377447,
+            "p95": 1.7232288,
+            "max": 1.740651
+          },
+          "prefill_ms": {
+            "n": 4,
+            "mean": 486.405,
+            "stdev": 2.3271558821875153,
+            "min": 483.74,
+            "p50": 486.5525,
+            "p95": 488.75804999999997,
+            "max": 488.775
+          },
+          "generation_ms": {
+            "n": 4,
+            "mean": 783.78025,
+            "stdev": 86.11810272926068,
+            "min": 697.623,
+            "p50": 783.53,
+            "p95": 870.27585,
+            "max": 870.438
+          },
+          "eval_count": {
+            "n": 4,
+            "mean": 42.5,
+            "stdev": 4.5,
+            "min": 38.0,
+            "p50": 42.5,
+            "p95": 47.0,
+            "max": 47.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:42:35.428893669Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "native",
+      "traffic": "repeat",
+      "static_prefix_sha256": "04c96d73db1536a32581bd4e7c9c00bc8e81646f10a6561a2a6571195ed56243",
+      "request_hashes": [
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 23190,
+          "identical_leading_messages": 48
+        },
+        {
+          "common_message_bytes": 23190,
+          "identical_leading_messages": 48
+        },
+        {
+          "common_message_bytes": 23190,
+          "identical_leading_messages": 48
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 8,
+            "mean": 817.6519452499633,
+            "stdev": 4.110001040197222,
+            "min": 808.2384620211087,
+            "p50": 818.5439850058174,
+            "p95": 822.0798644397291,
+            "max": 823.104605980916
+          },
+          "load_ms": {
+            "n": 8,
+            "mean": 1.41418925,
+            "stdev": 0.2461624084175679,
+            "min": 1.055885,
+            "p50": 1.5498604999999999,
+            "p95": 1.6580271,
+            "max": 1.678458
+          },
+          "prefill_ms": {
+            "n": 8,
+            "mean": 70.805,
+            "stdev": 1.0816290953926844,
+            "min": 69.769,
+            "p50": 70.495,
+            "p95": 72.6555,
+            "max": 73.317
+          },
+          "generation_ms": {
+            "n": 8,
+            "mean": 697.608875,
+            "stdev": 1.1720980587710976,
+            "min": 696.507,
+            "p50": 697.2985000000001,
+            "p95": 699.65935,
+            "max": 700.233
+          },
+          "eval_count": {
+            "n": 8,
+            "mean": 38.0,
+            "stdev": 0.0,
+            "min": 38.0,
+            "p50": 38.0,
+            "p95": 38.0,
+            "max": 38.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:42:45.495340865Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "native",
+      "traffic": "vary_clock_only",
+      "static_prefix_sha256": "04c96d73db1536a32581bd4e7c9c00bc8e81646f10a6561a2a6571195ed56243",
+      "request_hashes": [
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "34bd40ea13f3b5516d293115a5cd20e4e3dc17ad0d6c9534dcd0351f5cfd0d65",
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "34bd40ea13f3b5516d293115a5cd20e4e3dc17ad0d6c9534dcd0351f5cfd0d65"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        },
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        },
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 8,
+            "mean": 1245.4061240023293,
+            "stdev": 5.986121406693537,
+            "min": 1232.0673540234566,
+            "p50": 1245.6095655070385,
+            "p95": 1252.1825129457284,
+            "max": 1252.745789999608
+          },
+          "load_ms": {
+            "n": 8,
+            "mean": 1.494818875,
+            "stdev": 0.3653247611090157,
+            "min": 1.053921,
+            "p50": 1.5151575,
+            "p95": 2.0530235,
+            "max": 2.252387
+          },
+          "prefill_ms": {
+            "n": 8,
+            "mean": 492.56525,
+            "stdev": 0.3899226686152016,
+            "min": 491.947,
+            "p50": 492.5785,
+            "p95": 493.04949999999997,
+            "max": 493.109
+          },
+          "generation_ms": {
+            "n": 8,
+            "mean": 699.307625,
+            "stdev": 0.6118866188886527,
+            "min": 698.186,
+            "p50": 699.4594999999999,
+            "p95": 699.9462000000001,
+            "max": 699.984
+          },
+          "eval_count": {
+            "n": 8,
+            "mean": 38.0,
+            "stdev": 0.0,
+            "min": 38.0,
+            "p50": 38.0,
+            "p95": 38.0,
+            "max": 38.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:43:00.063638935Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "native",
+      "traffic": "vary_query_only",
+      "static_prefix_sha256": "04c96d73db1536a32581bd4e7c9c00bc8e81646f10a6561a2a6571195ed56243",
+      "request_hashes": [
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "c1401220d54dad8e496ae8d77b8acd03416ff873c9d3e82e205a806807807ced",
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "c1401220d54dad8e496ae8d77b8acd03416ff873c9d3e82e205a806807807ced"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 23039,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 23039,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 23039,
+          "identical_leading_messages": 46
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 8,
+            "mean": 1328.096706121869,
+            "stdev": 93.56779347333071,
+            "min": 1232.6686330197845,
+            "p50": 1322.514883504482,
+            "p95": 1432.0881420426304,
+            "max": 1432.7873779984657
+          },
+          "load_ms": {
+            "n": 8,
+            "mean": 1.228091,
+            "stdev": 0.34535413203695703,
+            "min": 0.973213,
+            "p50": 1.1313835,
+            "p95": 1.8029896000000003,
+            "max": 2.117221
+          },
+          "prefill_ms": {
+            "n": 8,
+            "mean": 490.558625,
+            "stdev": 3.0235781756678715,
+            "min": 486.364,
+            "p50": 491.324,
+            "p95": 493.7844,
+            "max": 493.909
+          },
+          "generation_ms": {
+            "n": 8,
+            "mean": 785.92275,
+            "stdev": 86.27691321806489,
+            "min": 698.594,
+            "p50": 786.1949999999999,
+            "p95": 872.4248500000001,
+            "max": 872.491
+          },
+          "eval_count": {
+            "n": 8,
+            "mean": 42.5,
+            "stdev": 4.5,
+            "min": 38.0,
+            "p50": 42.5,
+            "p95": 47.0,
+            "max": 47.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:43:16.061780331Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "native",
+      "traffic": "vary_query_clock",
+      "static_prefix_sha256": "04c96d73db1536a32581bd4e7c9c00bc8e81646f10a6561a2a6571195ed56243",
+      "request_hashes": [
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "61e655a72bef6278f3a5a4d6d390c6a230f03433aef14492cb048c665b8e9032",
+        "b5cfd4ded685a9ab2781eee49296553f0ab29ee41257e57de0f920a40a8704be",
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        },
+        {
+          "common_message_bytes": 23039,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 8,
+            "mean": 1234.1921831248328,
+            "stdev": 238.51407847612705,
+            "min": 843.0538150132634,
+            "p50": 1322.0401729922742,
+            "p95": 1441.6044971410884,
+            "max": 1443.3231689909007
+          },
+          "load_ms": {
+            "n": 8,
+            "mean": 1.29948375,
+            "stdev": 0.23168139283224173,
+            "min": 1.094832,
+            "p50": 1.1934755,
+            "p95": 1.7067655,
+            "max": 1.769146
+          },
+          "prefill_ms": {
+            "n": 8,
+            "mean": 386.208625,
+            "stdev": 178.20779516405665,
+            "min": 76.659,
+            "p50": 486.4585,
+            "p95": 494.08264999999994,
+            "max": 494.111
+          },
+          "generation_ms": {
+            "n": 8,
+            "mean": 795.37775,
+            "stdev": 96.84431445850345,
+            "min": 699.106,
+            "p50": 785.8425,
+            "p95": 910.22105,
+            "max": 910.626
+          },
+          "eval_count": {
+            "n": 8,
+            "mean": 43.0,
+            "stdev": 5.049752469181039,
+            "min": 38.0,
+            "p50": 42.5,
+            "p95": 49.0,
+            "max": 49.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:43:31.321655618Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "native",
+      "traffic": "two_conversations",
+      "static_prefix_sha256": "04c96d73db1536a32581bd4e7c9c00bc8e81646f10a6561a2a6571195ed56243",
+      "request_hashes": [
+        "c4f1167206116c4df85583a90be6d14c502bb3257c4737387e0e6a941d88e3a6",
+        "8cc5022224a6ee96ce8ac28551201f578f3ce9314750e4c79bdb85c73f5d50d4",
+        "8841f178b1064f62e7102de540c5f2e0ce8d3874f7b750f05ab5a629137b0db8",
+        "2750c39c657cb51ebfd53b9abdb4c37fba07645b8aac370f06fd0a16ebddf4c6"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 23049,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 23049,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 23049,
+          "identical_leading_messages": 46
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 8,
+            "mean": 1439.316303243686,
+            "stdev": 36.30760319532902,
+            "min": 1390.5800259963144,
+            "p50": 1439.3349864985794,
+            "p95": 1485.5995074874954,
+            "max": 1487.4762739927974
+          },
+          "load_ms": {
+            "n": 8,
+            "mean": 1.15321,
+            "stdev": 0.13391244954073542,
+            "min": 1.016939,
+            "p50": 1.1274004999999998,
+            "p95": 1.3690944000000003,
+            "max": 1.493154
+          },
+          "prefill_ms": {
+            "n": 8,
+            "mean": 488.331,
+            "stdev": 6.62200141573528,
+            "min": 480.618,
+            "p50": 488.567,
+            "p95": 495.71299999999997,
+            "max": 495.846
+          },
+          "generation_ms": {
+            "n": 8,
+            "mean": 900.1535,
+            "stdev": 37.92103635516833,
+            "min": 853.524,
+            "p50": 899.8455,
+            "p95": 946.9551499999999,
+            "max": 947.435
+          },
+          "eval_count": {
+            "n": 8,
+            "mean": 48.5,
+            "stdev": 2.0615528128088303,
+            "min": 46.0,
+            "p50": 48.5,
+            "p95": 51.0,
+            "max": 51.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:43:48.657678021Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "native",
+      "traffic": "alternating_chat",
+      "static_prefix_sha256": "04c96d73db1536a32581bd4e7c9c00bc8e81646f10a6561a2a6571195ed56243",
+      "request_hashes": [
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248",
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        },
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        },
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        }
+      ],
+      "by_kind": {
+        "chat": {
+          "wall_ms": {
+            "n": 4,
+            "mean": 470.58801024832064,
+            "stdev": 36.16474744465246,
+            "min": 433.92745399614796,
+            "p50": 459.5561585010728,
+            "p95": 520.3323269466637,
+            "max": 529.312269994989
+          },
+          "load_ms": {
+            "n": 4,
+            "mean": 0.9035932499999999,
+            "stdev": 0.1385830892504114,
+            "min": 0.753891,
+            "p50": 0.8885315,
+            "p95": 1.0697812999999998,
+            "max": 1.083419
+          },
+          "prefill_ms": {
+            "n": 4,
+            "mean": 70.42075,
+            "stdev": 0.10638462059903189,
+            "min": 70.258,
+            "p50": 70.4405,
+            "p95": 70.5341,
+            "max": 70.544
+          },
+          "generation_ms": {
+            "n": 4,
+            "mean": 192.61775,
+            "stdev": 35.73571763918419,
+            "min": 154.228,
+            "p50": 183.228,
+            "p95": 241.26415,
+            "max": 249.787
+          },
+          "eval_count": {
+            "n": 4,
+            "mean": 11.0,
+            "stdev": 1.8708286933869707,
+            "min": 9.0,
+            "p50": 10.5,
+            "p95": 13.55,
+            "max": 14.0
+          }
+        },
+        "planner": {
+          "wall_ms": {
+            "n": 4,
+            "mean": 980.5254035018152,
+            "stdev": 10.509553781005284,
+            "min": 970.8628460066393,
+            "p50": 977.1745079924585,
+            "p95": 994.7415549118887,
+            "max": 996.8897520157043
+          },
+          "load_ms": {
+            "n": 4,
+            "mean": 1.0334510000000001,
+            "stdev": 0.04483529975922992,
+            "min": 0.980968,
+            "p50": 1.0285715,
+            "p95": 1.0895430000000002,
+            "max": 1.095693
+          },
+          "prefill_ms": {
+            "n": 4,
+            "mean": 70.58500000000001,
+            "stdev": 0.1273558008101706,
+            "min": 70.378,
+            "p50": 70.626,
+            "p95": 70.70325,
+            "max": 70.71
+          },
+          "generation_ms": {
+            "n": 4,
+            "mean": 699.924,
+            "stdev": 0.27614941607757765,
+            "min": 699.474,
+            "p50": 700.0,
+            "p95": 700.1936499999999,
+            "max": 700.222
+          },
+          "eval_count": {
+            "n": 4,
+            "mean": 38.0,
+            "stdev": 0.0,
+            "min": 38.0,
+            "p50": 38.0,
+            "p95": 38.0,
+            "max": 38.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:43:57.709721634Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "native",
+      "traffic": "alternating_chat_varied",
+      "static_prefix_sha256": "04c96d73db1536a32581bd4e7c9c00bc8e81646f10a6561a2a6571195ed56243",
+      "request_hashes": [
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248",
+        "61e655a72bef6278f3a5a4d6d390c6a230f03433aef14492cb048c665b8e9032",
+        "338adaddf11c980c2765796c00b13dc3f0c28b9b414886fdea122d7592624248"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        },
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        },
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        }
+      ],
+      "by_kind": {
+        "chat": {
+          "wall_ms": {
+            "n": 4,
+            "mean": 455.21084649226395,
+            "stdev": 55.67760928070226,
+            "min": 363.71365300146863,
+            "p50": 477.7468004904222,
+            "p95": 501.15813568845624,
+            "max": 501.63613198674284
+          },
+          "load_ms": {
+            "n": 4,
+            "mean": 0.89017425,
+            "stdev": 0.11150761521612546,
+            "min": 0.770824,
+            "p50": 0.8790425,
+            "p95": 1.0219481499999998,
+            "max": 1.031788
+          },
+          "prefill_ms": {
+            "n": 4,
+            "mean": 70.92675,
+            "stdev": 0.4819773723941804,
+            "min": 70.331,
+            "p50": 70.8685,
+            "p95": 71.54945000000001,
+            "max": 71.639
+          },
+          "generation_ms": {
+            "n": 4,
+            "mean": 150.07775,
+            "stdev": 54.5111606112684,
+            "min": 59.411,
+            "p50": 173.817,
+            "p95": 193.1004,
+            "max": 193.266
+          },
+          "eval_count": {
+            "n": 4,
+            "mean": 8.75,
+            "stdev": 2.8613807855648994,
+            "min": 4.0,
+            "p50": 10.0,
+            "p95": 11.0,
+            "max": 11.0
+          }
+        },
+        "planner": {
+          "wall_ms": {
+            "n": 4,
+            "mean": 1482.0609557646094,
+            "stdev": 79.1412983326296,
+            "min": 1396.7182250053156,
+            "p50": 1484.7657960199285,
+            "p95": 1561.7176625150023,
+            "max": 1561.9940060132649
+          },
+          "load_ms": {
+            "n": 4,
+            "mean": 1.0451865,
+            "stdev": 0.03213867373196971,
+            "min": 0.990105,
+            "p50": 1.0600635,
+            "p95": 1.06933575,
+            "max": 1.070514
+          },
+          "prefill_ms": {
+            "n": 4,
+            "mean": 488.658,
+            "stdev": 2.437339943462956,
+            "min": 485.652,
+            "p50": 488.937,
+            "p95": 491.0913,
+            "max": 491.106
+          },
+          "generation_ms": {
+            "n": 4,
+            "mean": 786.439,
+            "stdev": 86.8093110415006,
+            "min": 699.172,
+            "p50": 785.78,
+            "p95": 874.4883500000001,
+            "max": 875.024
+          },
+          "eval_count": {
+            "n": 4,
+            "mean": 42.5,
+            "stdev": 4.5,
+            "min": 38.0,
+            "p50": 42.5,
+            "p95": 47.0,
+            "max": 47.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:44:08.745680471Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    }
+  ],
+  "files": {
+    "src/home_cortex/__init__.py": "0d4a037fb4316b4c2e93d6a08f1c7cdf2adaca43b0dd561d95ae3a230cf618d0",
+    "src/home_cortex/agent_service.py": "40055729ca208fb343aefd391d6c502d48e26de06913998dbafe4496829fc5fb",
+    "src/home_cortex/agents/__init__.py": "db4a660eea6a82ef78451b28ab09bb255561b961b312361a396d513d67a354d3",
+    "src/home_cortex/agents/registry.py": "c287e6460982a17c5715f5ab456f2a51c0f775ac3d80b16f69b388f7ce119721",
+    "src/home_cortex/agents/steward/__init__.py": "f5c0a9fdaa7c98cf6f04ed4ad0b73cdfbb1d6ef0c629aaaa5afb447732102f54",
+    "src/home_cortex/agents/steward/config.yaml": "41dd49fbe6a68523014770f5707625ec6cace9b02faeedaa41daae46babe7975",
+    "src/home_cortex/agents/steward/prompt.md": "1b224653cb5b6d49b9b3555fa43cdbd76c8d861edf72f913f57700b8c4b6eba2",
+    "src/home_cortex/agents/steward/tools.py": "4905bced04a6949d3cb8652ee9e9247cb3eb29c0926eee94e8cdad61dd01380e",
+    "src/home_cortex/api.py": "23be4996c066e15ccfa8dbcb9b31195887d04d7d7efa6216d477082b29aadd42",
+    "src/home_cortex/calculate.py": "2316d6fb3dd5b989716ea2ccfea1ddc6b5f057b1a843d1c38f114cac975eb110",
+    "src/home_cortex/calendar.py": "08b6984900b7ab7b0f899b595c632996023acd90379eaa23d13141e4e961280a",
+    "src/home_cortex/config.py": "db78d831f41ca7958849a84e455a8d9ba95f2a59689c8d913454e31941d34084",
+    "src/home_cortex/db.py": "9d8f17a9191289b6c1462a915152689c6748b95f56f13440b1d9942f914616ae",
+    "src/home_cortex/display.py": "a6027f9b01a489faf7046ba64e045a6852749bdd7fc798e66174931581082c17",
+    "src/home_cortex/edge_schema.py": "3c5234f543adcf959e23e7c29b34718bf10ef5bdaa7437497da3338351496520",
+    "src/home_cortex/fact_benchmark.py": "1826e2c07ad2639aacc20b7cf35c7b55b24ab12a105bfd8561a5f7bb40b1b49b",
+    "src/home_cortex/greetings.py": "e64c6e620422f087f40886b1426e38b7f02b52962e6e91a37ec12d465c3e85b7",
+    "src/home_cortex/identity.py": "f8e817c57486aa59b24ffac29c811cb83998163f780ea0307dc22f4aa6225e92",
+    "src/home_cortex/ingestion.py": "b933d92c921ad86488146898ccc54a9e6a3fe01a574926e5b0f9a4b7a0304101",
+    "src/home_cortex/model_loop.py": "9680ba104d781e1101665a9ff2c59985d15ce35d21787a1533a76861316a7818",
+    "src/home_cortex/ollama.py": "c3d3a8ba9ceb2a8b096d8e1e44c1f345dd9ed67e8defe5b136a5fb7033a06a41",
+    "src/home_cortex/openrouter.py": "21faf8cf7b90d441e231cbafd7a7c419a176954f51467b433fa7cfdbe49a2949",
+    "src/home_cortex/operator_registry.py": "b9787a320eaa6cde71d6967048ec51504e09490b215f2ea3f6b28c7ca39d77aa",
+    "src/home_cortex/profiling.py": "5717ce5f50103e5fcfe96674582cb0f57a314920447ebdb625db0f97b805aaf5",
+    "src/home_cortex/record_ids.py": "eaa2ab706671925e2f72803d82b844c0615b73a37f4318691f1584f102cce690",
+    "src/home_cortex/retrieval.py": "a34047fef74a6f49eff74eb9b2555c36ee5944f674d0d4721762499b2b7bf0bd",
+    "src/home_cortex/schema_catalog.py": "ae81da6e6954cf9a18b65ad79807169c7ee9545bb41ee589d36fea22062c6814",
+    "src/home_cortex/semantic_conversation.py": "5d7e1832af784223791a737d96ed80250f7c76bfe571c8f03c28b89f9ea9a2f4",
+    "src/home_cortex/semantic_facts.py": "e80e4bf0123a130e82721d108272ad1e5f0404ea970182e0ab68b716c9d96e28",
+    "src/home_cortex/semantic_ontology.py": "3ce9f683fe53ae315225ca2aeb21dd65d411f0c9fb9e0236216d1dd23ffdd2a6",
+    "src/home_cortex/semantic_planner_benchmark.py": "3f24d832f8dc9d6a74f4d94a7873f54ceaa1bba1abfb6e228a6e21ff3270d09f",
+    "src/home_cortex/text.py": "3bae6d7d4d337c297e02d5d4daec88506b2dcce1887622a0341237a7b4acce7a",
+    "src/home_cortex/tools.py": "bfd00d00a6b25b38c9ec424bc1abea3d3dd19e2139ad783dfe3d3fd952462b28",
+    "schemas/edge/hosted_by.yaml": "b354c3787e2d098d6154220518f1738d135894d2f76c9ab8cd57760213fb5f64",
+    "schemas/edge/lives_in.yaml": "ffff499adb4997887f9cb42698b562f8b6bc4e6a8b83bb3a9ae1484aec3820aa",
+    "schemas/edge/located_in.yaml": "fa587f20e322e0c56709bc950c973d00134900b16042ff7d46713a7550664c28",
+    "schemas/edge/parent_of.yaml": "e44cc4bc0fa42a7b1dc2cb33131e130ace91fc68ded9c405fe5336c49972efe6",
+    "schemas/edge/spouse_of.yaml": "265c9f0ab4e36ce03e8cd4739c1105d347f7cfecb44c82514cc1d8629321919d",
+    "schemas/semantic/ontology.yaml": "2aea40ef0569a0ba6fd706bb6216a37279ca7e5eac63c51fb0023cdb27987f1d",
+    "benchmarks/fixtures/semantic-contract/edges/lives_in.json": "8ec260b0fdbb6eac0d0a99712a39cd0af1bc9968fdc45499fe12143810578696",
+    "benchmarks/fixtures/semantic-contract/edges/parent_of.json": "0ff24f26ac0025769a7f19d1bfbd7b5415ae1c9d83042faec2ae13ed552f0070",
+    "benchmarks/fixtures/semantic-contract/edges/spouse_of.json": "ce73f9b8aca95af487dbf88345852bf21194aa86df85c1b9aa9e4114400f6647",
+    "benchmarks/fixtures/semantic-contract/nodes/address.json": "06832495e07e0c17c746caf929cd55dd4ac8ebf3a52f5ff253c038b73248dac8",
+    "benchmarks/fixtures/semantic-contract/nodes/person.json": "da2d6da82312dbc90dfba3b116da141993a25d1814b9e4544aac68b9c332afb5",
+    "scripts/ollama_prefix_reuse_probe.py": "c9cd338b87b0229b440773a176a272ad07c2102fda67d4a733530a951f1b86d5",
+    "scripts/ollama_warm_load_probe.py": "f5630382ee7b231c5f0cce80cca82cbcac88981a37c9d0b75c7612f28fdca233"
+  },
+  "before": {
+    "ollama_version": "0.32.15",
+    "ps": {
+      "models": [
+        {
+          "name": "qwen3.5:9b",
+          "model": "qwen3.5:9b",
+          "size": 5628493822,
+          "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+          "details": {
+            "parent_model": "",
+            "format": "gguf",
+            "family": "qwen35",
+            "families": [
+              "qwen35"
+            ],
+            "parameter_size": "9.7B",
+            "quantization_level": "Q4_K_M"
+          },
+          "expires_at": "2026-09-09T08:40:09.669566663Z",
+          "size_vram": 5628493822,
+          "context_length": 8192
+        }
+      ],
+      "_wall_ms": 0.37516700103878975,
+      "_bytes_in": 0,
+      "_bytes_out": 380
+    },
+    "resident": {
+      "name": "qwen3.5:9b",
+      "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+      "size": 5628493822,
+      "size_vram": 5628493822,
+      "expires_at": "2026-09-09T08:40:09.669566663Z",
+      "context": 8192,
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "qwen35",
+        "families": [
+          "qwen35"
+        ],
+        "parameter_size": "9.7B",
+        "quantization_level": "Q4_K_M"
+      }
+    }
+  },
+  "after": {
+    "ollama_version": "0.32.15",
+    "ps": {
+      "models": [
+        {
+          "name": "qwen3.5:9b",
+          "model": "qwen3.5:9b",
+          "size": 5628493822,
+          "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+          "details": {
+            "parent_model": "",
+            "format": "gguf",
+            "family": "qwen35",
+            "families": [
+              "qwen35"
+            ],
+            "parameter_size": "9.7B",
+            "quantization_level": "Q4_K_M"
+          },
+          "expires_at": "2026-09-09T08:44:08.745680471Z",
+          "size_vram": 5628493822,
+          "context_length": 8192
+        }
+      ],
+      "_wall_ms": 0.14248999650590122,
+      "_bytes_in": 0,
+      "_bytes_out": 380
+    },
+    "resident": {
+      "name": "qwen3.5:9b",
+      "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+      "size": 5628493822,
+      "size_vram": 5628493822,
+      "expires_at": "2026-09-09T08:44:08.745680471Z",
+      "context": 8192,
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "qwen35",
+        "families": [
+          "qwen35"
+        ],
+        "parameter_size": "9.7B",
+        "quantization_level": "Q4_K_M"
+      }
+    }
+  },
+  "paired_outputs": {
+    "repeat": {
+      "paired_planner_outputs": 8,
+      "identical_parsed_json": 8,
+      "json_objects": 16
+    },
+    "vary_clock_only": {
+      "paired_planner_outputs": 8,
+      "identical_parsed_json": 8,
+      "json_objects": 16
+    },
+    "vary_query_only": {
+      "paired_planner_outputs": 8,
+      "identical_parsed_json": 8,
+      "json_objects": 16
+    },
+    "vary_query_clock": {
+      "paired_planner_outputs": 8,
+      "identical_parsed_json": 8,
+      "json_objects": 16
+    },
+    "two_conversations": {
+      "paired_planner_outputs": 8,
+      "identical_parsed_json": 8,
+      "json_objects": 16
+    },
+    "alternating_chat": {
+      "paired_planner_outputs": 4,
+      "identical_parsed_json": 4,
+      "json_objects": 8
+    },
+    "alternating_chat_varied": {
+      "paired_planner_outputs": 4,
+      "identical_parsed_json": 4,
+      "json_objects": 8
+    }
+  }
+}

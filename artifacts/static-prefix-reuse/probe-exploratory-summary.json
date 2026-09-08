@@ -1,0 +1,996 @@
+{
+  "hash_seed": "0",
+  "experiments": [
+    {
+      "ordering": "native",
+      "traffic": "repeat",
+      "static_prefix_sha256": "04c96d73db1536a32581bd4e7c9c00bc8e81646f10a6561a2a6571195ed56243",
+      "request_hashes": [
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 23190,
+          "identical_leading_messages": 48
+        },
+        {
+          "common_message_bytes": 23190,
+          "identical_leading_messages": 48
+        },
+        {
+          "common_message_bytes": 23190,
+          "identical_leading_messages": 48
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 12,
+            "mean": 813.926916756221,
+            "stdev": 4.634724485389618,
+            "min": 807.3705979913939,
+            "p50": 814.1854145069374,
+            "p95": 820.3946824607556,
+            "max": 820.7084690220654
+          },
+          "load_ms": {
+            "n": 12,
+            "mean": 1.4106465833333333,
+            "stdev": 0.22705467080546127,
+            "min": 1.074382,
+            "p50": 1.4743475,
+            "p95": 1.74103245,
+            "max": 1.783295
+          },
+          "prefill_ms": {
+            "n": 12,
+            "mean": 69.85575,
+            "stdev": 0.35261407728563443,
+            "min": 69.364,
+            "p50": 69.739,
+            "p95": 70.5535,
+            "max": 70.636
+          },
+          "generation_ms": {
+            "n": 12,
+            "mean": 679.3189166666666,
+            "stdev": 0.4838192600433478,
+            "min": 678.356,
+            "p50": 679.26,
+            "p95": 680.02705,
+            "max": 680.076
+          },
+          "eval_count": {
+            "n": 12,
+            "mean": 38.0,
+            "stdev": 0.0,
+            "min": 38.0,
+            "p50": 38.0,
+            "p95": 38.0,
+            "max": 38.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:38:04.562365375Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "native",
+      "traffic": "vary_query_clock",
+      "static_prefix_sha256": "04c96d73db1536a32581bd4e7c9c00bc8e81646f10a6561a2a6571195ed56243",
+      "request_hashes": [
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "61e655a72bef6278f3a5a4d6d390c6a230f03433aef14492cb048c665b8e9032",
+        "b5cfd4ded685a9ab2781eee49296553f0ab29ee41257e57de0f920a40a8704be",
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        },
+        {
+          "common_message_bytes": 23039,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 12,
+            "mean": 1206.477782082705,
+            "stdev": 236.07104118049503,
+            "min": 815.4169469780754,
+            "p50": 1297.4920895067044,
+            "p95": 1409.0161921994877,
+            "max": 1409.525038994616
+          },
+          "load_ms": {
+            "n": 12,
+            "mean": 1.24873325,
+            "stdev": 0.22591113690089332,
+            "min": 0.992491,
+            "p50": 1.148853,
+            "p95": 1.6057862,
+            "max": 1.61311
+          },
+          "prefill_ms": {
+            "n": 12,
+            "mean": 374.7891666666667,
+            "stdev": 173.8862980948726,
+            "min": 73.463,
+            "p50": 472.7715,
+            "p95": 481.18269999999995,
+            "max": 482.704
+          },
+          "generation_ms": {
+            "n": 12,
+            "mean": 778.1869166666667,
+            "stdev": 94.71729767969025,
+            "min": 682.379,
+            "p50": 768.3620000000001,
+            "p95": 891.3363999999999,
+            "max": 892.289
+          },
+          "eval_count": {
+            "n": 12,
+            "mean": 43.0,
+            "stdev": 5.049752469181039,
+            "min": 38.0,
+            "p50": 42.5,
+            "p95": 49.0,
+            "max": 49.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:38:23.912230259Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "native",
+      "traffic": "two_conversations",
+      "static_prefix_sha256": "04c96d73db1536a32581bd4e7c9c00bc8e81646f10a6561a2a6571195ed56243",
+      "request_hashes": [
+        "c4f1167206116c4df85583a90be6d14c502bb3257c4737387e0e6a941d88e3a6",
+        "8cc5022224a6ee96ce8ac28551201f578f3ce9314750e4c79bdb85c73f5d50d4",
+        "8841f178b1064f62e7102de540c5f2e0ce8d3874f7b750f05ab5a629137b0db8",
+        "2750c39c657cb51ebfd53b9abdb4c37fba07645b8aac370f06fd0a16ebddf4c6"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 23049,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 23049,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 23049,
+          "identical_leading_messages": 46
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 12,
+            "mean": 1419.6613627548988,
+            "stdev": 38.17888790978336,
+            "min": 1364.561501017306,
+            "p50": 1419.6438680082792,
+            "p95": 1472.0168810614268,
+            "max": 1482.8371240000706
+          },
+          "load_ms": {
+            "n": 12,
+            "mean": 1.3193391666666667,
+            "stdev": 0.4132387759687356,
+            "min": 1.04281,
+            "p50": 1.1188685,
+            "p95": 2.0718516499999997,
+            "max": 2.426468
+          },
+          "prefill_ms": {
+            "n": 12,
+            "mean": 479.2055833333333,
+            "stdev": 6.777781611736172,
+            "min": 469.802,
+            "p50": 478.969,
+            "p95": 487.19354999999996,
+            "max": 487.457
+          },
+          "generation_ms": {
+            "n": 12,
+            "mean": 887.4275,
+            "stdev": 37.87677454478757,
+            "min": 838.861,
+            "p50": 888.2394999999999,
+            "p95": 934.1399,
+            "max": 934.977
+          },
+          "eval_count": {
+            "n": 12,
+            "mean": 48.5,
+            "stdev": 2.0615528128088303,
+            "min": 46.0,
+            "p50": 48.5,
+            "p95": 51.0,
+            "max": 51.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:38:46.640958433Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "native",
+      "traffic": "alternating_chat",
+      "static_prefix_sha256": "04c96d73db1536a32581bd4e7c9c00bc8e81646f10a6561a2a6571195ed56243",
+      "request_hashes": [
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "c16d3d0a51a7b99f2575da041b21e82e01b4dabe0b094ee46a9a2027a39cf135",
+        "50310fde521fbb49fd993b1e1bbee6dda7b7ef6325f36be1c67f4fc70345c1fc",
+        "c16d3d0a51a7b99f2575da041b21e82e01b4dabe0b094ee46a9a2027a39cf135"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        },
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        },
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        }
+      ],
+      "by_kind": {
+        "chat": {
+          "wall_ms": {
+            "n": 6,
+            "mean": 498.51126583719935,
+            "stdev": 49.11551512701983,
+            "min": 423.0261569900904,
+            "p50": 493.75189800048247,
+            "p95": 569.754417760123,
+            "max": 587.9349060123786
+          },
+          "load_ms": {
+            "n": 6,
+            "mean": 0.6800868333333333,
+            "stdev": 0.07978625178858964,
+            "min": 0.575301,
+            "p50": 0.6736145,
+            "p95": 0.7885117500000001,
+            "max": 0.807276
+          },
+          "prefill_ms": {
+            "n": 6,
+            "mean": 70.0165,
+            "stdev": 1.2545583220135004,
+            "min": 69.053,
+            "p50": 69.52,
+            "p95": 72.064,
+            "max": 72.704
+          },
+          "generation_ms": {
+            "n": 6,
+            "mean": 245.55200000000002,
+            "stdev": 49.59223271171942,
+            "min": 171.281,
+            "p50": 238.16649999999998,
+            "p95": 318.38750000000005,
+            "max": 336.581
+          },
+          "eval_count": {
+            "n": 6,
+            "mean": 14.0,
+            "stdev": 2.70801280154532,
+            "min": 10.0,
+            "p50": 13.5,
+            "p95": 18.0,
+            "max": 19.0
+          }
+        },
+        "planner": {
+          "wall_ms": {
+            "n": 6,
+            "mean": 945.0425866671139,
+            "stdev": 10.897652595204173,
+            "min": 930.4419859836344,
+            "p50": 946.7512929986697,
+            "p95": 957.4763500058907,
+            "max": 957.712408999214
+          },
+          "load_ms": {
+            "n": 6,
+            "mean": 1.4865395000000001,
+            "stdev": 0.4419459245536532,
+            "min": 1.011598,
+            "p50": 1.3742055,
+            "p95": 2.1233425,
+            "max": 2.205985
+          },
+          "prefill_ms": {
+            "n": 6,
+            "mean": 70.5725,
+            "stdev": 0.2507168057124731,
+            "min": 70.131,
+            "p50": 70.632,
+            "p95": 70.82374999999999,
+            "max": 70.824
+          },
+          "generation_ms": {
+            "n": 6,
+            "mean": 691.528,
+            "stdev": 0.6652914148451399,
+            "min": 690.571,
+            "p50": 691.635,
+            "p95": 692.28125,
+            "max": 692.295
+          },
+          "eval_count": {
+            "n": 6,
+            "mean": 38.0,
+            "stdev": 0.0,
+            "min": 38.0,
+            "p50": 38.0,
+            "p95": 38.0,
+            "max": 38.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:38:58.370981872Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "canonical",
+      "traffic": "repeat",
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": [
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 23190,
+          "identical_leading_messages": 48
+        },
+        {
+          "common_message_bytes": 23190,
+          "identical_leading_messages": 48
+        },
+        {
+          "common_message_bytes": 23190,
+          "identical_leading_messages": 48
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 12,
+            "mean": 832.3433592546886,
+            "stdev": 4.258217491372981,
+            "min": 825.048903003335,
+            "p50": 832.2860409971327,
+            "p95": 838.7969966657693,
+            "max": 840.934592008125
+          },
+          "load_ms": {
+            "n": 12,
+            "mean": 1.5060721666666668,
+            "stdev": 0.26037398736491624,
+            "min": 1.038601,
+            "p50": 1.5643645,
+            "p95": 1.8292275,
+            "max": 1.926957
+          },
+          "prefill_ms": {
+            "n": 12,
+            "mean": 70.522,
+            "stdev": 0.29965424520047473,
+            "min": 69.924,
+            "p50": 70.42699999999999,
+            "p95": 71.00385,
+            "max": 71.011
+          },
+          "generation_ms": {
+            "n": 12,
+            "mean": 694.197,
+            "stdev": 0.7816912220734386,
+            "min": 693.092,
+            "p50": 694.0695000000001,
+            "p95": 695.34115,
+            "max": 695.466
+          },
+          "eval_count": {
+            "n": 12,
+            "mean": 38.0,
+            "stdev": 0.0,
+            "min": 38.0,
+            "p50": 38.0,
+            "p95": 38.0,
+            "max": 38.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:39:15.430243318Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "canonical",
+      "traffic": "vary_query_clock",
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": [
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "fe0f6f2009615a16f7cf505af284ff4fddc95d6562a76d1143e4117d364d9818",
+        "96ddba22a6e6f939f4647badccb33dea85ff7eb5ca9d4fc77e26da27642934ab",
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        },
+        {
+          "common_message_bytes": 23039,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 22818,
+          "identical_leading_messages": 45
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 12,
+            "mean": 1225.0806205847766,
+            "stdev": 238.18777048227847,
+            "min": 824.1230700223241,
+            "p50": 1314.5279549935367,
+            "p95": 1433.1518845516257,
+            "max": 1433.6505139945075
+          },
+          "load_ms": {
+            "n": 12,
+            "mean": 1.248116,
+            "stdev": 0.2431370263606512,
+            "min": 0.988503,
+            "p50": 1.1325254999999999,
+            "p95": 1.6894348499999996,
+            "max": 1.804887
+          },
+          "prefill_ms": {
+            "n": 12,
+            "mean": 382.1015,
+            "stdev": 177.69676176213792,
+            "min": 74.305,
+            "p50": 482.2555,
+            "p95": 490.24019999999996,
+            "max": 490.722
+          },
+          "generation_ms": {
+            "n": 12,
+            "mean": 791.4030833333334,
+            "stdev": 96.32355083645461,
+            "min": 695.279,
+            "p50": 782.5445,
+            "p95": 906.02085,
+            "max": 906.204
+          },
+          "eval_count": {
+            "n": 12,
+            "mean": 43.0,
+            "stdev": 5.049752469181039,
+            "min": 38.0,
+            "p50": 42.5,
+            "p95": 49.0,
+            "max": 49.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:39:35.089419512Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "canonical",
+      "traffic": "two_conversations",
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": [
+        "5451072f7a456bd187074a7377aebfe3a78d54ae18c0e3cf5396dad9b9c9aacb",
+        "ca4aa207db41bcf8bf5553e4a9f6311cb6eebbbffd14e2b88d8109dcc637293e",
+        "7fd480905555ccb7c2f044171893db2ff438ba01077a32ef0f1b6ee8aae573e8",
+        "b76590267044fce9c6c0a7f3933f8e7b35c9df096ec7ae4383411c1c2ad4e5d8"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 23049,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 23049,
+          "identical_leading_messages": 46
+        },
+        {
+          "common_message_bytes": 23049,
+          "identical_leading_messages": 46
+        }
+      ],
+      "by_kind": {
+        "planner": {
+          "wall_ms": {
+            "n": 12,
+            "mean": 1438.4607121586062,
+            "stdev": 33.86626363859962,
+            "min": 1395.380653993925,
+            "p50": 1441.138152993517,
+            "p95": 1482.0171505445614,
+            "max": 1488.7163150124252
+          },
+          "load_ms": {
+            "n": 12,
+            "mean": 1.33120875,
+            "stdev": 0.26387416012913084,
+            "min": 1.048862,
+            "p50": 1.169754,
+            "p95": 1.7250991,
+            "max": 1.783145
+          },
+          "prefill_ms": {
+            "n": 12,
+            "mean": 486.04108333333335,
+            "stdev": 7.022222054050187,
+            "min": 477.637,
+            "p50": 486.118,
+            "p95": 494.2133,
+            "max": 494.485
+          },
+          "generation_ms": {
+            "n": 12,
+            "mean": 898.079,
+            "stdev": 37.6820845362886,
+            "min": 851.414,
+            "p50": 898.5475,
+            "p95": 943.9647,
+            "max": 944.166
+          },
+          "eval_count": {
+            "n": 12,
+            "mean": 48.5,
+            "stdev": 2.0615528128088303,
+            "min": 46.0,
+            "p50": 48.5,
+            "p95": 51.0,
+            "max": 51.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:39:58.166164462Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    },
+    {
+      "ordering": "canonical",
+      "traffic": "alternating_chat",
+      "static_prefix_sha256": "33e424b99ef67e4697bbf244f0fd5f23a45366d2971976d5766de10779d93b66",
+      "request_hashes": [
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "c16d3d0a51a7b99f2575da041b21e82e01b4dabe0b094ee46a9a2027a39cf135",
+        "cd66bf4f22c6448dfdebe814075441774c2c496ef1502b55b84559fa827e24fd",
+        "c16d3d0a51a7b99f2575da041b21e82e01b4dabe0b094ee46a9a2027a39cf135"
+      ],
+      "adjacent_prefixes": [
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        },
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        },
+        {
+          "common_message_bytes": 29,
+          "identical_leading_messages": 0
+        }
+      ],
+      "by_kind": {
+        "chat": {
+          "wall_ms": {
+            "n": 6,
+            "mean": 452.8167835039009,
+            "stdev": 33.87172286090823,
+            "min": 420.42324400972575,
+            "p50": 440.7934854971245,
+            "p95": 496.8185750185512,
+            "max": 497.0026970258914
+          },
+          "load_ms": {
+            "n": 6,
+            "mean": 0.7951843333333333,
+            "stdev": 0.1678725784215185,
+            "min": 0.591432,
+            "p50": 0.735756,
+            "p95": 1.06017325,
+            "max": 1.120612
+          },
+          "prefill_ms": {
+            "n": 6,
+            "mean": 69.43766666666667,
+            "stdev": 0.11116304341921442,
+            "min": 69.253,
+            "p50": 69.4435,
+            "p95": 69.57475,
+            "max": 69.586
+          },
+          "generation_ms": {
+            "n": 6,
+            "mean": 203.4875,
+            "stdev": 33.56955039789283,
+            "min": 171.673,
+            "p50": 191.409,
+            "p95": 247.07325,
+            "max": 247.104
+          },
+          "eval_count": {
+            "n": 6,
+            "mean": 11.666666666666666,
+            "stdev": 1.7950549357115013,
+            "min": 10.0,
+            "p50": 11.0,
+            "p95": 14.0,
+            "max": 14.0
+          }
+        },
+        "planner": {
+          "wall_ms": {
+            "n": 6,
+            "mean": 952.451962827278,
+            "stdev": 11.777968044072919,
+            "min": 934.3352419964503,
+            "p50": 952.7450849855086,
+            "p95": 967.2471152443904,
+            "max": 968.1571589899249
+          },
+          "load_ms": {
+            "n": 6,
+            "mean": 1.5391578333333333,
+            "stdev": 0.08077842485964647,
+            "min": 1.398679,
+            "p50": 1.5508025,
+            "p95": 1.6279559999999997,
+            "max": 1.632367
+          },
+          "prefill_ms": {
+            "n": 6,
+            "mean": 70.35000000000001,
+            "stdev": 0.195943018928123,
+            "min": 70.162,
+            "p50": 70.2955,
+            "p95": 70.66075000000001,
+            "max": 70.772
+          },
+          "generation_ms": {
+            "n": 6,
+            "mean": 697.8355,
+            "stdev": 0.3381768521547866,
+            "min": 697.446,
+            "p50": 697.8435,
+            "p95": 698.2255,
+            "max": 698.241
+          },
+          "eval_count": {
+            "n": 6,
+            "mean": 38.0,
+            "stdev": 0.0,
+            "min": 38.0,
+            "p50": 38.0,
+            "p95": 38.0,
+            "max": 38.0
+          }
+        }
+      },
+      "resident_after": {
+        "name": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "size": 5628493822,
+        "size_vram": 5628493822,
+        "expires_at": "2026-09-09T08:40:09.669566663Z",
+        "context": 8192,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "9.7B",
+          "quantization_level": "Q4_K_M"
+        }
+      }
+    }
+  ],
+  "files": {
+    "src/home_cortex/__init__.py": "0d4a037fb4316b4c2e93d6a08f1c7cdf2adaca43b0dd561d95ae3a230cf618d0",
+    "src/home_cortex/agent_service.py": "40055729ca208fb343aefd391d6c502d48e26de06913998dbafe4496829fc5fb",
+    "src/home_cortex/agents/__init__.py": "db4a660eea6a82ef78451b28ab09bb255561b961b312361a396d513d67a354d3",
+    "src/home_cortex/agents/registry.py": "c287e6460982a17c5715f5ab456f2a51c0f775ac3d80b16f69b388f7ce119721",
+    "src/home_cortex/agents/steward/__init__.py": "f5c0a9fdaa7c98cf6f04ed4ad0b73cdfbb1d6ef0c629aaaa5afb447732102f54",
+    "src/home_cortex/agents/steward/config.yaml": "41dd49fbe6a68523014770f5707625ec6cace9b02faeedaa41daae46babe7975",
+    "src/home_cortex/agents/steward/tools.py": "4905bced04a6949d3cb8652ee9e9247cb3eb29c0926eee94e8cdad61dd01380e",
+    "src/home_cortex/api.py": "23be4996c066e15ccfa8dbcb9b31195887d04d7d7efa6216d477082b29aadd42",
+    "src/home_cortex/calculate.py": "2316d6fb3dd5b989716ea2ccfea1ddc6b5f057b1a843d1c38f114cac975eb110",
+    "src/home_cortex/calendar.py": "08b6984900b7ab7b0f899b595c632996023acd90379eaa23d13141e4e961280a",
+    "src/home_cortex/config.py": "db78d831f41ca7958849a84e455a8d9ba95f2a59689c8d913454e31941d34084",
+    "src/home_cortex/db.py": "9d8f17a9191289b6c1462a915152689c6748b95f56f13440b1d9942f914616ae",
+    "src/home_cortex/display.py": "a6027f9b01a489faf7046ba64e045a6852749bdd7fc798e66174931581082c17",
+    "src/home_cortex/edge_schema.py": "3c5234f543adcf959e23e7c29b34718bf10ef5bdaa7437497da3338351496520",
+    "src/home_cortex/fact_benchmark.py": "1826e2c07ad2639aacc20b7cf35c7b55b24ab12a105bfd8561a5f7bb40b1b49b",
+    "src/home_cortex/greetings.py": "e64c6e620422f087f40886b1426e38b7f02b52962e6e91a37ec12d465c3e85b7",
+    "src/home_cortex/identity.py": "f8e817c57486aa59b24ffac29c811cb83998163f780ea0307dc22f4aa6225e92",
+    "src/home_cortex/ingestion.py": "b933d92c921ad86488146898ccc54a9e6a3fe01a574926e5b0f9a4b7a0304101",
+    "src/home_cortex/model_loop.py": "9680ba104d781e1101665a9ff2c59985d15ce35d21787a1533a76861316a7818",
+    "src/home_cortex/ollama.py": "c3d3a8ba9ceb2a8b096d8e1e44c1f345dd9ed67e8defe5b136a5fb7033a06a41",
+    "src/home_cortex/openrouter.py": "21faf8cf7b90d441e231cbafd7a7c419a176954f51467b433fa7cfdbe49a2949",
+    "src/home_cortex/operator_registry.py": "b9787a320eaa6cde71d6967048ec51504e09490b215f2ea3f6b28c7ca39d77aa",
+    "src/home_cortex/profiling.py": "5717ce5f50103e5fcfe96674582cb0f57a314920447ebdb625db0f97b805aaf5",
+    "src/home_cortex/record_ids.py": "eaa2ab706671925e2f72803d82b844c0615b73a37f4318691f1584f102cce690",
+    "src/home_cortex/retrieval.py": "a34047fef74a6f49eff74eb9b2555c36ee5944f674d0d4721762499b2b7bf0bd",
+    "src/home_cortex/schema_catalog.py": "ae81da6e6954cf9a18b65ad79807169c7ee9545bb41ee589d36fea22062c6814",
+    "src/home_cortex/semantic_conversation.py": "5d7e1832af784223791a737d96ed80250f7c76bfe571c8f03c28b89f9ea9a2f4",
+    "src/home_cortex/semantic_facts.py": "e80e4bf0123a130e82721d108272ad1e5f0404ea970182e0ab68b716c9d96e28",
+    "src/home_cortex/semantic_ontology.py": "3ce9f683fe53ae315225ca2aeb21dd65d411f0c9fb9e0236216d1dd23ffdd2a6",
+    "src/home_cortex/semantic_planner_benchmark.py": "3f24d832f8dc9d6a74f4d94a7873f54ceaa1bba1abfb6e228a6e21ff3270d09f",
+    "src/home_cortex/text.py": "3bae6d7d4d337c297e02d5d4daec88506b2dcce1887622a0341237a7b4acce7a",
+    "src/home_cortex/tools.py": "bfd00d00a6b25b38c9ec424bc1abea3d3dd19e2139ad783dfe3d3fd952462b28",
+    "schemas/edge/hosted_by.yaml": "b354c3787e2d098d6154220518f1738d135894d2f76c9ab8cd57760213fb5f64",
+    "schemas/edge/lives_in.yaml": "ffff499adb4997887f9cb42698b562f8b6bc4e6a8b83bb3a9ae1484aec3820aa",
+    "schemas/edge/located_in.yaml": "fa587f20e322e0c56709bc950c973d00134900b16042ff7d46713a7550664c28",
+    "schemas/edge/parent_of.yaml": "e44cc4bc0fa42a7b1dc2cb33131e130ace91fc68ded9c405fe5336c49972efe6",
+    "schemas/edge/spouse_of.yaml": "265c9f0ab4e36ce03e8cd4739c1105d347f7cfecb44c82514cc1d8629321919d",
+    "schemas/semantic/ontology.yaml": "2aea40ef0569a0ba6fd706bb6216a37279ca7e5eac63c51fb0023cdb27987f1d",
+    "benchmarks/fixtures/semantic-contract/edges/lives_in.json": "8ec260b0fdbb6eac0d0a99712a39cd0af1bc9968fdc45499fe12143810578696",
+    "benchmarks/fixtures/semantic-contract/edges/parent_of.json": "0ff24f26ac0025769a7f19d1bfbd7b5415ae1c9d83042faec2ae13ed552f0070",
+    "benchmarks/fixtures/semantic-contract/edges/spouse_of.json": "ce73f9b8aca95af487dbf88345852bf21194aa86df85c1b9aa9e4114400f6647",
+    "benchmarks/fixtures/semantic-contract/nodes/address.json": "06832495e07e0c17c746caf929cd55dd4ac8ebf3a52f5ff253c038b73248dac8",
+    "benchmarks/fixtures/semantic-contract/nodes/person.json": "da2d6da82312dbc90dfba3b116da141993a25d1814b9e4544aac68b9c332afb5"
+  },
+  "before": {
+    "ollama_version": "0.32.15",
+    "ps": {
+      "models": [
+        {
+          "name": "qwen3.5:9b",
+          "model": "qwen3.5:9b",
+          "size": 5628493822,
+          "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+          "details": {
+            "parent_model": "",
+            "format": "gguf",
+            "family": "qwen35",
+            "families": [
+              "qwen35"
+            ],
+            "parameter_size": "9.7B",
+            "quantization_level": "Q4_K_M"
+          },
+          "expires_at": "2026-09-09T08:32:03.006953907Z",
+          "size_vram": 5628493822,
+          "context_length": 8192
+        }
+      ],
+      "_wall_ms": 0.25991100119426847,
+      "_bytes_in": 0,
+      "_bytes_out": 380
+    },
+    "resident": {
+      "name": "qwen3.5:9b",
+      "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+      "size": 5628493822,
+      "size_vram": 5628493822,
+      "expires_at": "2026-09-09T08:32:03.006953907Z",
+      "context": 8192,
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "qwen35",
+        "families": [
+          "qwen35"
+        ],
+        "parameter_size": "9.7B",
+        "quantization_level": "Q4_K_M"
+      }
+    }
+  },
+  "after": {
+    "ollama_version": "0.32.15",
+    "ps": {
+      "models": [
+        {
+          "name": "qwen3.5:9b",
+          "model": "qwen3.5:9b",
+          "size": 5628493822,
+          "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+          "details": {
+            "parent_model": "",
+            "format": "gguf",
+            "family": "qwen35",
+            "families": [
+              "qwen35"
+            ],
+            "parameter_size": "9.7B",
+            "quantization_level": "Q4_K_M"
+          },
+          "expires_at": "2026-09-09T08:40:09.669566663Z",
+          "size_vram": 5628493822,
+          "context_length": 8192
+        }
+      ],
+      "_wall_ms": 0.3097589942626655,
+      "_bytes_in": 0,
+      "_bytes_out": 380
+    },
+    "resident": {
+      "name": "qwen3.5:9b",
+      "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+      "size": 5628493822,
+      "size_vram": 5628493822,
+      "expires_at": "2026-09-09T08:40:09.669566663Z",
+      "context": 8192,
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "qwen35",
+        "families": [
+          "qwen35"
+        ],
+        "parameter_size": "9.7B",
+        "quantization_level": "Q4_K_M"
+      }
+    }
+  },
+  "paired_outputs": {
+    "repeat": {
+      "paired_planner_outputs": 12,
+      "identical_parsed_json": 12,
+      "json_objects": 24
+    },
+    "vary_query_clock": {
+      "paired_planner_outputs": 12,
+      "identical_parsed_json": 12,
+      "json_objects": 24
+    },
+    "two_conversations": {
+      "paired_planner_outputs": 12,
+      "identical_parsed_json": 12,
+      "json_objects": 24
+    },
+    "alternating_chat": {
+      "paired_planner_outputs": 6,
+      "identical_parsed_json": 6,
+      "json_objects": 12
+    }
+  }
+}

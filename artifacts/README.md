@@ -6,6 +6,8 @@ active source code.**
 - `qwen35-semantic-contract/` and `tier1-baseline/` contain the output of
   semantic-planner / fact-benchmark runs on real LLMs, plus the investigation
   notes in `REPORT.md`.
+- `static-prefix-reuse/` records cross-process serialization checks and isolated
+  planner/chat/conversation prefill measurements (`REPORT.md` + summaries).
 - `ollama-warm-load/` explains warm-request Ollama `load_duration` on a
   resident `qwen3.5:9b` runner (`REPORT.md` + `probe-summary.json`).
 - The **readable, authoritative** provenance is the `*-summary.json` files and the

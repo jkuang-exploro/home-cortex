@@ -142,10 +142,12 @@ def _example_text() -> tuple[tuple[str, str], ...]:
 
 
 def planner_system_prompt(capabilities: Mapping[str, Any]) -> str:
+    # Capability maps may originate from sets or differently ordered registries.
+    # Canonicalize object keys only; ordered semantic arrays remain unchanged.
     return (
         _PLANNER_INSTRUCTIONS
         + "\nCapabilities:\n"
-        + json.dumps(capabilities, ensure_ascii=False, separators=(",", ":"))
+        + json.dumps(capabilities, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     )
 
 
