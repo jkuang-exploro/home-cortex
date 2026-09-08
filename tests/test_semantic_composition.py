@@ -421,12 +421,12 @@ async def test_deleted_antecedent_is_reloaded_and_fails(household):
     assert 'could not find' in (await agent.answer('his date',user_entity_id='person:a',conversation_id='one')).answer
 
 
-@pytest.mark.parametrize('route,stream', [('/v1/chat/completions',False),('/v1/chat/completions',True),('/agent/steward/chat',False)])
+@pytest.mark.parametrize('route,stream', [('/v1/chat/completions',False),('/v1/chat/completions',True),('/agent/steward/chat',False),('/v1/chat',False)])
 def test_http_named_then_pronoun_and_session_ownership(household, api_client, route, stream):
     from home_cortex.api import app, VIRTUAL_MODEL
     client,_=api_client
     first=ages().model_copy(update={'subject':named(),'projection':'scalar'})
-    agent,_=agent_for(household,first,anniversary())
+    agent,model_client=agent_for(household,first,anniversary(),anniversary(),anniversary())
     app.state.agents={'steward':agent}
     app.state.retrieval.records=[{'id':'person:a','name':'Synthetic A'}, {'id':'person:b','name':'Synthetic B'}]
     app.state.settings=SimpleNamespace(cortex_api_key=None,cortex_identity_map={'id:a':'person:a','id:b':'person:b'})
@@ -441,11 +441,34 @@ def test_http_named_then_pronoun_and_session_ownership(household, api_client, ro
         return {'message':text,'conversation_id':conversation_id}
     first_response=client.post(route,json=body('How old is son1?'),headers=headers)
     assert first_response.status_code==200 and '18 years' in first_response.text
+    assert len(model_client.calls)==1
+    restored=client.get(f'/agent/steward/conversations/{conversation_id}',headers=headers)
+    assert restored.status_code==200 and restored.json()['id']==conversation_id
     response=client.post(route,json=body('When is his tenth birthday?'),headers=headers)
     assert response.status_code==200 and '2018-09-03' in response.text
     assert 'How may I help you' not in response.text
+    assert len(model_client.calls)==2
     denied=client.post(route,json=body('his date'),headers={'X-OpenWebUI-User-Id':'b'})
     assert denied.status_code==404 and denied.json()['error']['code']=='conversation_not_found'
+    assert len(model_client.calls)==2
+    # Discourse loss keeps authorization but cannot trust replayed client prose.
+    agent.semantic_conversations._states.clear()
+    missing=client.post(route,json=body('When is his tenth birthday?'),headers=headers)
+    assert missing.status_code==200 and 'clarify' in missing.text
+    assert len(model_client.calls)==3
+    new=client.post('/agent/steward/conversations',json={'language':'en'},headers=headers)
+    assert new.status_code==201 and new.json()['id']!=conversation_id
+    old_id=conversation_id
+    conversation_id=new.json()['id']
+    separate=client.post(route,json=body('When is his tenth birthday?'),headers=headers)
+    assert separate.status_code==200 and 'clarify' in separate.text
+    # A process restart also loses the authorization registry: fail closed.
+    from home_cortex.api import ConversationStore
+    app.state.conversations=ConversationStore()
+    conversation_id=old_id
+    expired=client.post(route,json=body('his date'),headers=headers)
+    assert expired.status_code==404 and expired.json()['error']['code']=='conversation_not_found'
+    assert len(model_client.calls)==4
 
 
 # Reuse the API fixture's isolated application lifecycle, replacing its fake agent above.

@@ -1,8 +1,7 @@
 diff --git a/backend/open_webui/main.py b/backend/open_webui/main.py
-index d47c88f..fac5da2 100644
 --- a/backend/open_webui/main.py
 +++ b/backend/open_webui/main.py
-@@ -106,6 +106,7 @@ from open_webui.routers import (
+@@ -106,6 +106,7 @@
      terminals,
      automations,
      calendar,
@@ -10,7 +9,7 @@ index d47c88f..fac5da2 100644
  )
  
  from open_webui.routers.retrieval import (
-@@ -1435,6 +1436,7 @@ app.include_router(users.router, prefix='/api/v1/users', tags=['users'])
+@@ -1435,6 +1436,7 @@
  
  app.include_router(channels.router, prefix='/api/v1/channels', tags=['channels'])
  app.include_router(chats.router, prefix='/api/v1/chats', tags=['chats'])
@@ -20,7 +19,6 @@ index d47c88f..fac5da2 100644
  
 diff --git a/backend/open_webui/routers/cortex.py b/backend/open_webui/routers/cortex.py
 new file mode 100644
-index 0000000..f4bca8c
 --- /dev/null
 +++ b/backend/open_webui/routers/cortex.py
 @@ -0,0 +1,84 @@
@@ -110,7 +108,6 @@ index 0000000..f4bca8c
 +        )
 diff --git a/src/lib/apis/cortex/index.ts b/src/lib/apis/cortex/index.ts
 new file mode 100644
-index 0000000..59cbf8c
 --- /dev/null
 +++ b/src/lib/apis/cortex/index.ts
 @@ -0,0 +1,33 @@
@@ -148,7 +145,6 @@ index 0000000..59cbf8c
 +	return response;
 +};
 diff --git a/src/lib/components/chat/Chat.svelte b/src/lib/components/chat/Chat.svelte
-index 751c49b..005dbf0 100644
 --- a/src/lib/components/chat/Chat.svelte
 +++ b/src/lib/components/chat/Chat.svelte
 @@ -95,6 +95,7 @@
@@ -165,7 +161,7 @@ index 751c49b..005dbf0 100644
  	let selectedModels = [''];
 +	const CORTEX_GREETING_MODEL = '老管家';
 +	const CORTEX_GREETING_AGENT = 'steward';
-+	let greetingInitialization = false;
++	const greetingInitializations = new WeakMap<object, Promise<void>>();
 +	let greetingInitializedForModel: string | null = null;
  	let atSelectedModel: Model | undefined;
  	let selectedModelIds = [];
@@ -185,13 +181,23 @@ index 751c49b..005dbf0 100644
  	};
  
  	const resetInput = async () => {
-@@ -1105,6 +1113,66 @@
+@@ -1105,6 +1113,76 @@
  	// Web functions
  	//////////////////////////
  
-+	const initializeAgentGreeting = async () => {
++	const initializeAgentGreeting = () => {
++		const initialHistory = history;
++		const pending = greetingInitializations.get(initialHistory);
++		if (pending) return pending;
++		const initialization = createAgentGreeting(initialHistory).finally(() => {
++			greetingInitializations.delete(initialHistory);
++		});
++		greetingInitializations.set(initialHistory, initialization);
++		return initialization;
++	};
++
++	const createAgentGreeting = async (initialHistory) => {
 +		if (
-+			greetingInitialization ||
 +			history.currentId ||
 +			selectedModelIds.length !== 1 ||
 +			selectedModelIds[0] !== CORTEX_GREETING_MODEL ||
@@ -203,14 +209,16 @@ index 751c49b..005dbf0 100644
 +		const model = $models.find((item) => item.id === CORTEX_GREETING_MODEL);
 +		if (!model) return;
 +
-+		greetingInitialization = true;
 +		try {
 +			const conversation = await createCortexConversation(
 +				localStorage.token,
 +				CORTEX_GREETING_AGENT,
 +				$i18n.language ?? 'en'
 +			);
-+			if (!conversation?.greeting || history.currentId) return;
++			if (
++				!conversation?.greeting || history !== initialHistory || history.currentId ||
++				selectedModelIds.length !== 1 || selectedModelIds[0] !== CORTEX_GREETING_MODEL
++			) return;
 +			params = {
 +				...params,
 +				custom_params: {
@@ -244,15 +252,13 @@ index 751c49b..005dbf0 100644
 +		} catch (error) {
 +			console.error('Failed to initialize Cortex greeting', error);
 +			toast.error($i18n.t('Unable to initialize the Cortex greeting'));
-+		} finally {
-+			greetingInitialization = false;
 +		}
 +	};
 +
  	const initNewChat = async () => {
  		console.log('initNewChat');
  		if ($user?.role !== 'admin' && $user?.permissions?.chat?.temporary_enforced) {
-@@ -1228,6 +1296,7 @@
+@@ -1228,6 +1306,7 @@
  			messages: {},
  			currentId: null
  		};
@@ -260,7 +266,7 @@ index 751c49b..005dbf0 100644
  
  		chatFiles = [];
  		params = {};
-@@ -1336,6 +1405,7 @@
+@@ -1336,6 +1415,7 @@
  		selectedModels = selectedModels.map((modelId) =>
  			$models.map((m) => m.id).includes(modelId) ? modelId : ''
  		);
@@ -268,3 +274,13 @@ index 751c49b..005dbf0 100644
  
  		const chatInput = document.getElementById('chat-input');
  		setTimeout(() => chatInput?.focus(), 0);
+@@ -1904,6 +1984,9 @@
+ 	//////////////////////////
+ 
+ 	const submitPrompt = async (inputContent, inputFiles) => {
++		const initialHistory = history;
++		await initializeAgentGreeting();
++		if (history !== initialHistory) return;
+ 		const _files = structuredClone(inputFiles);
+ 
+ 		chatFiles.push(

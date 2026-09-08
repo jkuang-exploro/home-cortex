@@ -31,3 +31,7 @@ docker compose up -d --force-recreate --no-deps open-webui
 When upgrading Open WebUI, update the base image and pinned source commit
 together, then rebase `home-cortex-greeting.patch` and run a complete frontend
 production build before deployment.
+
+Conversation creation is shared with first-turn submission so a slow greeting
+response cannot drop its ID. See [the propagation audit and request traces](CONVERSATION-TRACE.md)
+for reload, new-chat, restart, and adoption boundaries.

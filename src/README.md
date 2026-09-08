@@ -292,7 +292,9 @@ that ID through its persisted `params.custom_params`, which the OpenAI-compatibl
 provider path emits as the top-level `conversation_id`. The API checks ownership.
 The semantic coordinator scopes state by conversation, speaker, household and agent,
 serializes concurrent turns, and retains eight user turns in at most 1,000
-process-local sessions. Restart/eviction loses focus and requires clarification.
+process-local sessions. Discourse eviction loses focus and requires clarification.
+A full server restart or authorization-registry eviction also invalidates the ID
+(`404 conversation_not_found`); create a fresh conversation and restate the referent.
 Requests without an ID interpret the current turn once, then re-ground only the
 earlier user turns explicitly referenced by its discourse plan. Clients that send
 only the latest message need a conversation ID for cross-request references.
