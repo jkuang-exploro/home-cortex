@@ -28,6 +28,7 @@ from .operator_registry import (
 )
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_ontology import SemanticOntology
+from .semantic_display import SemanticDisplay
 from .text import latest_user_message, safe_log_token
 
 logger = logging.getLogger("uvicorn.error.home_cortex.semantic_facts")
@@ -2162,8 +2163,30 @@ class HouseholdFactEngine:
 
 
 class FactRenderer:
+    def __init__(self, ontology: SemanticOntology | None = None) -> None:
+        self.ontology = ontology or SemanticOntology.load_default()
+
     @stage("renderer")
     def render(
+        self,
+        request: SemanticFactRequest,
+        result: FactResult,
+        context: AgentRequestContext,
+    ) -> str:
+        rendered = self._render_result(request, result, context)
+        # Describe the expanded, validated IR once, including empty/partial results.
+        # Unsupported plans have no executed scope to describe.
+        if result.status != "semantic_plan_unsupported" and (
+            request.subject.path or request.filters or request.exclude or request.other
+            or request.property is not None
+            or request.operation == "count" or request.projection == "each"
+            or (request.operation == "select" and request.property is None)
+        ):
+            description = SemanticDisplay(self.ontology, context.locale or "en").describe(request)
+            return f"{description}\n{rendered}"
+        return rendered
+
+    def _render_result(
         self,
         request: SemanticFactRequest,
         result: FactResult,
@@ -2178,7 +2201,7 @@ class FactRenderer:
             if not result.rows:
                 return "没有找到符合条件的记录。" if language.startswith("zh") else "No matching records."
             return "\n".join(
-                f"{_name(row.entity, language)}: " + self.render(
+                f"{_name(row.entity, language)}: " + self._render_result(
                     request.model_copy(update={"projection": "scalar"}),
                     FactResult(row.status, row.value, row.evidence, row.missing_requirements, unit=row.unit), context
                 ) for row in result.rows
@@ -2219,12 +2242,7 @@ class FactRenderer:
             label = _property_label(result.missing_requirements)
             return f"家庭资料中有对应关系记录，但目前没有记录{label}。"
         if result.status == "filter_input_missing":
-            if "adult" in result.missing_requirements:
-                return "目前缺少足够的年龄或家庭角色资料，无法确定成年人数量。"
-            if "minor" in result.missing_requirements:
-                return "目前缺少足够的年龄或家庭角色资料，无法确定未成年人数。"
-            label = _property_label(result.missing_requirements) or "筛选所需资料"
-            return f"目前缺少足够的{label}，无法可靠完成筛选。"
+            return "目前缺少筛选所需资料，无法可靠完成筛选。"
         if result.status == "filter_unsupported":
             return "当前语义查询协议不支持这个筛选条件。"
         if result.status == "operator_unsupported":
@@ -2248,18 +2266,15 @@ class FactRenderer:
             return f"家庭资料不足以完成这项计算{suffix}。"
         if request.operation == "count":
             count = int(result.value)
-            noun = _count_noun(request)
-            if request.subject.kind == "current_household":
-                return f"家里目前有{_zh_number(count)}{noun}。"
-            return f"您目前有{_zh_number(count)}{noun}。"
+            return f"符合条件的记录数：{count}。"
         if request.operation == "select" and request.property is None:
             values = result.value if isinstance(result.value, list) else []
             if not values:
                 if request.filters or any(step.filters for step in request.subject.path):
                     return "没有找到符合筛选条件的记录。"
-                return "家庭资料中目前没有记录当前家庭成员。"
+                return "没有找到符合查询范围的记录。"
             names = "、".join(_name(item, "zh") for item in values)
-            return f"家里目前的成员有：{names}。"
+            return f"符合条件的记录：{names}。"
         if request.operation == "select":
             if (
                 request.property_source == "relationship"
@@ -2267,11 +2282,11 @@ class FactRenderer:
                 and request.subject.path[-1].relation == "spouse"
                 and request.property == "start_date"
             ):
-                return f"您和配偶的结婚日期是{result.value}。"
-            if request.property == "birth_date":
+                return f"该配偶关系的开始日期是{result.value}。"
+            if request.property == "birth_date" and request.property_source == "entity":
                 return f"{_subject_possessive(request.subject)}出生日期是{result.value}。"
             if request.property == "full_address":
-                return f"您的具体住址是{_format_address(result.value)}。"
+                return f"具体住址是{_format_address(result.value)}。"
             return f"查询到的值是{result.value}。"
         if request.operation in {"date_difference", "duration", "completed_years"}:
             unit = result.unit or ("years" if request.operation == "completed_years" else request.mode)
@@ -2293,13 +2308,17 @@ class FactRenderer:
             if request.other is not None and isinstance(result.value, Mapping):
                 selected = _name(result.value.get("selected"), "zh")
                 other = _name(result.value.get("other"), "zh")
+                if request.property == "birth_date" and request.property_source == "entity":
+                    if result.value.get("equal"):
+                        return f"{selected}和{other}年龄相同。"
+                    adjective = "大" if request.operation == "argmin" else "小"
+                    return f"{selected}年龄比{other}{adjective}。"
                 if result.value.get("equal"):
-                    return f"{selected}和{other}年龄相同。"
-                adjective = "大" if request.operation == "argmin" else "小"
-                return f"{selected}年龄比{other}{adjective}。"
-            if request.property == "birth_date":
+                    return f"{selected}和{other}的比较值相同。"
+                return f"{'最小值' if request.operation == 'argmin' else '最大值'}对应对象：{selected}。"
+            if request.property == "birth_date" and request.property_source == "entity":
                 qualifier = "最年长" if request.operation == "argmin" else "最年轻"
-                return f"家里{qualifier}的是{_name(result.value, 'zh')}。"
+                return f"查询范围内{qualifier}的是{_name(result.value, 'zh')}。"
             return f"符合极值条件的是{_name(result.value, 'zh')}。"
         if request.operation in {"sum", "average", "min", "max"}:
             return f"计算结果是{result.value}。"
@@ -2351,13 +2370,13 @@ class FactRenderer:
             if not result.value:
                 if request.filters or any(step.filters for step in request.subject.path):
                     return "No records match the filters."
-                return "The household data has no current member records."
-            return "Current household members: " + ", ".join(
+                return "No records match the query scope."
+            return "Matching records: " + ", ".join(
                 _name(item, "en") for item in result.value
             ) + "."
         if request.operation == "select":
             if request.property == "full_address":
-                return f"Your street address is {_format_address(result.value)}."
+                return f"The street address is {_format_address(result.value)}."
             return f"The requested value is {result.value}."
         if request.operation in {"date_difference", "duration", "completed_years"}:
             unit = result.unit or ("years" if request.operation == "completed_years" else request.mode)
@@ -2377,11 +2396,15 @@ class FactRenderer:
             if request.other is not None and isinstance(result.value, Mapping):
                 selected = _name(result.value.get("selected"), "en")
                 other = _name(result.value.get("other"), "en")
+                if request.property == "birth_date" and request.property_source == "entity":
+                    if result.value.get("equal"):
+                        return f"{selected} and {other} are the same age."
+                    adjective = "older" if request.operation == "argmin" else "younger"
+                    return f"{selected} is {adjective} than {other}."
                 if result.value.get("equal"):
-                    return f"{selected} and {other} are the same age."
-                adjective = "older" if request.operation == "argmin" else "younger"
-                return f"{selected} is {adjective} than {other}."
-            return f"The matching household member is {_name(result.value, 'en')}."
+                    return f"{selected} and {other} have equal comparison values."
+                return f"The {'minimum' if request.operation == 'argmin' else 'maximum'} belongs to {selected}."
+            return f"The matching entity is {_name(result.value, 'en')}."
         if request.operation in {"sum", "average", "min", "max"}:
             return f"The computed result is {result.value}."
         if request.operation in {
@@ -2403,7 +2426,7 @@ class SemanticFactService:
         renderer: FactRenderer | None = None,
     ) -> None:
         self.engine = engine
-        self.renderer = renderer or FactRenderer()
+        self.renderer = renderer or FactRenderer(engine.schema.ontology)
         self.planner = planner
 
     async def try_answer(
@@ -2938,32 +2961,6 @@ def _last_relation(reference: SemanticReference) -> str | None:
     return reference.path[-1].relation if reference.path else None
 
 
-def _counts_children(reference: SemanticReference) -> bool:
-    if _last_relation(reference) == "child":
-        return True
-    return any(
-        item.source == "relation"
-        and item.property == "household_role"
-        and item.value == "minor_dependent"
-        for step in reference.path
-        for item in step.filters
-    )
-
-
-def _count_noun(request: SemanticFactRequest) -> str:
-    predicates = {item.predicate for item in request.filters}
-    if "adult" in predicates:
-        return "位成年人"
-    if "minor" in predicates:
-        return "个未成年人"
-    reference = request.subject
-    if _counts_children(reference):
-        return "个孩子"
-    if _last_relation(reference) == "member":
-        return "个人"
-    return "条记录"
-
-
 def _relation_label(
     reference: SemanticReference,
     semantic_relation: str | None = None,
@@ -3001,7 +2998,9 @@ def _subject_nominative(reference: SemanticReference) -> str:
 
 def _relation_noun(step: SemanticRelationStep) -> str:
     gender = next(
-        (item.value for item in step.filters if item.property == "gender"),
+        (item.value for item in step.filters if item.property == "gender"
+         and item.source == "entity" and item.operator == "eq" and item.value_from is None
+         and item.value in {"male", "female"}),
         None,
     )
     return {
@@ -3036,22 +3035,6 @@ def _property_label(properties: Sequence[str]) -> str:
         "minor": "未成年人判断资料",
         "full_address": "具体住址",
     }.get(properties[0], "所需信息")
-
-
-def _zh_number(value: int) -> str:
-    return {
-        0: "零",
-        1: "一",
-        2: "两",
-        3: "三",
-        4: "四",
-        5: "五",
-        6: "六",
-        7: "七",
-        8: "八",
-        9: "九",
-        10: "十",
-    }.get(value, str(value))
 
 
 def _format_address(value: Any) -> str:

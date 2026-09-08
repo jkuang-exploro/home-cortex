@@ -33,6 +33,7 @@ class OntologyReferenceConcept:
     name: str
     aliases: tuple[str, ...]
     path: tuple[OntologyRelationStep, ...]
+    label: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,9 @@ class OntologyProperty:
     fields: tuple[str, ...]
     aliases: tuple[str, ...]
     ordering: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    label: tuple[tuple[str, str], ...] = ()
+    # Presentation only: this does not declare a closed domain or normalize values.
+    value_labels: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -63,6 +67,7 @@ class OntologyCollectionPredicate:
     matching_values: tuple[str, ...]
     fallback: OntologyPredicateFallback
     default_scope_relation: str | None = None
+    label: tuple[tuple[str, str], ...] = ()
 
 
 class SemanticOntology:
@@ -290,6 +295,7 @@ def _parse_collection_predicates(
             "matching_values",
             "fallback",
             "default_scope_relation",
+            "label",
         }
         if extra := sorted(set(item) - allowed):
             raise ValueError(f"Unknown {label} fields: {', '.join(extra)}")
@@ -363,6 +369,7 @@ def _parse_collection_predicates(
                 require_past=require_past,
             ),
             default_scope_relation=default_scope_relation,
+            label=_parse_labels(item.get("label", {}), f"{label}.label", path),
         )
     return result
 
@@ -372,7 +379,7 @@ def _parse_properties(raw: Any, path: Path) -> dict[str, OntologyProperty]:
     result: dict[str, OntologyProperty] = {}
     for name, definition in values.items():
         item = _mapping(definition, f"properties.{name}", path)
-        extra = sorted(set(item) - {"fields", "aliases", "ordering"})
+        extra = sorted(set(item) - {"fields", "aliases", "ordering", "label", "value_labels"})
         if extra:
             raise ValueError(f"Unknown properties.{name} fields: {', '.join(extra)}")
         ordering = _mapping(item.get("ordering", {}), f"properties.{name}.ordering", path)
@@ -383,6 +390,13 @@ def _parse_properties(raw: Any, path: Path) -> dict[str, OntologyProperty]:
             _strings(item.get("fields"), f"properties.{name}.fields", path),
             _strings(item.get("aliases", []), f"properties.{name}.aliases", path),
             tuple((key, _strings(values, f"properties.{name}.ordering.{key}", path)) for key, values in ordering.items()),
+            _parse_labels(item.get("label", {}), f"properties.{name}.label", path),
+            tuple(
+                (value, _parse_labels(labels, f"properties.{name}.value_labels.{value}", path))
+                for value, labels in _mapping(
+                    item.get("value_labels", {}), f"properties.{name}.value_labels", path
+                ).items()
+            ),
         )
     return result
 
@@ -407,7 +421,7 @@ def _parse_reference_concepts(
     result: dict[str, OntologyReferenceConcept] = {}
     for name, definition in values.items():
         item = _mapping(definition, f"reference_concepts.{name}", path)
-        extra = sorted(set(item) - {"aliases", "path"})
+        extra = sorted(set(item) - {"aliases", "path", "label"})
         if extra:
             raise ValueError(
                 f"Unknown reference_concepts.{name} fields: {', '.join(extra)}"
@@ -438,8 +452,19 @@ def _parse_reference_concepts(
                 for filter_index, raw_filter in enumerate(step.get("filters", []))
             )
             steps.append(OntologyRelationStep(relation, filters))
-        result[name] = OntologyReferenceConcept(name, aliases, tuple(steps))
+        result[name] = OntologyReferenceConcept(
+            name, aliases, tuple(steps),
+            _parse_labels(item.get("label", {}), f"reference_concepts.{name}.label", path),
+        )
     return result
+
+
+def _parse_labels(raw: Any, field: str, path: Path) -> tuple[tuple[str, str], ...]:
+    labels = _mapping(raw, field, path)
+    if any(not locale.strip() or not isinstance(text, str) or not text.strip()
+           for locale, text in labels.items()):
+        raise ValueError(f"{field} must map locales to nonempty display strings")
+    return tuple((locale, text.strip()) for locale, text in labels.items())
 
 
 def _parse_filter(

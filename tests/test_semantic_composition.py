@@ -332,7 +332,8 @@ async def test_projection_property_selection_and_serialization(household):
 async def test_collection_query_through_service_and_singular_followup_is_ambiguous(household):
     agent,_=agent_for(household,ages(exclude=(SemanticReference(kind='self'),)),anniversary())
     result=await agent.answer('How old are the other household members?',user_entity_id='person:a',conversation_id='one')
-    assert len(result.answer.splitlines())==7 and 'son1: The age is 18 years.' in result.answer
+    assert len(result.answer.splitlines())==8 and 'son1: The age is 18 years.' in result.answer
+    assert 'exclude entities: (you)' in result.answer.splitlines()[0]
     followup=await agent.answer('his birthday',user_entity_id='person:a',conversation_id='one')
     assert 'multiple entities' in followup.answer
 
@@ -417,7 +418,8 @@ async def test_explicit_wife_after_in_law_is_not_spouse_then_daughter(household)
     agent, _ = agent_for(household, in_law, wife)
     await agent.answer('in-law', user_entity_id='person:a', conversation_id='inlaw')
     follow = await agent.answer('wife countdown', user_entity_id='person:a', conversation_id='inlaw')
-    assert follow.answer == 'The birthday is in 271 days.'
+    assert follow.answer.endswith('The birthday is in 271 days.')
+    assert 'spouse {entity.gender = female}' in follow.answer
     assert '2010-04-09' not in follow.answer
 
 

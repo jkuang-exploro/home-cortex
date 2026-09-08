@@ -79,3 +79,35 @@ def test_ontology_rejects_unknown_base_relation(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Unknown base relation"):
         SemanticOntology.from_file(custom_path)
+
+
+def test_display_metadata_does_not_change_planner_contract(tmp_path: Path) -> None:
+    raw = yaml.safe_load(ONTOLOGY_PATH.read_text())
+    labeled = SemanticOntology.from_file(ONTOLOGY_PATH)
+    for group in ('properties', 'collection_predicates', 'reference_concepts'):
+        for definition in raw[group].values():
+            definition.pop('label', None)
+            definition.pop('value_labels', None)
+    path = tmp_path / 'legacy.yaml'
+    path.write_text(yaml.safe_dump(raw))
+    legacy = SemanticOntology.from_file(path)
+    assert legacy.planner_payload() == labeled.planner_payload()
+    assert labeled.properties['gender'].label == (('en', 'gender'), ('zh', '性别'))
+    assert legacy.properties['gender'].label == ()
+    catalog = RuntimeSchemaCatalog.from_data_dir(tmp_path, EdgeSchemaRegistry.load_default())
+    before, after = (SemanticSchemaRegistry(catalog, ontology) for ontology in (legacy, labeled))
+    assert before.planner_capability_payload() == after.planner_capability_payload()
+    assert before.planner_output_schema() == after.planner_output_schema()
+
+
+@pytest.mark.parametrize('field,value', [
+    ('label', {'en': ''}), ('label', {'en': 42}), ('label', ['gender']),
+    ('value_labels', {'female': {'en': False}}), ('value_labels', {'female': 'female'}),
+])
+def test_display_metadata_rejects_malformed_labels(tmp_path: Path, field, value) -> None:
+    raw = yaml.safe_load(ONTOLOGY_PATH.read_text())
+    raw['properties']['gender'][field] = value
+    path = tmp_path / 'invalid.yaml'
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError):
+        SemanticOntology.from_file(path)

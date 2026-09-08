@@ -113,8 +113,10 @@ async def test_date_filtered_set_preserves_bounds_scope_and_cardinality(househol
     empty=query.model_copy(update={'filters':(condition.model_copy(update={'value':('1900-01-01','1901-01-01')}),)})
     result,*_=await engine.execute(empty,ctx)
     assert result.status=='found' and result.value==[]
-    assert FactRenderer().render(empty,result,replace(ctx,locale='zh'))=='没有找到符合筛选条件的记录。'
-    assert FactRenderer().render(empty,result,replace(ctx,locale='en'))=='No records match the filters.'
+    for locale, ending in [('zh', '没有找到符合筛选条件的记录。'), ('en', 'No records match the filters.')]:
+        text = FactRenderer().render(empty,result,replace(ctx,locale=locale))
+        assert text.endswith(ending)
+        assert '1900-01-01' in text and '1901-01-01' in text
     dispatcher.entities['person:b'].pop('dob')
     result,*_=await engine.execute(query,ctx)
     assert result.status=='filter_input_missing'

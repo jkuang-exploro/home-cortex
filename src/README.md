@@ -6,6 +6,28 @@ grounded answer. Household graph reads run only through the semantic fact
 pipeline; model-facing tools provide local calculation and read-only Google
 Calendar access.
 
+## Faithful semantic answer descriptions
+
+`FactRenderer` uses the executed semantic request and result, with the engine's
+ontology, to describe scope and conditions. `semantic_display.py` composes every
+filter, predicate, intermediate traversal, exclusion and comparison operand;
+counts and empty results retain the same description. Relationship conditions
+distinguish independently matching associated edges from a projected single edge.
+Rendering neither reads the utterance nor changes execution values.
+
+Ontology properties, predicates and reference concepts accept optional localized
+`label` maps. Properties also accept presentation-only `value_labels`, for example
+`female: {en: female, zh: 女性}`. These labels do not define a closed value domain
+or normalize input values. Missing labels fall back to English, then the semantic
+key or literal. No new sentence template is needed for an additional filter.
+The model-facing capabilities and output schema omit this display metadata.
+
+This is an additive display extension to ontology version 1, not implementation
+of the proposed version-2 type/value contracts. Deploy the updated loader with the
+labeled ontology; older loaders reject the new fields. Unlabeled V1 ontologies
+remain supported. See the [before/after report](../artifacts/condition-rendering/REPORT.md)
+for validation and presentation limitations.
+
 ## Endpoints
 
 - `GET /health` checks SurrealDB and does not require a Cortex API key.

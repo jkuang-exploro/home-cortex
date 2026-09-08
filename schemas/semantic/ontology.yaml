@@ -2,36 +2,53 @@ version: 1
 
 properties:
   display_name:
+    label: {en: name, zh: 姓名}
     fields: [display_name, name, full_name]
     aliases: [姓名, 名字, name, display name]
   given_name:
+    label: {en: given name, zh: 名字}
     fields: [given_name, first_name]
     aliases: [名字, given name, first name]
   family_name:
+    label: {en: family name, zh: 姓氏}
     fields: [family_name, last_name, surname]
     aliases: [姓氏, surname, family name, last name]
   form_of_address:
+    label: {en: form of address, zh: 称呼}
     fields: [form_of_address, address_as]
     aliases: [称呼, form of address]
   birth_date:
+    label: {en: birth date, zh: 出生日期}
     ordering:
       minimum: [年长, 年纪大, 年龄最大, 出生最早, older, oldest, earliest born]
       maximum: [年幼, 年纪小, 年龄最小, 出生最晚, younger, youngest, latest born]
     fields: [birth_date, birthday, dob, date_of_birth]
     aliases: [生日, 出生日期, 出生时间, 哪天出生, birthday, birth date, date of birth, born]
   full_address:
+    label: {en: street address, zh: 具体住址}
     fields: [full_address, address, street_address]
     aliases: [住址, 地址, 街道地址, full address, street address]
   gender:
+    label: {en: gender, zh: 性别}
+    value_labels:
+      female: {en: female, zh: 女性}
+      male: {en: male, zh: 男性}
     fields: [gender, sex]
     aliases: [性别, gender, sex]
   household_role:
+    label: {en: household role, zh: 家庭角色}
+    value_labels:
+      owner: {en: owner, zh: 户主}
+      adult_dependent: {en: adult dependent, zh: 成年受扶养人}
+      minor_dependent: {en: minor dependent, zh: 未成年受扶养人}
     fields: [household_role, member_role, role]
     aliases: [家庭角色, household role]
   start_date:
+    label: {en: start date, zh: 开始日期}
     fields: [start, since, start_date]
     aliases: [开始日期, 起始日期, 结婚日期, start date, since]
   end_date:
+    label: {en: end date, zh: 结束日期}
     fields: [end, until, end_date]
     aliases: [结束日期, end date, until]
 
@@ -40,6 +57,7 @@ policy_values:
 
 collection_predicates:
   adult:
+    label: {en: adult, zh: 成年人}
     aliases: [成年人, 成人, adults]
     entity_types: [person]
     default_scope_relation: member
@@ -54,6 +72,7 @@ collection_predicates:
       operator: gte
       value_from_policy: adulthood_years
   minor:
+    label: {en: minor, zh: 未成年人}
     aliases: [未成年人, 孩子, 小孩, minors, child]
     entity_types: [person]
     default_scope_relation: member
@@ -82,14 +101,17 @@ base_relations:
 
 reference_concepts:
   member:
+    label: {en: household member, zh: 家庭成员}
     aliases: [家庭成员, household member, resident]
     path:
       - relation: member
   residence:
+    label: {en: residence, zh: 住所}
     aliases: [居住地, 住址, residence, home address]
     path:
       - relation: residence
   spouse:
+    label: {en: spouse, zh: 配偶}
     aliases: [配偶, 爱人, spouse, partner]
     path:
       - relation: spouse
@@ -106,6 +128,7 @@ reference_concepts:
         filters:
           - {property: gender, value: male}
   child:
+    label: {en: child, zh: 子女}
     aliases: [孩子, 小孩, child, children]
     path:
       - relation: child
@@ -122,6 +145,7 @@ reference_concepts:
         filters:
           - {property: gender, value: female}
   parent:
+    label: {en: parent, zh: 父母}
     aliases: [父母, parent, parents]
     path:
       - relation: parent

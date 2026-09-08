@@ -8,3 +8,9 @@
 
 Treat this directory as reference material only. Do not treat its prose as the
 current source of truth for how the interpreter works.
+
+Proposed designs (not implemented):
+
+- [Declarative semantic type and value contracts](design/declarative-semantic-contracts.md)
+  — Ticket 2: existing-contract audit, ontology extension, compatibility and
+  migration plan, change boundaries, and test matrix.
