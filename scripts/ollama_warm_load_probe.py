@@ -2,7 +2,7 @@
 """Isolated Ollama warm-request load_duration probe.
 
 Does not unload models, change Ollama settings, or send a mismatched num_ctx.
-All inference calls keep qwen3.5:9b at context 8192 and keep_alive 24h.
+Inference calls keep the requested model at the resident context and keep_alive 24h.
 
 Direct HTTP experiments use only the standard library. Cortex comparison
 requires PYTHONPATH to an isolated package copy.
@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-MODEL = "qwen3.5:9b"
+MODEL = "qwen3.5:4b"
 NUM_CTX = 8192
 KEEP_ALIVE = "24h"
 TINY_USER = "Reply with the single word: ok"
@@ -279,11 +279,11 @@ def dump_planner_payload(root: Path, utterance: str) -> dict[str, Any]:
         "messages": messages,
         "stream": False,
         "think": False,
-        "keep_alive": PLANNER_KEEP_ALIVE,
+        "keep_alive": KEEP_ALIVE,
         "format": output_schema,
         "options": {
             "temperature": 0,
-            "num_ctx": PLANNER_NUM_CTX,
+            "num_ctx": NUM_CTX,
             "num_predict": PLANNER_NUM_PREDICT,
             "seed": PLANNER_SEED,
         },
@@ -305,11 +305,13 @@ def dump_planner_payload(root: Path, utterance: str) -> dict[str, Any]:
 
 async def run_cortex_planner(root: Path, url: str, utterance: str, warmup: int, repeat: int) -> dict[str, Any]:
     sys.path.insert(0, str(root / "src"))
-    from home_cortex.ollama import OllamaService  # type: ignore
+    from home_cortex.ollama import OllamaService, PLANNER_NUM_CTX  # type: ignore
     from home_cortex.profiling import trace_request  # type: ignore
     from home_cortex.semantic_conversation import SemanticConversationService  # type: ignore
     from home_cortex.semantic_planner_benchmark import build_json_fact_service  # type: ignore
 
+    if PLANNER_NUM_CTX != NUM_CTX:
+        raise RuntimeError(f"planner num_ctx {PLANNER_NUM_CTX} != probe {NUM_CTX}")
     model = OllamaService(url, MODEL)
     service, context = build_json_fact_service(
         root / "benchmarks/fixtures/semantic-contract",
@@ -396,11 +398,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--planner-repeat", type=int, default=8)
     parser.add_argument("--skip-cortex", action="store_true")
     parser.add_argument("--utterance", default="Who am I?")
+    parser.add_argument("--model", default=MODEL)
+    parser.add_argument("--num-ctx", type=int, default=NUM_CTX)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    global MODEL, NUM_CTX
+    MODEL = args.model
+    NUM_CTX = args.num_ctx
     client = OllamaHttp(args.ollama_url, reuse=True)
     started = time.time()
     report: dict[str, Any] = {
@@ -419,7 +426,7 @@ def main() -> None:
         env_before = snapshot(client)
         report["environment_before"] = env_before
         if not env_before["resident"].get("name"):
-            raise RuntimeError("qwen3.5:9b is not resident; refusing to start a cold load")
+            raise RuntimeError(f"{MODEL} is not resident; refusing to start a cold load")
         resident_ctx = env_before["resident"].get("context")
         if resident_ctx not in (None, NUM_CTX):
             raise RuntimeError(f"resident context is {resident_ctx}, not {NUM_CTX}; refusing to mismatch")

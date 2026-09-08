@@ -8,8 +8,9 @@ active source code.**
   notes in `REPORT.md`.
 - `static-prefix-reuse/` records cross-process serialization checks and isolated
   planner/chat/conversation prefill measurements (`REPORT.md` + summaries).
-- `ollama-warm-load/` explains warm-request Ollama `load_duration` on a
-  resident `qwen3.5:9b` runner (`REPORT.md` + `probe-summary.json`).
+- `ollama-warm-load/` explains warm-request Ollama `load_duration`.
+  `REPORT.md` is the 9B / 0.32.13 run; `REPORT-qwen35-4b.md` is the 4B /
+  0.32.15 redo (`probe-summary.json` and `probe-summary-qwen35-4b.json`).
 - The **readable, authoritative** provenance is the `*-summary.json` files and the
   `REPORT.md` / `REPORT-qwen35-9b.md` prose. Prefer these.
 - The large per-case JSONs (e.g. `probe-iteration*.json`, `probe.json`,

@@ -36,6 +36,7 @@ _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用�
 引用语法：
 - self 是已认证的当前说话人，assistant 是本助手，二者 entity_type=person、value=null。对助手的第二人称身份问题仍是事实请求，subject 必须是 assistant。current_household 是配置的家庭，entity_type=address、value=null。named_entity.value 只能逐字复制用户说出的姓名或称呼；不得猜测 ID 或把亲属短语当姓名。
 - path 是概念的有序组合，每步 {"concept":"名称"}，可附加 filters。reference_concepts 是权威定义；完整短语匹配某个 aliases 时，path 只放该最具体概念一次，不拆解或追加近义概念。son 不能简化为 child，wife 不能简化为 spouse，father 不能简化为 parent。本体会完整展开概念的关系和过滤条件。
+- reference_concepts 中 emit 是该概念在输出 path 中占据的唯一一步，path 是供理解的完整展开定义而非额外输出步骤。每个 concept 都是从当前路径终点出发的完整关系，不是只表示最后一跳。概念定义中的内部路径由执行器展开，输出时不得把这些内部步骤再放在该 concept 前后。只有用户明确表达的外层领属才追加概念。新的完整第一人称问题从 self 重新开始，不沿用或累加前一问题的路径。
 - 只有嵌套亲属才增加一跳。性别等形容词约束同一个目标，不增加一跳；额外 filters 与概念原有条件取 AND。说话人的亲属始终从 self 开始，“我家的儿子”也不先遍历全家。
 - 家庭成员列表、计数和极值是 current_household 后接 member。无所属限定的成年人/未成年人/孩子是家庭 member 加对应 predicate；明确“我的孩子”才是 self 后接 child。任何住址或家庭地址查询都从 self 接 residence，再取 full_address；current_household 只用于成员集合，不直接投影地址。遵守 relation_signatures 的起点与终点类型。
 
@@ -83,6 +84,8 @@ def _example_text() -> tuple[tuple[str, str], ...]:
         ("请列出我的女性后代。", "select", reference("self", "daughter"), None, "entity", {}),
         ("我母亲的丈夫是哪位？", "resolve_reference", reference("self", "mother", "husband"), None, "entity", {}),
         ("我的丈夫出生于哪天？", "select", reference("self", "husband"), "birth_date", "entity", {}),
+        ("请介绍婆婆的身份。", "resolve_reference", reference("self", "mother_in_law"), None, "entity", {}),
+        ("请介绍女儿的婆婆的身份。", "resolve_reference", reference("self", "daughter", "mother_in_law"), None, "entity", {}),
         ("我的母亲如今已满多少周岁？", "date_difference", reference("self", "mother"), "birth_date", "entity", {"mode": "years"}),
         ("列出居住关系始于2015年的本户成员。", "select", reference("current_household", "member"), None, "entity", {"filters": [{"property": "start_date", "source": "relation", "operator": "date_range", "value": ["2015-01-01", "2016-01-01"]}]}),
         ("请提供这个家庭的完整地址。", "select", reference("self", "residence"), "full_address", "entity", {}),

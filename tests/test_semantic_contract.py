@@ -438,3 +438,30 @@ def test_ordering_meaning_is_declarative_and_property_specific(household):
     assert 'youngest' in props['birth_date']['ordering']['maximum']
     assert isinstance(props['display_name'],list)
     assert engine.schema.planner_capability_payload()['relation_signatures']['residence']=={'person':['address']}
+
+
+@pytest.mark.asyncio
+async def test_atomic_in_law_concept_does_not_duplicate_its_spouse_step(household):
+    engine, ctx, dispatcher = household
+    dispatcher.entities['person:own_father'] = {
+        'id': 'person:own_father', 'name': 'Own father', 'gender': 'male', 'dob': '1950-01-02',
+    }
+    dispatcher.edges['parent_of'].append({'from': 'person:own_father', 'to': 'person:a'})
+
+    def request(*concepts, operation='resolve_reference', property=None):
+        payload = {'request': {'operation': operation, 'property': property,
+                   'subject': {'kind': 'self', 'entity_type': 'person',
+                               'path': [{'concept': name} for name in concepts]}}}
+        return SemanticFactRequest.model_validate(engine.schema.expand_planner_concepts(payload)['request'])
+
+    # The two complete concepts must remain different even in adjacent turns.
+    own, *_ = await engine.execute(request('father'), ctx)
+    in_law, *_ = await engine.execute(request('father_in_law'), ctx)
+    assert own.evidence.entity_ids == ('person:own_father',)
+    assert in_law.evidence.entity_ids == ('person:father',)
+    birth, *_ = await engine.execute(request('father_in_law', operation='select', property='birth_date'), ctx)
+    assert birth.value == '1955-01-01'
+    # Explicit outer possession is legitimate; never remove a repeated spouse
+    # downstream just because it was wrong for a different natural-language query.
+    nested, *_ = await engine.execute(request('spouse', 'father_in_law'), ctx)
+    assert nested.evidence.entity_ids == ('person:own_father',)

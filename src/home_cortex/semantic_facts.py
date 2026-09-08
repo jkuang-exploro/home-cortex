@@ -533,7 +533,10 @@ class SemanticSchemaRegistry:
                     for relation in full["semantic_relations"]
                 },
                 "property_aliases": ontology["properties"],
-                "reference_concepts": ontology["reference_concepts"],
+                "reference_concepts": {
+                    name: {**definition, "emit": {"concept": name}}
+                    for name, definition in ontology["reference_concepts"].items()
+                },
                 "collection_predicates": ontology["collection_predicates"],
             }
         return self._planner_capability_cache
