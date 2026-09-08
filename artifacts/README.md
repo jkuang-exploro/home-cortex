@@ -6,6 +6,8 @@ active source code.**
 - `qwen35-semantic-contract/` and `tier1-baseline/` contain the output of
   semantic-planner / fact-benchmark runs on real LLMs, plus the investigation
   notes in `REPORT.md`.
+- `kinship-context/` records the multi-turn in-law reproduction, separate 9B/4B
+  comparisons, and rejected prompt experiments (`REPORT.md` + summaries).
 - `static-prefix-reuse/` records cross-process serialization checks and isolated
   planner/chat/conversation prefill measurements (`REPORT.md` + summaries).
 - `ollama-warm-load/` explains warm-request Ollama `load_duration`.

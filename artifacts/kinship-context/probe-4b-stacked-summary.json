@@ -1,0 +1,411 @@
+{
+  "environment": {
+    "version": {
+      "version": "0.32.15"
+    },
+    "ps": {
+      "models": [
+        {
+          "name": "qwen3.5:4b",
+          "model": "qwen3.5:4b",
+          "size": 3341958511,
+          "digest": "2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd",
+          "details": {
+            "parent_model": "",
+            "format": "gguf",
+            "family": "qwen35",
+            "families": [
+              "qwen35"
+            ],
+            "parameter_size": "4.7B",
+            "quantization_level": "Q4_K_M"
+          },
+          "expires_at": "2026-09-09T09:52:05.703944074Z",
+          "size_vram": 3341958511,
+          "context_length": 8192
+        }
+      ]
+    }
+  },
+  "after": {
+    "models": [
+      {
+        "name": "qwen3.5:4b",
+        "model": "qwen3.5:4b",
+        "size": 3341958511,
+        "digest": "2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd",
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen35",
+          "families": [
+            "qwen35"
+          ],
+          "parameter_size": "4.7B",
+          "quantization_level": "Q4_K_M"
+        },
+        "expires_at": "2026-09-09T14:45:08.375247918Z",
+        "size_vram": 3341958511,
+        "context_length": 8192
+      }
+    ]
+  },
+  "payload_hashes": {
+    "kinship-baseline.json": "dbd21f0c57febad8a81300da994593173c53cf69c3abe1284349b60ade1de419",
+    "kinship-candidate.json": "4cac9fc238982923f7355003c516eaa2a736b36ed84617b93f94a561d35c271f"
+  },
+  "scoring": "Exact expanded subject and schema validity; not household answer accuracy",
+  "variants": {
+    "baseline": {
+      "cases": {
+        "sequence-0": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-1": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-2": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-3": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-4": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-5": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-6": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-7": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "minimal_pair-0": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "minimal_pair-1": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-0": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-1": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-2": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-3": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-4": {
+          "correct": 0,
+          "total": 3,
+          "failures": [
+            {
+              "repeat": 0,
+              "subject": {
+                "kind": "self",
+                "value": null,
+                "entity_type": "person",
+                "path": [
+                  {
+                    "concept": "spouse"
+                  },
+                  {
+                    "concept": "father"
+                  }
+                ]
+              }
+            },
+            {
+              "repeat": 1,
+              "subject": {
+                "kind": "self",
+                "value": null,
+                "entity_type": "person",
+                "path": [
+                  {
+                    "concept": "spouse"
+                  },
+                  {
+                    "concept": "father"
+                  }
+                ]
+              }
+            },
+            {
+              "repeat": 2,
+              "subject": {
+                "kind": "self",
+                "value": null,
+                "entity_type": "person",
+                "path": [
+                  {
+                    "concept": "spouse"
+                  },
+                  {
+                    "concept": "father"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "heldout-5": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-6": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-7": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-8": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        }
+      },
+      "mean_wall_ms": 1038.3553516166694,
+      "correct": 54,
+      "total": 57
+    },
+    "candidate": {
+      "cases": {
+        "sequence-0": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-1": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-2": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-3": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-4": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-5": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-6": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "sequence-7": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "minimal_pair-0": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "minimal_pair-1": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-0": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-1": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-2": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-3": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-4": {
+          "correct": 0,
+          "total": 3,
+          "failures": [
+            {
+              "repeat": 0,
+              "subject": {
+                "kind": "self",
+                "value": null,
+                "entity_type": "person",
+                "path": [
+                  {
+                    "concept": "wife"
+                  },
+                  {
+                    "concept": "father_in_law"
+                  }
+                ]
+              }
+            },
+            {
+              "repeat": 1,
+              "subject": {
+                "kind": "self",
+                "value": null,
+                "entity_type": "person",
+                "path": [
+                  {
+                    "concept": "wife"
+                  },
+                  {
+                    "concept": "father_in_law"
+                  }
+                ]
+              }
+            },
+            {
+              "repeat": 2,
+              "subject": {
+                "kind": "self",
+                "value": null,
+                "entity_type": "person",
+                "path": [
+                  {
+                    "concept": "wife"
+                  },
+                  {
+                    "concept": "father_in_law"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "heldout-5": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-6": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-7": {
+          "correct": 3,
+          "total": 3,
+          "failures": []
+        },
+        "heldout-8": {
+          "correct": 0,
+          "total": 3,
+          "failures": [
+            {
+              "repeat": 0,
+              "subject": {
+                "kind": "self",
+                "value": null,
+                "entity_type": "person",
+                "path": [
+                  {
+                    "concept": "mother"
+                  },
+                  {
+                    "concept": "paternal_grandfather"
+                  }
+                ]
+              }
+            },
+            {
+              "repeat": 1,
+              "subject": {
+                "kind": "self",
+                "value": null,
+                "entity_type": "person",
+                "path": [
+                  {
+                    "concept": "mother"
+                  },
+                  {
+                    "concept": "paternal_grandfather"
+                  }
+                ]
+              }
+            },
+            {
+              "repeat": 2,
+              "subject": {
+                "kind": "self",
+                "value": null,
+                "entity_type": "person",
+                "path": [
+                  {
+                    "concept": "mother"
+                  },
+                  {
+                    "concept": "paternal_grandfather"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "mean_wall_ms": 1051.935008825048,
+      "correct": 51,
+      "total": 57
+    }
+  }
+}
