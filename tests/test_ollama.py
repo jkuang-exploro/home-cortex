@@ -73,6 +73,8 @@ async def test_ordinary_chat_call() -> None:
             "messages": [{"role": "user", "content": "Say hello"}],
             "stream": False,
             "think": False,
+            "keep_alive": "24h",
+            "options": {"num_ctx": 8192},
         }
     ]
 
@@ -114,6 +116,8 @@ async def test_tool_call_response() -> None:
     assert client.calls[0]["tools"] == TOOLS
     assert client.calls[0]["stream"] is False
     assert client.calls[0]["think"] is False
+    assert client.calls[0]["keep_alive"] == "24h"
+    assert client.calls[0]["options"] == {"num_ctx": 8192}
 
 
 @pytest.mark.asyncio
@@ -280,6 +284,8 @@ async def test_streaming_tool_chat_yields_chunks_and_closes_stream() -> None:
             "tools": TOOLS,
             "stream": True,
             "think": False,
+            "keep_alive": "24h",
+            "options": {"num_ctx": 8192},
         }
     ]
 

@@ -8,8 +8,13 @@ from ollama import AsyncClient, ChatResponse
 from .profiling import model_call, stage
 
 
-PLANNER_KEEP_ALIVE = "24h"
-PLANNER_NUM_CTX = 8192
+# Keep the same resident runner configuration across ordinary chat and planning.
+# Different context sizes cause Ollama to restart the runner between paths.
+OLLAMA_KEEP_ALIVE = "24h"
+OLLAMA_NUM_CTX = 8192
+# Retain the planner names used by benchmark fingerprinting and probe scripts.
+PLANNER_KEEP_ALIVE = OLLAMA_KEEP_ALIVE
+PLANNER_NUM_CTX = OLLAMA_NUM_CTX
 PLANNER_NUM_PREDICT = 384
 PLANNER_SEED = 0
 _PLANNER_HISTORY_BOUNDARY = (
@@ -225,6 +230,8 @@ class OllamaService:
             messages=messages,
             stream=False,
             think=False,
+            keep_alive=OLLAMA_KEEP_ALIVE,
+            options={"num_ctx": OLLAMA_NUM_CTX},
         )
 
     async def chat_with_tools(
@@ -239,6 +246,8 @@ class OllamaService:
             tools=tools,
             stream=False,
             think=False,
+            keep_alive=OLLAMA_KEEP_ALIVE,
+            options={"num_ctx": OLLAMA_NUM_CTX},
         )
 
     async def plan_semantic_fact(
@@ -284,6 +293,8 @@ class OllamaService:
             tools=tools,
             stream=True,
             think=False,
+            keep_alive=OLLAMA_KEEP_ALIVE,
+            options={"num_ctx": OLLAMA_NUM_CTX},
         )
         stream = cast(AsyncIterator[ChatResponse], response)
         try:

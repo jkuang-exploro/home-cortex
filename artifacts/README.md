@@ -6,6 +6,8 @@ active source code.**
 - `qwen35-semantic-contract/` and `tier1-baseline/` contain the output of
   semantic-planner / fact-benchmark runs on real LLMs, plus the investigation
   notes in `REPORT.md`.
+- `ollama-warm-load/` explains warm-request Ollama `load_duration` on a
+  resident `qwen3.5:9b` runner (`REPORT.md` + `probe-summary.json`).
 - The **readable, authoritative** provenance is the `*-summary.json` files and the
   `REPORT.md` / `REPORT-qwen35-9b.md` prose. Prefer these.
 - The large per-case JSONs (e.g. `probe-iteration*.json`, `probe.json`,
