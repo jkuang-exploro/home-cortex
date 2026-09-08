@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import secrets
 import time
 from collections import OrderedDict
@@ -27,6 +28,7 @@ from .agents import (
 )
 from .config import Settings, get_settings
 from .db import Database
+from .profiling import RequestTraceMiddleware
 from .edge_schema import EdgeSchemaRegistry
 from .schema_catalog import RuntimeSchemaCatalog
 from .display import conversation_language
@@ -224,6 +226,11 @@ async def request_observability(request: Request, call_next):
         duration_ms,
     )
     return response
+
+
+app.add_middleware(
+    RequestTraceMiddleware, enabled=os.environ.get("CORTEX_PROFILE_REQUESTS") == "1"
+)
 
 
 @app.exception_handler(StarletteHTTPException)

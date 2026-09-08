@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -13,6 +14,7 @@ from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from .profiling import stage
 from .display import resolve_display_name
 from .edge_schema import EdgeSchemaRegistry, UnknownEdgeSchemaError
 from .operator_registry import (
@@ -489,6 +491,7 @@ class SemanticSchemaRegistry:
         }
         return self._capability_cache
 
+    @stage("schema.capabilities")
     def planner_capability_payload(self) -> dict[str, Any]:
         """Serialize the executable grammar, without storage or redundant aliases."""
         if self._planner_capability_cache is None:
@@ -535,6 +538,7 @@ class SemanticSchemaRegistry:
             }
         return self._planner_capability_cache
 
+    @stage("schema.output")
     def planner_output_schema(self) -> dict[str, Any]:
         """Constrain model output to this deployment's semantic vocabulary.
 
@@ -1117,6 +1121,7 @@ class SemanticFactPlanner:
         self.ollama = ollama
         self.schema = schema
 
+    @stage("planner.total")
     async def plan(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -1250,6 +1255,7 @@ class EntityResolver:
         self.schema = schema
         self.max_records = max_records
 
+    @stage("resolver.total")
     async def resolve(
         self,
         reference: SemanticReference,
@@ -1543,6 +1549,7 @@ class HouseholdFactEngine:
             max_records=max_records,
         )
 
+    @stage("executor.total")
     async def execute(
         self,
         request: SemanticFactRequest,
@@ -2155,6 +2162,7 @@ class HouseholdFactEngine:
 
 
 class FactRenderer:
+    @stage("renderer")
     def render(
         self,
         request: SemanticFactRequest,
@@ -2597,6 +2605,7 @@ class _FactExecution:
         if evidence not in self.relationship_evidence:
             self.relationship_evidence.append(evidence)
 
+    @stage("graph.records")
     async def records(self, tool: str, arguments: dict[str, Any]) -> list[dict[str, Any]]:
         entity_id = arguments.get("entity_id")
         if tool == "get_entity" and isinstance(entity_id, str):

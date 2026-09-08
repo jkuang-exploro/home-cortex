@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 from ollama import ChatResponse
 
+from .profiling import model_call, observe_usage, stream_model_call
 from .ollama import PLANNER_NUM_PREDICT, PLANNER_SEED, planner_chat_messages
 
 DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1"
@@ -94,6 +95,7 @@ class OpenRouterService:
             raise ValueError("Semantic fact planner returned a non-object")
         return parsed
 
+    @stream_model_call("openrouter")
     async def stream_chat_with_tools(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -115,6 +117,7 @@ class OpenRouterService:
             await _raise_for_status(response)
             tool_fragments: dict[int, dict[str, Any]] = {}
             async for event in _iter_sse_json(response):
+                observe_usage(event)
                 delta = _choice_delta(event)
                 if delta is None:
                     continue
@@ -175,6 +178,7 @@ class OpenRouterService:
             tool_calls=message.get("tool_calls"),
         )
 
+    @model_call("openrouter")
     async def _post(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         response = await self.client.post(
             f"{self.base_url}/chat/completions",

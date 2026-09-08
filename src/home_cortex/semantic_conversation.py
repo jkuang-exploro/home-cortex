@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -9,6 +10,7 @@ from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
+from .profiling import stage
 from .semantic_facts import (
     AgentRequestContext,
     DiscourseContext,
@@ -34,6 +36,7 @@ class SemanticConversationService:
         self.maximum = maximum
         self._states: OrderedDict[tuple[str, str, str | None, str], _Conversation] = OrderedDict()
 
+    @stage("conversation.total")
     async def try_answer(
         self, messages: Sequence[Mapping[str, Any]], *, context: AgentRequestContext,
         request_id: str = "-",

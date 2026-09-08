@@ -1,0 +1,207 @@
+{
+  "mode": "ollama",
+  "scope": "semantic conversation pipeline; excludes HTTP/auth and production SurrealDB",
+  "sample_count": 35,
+  "repeat": 1,
+  "warmup": "one full suite pass excluded",
+  "latency_ms": {
+    "n": 35,
+    "p50": 2168.998,
+    "p95": 3201.172
+  },
+  "mean_exclusive_ms": {
+    "llm.ollama": 2358.946652715011,
+    "planner.messages": 0.4298838279542646,
+    "planner.total": 0.32637945966728565,
+    "conversation.total": 0.24577425959120905,
+    "executor.total": 0.10512753672498677,
+    "resolver.total": 0.05527788848017475,
+    "graph.records": 0.035799259369793744,
+    "renderer": 0.011479711974970996,
+    "schema.output": 0.0010986271913030318,
+    "schema.capabilities": 0.0009355713180931551
+  },
+  "semantic_matches": 28,
+  "structured_correct": 31,
+  "structured_unscored": 0,
+  "llm_calls": 37,
+  "prompt_components": [
+    {
+      "message_content": {
+        "instructions": {
+          "utf8_bytes": 6786,
+          "approx_tokens_utf8_div_4": 1696.5,
+          "content_byte_percent": 34.18984280532044
+        },
+        "capabilities": {
+          "utf8_bytes": 7243,
+          "approx_tokens_utf8_div_4": 1810.75,
+          "content_byte_percent": 36.492341797662235
+        },
+        "examples": {
+          "utf8_bytes": 5525,
+          "approx_tokens_utf8_div_4": 1381.25,
+          "content_byte_percent": 27.836557839580813
+        },
+        "reminder_history_query_notes": {
+          "utf8_bytes": 279,
+          "approx_tokens_utf8_div_4": 69.75,
+          "content_byte_percent": 1.405683192261185
+        },
+        "system_separator": {
+          "utf8_bytes": 15,
+          "approx_tokens_utf8_div_4": 3.75,
+          "content_byte_percent": 0.07557436517533253
+        }
+      },
+      "output_schema_bytes_separate": 6549,
+      "wire_messages_bytes": 23096,
+      "example_pairs": 22,
+      "content_sha256": "748e64340b3bdf21aa26ea55dcd04246030a77e7ed9a8a1b5f2d94916f1da0aa"
+    }
+  ],
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/hc-token-audit-baseline-v2/benchmarks/semantic_planner_synthetic.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "4c6bc495af10e6b434120ac0f4ca05964f824679fe36733993783e4a764a7835",
+    "data_tree_sha256": "94d2e554023019f0c53bcaa4cbbd06d06caace6612bef34e93f7ff545f18fd48",
+    "schema_tree_sha256": "4144c93ae28d050851b302e676e1a29fa1095aab4b978eebaa25cd53b4b3a3eb",
+    "imported_package_path": "/tmp/hc-token-audit-baseline-v2/src/home_cortex/semantic_planner_benchmark.py",
+    "copied_package_sha256": "95439c44fe9a7f9aad54a27936a7c9ff82545a20a786daeb71428e76160ef88f",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.13",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 8192,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 1,
+    "verified_cold": false
+  },
+  "datasets_sha256": {
+    "semantic_planner_synthetic.yaml": "4c6bc495af10e6b434120ac0f4ca05964f824679fe36733993783e4a764a7835",
+    "semantic_planner_age_filters.yaml": "7557e7b13a396666a2bcd4bdd6c70bc3dd18215f9e223c5deeaf7b9b492dbc0b",
+    "semantic_planner_date_intervals.yaml": "152c64430e093d58840a309e59f3bf1e11131a9b5f54962e4c55055e52d6b752"
+  },
+  "model_metrics": {
+    "input_tokens": {
+      "observed_calls": 37,
+      "total": 170074,
+      "mean_per_call": 4596.594594594595,
+      "mean_per_request": 4859.257142857143
+    },
+    "output_tokens": {
+      "observed_calls": 37,
+      "total": 2025,
+      "mean_per_call": 54.729729729729726,
+      "mean_per_request": 57.857142857142854
+    },
+    "ttft_ms": {
+      "observed_calls": 0,
+      "total": null,
+      "mean_per_call": null,
+      "mean_per_request": null
+    },
+    "prefill_ms": {
+      "observed_calls": 37,
+      "total": 17007.799999,
+      "mean_per_call": 459.67027024324324,
+      "mean_per_request": 485.9371428285714
+    },
+    "generation_ms": {
+      "observed_calls": 37,
+      "total": 37870.904,
+      "mean_per_call": 1023.537945945946,
+      "mean_per_request": 1082.0258285714287
+    },
+    "load_ms": {
+      "observed_calls": 37,
+      "total": 25042.818037,
+      "mean_per_call": 676.832919918919,
+      "mean_per_request": 715.5090867714285
+    },
+    "duration_ms": {
+      "observed_calls": 37,
+      "total": 82563.1328450254,
+      "mean_per_call": 2231.436022838524,
+      "mean_per_request": 2358.946652715011
+    }
+  },
+  "followups": [
+    {
+      "case_id": "followup-stateless",
+      "total_ms": 3481.05886799749,
+      "llm_calls": 2,
+      "structured_correct": true
+    },
+    {
+      "case_id": "followup-persistent",
+      "total_ms": 1869.804939997266,
+      "llm_calls": 1,
+      "structured_correct": true
+    }
+  ],
+  "failures": [
+    {
+      "case_id": "daughter_identity_a",
+      "semantic_match": false,
+      "structured_correct": true,
+      "status": "found"
+    },
+    {
+      "case_id": "born_1980_0",
+      "semantic_match": false,
+      "structured_correct": false,
+      "status": "found"
+    },
+    {
+      "case_id": "born_1982_0",
+      "semantic_match": false,
+      "structured_correct": false,
+      "status": "found"
+    },
+    {
+      "case_id": "born_count_0",
+      "semantic_match": false,
+      "structured_correct": false,
+      "status": "found"
+    },
+    {
+      "case_id": "born_1988_0",
+      "semantic_match": false,
+      "structured_correct": true,
+      "status": "found"
+    },
+    {
+      "case_id": "wife_birth",
+      "semantic_match": false,
+      "structured_correct": true,
+      "status": "found"
+    },
+    {
+      "case_id": "household_count::How many people are in my household?",
+      "semantic_match": false,
+      "structured_correct": false,
+      "status": "semantic_plan_unsupported"
+    }
+  ]
+}

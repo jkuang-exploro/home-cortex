@@ -1,0 +1,103 @@
+{
+  "scope": "Full ASGI request/response with real SurrealDB on a temporary synthetic namespace; excludes browser, TCP ingress and proxy",
+  "sample_count": 10,
+  "latency_ms": {
+    "n": 10,
+    "p50": 2146.44,
+    "p95": 3028.085
+  },
+  "mean_exclusive_ms": {
+    "agent.prepare": 0.0403269033995457,
+    "llm.ollama": 2296.1729944028775,
+    "executor.total": 0.12225271057104692,
+    "conversation.total": 0.24127239448716864,
+    "schema.capabilities": 0.0010221003321930766,
+    "resolver.total": 0.057165397447533906,
+    "graph.records": 0.2350967944948934,
+    "context.trusted": 0.03757009835680947,
+    "surreal.query": 3.7920463990303688,
+    "renderer": 0.01685830211499706,
+    "planner.messages": 0.18939909932669252,
+    "messages.normalize": 0.005983799928799272,
+    "identity.normalize": 0.0032176001695916057,
+    "agent.total": 0.017527598538435996,
+    "schema.output": 0.001104401599150151,
+    "planner.total": 0.2964813946164213
+  },
+  "llm_calls": 10,
+  "db_queries": 39,
+  "cases": [
+    {
+      "case_id": "speaker_a_marriage",
+      "total_ms": 2141.0390329983784,
+      "llm_calls": 1,
+      "db_queries": 2,
+      "response_sha256": "74caade2bd8bde5401288ac7197206e216fde733a96f6abcbe8186ea495b4b7e"
+    },
+    {
+      "case_id": "wife_birth",
+      "total_ms": 2151.841635000892,
+      "llm_calls": 1,
+      "db_queries": 3,
+      "response_sha256": "3ffa30185ea7c475be2fad7ed1c76835374493fbfbba1c4be867218fec2fecef"
+    },
+    {
+      "case_id": "daughter_birth",
+      "total_ms": 2123.884603002807,
+      "llm_calls": 1,
+      "db_queries": 3,
+      "response_sha256": "556309c645189eb87e196b671f21579cdd1f185d41d9f62429e8f46305b0cdec"
+    },
+    {
+      "case_id": "ambiguous_sons",
+      "total_ms": 2192.320464004297,
+      "llm_calls": 1,
+      "db_queries": 2,
+      "response_sha256": "5cf977077f6d1d37d0a7343eccd883ff4b1ad230f26312d4b34aa46e184ebf46"
+    },
+    {
+      "case_id": "wife_identity_a",
+      "total_ms": 2080.3200069931336,
+      "llm_calls": 1,
+      "db_queries": 2,
+      "response_sha256": "82c244b61ee8cba630608743bdee6c5404e197bf25e4c896b0110413ee7d1c49"
+    },
+    {
+      "case_id": "unknown_name",
+      "total_ms": 2018.8730780064361,
+      "llm_calls": 1,
+      "db_queries": 2,
+      "response_sha256": "33696e72bf12ca4e201e0d14ace7d6776ed1f0a9f697e36479096f6be190fb91"
+    },
+    {
+      "case_id": "wife_age_2",
+      "total_ms": 2207.6289799879305,
+      "llm_calls": 1,
+      "db_queries": 3,
+      "response_sha256": "ee4ae5b942516b276b73d769aefbac213a12966517a772034debd12b3f6ff22d"
+    },
+    {
+      "case_id": "self_age_1",
+      "total_ms": 2075.2954829949886,
+      "llm_calls": 1,
+      "db_queries": 2,
+      "response_sha256": "e9e5fe6bb2627953814651e1fd9d6e44f7ba1fb4fc484d392b2e5530df6ac6c7"
+    },
+    {
+      "case_id": "born_1988_1",
+      "total_ms": 2920.911030989373,
+      "llm_calls": 1,
+      "db_queries": 10,
+      "response_sha256": "2329f5f6d7cbae4b81a59567eb8135e59f706a122e1a5d8b2eadf7ef50995b22"
+    },
+    {
+      "case_id": "born_1982_0",
+      "total_ms": 3115.7728059915826,
+      "llm_calls": 1,
+      "db_queries": 10,
+      "response_sha256": "2329f5f6d7cbae4b81a59567eb8135e59f706a122e1a5d8b2eadf7ef50995b22"
+    }
+  ],
+  "unattributed_http_ms": 1.5583925996907055,
+  "mean_non_llm_ms": 6.615717594104353
+}

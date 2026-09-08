@@ -1,0 +1,189 @@
+{
+  "mode": "ollama",
+  "scope": "semantic conversation pipeline; excludes HTTP/auth and production SurrealDB",
+  "sample_count": 35,
+  "repeat": 1,
+  "warmup": "one full suite pass excluded",
+  "latency_ms": {
+    "n": 35,
+    "p50": 2174.457,
+    "p95": 3065.113
+  },
+  "mean_exclusive_ms": {
+    "llm.ollama": 2311.064167229259,
+    "planner.total": 0.3297727700555697,
+    "conversation.total": 0.25699559898514834,
+    "planner.messages": 0.20014062839826302,
+    "executor.total": 0.11860439886472054,
+    "resolver.total": 0.059247316260422976,
+    "graph.records": 0.03587111298527036,
+    "renderer": 0.012142601190134883,
+    "schema.output": 0.001234228173936052,
+    "schema.capabilities": 0.0009526864492467471
+  },
+  "semantic_matches": 31,
+  "structured_correct": 33,
+  "structured_unscored": 0,
+  "llm_calls": 36,
+  "prompt_components": [
+    {
+      "message_content": {
+        "instructions": {
+          "utf8_bytes": 6786,
+          "approx_tokens_utf8_div_4": 1696.5,
+          "content_byte_percent": 34.18984280532044
+        },
+        "capabilities": {
+          "utf8_bytes": 7243,
+          "approx_tokens_utf8_div_4": 1810.75,
+          "content_byte_percent": 36.492341797662235
+        },
+        "examples": {
+          "utf8_bytes": 5525,
+          "approx_tokens_utf8_div_4": 1381.25,
+          "content_byte_percent": 27.836557839580813
+        },
+        "reminder_history_query_notes": {
+          "utf8_bytes": 279,
+          "approx_tokens_utf8_div_4": 69.75,
+          "content_byte_percent": 1.405683192261185
+        },
+        "system_separator": {
+          "utf8_bytes": 15,
+          "approx_tokens_utf8_div_4": 3.75,
+          "content_byte_percent": 0.07557436517533253
+        }
+      },
+      "output_schema_bytes_separate": 6549,
+      "wire_messages_bytes": 23096,
+      "example_pairs": 22,
+      "content_sha256": "ab05613e684e859c04168b9975d7eab739eace5279324875402acf55e75d756e"
+    }
+  ],
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/hc-token-audit-after/benchmarks/semantic_planner_synthetic.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "4c6bc495af10e6b434120ac0f4ca05964f824679fe36733993783e4a764a7835",
+    "data_tree_sha256": "94d2e554023019f0c53bcaa4cbbd06d06caace6612bef34e93f7ff545f18fd48",
+    "schema_tree_sha256": "4144c93ae28d050851b302e676e1a29fa1095aab4b978eebaa25cd53b4b3a3eb",
+    "imported_package_path": "/tmp/hc-token-audit-after/src/home_cortex/semantic_planner_benchmark.py",
+    "copied_package_sha256": "8cc45fd1e2bb8b4712f06fb46d2346eced8ff22478a544bec9a970200bedb319",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.13",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 8192,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 1,
+    "verified_cold": false
+  },
+  "datasets_sha256": {
+    "semantic_planner_synthetic.yaml": "4c6bc495af10e6b434120ac0f4ca05964f824679fe36733993783e4a764a7835",
+    "semantic_planner_age_filters.yaml": "7557e7b13a396666a2bcd4bdd6c70bc3dd18215f9e223c5deeaf7b9b492dbc0b",
+    "semantic_planner_date_intervals.yaml": "152c64430e093d58840a309e59f3bf1e11131a9b5f54962e4c55055e52d6b752"
+  },
+  "model_metrics": {
+    "input_tokens": {
+      "observed_calls": 36,
+      "total": 165423,
+      "mean_per_call": 4595.083333333333,
+      "mean_per_request": 4726.371428571429
+    },
+    "output_tokens": {
+      "observed_calls": 36,
+      "total": 1977,
+      "mean_per_call": 54.916666666666664,
+      "mean_per_request": 56.48571428571429
+    },
+    "ttft_ms": {
+      "observed_calls": 0,
+      "total": null,
+      "mean_per_call": null,
+      "mean_per_request": null
+    },
+    "prefill_ms": {
+      "observed_calls": 36,
+      "total": 16578.264999,
+      "mean_per_call": 460.5073610833333,
+      "mean_per_request": 473.6647142571428
+    },
+    "generation_ms": {
+      "observed_calls": 36,
+      "total": 37097.966,
+      "mean_per_call": 1030.4990555555555,
+      "mean_per_request": 1059.9418857142857
+    },
+    "load_ms": {
+      "observed_calls": 36,
+      "total": 24632.815447,
+      "mean_per_call": 684.2448735277778,
+      "mean_per_request": 703.7947270571428
+    },
+    "duration_ms": {
+      "observed_calls": 36,
+      "total": 80887.24585302407,
+      "mean_per_call": 2246.86794036178,
+      "mean_per_request": 2311.064167229259
+    }
+  },
+  "followups": [
+    {
+      "case_id": "followup-stateless",
+      "total_ms": 3546.4261360029923,
+      "llm_calls": 2,
+      "structured_correct": true
+    },
+    {
+      "case_id": "followup-persistent",
+      "total_ms": 1810.1964089873945,
+      "llm_calls": 1,
+      "structured_correct": true
+    }
+  ],
+  "failures": [
+    {
+      "case_id": "daughter_identity_a",
+      "semantic_match": false,
+      "structured_correct": true,
+      "status": "found"
+    },
+    {
+      "case_id": "born_1980_0",
+      "semantic_match": false,
+      "structured_correct": false,
+      "status": "found"
+    },
+    {
+      "case_id": "born_1982_0",
+      "semantic_match": false,
+      "structured_correct": false,
+      "status": "found"
+    },
+    {
+      "case_id": "born_1988_0",
+      "semantic_match": false,
+      "structured_correct": true,
+      "status": "found"
+    }
+  ]
+}

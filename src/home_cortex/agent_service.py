@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from .profiling import stage
 from .display import (
     conversation_language,
     internal_ids_requested,
@@ -119,6 +121,7 @@ class AgentService:
             conversation_id=conversation_id,
         )
 
+    @stage("agent.total")
     async def answer_messages(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -186,6 +189,7 @@ class AgentService:
         ):
             yield token
 
+    @stage("agent.prepare")
     async def _prepare_request(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -232,6 +236,7 @@ class AgentService:
             expose_internal_ids=internal_ids_requested(safe_messages),
         )
 
+    @stage("context.trusted")
     def _trusted_conversation(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -252,6 +257,7 @@ class AgentService:
         return datetime.now(ZoneInfo(self.household_timezone))
 
 
+@stage("identity.normalize")
 def _normalized_identity(
     user_entity_id: str | None,
     user_entity: Mapping[str, Any] | None,
@@ -322,6 +328,7 @@ def _identity_context(user_entity: Mapping[str, Any]) -> list[dict[str, str]]:
     ]
 
 
+@stage("messages.normalize")
 def _conversation_messages(
     messages: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:

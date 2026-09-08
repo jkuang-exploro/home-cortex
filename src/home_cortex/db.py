@@ -2,6 +2,7 @@ from typing import Any
 
 from surrealdb import AsyncSurreal
 
+from .profiling import stage
 from .config import Settings
 
 
@@ -33,6 +34,7 @@ class Database:
         self._require_connection()
         return str(await self.client.version())
 
+    @stage("surreal.query")
     async def query(
         self,
         statement: str,

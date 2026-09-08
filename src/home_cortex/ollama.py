@@ -1,8 +1,11 @@
 import json
+from functools import lru_cache
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any, cast
 
 from ollama import AsyncClient, ChatResponse
+
+from .profiling import model_call, stage
 
 
 PLANNER_KEEP_ALIVE = "24h"
@@ -51,6 +54,12 @@ _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用�
 """
 
 def _semantic_planner_examples() -> list[dict[str, str]]:
+    # Cache only immutable text; callers still own their message dictionaries.
+    return [{"role": role, "content": content} for role, content in _example_text()]
+
+
+@lru_cache(maxsize=1)
+def _example_text() -> tuple[tuple[str, str], ...]:
     """Illustrate reusable grammar without evaluation wording or household facts."""
     def reference(kind: str, *concepts: str) -> dict[str, Any]:
         return {"kind": kind, "value": None,
@@ -124,7 +133,7 @@ def _semantic_planner_examples() -> list[dict[str, str]]:
             },
         }, ensure_ascii=False, separators=(",", ":"))},
     ))
-    return messages
+    return tuple((message["role"], message["content"]) for message in messages)
 
 
 def planner_system_prompt(capabilities: Mapping[str, Any]) -> str:
@@ -135,6 +144,7 @@ def planner_system_prompt(capabilities: Mapping[str, Any]) -> str:
     )
 
 
+@stage("planner.messages")
 def planner_chat_messages(
     messages: Sequence[Mapping[str, Any]],
     capabilities: Mapping[str, Any],
@@ -201,12 +211,16 @@ class OllamaService:
         self.client = client or AsyncClient(host=self.base_url)
         self.last_planner_runtime: dict[str, Any] = {}
 
+    @model_call("ollama")
+    async def _chat(self, **kwargs):
+        return await self.client.chat(**kwargs)
+
     async def chat(
         self,
         messages: Sequence[Mapping[str, Any]],
     ) -> ChatResponse:
         """Send one ordinary chat request without exposing tools."""
-        return await self.client.chat(
+        return await self._chat(
             model=self.model,
             messages=messages,
             stream=False,
@@ -219,7 +233,7 @@ class OllamaService:
         tools: Sequence[Mapping[str, Any]],
     ) -> ChatResponse:
         """Send one request that lets the model choose a read-only Cortex tool."""
-        return await self.client.chat(
+        return await self._chat(
             model=self.model,
             messages=messages,
             tools=tools,
@@ -236,7 +250,7 @@ class OllamaService:
         household_now: str,
     ) -> Mapping[str, Any]:
         """Interpret an open-ended request without exposing physical storage."""
-        response = await self.client.chat(
+        response = await self._chat(
             model=self.model,
             messages=planner_chat_messages(
                 messages, capabilities, household_now=household_now
@@ -264,7 +278,7 @@ class OllamaService:
         tools: Sequence[Mapping[str, Any]],
     ) -> AsyncIterator[ChatResponse]:
         """Stream one response while allowing read-only Cortex tool calls."""
-        response = await self.client.chat(
+        response = await self._chat(
             model=self.model,
             messages=messages,
             tools=tools,

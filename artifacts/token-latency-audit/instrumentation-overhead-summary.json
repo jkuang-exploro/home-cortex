@@ -1,0 +1,7 @@
+{
+  "scope": "Local replay identity; 100 warm-up + 1000 measured requests per condition; tracing toggle, no inference",
+  "p50_ms": {
+    "False": 0.29068702133372426,
+    "True": 0.3000620345119387
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "scope": "Same-process prompt construction; 10 alternating batches of 1000 calls; no inference",
+  "exact_message_equivalence_cases": 53,
+  "median_ms_per_call": {
+    "baseline": 0.09186554199550301,
+    "after": 0.040475771005731076
+  }
+}

@@ -541,3 +541,52 @@ docker compose exec cortex-api \
   --ollama-url http://ollama:11434 \
   --model qwen3.5:9b
 ```
+
+### Opt-in latency and token audit
+
+Set `CORTEX_PROFILE_REQUESTS=1` in the API process environment before startup to
+emit one bounded `request_profile` JSON log per HTTP request. It includes the
+complete ASGI lifetime (including streamed bodies), named nested stage intervals,
+and every model transport call, including validation retries, discourse replay,
+and ordinary chat/tool selection. Logs retain at most 512 intervals and count
+any dropped intervals. They contain numeric usage/timing and exception types;
+prompts, model output, SQL, identities, and graph values are omitted.
+
+For an isolated Python invocation, use
+`with home_cortex.profiling.trace_request() as trace:` around the awaited request
+and inspect `trace.events`. Tracing is disabled by default. Each event has a
+start offset and elapsed duration; nested intervals must not be added together.
+The audit harness calculates exclusive contributions for its sequential requests.
+
+Provider-reported input/output/reasoning tokens and load/prefill/generation times
+remain `null` when unavailable. Non-streaming planner calls cannot measure TTFT.
+Streaming calls measure the first observed content, reasoning or tool delta;
+post-TTFT wall time includes consumer backpressure. Provider generation duration
+is a distinct field. The older `routing_ms`, `llm_ms`, and `request_ms` diagnostic
+fields overlap; `last_planner_runtime` retains only the latest attempt and must
+not be used to total retries or concurrent requests. Use the request trace instead.
+
+Reproduce the synthetic audit from an isolated package on the GPU host:
+
+```sh
+PYTHONHASHSEED=0 PYTHONPATH=src python scripts/token_latency_audit.py \
+  --mode ollama --repeat 1 --output /tmp/probe-audit.json
+PYTHONHASHSEED=0 PYTHONPATH=src python scripts/token_component_probe.py \
+  --output /tmp/component-summary.json
+```
+
+`--mode replay --repeat 10` on the first command measures deterministic processing
+with declared expected IR and no inference; its scores are not model accuracy.
+The benchmark uses each dataset's frozen clock and an excluded full warm-up pass.
+Pin the hash seed in both comparison processes: relationship-property dictionaries
+currently inherit set iteration order. The separate raw-generation component
+probe consumes one output token per component and does not measure chat framing.
+Run it outside timed benchmark passes.
+
+`scripts/http_latency_audit.py --output /tmp/http-audit.json` supplements this with
+the full ASGI route and real SurrealDB queries. It uses existing DB credentials,
+creates a UUID-named `hc_latency_audit_*` namespace with the invented fixture,
+and removes that namespace in `finally`. Run only in an isolated process;
+it replaces that process's FastAPI runtime state. It never selects the configured
+production namespace. ASGI timings exclude browser, reverse-proxy and TCP ingress.
+See [the audit report](../artifacts/token-latency-audit/REPORT.md) for results and limits.
