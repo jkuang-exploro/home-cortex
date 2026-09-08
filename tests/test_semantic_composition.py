@@ -17,7 +17,7 @@ from home_cortex.semantic_facts import (
     DiscourseContext, FactRenderer, SemanticFactRequest, SemanticReference,
     SemanticRelationStep, SemanticFilter, SemanticPlannerFailure,
 )
-from test_semantic_contract import household
+from test_semantic_contract import household, ref, step
 
 
 def members():
@@ -386,6 +386,39 @@ async def test_collection_exclusion_concept_expands_without_dropping_filters(hou
     assert payload['request']['exclude'][0]['path'][0]=={'concept':'wife'}
     result,*_=await household[0].execute(request,household[1])
     assert 'person:b' not in {row.entity['id'] for row in result.rows}
+
+
+@pytest.mark.asyncio
+async def test_explicit_wife_after_in_law_is_not_spouse_then_daughter(household):
+    engine, context, _ = household
+    context = replace(context, locale='zh')
+    wife = SemanticFactRequest(
+        operation='annual_occurrence',
+        subject=ref(step('spouse', 'female')),
+        property='birth_date',
+        mode='days',
+    )
+    wrong = SemanticFactRequest(
+        operation='select',
+        subject=ref(step('spouse'), step('child', 'female')),
+        property='birth_date',
+    )
+    in_law = SemanticFactRequest(
+        operation='resolve_reference',
+        subject=ref(step('spouse'), step('parent', 'male')),
+    )
+    wife_result, *_ = await engine.execute(wife, context)
+    wrong_result, *_ = await engine.execute(wrong, context)
+    assert wife_result.evidence.entity_ids == ('person:b',)
+    assert wrong_result.evidence.entity_ids == ('person:daughter',)
+    assert '妻子' in FactRenderer().render(wife, wife_result, context)
+    assert '女儿' not in FactRenderer().render(wife, wife_result, context)
+    assert '配偶的女儿' in FactRenderer().render(wrong, wrong_result, context)
+    agent, _ = agent_for(household, in_law, wife)
+    await agent.answer('in-law', user_entity_id='person:a', conversation_id='inlaw')
+    follow = await agent.answer('wife countdown', user_entity_id='person:a', conversation_id='inlaw')
+    assert follow.answer == 'The birthday is in 271 days.'
+    assert '2010-04-09' not in follow.answer
 
 
 @pytest.mark.asyncio
