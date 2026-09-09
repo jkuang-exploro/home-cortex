@@ -15,6 +15,7 @@ from .record_ids import (
     canonical_record_id,
     split_record_id,
 )
+from .schema_catalog import node_table_sources
 
 TABLE_PATTERN = TABLE_NAME_RE
 _RETIRED_EDGE_TABLES = ("contained_in",)
@@ -176,7 +177,8 @@ async def ingest_directory(
         )
 
     registry = edge_registry or EdgeSchemaRegistry.load_default(data_dir)
-    node_files = sorted(nodes_dir.glob("*.json"))
+    node_sources = node_table_sources(nodes_dir)
+    node_files = [path for paths in node_sources.values() for path in paths]
     edge_files = sorted(edges_dir.glob("*.json"))
     source_relationships = {path.stem for path in edge_files}
     missing_relationships = sorted(
@@ -192,32 +194,33 @@ async def ingest_directory(
     prepared_edges: dict[str, list[_PreparedEdge]] = {}
 
     # Validate the entire source before mutating the database.
-    for path in node_files:
+    for table, paths in node_sources.items():
         table_nodes: list[_PreparedNode] = []
         seen_node_ids: set[str] = set()
-        for record in _records_from_file(path):
-            _validate_node_name(record, path)
-            raw_id = record.get("id")
-            if not isinstance(raw_id, str):
-                raise ValueError(f"Node in {path} is missing a string 'id'")
-            record_id = parse_record_id(raw_id, source=path)
-            if record_id.table_name != path.stem:
-                raise ValueError(
-                    f"Node ID {raw_id!r} in {path} must use the {path.stem!r} table"
+        for path in paths:
+            for record in _records_from_file(path):
+                _validate_node_name(record, path)
+                raw_id = record.get("id")
+                if not isinstance(raw_id, str):
+                    raise ValueError(f"Node in {path} is missing a string 'id'")
+                record_id = parse_record_id(raw_id, source=path)
+                if record_id.table_name != table:
+                    raise ValueError(
+                        f"Node ID {raw_id!r} in {path} must use the {table!r} table"
+                    )
+                canonical_id = canonical_record_id(record_id)
+                if canonical_id in seen_node_ids:
+                    raise ValueError(f"Duplicate node ID {record_id} in {path}")
+                seen_node_ids.add(canonical_id)
+                _validate_address_as(record, path, record_id.table_name)
+                _validate_person_relationship_status(
+                    record,
+                    path,
+                    record_id.table_name,
                 )
-            canonical_id = canonical_record_id(record_id)
-            if canonical_id in seen_node_ids:
-                raise ValueError(f"Duplicate node ID {record_id} in {path}")
-            seen_node_ids.add(canonical_id)
-            _validate_address_as(record, path, record_id.table_name)
-            _validate_person_relationship_status(
-                record,
-                path,
-                record_id.table_name,
-            )
-            content = {key: value for key, value in record.items() if key != "id"}
-            table_nodes.append(_PreparedNode(record_id, content))
-        prepared_nodes[path.stem] = table_nodes
+                content = {key: value for key, value in record.items() if key != "id"}
+                table_nodes.append(_PreparedNode(record_id, content))
+        prepared_nodes[table] = table_nodes
 
     known_node_ids = {
         canonical_record_id(node.record_id)

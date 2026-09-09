@@ -22,6 +22,7 @@ from .retrieval import ENTITY_SUMMARY_FIELDS, RetrievalService
 from .schema_catalog import (
     RuntimeSchemaCatalog,
     matches_scoped_appellation,
+    node_table_sources,
     normalize_entity_alias,
     record_aliases,
 )
@@ -390,7 +391,8 @@ class _JsonGraphDispatcher:
         self.registry = registry
         self.entities = {
             record["id"]: record
-            for path in (data_dir / "nodes").glob("*.json")
+            for paths in node_table_sources(data_dir / "nodes").values()
+            for path in paths
             for record in json.loads(path.read_text(encoding="utf-8"))
         }
         self.edges = {

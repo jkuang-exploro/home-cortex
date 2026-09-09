@@ -36,10 +36,11 @@ for validation and presentation limitations.
 ## Endpoints
 
 - `GET /health` checks SurrealDB and does not require a Cortex API key.
-- `POST /admin/ingest` imports `/app/data/nodes/*.json` and
-  `/app/data/edges/*.json`. It validates all input before writing, then makes
-  each JSON file authoritative for its table, including pruning records removed
-  from that file. When `CORTEX_API_KEY` is set, this route requires that key.
+- `POST /admin/ingest` imports `/app/data/nodes/*.json` (or shards under
+  `/app/data/nodes/<table>/*.json`) and `/app/data/edges/*.json`. It validates
+  all input before writing, then makes each table authoritative, including
+  pruning records removed from that table's source files. When `CORTEX_API_KEY`
+  is set, this route requires that key.
 - `POST /v1/chat` runs the default steward agent for backward compatibility.
 - `POST /agent/steward/chat` invokes the named household steward directly.
 - `POST /agent/steward/conversations` initializes a conversation and returns

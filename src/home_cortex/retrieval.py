@@ -14,6 +14,7 @@ from .edge_schema import (
 from .record_ids import canonical_record_id, split_record_id
 from .schema_catalog import (
     matches_scoped_appellation,
+    node_table_sources,
     normalize_entity_alias,
     record_aliases,
 )
@@ -242,6 +243,8 @@ class RetrievalService:
         directory = data_dir / category
         if not directory.is_dir():
             return ()
+        if category == "nodes":
+            return tuple(node_table_sources(directory))
         return tuple(sorted(path.stem for path in directory.glob("*.json")))
 
 

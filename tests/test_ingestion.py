@@ -7,7 +7,9 @@ import pytest
 from surrealdb import AsyncSurreal, RecordID
 from surrealdb.errors import NotFoundError
 
+from home_cortex.edge_schema import EdgeSchemaRegistry
 from home_cortex.ingestion import _prune_table, ingest_directory
+from home_cortex.schema_catalog import RuntimeSchemaCatalog, node_table_sources
 
 STATIC_TEST_DATA = Path(__file__).parent / "static_test_data"
 
@@ -434,3 +436,76 @@ async def test_ingestion_prunes_retired_location_node_table() -> None:
     assert len(legacy) == 1
     assert remaining == []
     assert [str(record["id"]) for record in addresses] == ["address:test_house"]
+
+
+def test_household_item_shards_are_one_item_table() -> None:
+    root = Path(__file__).parents[1] / "data" / "nodes"
+    sources = node_table_sources(root)
+    assert "item" in sources
+    assert {path.name for path in sources["item"]} == {
+        "appliance.json",
+        "food.json",
+        "furniture.json",
+    }
+    assert "appliance" not in sources
+    catalog = RuntimeSchemaCatalog.from_data_dir(
+        Path(__file__).parents[1] / "data",
+        EdgeSchemaRegistry.load_default(),
+    )
+    assert "item" in catalog.entities
+    assert "appliance" not in catalog.entities
+    assert "item_type" in catalog.entities["item"].properties
+
+
+def test_item_json_and_item_directory_cannot_both_exist(tmp_path: Path) -> None:
+    nodes = tmp_path / "nodes"
+    nodes.mkdir()
+    (nodes / "item.json").write_text("[]")
+    (nodes / "item").mkdir()
+    (nodes / "item" / "appliance.json").write_text("[]")
+    with pytest.raises(ValueError, match="cannot be both"):
+        node_table_sources(nodes)
+
+
+@pytest.mark.asyncio
+async def test_sharded_item_directory_ingests_into_item_table(tmp_path: Path) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    items = json.loads((data_dir / "nodes" / "item.json").read_text(encoding="utf-8"))
+    (data_dir / "nodes" / "item.json").unlink()
+    shard_dir = data_dir / "nodes" / "item"
+    shard_dir.mkdir()
+    (shard_dir / "appliance.json").write_text(
+        json.dumps([items[0]]), encoding="utf-8"
+    )
+    (shard_dir / "food.json").write_text(json.dumps(items[1:]), encoding="utf-8")
+
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        result = await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+        records = await database.query("SELECT * FROM item ORDER BY id;")
+    finally:
+        await database.close()
+
+    assert result.node_files >= 2
+    assert {str(record["id"]) for record in records} == {item["id"] for item in items}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_ids_across_item_shards_are_rejected(tmp_path: Path) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    items = json.loads((data_dir / "nodes" / "item.json").read_text(encoding="utf-8"))
+    (data_dir / "nodes" / "item.json").unlink()
+    shard_dir = data_dir / "nodes" / "item"
+    shard_dir.mkdir()
+    (shard_dir / "appliance.json").write_text(json.dumps(items[:1]), encoding="utf-8")
+    (shard_dir / "food.json").write_text(json.dumps(items[:1]), encoding="utf-8")
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        with pytest.raises(ValueError, match="Duplicate node ID"):
+            await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+    finally:
+        await database.close()

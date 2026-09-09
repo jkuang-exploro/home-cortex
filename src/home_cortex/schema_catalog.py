@@ -13,6 +13,7 @@ from typing import Any, Mapping, get_args
 
 from .edge_schema import EdgeSchemaRegistry
 from .operator_registry import ValueKind, infer_field_kind
+from .record_ids import TABLE_NAME_RE
 
 
 @dataclass(frozen=True)
@@ -78,8 +79,12 @@ class RuntimeSchemaCatalog:
         entities: dict[str, EntityTypeSchema] = {}
         node_dir = data_dir / "nodes"
         if node_dir.is_dir():
-            for path in sorted(node_dir.glob("*.json")):
-                records = _json_records(path)
+            for table, paths in node_table_sources(node_dir).items():
+                records = [
+                    record
+                    for path in paths
+                    for record in _json_records(path)
+                ]
                 fields = sorted(
                     {
                         str(key)
@@ -87,8 +92,8 @@ class RuntimeSchemaCatalog:
                         for key in record
                     }
                 )
-                entities[path.stem] = EntityTypeSchema(
-                    path.stem,
+                entities[table] = EntityTypeSchema(
+                    table,
                     tuple(fields),
                     _infer_property_types(records, fields),
                 )
@@ -137,6 +142,35 @@ class RuntimeSchemaCatalog:
             except LookupError:
                 pass
         return schema.property_types.get(field, "unknown") if schema else "unknown"
+
+
+def node_table_sources(nodes_dir: Path) -> dict[str, tuple[Path, ...]]:
+    """Map each node table to its JSON sources.
+
+    A table is either `nodes/<table>.json` or one or more shards under
+    `nodes/<table>/*.json`. Those two forms cannot both exist.
+    """
+    if not nodes_dir.is_dir():
+        return {}
+    tables: dict[str, list[Path]] = {}
+    for path in sorted(nodes_dir.glob("*.json")):
+        if TABLE_NAME_RE.fullmatch(path.stem) is None:
+            raise ValueError(f"Invalid node table name derived from {path.name}")
+        tables[path.stem] = [path]
+    for child in sorted(path for path in nodes_dir.iterdir() if path.is_dir()):
+        if TABLE_NAME_RE.fullmatch(child.name) is None:
+            raise ValueError(f"Invalid node table name derived from {child.name}/")
+        shards = sorted(child.glob("*.json"))
+        if not shards:
+            continue
+        if child.name in tables:
+            raise ValueError(
+                f"Node table {child.name!r} cannot be both "
+                f"{child.name}.json and {child.name}/"
+            )
+        tables[child.name] = shards
+    return {name: tuple(paths) for name, paths in sorted(tables.items())}
+
 
 def _json_records(path: Path) -> list[dict[str, Any]]:
     raw = json.loads(path.read_text(encoding="utf-8"))

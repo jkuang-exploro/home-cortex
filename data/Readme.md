@@ -59,6 +59,13 @@ The V1 reception roles are `owner`, `minor_dependent`, `adult_dependent`, and
 `is_guest` or `person_type: guest` on the Person node. Missing, conflicting, or
 unrecognized roles resolve to the neutral `unknown` reception policy.
 
+Node files under `nodes/` are named for the SurrealDB table in each record ID.
+A table may be one file (`person.json`) or several shards in a directory of
+the same name (`item/appliance.json`, `item/furniture.json`, `item/food.json`).
+Shard filenames are organization only; every record ID in that directory must
+still use the parent table (`item:fridge_01`, not `appliance:fridge_01`). Do
+not keep both `item.json` and `item/`.
+
 Relationship files under `edges/` are named for a registered relationship in
 `schemas/edge/`. Schema files define endpoint types, direction, symmetry, and
 whether temporal fields are allowed. Data files contain facts only.

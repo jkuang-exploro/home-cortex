@@ -328,6 +328,16 @@ def test_table_names_come_from_static_test_data() -> None:
     )
 
     assert service.node_tables == ("address", "item", "person", "space")
+
+
+def test_table_names_include_sharded_item_directory() -> None:
+    service = RetrievalService(  # type: ignore[arg-type]
+        FakeDatabase({}),
+        data_dir=Path(__file__).parents[1] / "data",
+    )
+
+    assert "item" in service.node_tables
+    assert "appliance" not in service.node_tables
     assert service.edge_tables == (
         "hosted_by",
         "lives_in",
