@@ -36,7 +36,8 @@ _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用�
 - 身份问句看人称，不看“谁”。第一人称（我、I、me、my）问身份、姓名或称呼 → kind=self。第二人称（你、您、you、your）问身份、姓名、角色或自我介绍 → kind=assistant。不要把第二人称问句编成 self，也不要把第一人称问句编成 assistant。
 
 引用语法：
-- self 是已认证的当前说话人，assistant 是本助手，二者 entity_type=person、value=null。对助手的第二人称身份问题仍是事实请求，subject 必须是 assistant。current_household 是配置的家庭，entity_type=address、value=null。named_entity.value 只能逐字复制用户说出的姓名或称呼；不得猜测 ID 或把亲属短语当姓名。
+- self 是已认证的当前说话人，assistant 是本助手，二者 entity_type=person、value=null。对助手的第二人称身份问题仍是事实请求，subject 必须是 assistant。current_household 是配置的家庭，entity_type=address、value=null。named_entity.value 只能逐字复制用户说出的姓名或称呼、物品名称或空间名称；不得猜测 ID 或把亲属短语当姓名。
+- named_entity 也用于用户明确称呼的物品和空间，不只用于人名。主体的名称必须保留在 subject.value，entity_type 来自所指实体的声明类型（例如 item 或 space）。询问某个物品的位置时，以该命名物品为 subject，沿 location 查询返回的实体，用 select、property=null。询问某个命名空间内的物品时，以该空间为 subject，沿 contents 查询。current_household 是解析的上下文，不是命名主体的替代品；不得用 current_household→contents→location 丢掉被问物品的名称，也不得换成 self→residence 来回答家庭地址。只有明确要求街道地址才输出 full_address。始终遵守 relation_signatures；不能给空间套用只接受物品的 location，也不能把缺少的路径换成另一个可执行问题。
 - path 是概念的有序组合，每步 {"concept":"名称"}，可附加 filters。reference_concepts 是权威定义；完整短语匹配某个 aliases 时，path 只放该最具体概念一次，不拆解或追加近义概念。son 不能简化为 child，wife 不能简化为 spouse，father 不能简化为 parent。本体会完整展开概念的关系和过滤条件。
 - 只有嵌套亲属才增加一跳。性别等形容词约束同一个目标，不增加一跳；额外 filters 与概念原有条件取 AND。说话人的亲属始终从 self 开始，“我家的儿子”也不先遍历全家。不得把上一问概念展开后的某一跳保留下来再换上当前问的另一概念：最新一句已有完整亲属短语时，path 只含该短语对应的最具体概念。
 - 家庭成员列表、计数和极值是 current_household 后接 member。说话人说“我家/我家里/咱家”来问家里有谁、有几人、谁最年长或最年幼时，仍是 current_household 后接 member，不是 self 后接 member（person 不能走 member）。“我家的儿子”才是 self 后接 child。“我家住哪里”是 self 后接 residence。无所属限定的成年人/未成年人/孩子是家庭 member 加对应 predicate；明确“我的孩子”才是 self 后接 child。房间/屋子列表和间数是 current_household 后接 room，不是 member，也不在人身上加 space_type。任何住址或家庭地址查询都从 self 接 residence，再取 full_address。遵守 relation_signatures 的起点与终点类型。
@@ -108,6 +109,8 @@ def _example_text() -> tuple[tuple[str, str], ...]:
         ("住进现居所至今有多少天？", "date_difference", reference("self", "residence"), "start_date", "relationship", {"mode": "days"}),
         ("女儿下个生日距今有多少天？", "annual_occurrence", reference("self", "daughter"), "birth_date", "entity", {"mode": "days"}),
         ("我与母亲相比，出生较早的是谁？", "argmin", reference("self"), "birth_date", "entity", {"other": reference("self", "mother")}),
+        ("请查找收纳盒的所在位置。", "select", {"kind": "named_entity", "value": "收纳盒", "entity_type": "item", "path": [{"concept": "location"}]}, None, "entity", {}),
+        ("请列出展示区里面的物品。", "select", {"kind": "named_entity", "value": "展示区", "entity_type": "space", "path": [{"concept": "contents"}]}, None, "entity", {}),
         ("林青下次生日还要几天？", "annual_occurrence", {"kind": "named_entity", "value": "林青", "entity_type": "person"}, "birth_date", "entity", {"mode": "days"}),
     )
     messages: list[dict[str, str]] = []
