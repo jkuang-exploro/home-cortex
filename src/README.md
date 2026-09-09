@@ -208,7 +208,10 @@ relationship start date. The executor validates all operations, filters,
 predicate names, property sources, and types before it reads or computes data.
 
 All natural-language fact requests pass through the semantic interpreter,
-including identity and household lists/counts. Sentence-based Tier-0 dispatch
+including identity and household lists/counts. Chinese, English, and mixed
+Chinese-English utterances use the same semantic rules and compile to one
+canonical language-neutral IR; surface language is not an intermediate
+translation step, and IR identifiers stay English. Sentence-based Tier-0 dispatch
 and its configuration switch have been removed. Structured callers can pass a
 `SemanticFactRequest` directly to `HouseholdFactEngine.execute`.
 

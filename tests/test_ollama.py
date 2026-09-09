@@ -175,28 +175,36 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
     assert "Household now:" not in prompt
     assert clock == [
         "Household now: 2026-09-03T12:00:00-07:00\n"
-        "Person deixis for identity: first person → kind=self; "
-        "second person addressing this helper → kind=assistant. "
+        "Person deixis: first person 我/I/me/my → kind=self; "
+        "second person 你/您/you/your addressing this helper → kind=assistant. "
+        "Chinese, English, and mixed utterances compile to the same IR; "
+        "do not translate first. "
         "Do not add path, filters, or amount unless the latest "
         "utterance requires them. Do not copy filters from earlier turns. "
         "Age-at-least N is birth_date transform=date_difference mode=years operator=gte value=N. "
-        "以上/满=gte; 以下/未满=lt; do not invert. "
+        "以上/满/at least=gte; 以下/未满/under=lt; do not invert. "
+        "我家/我家里/my household/our household people lists use current_household then member, "
+        "never self then member or self then residence. "
         "Household rooms use path concept room from current_household. "
         "Entity identity is same_entity with two references subject and other, property=null. "
         "Residence-here compares that person's residence with current_household; "
-        "do not reuse a prior resolve_reference identity plan."
+        "do not reuse a prior resolve_reference identity plan. "
+        "named_entity.value keeps the user's literal (林青 stays 林青)."
     ]
     assert sum(m["role"] == "system" for m in call["messages"]) == 2
-    assert "second person addressing this helper" in json.dumps(call["messages"])
-    assert "self 是已认证的当前说话人" in prompt
+    assert "addressing this helper" in json.dumps(call["messages"])
+    assert "self is the authenticated speaker" in prompt
     assert "kind=assistant" in prompt
     assert "请介绍一下你自己。" in json.dumps(call["messages"], ensure_ascii=False)
-    assert "该母亲的现居所是否即当前配置家庭？" in json.dumps(call["messages"], ensure_ascii=False)
+    assert "Does that mother live at the configured home?" in json.dumps(
+        call["messages"], ensure_ascii=False
+    )
     assert "same_entity" in prompt
-    assert "逐字复制用户说出的姓名或称呼" in prompt
+    assert "named_entity.value copies the user's literal" in prompt
     assert "property=null" in prompt
-    assert "不计算或表述答案" in prompt
-    assert "只编译最后一条 user 消息" in prompt
+    assert "Do not compute or state the answer" in prompt
+    assert "Compile only the last user message" in prompt
+    assert "Surface language must not change the IR" in prompt
     assert "person:dylan_kuang" not in prompt
     assert "prior household chatter" not in json.dumps(call["messages"])
     assert "invented assistant fact" not in json.dumps(call["messages"])

@@ -157,6 +157,21 @@ def load_semantic_eval_cases(
     return tuple(cases)
 
 
+def load_bilingual_dataset(
+    path: Path | None = None,
+) -> Mapping[str, Any]:
+    """Load Chinese/English/mixed parity cases. Not a serving phrase table."""
+    target = path or (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks"
+        / "semantic_planner_bilingual.yaml"
+    )
+    raw = yaml.safe_load(target.read_text(encoding="utf-8"))
+    if not isinstance(raw, Mapping) or raw.get("version") != 1:
+        raise ValueError("bilingual planner dataset must have version 1")
+    return raw
+
+
 def load_probe_dataset(path: Path = DEFAULT_EVAL_PATH) -> ProbeDataset:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(raw, Mapping) or raw.get("version") != 1:

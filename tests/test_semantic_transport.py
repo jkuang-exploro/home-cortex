@@ -31,7 +31,8 @@ def test_all_reusable_demonstrations_roundtrip(household):
         payload = json.loads(message['content'])
         # Demonstrations historically omit eq despite the collection schema
         # requiring it. Supply that explicit canonical default for strict output.
-        for condition in payload.get('request', {}).get('filters', []):
+        request = payload.get('request') or {}
+        for condition in request.get('filters', []):
             if 'property' in condition:
                 condition.setdefault('operator', 'eq')
         text = codec.encode(payload)

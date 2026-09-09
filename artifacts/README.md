@@ -22,6 +22,8 @@ active source code.**
 - `query-generalization/` records the deployed capability audit, synthetic
   counterexamples, presentation contract, implementation notes, and compact
   evaluation summaries.
+- `bilingual-planner/` records the English-primary planner contract, mixed-language
+  few-shot rebalance, and isolated GPU Chinese/English/mixed parity measurements.
 - The **readable, authoritative** provenance is the `*-summary.json` files and the
   `REPORT.md` / `REPORT-qwen35-9b.md` prose. Prefer these.
 - The large per-case JSONs (e.g. `probe-iteration*.json`, `probe.json`,

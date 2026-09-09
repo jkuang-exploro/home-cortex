@@ -1,0 +1,409 @@
+version: 1
+
+# Chinese/English/mixed semantic parity. Expected values are semantic IR only.
+# Do not copy these utterances into planner few-shot examples unless a case is
+# itself a demonstration already present in ollama._example_text.
+
+members: &members
+  kind: current_household
+  entity_type: address
+  path: [{concept: member}]
+
+age_under_30: &age_under_30
+  property: birth_date
+  transform: date_difference
+  mode: years
+  operator: lt
+  value: 30
+
+pairs:
+  - id: self_identity
+    category: speaker_identity
+    zh: 我是谁？
+    en: Who am I?
+    expected:
+      operation: resolve_reference
+      subject: {kind: self, entity_type: person}
+  - id: assistant_identity
+    category: assistant_identity
+    zh: 你是谁？
+    en: Who are you?
+    expected:
+      operation: resolve_reference
+      subject: {kind: assistant, entity_type: person}
+  - id: household_count
+    category: household_counts
+    zh: 我家有几个人？
+    en: How many people are in our household?
+    expected:
+      operation: count
+      subject: *members
+  - id: household_list
+    category: household_membership
+    zh: 我家里都有谁？
+    en: Who is in our household?
+    expected:
+      operation: select
+      subject: *members
+  - id: father_in_law
+    category: kinship
+    zh: 我岳父是谁？
+    en: Who is my father-in-law?
+    expected:
+      operation: resolve_reference
+      subject:
+        kind: self
+        entity_type: person
+        path: [{concept: father_in_law}]
+  - id: son_age
+    category: age
+    zh: 我儿子几岁了？
+    en: How old is my son?
+    expected:
+      operation: date_difference
+      subject:
+        kind: self
+        entity_type: person
+        path: [{concept: son}]
+      property: birth_date
+      property_source: entity
+      mode: years
+  - id: oldest_member
+    category: oldest_youngest
+    zh: 谁最年长？
+    en: Who is the oldest?
+    expected:
+      operation: argmin
+      subject: *members
+      property: birth_date
+      property_source: entity
+  - id: age_under_30
+    category: age_thresholds
+    zh: 本户未满三十周岁的成员有多少？
+    en: How many household members are under 30?
+    expected:
+      operation: count
+      subject: *members
+      filters: [*age_under_30]
+  - id: storage_box
+    category: object_locations
+    ignore_named_value: true
+    zh: 收纳盒在哪里？
+    en: Where is the storage box?
+    expected:
+      operation: select
+      subject:
+        kind: named_entity
+        value: 收纳盒
+        entity_type: item
+        path: [{concept: location}]
+      property: null
+      property_source: entity
+  - id: linqing_age
+    category: named_objects
+    zh: 林青多大？
+    en: How old is 林青?
+    expected:
+      operation: date_difference
+      subject: {kind: named_entity, value: 林青, entity_type: person}
+      property: birth_date
+      property_source: entity
+      mode: years
+
+mixed:
+  - id: son_age_mixed
+    category: age
+    utterance: 我 son 几岁了？
+    equivalent_to: son_age
+  - id: father_in_law_mixed
+    category: kinship
+    utterance: Who is 我岳父?
+    equivalent_to: father_in_law
+  - id: wife_birthday_mixed
+    category: birth_dates
+    utterance: 我 wife 的 birthday 是哪天？
+    expected:
+      operation: select
+      subject:
+        kind: self
+        entity_type: person
+        path: [{concept: wife}]
+      property: birth_date
+      property_source: entity
+  - id: daughter_birthday_mixed
+    category: birth_dates
+    utterance: "What's 我女儿's birthday?"
+    expected:
+      operation: select
+      subject:
+        kind: self
+        entity_type: person
+        path: [{concept: daughter}]
+      property: birth_date
+      property_source: entity
+
+discourse:
+  - id: zhou_lan_zh_then_en
+    category: cross_language_discourse
+    turns:
+      - utterance: 周岚现在多大？
+        expected:
+          operation: date_difference
+          subject: {kind: named_entity, value: 周岚, entity_type: person}
+          property: birth_date
+          property_source: entity
+          mode: years
+      - utterance: When was his 20th birthday?
+        expected:
+          operation: date_add
+          subject:
+            kind: discourse
+            entity_type: person
+            turn_offset: 1
+            cardinality: single
+          property: birth_date
+          property_source: entity
+          amount: 20
+          mode: years
+  - id: zhou_lan_en_then_zh
+    category: cross_language_discourse
+    turns:
+      - utterance: How old is Zhou Lan?
+        expected:
+          operation: date_difference
+          subject: {kind: named_entity, value: Zhou Lan, entity_type: person}
+          property: birth_date
+          property_source: entity
+          mode: years
+      - utterance: 他的二十岁生日是哪天？
+        expected:
+          operation: date_add
+          subject:
+            kind: discourse
+            entity_type: person
+            turn_offset: 1
+            cardinality: single
+          property: birth_date
+          property_source: entity
+          amount: 20
+          mode: years
+
+negatives:
+  - id: who_am_i_not_assistant
+    utterance: Who am I?
+    forbidden_subject_kind: assistant
+    expected_subject_kind: self
+  - id: who_are_you_not_self
+    utterance: Who are you?
+    forbidden_subject_kind: self
+    expected_subject_kind: assistant
+  - id: household_not_self_member
+    utterance: Who is in my household?
+    forbidden_subject_kind: self
+    expected:
+      operation: select
+      subject: *members
+  - id: son_not_child
+    utterance: Who is my son?
+    expected:
+      operation: resolve_reference
+      subject:
+        kind: self
+        entity_type: person
+        path: [{concept: son}]
+    forbidden_concepts: [child]
+  - id: wife_not_spouse
+    utterance: Who is my wife?
+    expected:
+      operation: resolve_reference
+      subject:
+        kind: self
+        entity_type: person
+        path: [{concept: wife}]
+    forbidden_concepts: [spouse]
+  - id: father_in_law_not_parent
+    utterance: Who is my father-in-law?
+    expected:
+      operation: resolve_reference
+      subject:
+        kind: self
+        entity_type: person
+        path: [{concept: father_in_law}]
+    forbidden_concepts: [parent]
+
+stress:
+  - id: nested_zh
+    category: nested_kinship
+    language: zh
+    utterance: 我母亲的丈夫是谁？
+    expected:
+      operation: resolve_reference
+      subject: {kind: self, entity_type: person, path: [{concept: mother}, {concept: husband}]}
+  - id: nested_en
+    category: nested_kinship
+    language: en
+    utterance: "Who is my mother's husband?"
+    expected:
+      operation: resolve_reference
+      subject: {kind: self, entity_type: person, path: [{concept: mother}, {concept: husband}]}
+  - id: birth_zh
+    category: birth_dates
+    language: zh
+    utterance: 我儿子哪天出生的？
+    expected:
+      operation: select
+      subject: {kind: self, entity_type: person, path: [{concept: son}]}
+      property: birth_date
+      property_source: entity
+  - id: birth_en
+    category: birth_dates
+    language: en
+    utterance: On which date was my son born?
+    expected:
+      operation: select
+      subject: {kind: self, entity_type: person, path: [{concept: son}]}
+      property: birth_date
+      property_source: entity
+  - id: youngest_zh
+    category: oldest_youngest
+    language: zh
+    utterance: 谁最年幼？
+    expected:
+      operation: argmax
+      subject: *members
+      property: birth_date
+      property_source: entity
+  - id: youngest_en
+    category: oldest_youngest
+    language: en
+    utterance: Who is the youngest?
+    expected:
+      operation: argmax
+      subject: *members
+      property: birth_date
+      property_source: entity
+  - id: gender_zh
+    category: gender_filters
+    language: zh
+    utterance: 家里有几个男的？
+    expected:
+      operation: count
+      subject: *members
+      filters: [{property: gender, value: male}]
+  - id: gender_en
+    category: gender_filters
+    language: en
+    utterance: How many male members are in this household?
+    expected:
+      operation: count
+      subject: *members
+      filters: [{property: gender, value: male}]
+  - id: rooms_zh
+    category: room_queries
+    language: zh
+    utterance: 家里有几间房间？
+    expected:
+      operation: count
+      subject: {kind: current_household, entity_type: address, path: [{concept: room}]}
+  - id: rooms_en
+    category: room_queries
+    language: en
+    utterance: How many rooms does this household have?
+    expected:
+      operation: count
+      subject: {kind: current_household, entity_type: address, path: [{concept: room}]}
+  - id: address_zh
+    category: residence
+    language: zh
+    utterance: 我家住哪里？
+    expected:
+      operation: select
+      subject: {kind: self, entity_type: person, path: [{concept: residence}]}
+      property: full_address
+      property_source: entity
+  - id: address_en
+    category: residence
+    language: en
+    utterance: What is our street address?
+    expected:
+      operation: select
+      subject: {kind: self, entity_type: person, path: [{concept: residence}]}
+      property: full_address
+      property_source: entity
+  - id: marriage_start_zh
+    category: relationship_start_dates
+    language: zh
+    utterance: 我们什么时候结婚的？
+    expected:
+      operation: select
+      subject: {kind: self, entity_type: person, path: [{concept: spouse}]}
+      property: start_date
+      property_source: relationship
+  - id: marriage_start_en
+    category: relationship_start_dates
+    language: en
+    utterance: When did this marriage start?
+    expected:
+      operation: select
+      subject: {kind: self, entity_type: person, path: [{concept: spouse}]}
+      property: start_date
+      property_source: relationship
+  - id: marriage_years_zh
+    category: relationship_duration
+    language: zh
+    utterance: 我们结婚多少年了？
+    expected:
+      operation: date_difference
+      subject: {kind: self, entity_type: person, path: [{concept: spouse}]}
+      property: start_date
+      property_source: relationship
+      mode: years
+  - id: marriage_years_en
+    category: relationship_duration
+    language: en
+    utterance: How many years has this marriage lasted?
+    expected:
+      operation: date_difference
+      subject: {kind: self, entity_type: person, path: [{concept: spouse}]}
+      property: start_date
+      property_source: relationship
+      mode: years
+  - id: space_zh
+    category: named_spaces
+    language: zh
+    utterance: 展示区里面有什么？
+    expected:
+      operation: select
+      subject: {kind: named_entity, value: 展示区, entity_type: space, path: [{concept: contents}]}
+  - id: space_en
+    category: named_spaces
+    language: en
+    utterance: What items are inside the gallery?
+    ignore_named_value: true
+    expected:
+      operation: select
+      subject: {kind: named_entity, value: gallery, entity_type: space, path: [{concept: contents}]}
+  - id: unresolved_zh
+    category: unsupported_references
+    language: zh
+    utterance: 那个谁是哪一位？
+    expected:
+      operation: resolve_reference
+      subject: {kind: unresolved, entity_type: person}
+  - id: unresolved_en
+    category: unsupported_references
+    language: en
+    utterance: Who is that unspecified person?
+    expected:
+      operation: resolve_reference
+      subject: {kind: unresolved, entity_type: person}
+  - id: chat_zh
+    category: ordinary_chat
+    language: zh
+    utterance: 今天天气不错。
+    requires_fact: false
+  - id: chat_en
+    category: ordinary_chat
+    language: en
+    utterance: Just chatting about the weather.
+    requires_fact: false

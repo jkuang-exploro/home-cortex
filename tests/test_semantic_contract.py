@@ -307,7 +307,10 @@ def test_model_contract_and_examples_are_semantic_and_separate(household):
     for message in _semantic_planner_examples():
         if message['role']=='user': assert message['content'] not in utterances
         else:
-            request=SemanticFactRequest.model_validate(engine.schema.expand_planner_concepts(json.loads(message['content']))['request'])
+            payload=json.loads(message['content'])
+            if not payload.get('requires_fact') or payload.get('request') is None:
+                continue
+            request=SemanticFactRequest.model_validate(engine.schema.expand_planner_concepts(payload)['request'])
             assert engine.schema.validates(request)
             if request.operation=='resolve_reference' and not request.subject.path:
                 identity_kinds.append(request.subject.kind)

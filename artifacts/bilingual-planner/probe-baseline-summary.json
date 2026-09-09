@@ -1,0 +1,181 @@
+{
+  "mode": "bilingual_planner_probe",
+  "model": "qwen3.5:9b",
+  "prompt": {
+    "example_user_count": 37,
+    "components": [
+      {
+        "component": "instructions",
+        "utf8_bytes": 8825,
+        "text_sha256": "de5bef39f00cffc8bd7e30b7bb29e0564d1e8182cc7792012ee5a79d1896ea88",
+        "raw_prompt_tokens": 1949
+      },
+      {
+        "component": "examples",
+        "utf8_bytes": 10027,
+        "text_sha256": "dd0d3ef66d57cfe42c9033474257e8972ef00461d00a02c014c6e436a34bfddf",
+        "raw_prompt_tokens": 2260
+      },
+      {
+        "component": "capabilities",
+        "utf8_bytes": 8525,
+        "text_sha256": "f14a9fcbbb55fc56f5c7e937c22f6bbead1764b7f8c490f4c66cca5eef4bb558",
+        "raw_prompt_tokens": 1836
+      }
+    ],
+    "chat_prefix_messages": 77,
+    "instruction_chars": 4575,
+    "example_chars": 9091
+  },
+  "scores": {
+    "overall": {
+      "correct": 49,
+      "scored": 56,
+      "rate": 0.875
+    },
+    "all_samples": {
+      "correct": 147,
+      "scored": 168,
+      "rate": 0.875
+    },
+    "zh": {
+      "correct": 20,
+      "scored": 23,
+      "rate": 0.8696
+    },
+    "en": {
+      "correct": 25,
+      "scored": 29,
+      "rate": 0.8621
+    },
+    "mixed": {
+      "correct": 4,
+      "scored": 4,
+      "rate": 1.0
+    },
+    "pairs": {
+      "correct": 18,
+      "scored": 20,
+      "rate": 0.9
+    },
+    "discourse": {
+      "correct": 3,
+      "scored": 4,
+      "rate": 0.75
+    },
+    "negatives": {
+      "correct": 6,
+      "scored": 6,
+      "rate": 1.0
+    }
+  },
+  "parity": {
+    "both_correct": {
+      "correct": 9,
+      "scored": 10,
+      "rate": 0.9
+    },
+    "equivalent_actual": {
+      "correct": 9,
+      "scored": 10,
+      "rate": 0.9
+    },
+    "pairs": [
+      {
+        "pair_id": "age_under_30",
+        "both_correct": true,
+        "equivalent_actual": true,
+        "zh_match": true,
+        "en_match": true
+      },
+      {
+        "pair_id": "assistant_identity",
+        "both_correct": true,
+        "equivalent_actual": true,
+        "zh_match": true,
+        "en_match": true
+      },
+      {
+        "pair_id": "father_in_law",
+        "both_correct": true,
+        "equivalent_actual": true,
+        "zh_match": true,
+        "en_match": true
+      },
+      {
+        "pair_id": "household_count",
+        "both_correct": true,
+        "equivalent_actual": true,
+        "zh_match": true,
+        "en_match": true
+      },
+      {
+        "pair_id": "household_list",
+        "both_correct": true,
+        "equivalent_actual": true,
+        "zh_match": true,
+        "en_match": true
+      },
+      {
+        "pair_id": "linqing_age",
+        "both_correct": true,
+        "equivalent_actual": true,
+        "zh_match": true,
+        "en_match": true
+      },
+      {
+        "pair_id": "oldest_member",
+        "both_correct": true,
+        "equivalent_actual": true,
+        "zh_match": true,
+        "en_match": true
+      },
+      {
+        "pair_id": "self_identity",
+        "both_correct": true,
+        "equivalent_actual": true,
+        "zh_match": true,
+        "en_match": true
+      },
+      {
+        "pair_id": "son_age",
+        "both_correct": true,
+        "equivalent_actual": true,
+        "zh_match": true,
+        "en_match": true
+      },
+      {
+        "pair_id": "storage_box",
+        "both_correct": false,
+        "equivalent_actual": false,
+        "zh_match": false,
+        "en_match": false
+      }
+    ]
+  },
+  "latency_ms": {
+    "n": 56,
+    "p50": 1395.935,
+    "p95": 2829.779
+  },
+  "tokens": {
+    "prompt_eval_count": {
+      "n": 56,
+      "median": 6611.0
+    },
+    "eval_count": {
+      "n": 56,
+      "median": 47.0
+    }
+  },
+  "forbidden": [],
+  "failure_ids": [
+    "storage_box:zh",
+    "storage_box:en",
+    "space_zh",
+    "space_en",
+    "unresolved_zh",
+    "unresolved_en",
+    "zhou_lan_en_then_zh:t0"
+  ]
+}

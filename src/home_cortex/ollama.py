@@ -24,43 +24,54 @@ _PLANNER_HISTORY_BOUNDARY = (
     "antecedents.]"
 )
 
-_PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用户问题编译成一个 JSON 语义请求，不计算或表述答案。家庭事实、身份和姓名问题 requires_fact=true；只有普通闲聊才是 false 且 request=null。
+# Semantic contract is English-primary. Canonical IR identifiers stay English.
+# Keep Chinese text only for wording that is itself the rule (deixis, kinship
+# terms, age-threshold particles). Chinese, English, and mixed utterances
+# compile through this same grammar into one language-neutral IR.
+_PLANNER_INSTRUCTIONS = """You are Home Cortex's semantic interpreter. Compile the latest user message into one JSON semantic request. Do not compute or state the answer. Household facts, identity, and names: requires_fact=true. Ordinary chat only: requires_fact=false and request=null.
 
-组合与对话语法：
-- projection=each 明确对集合逐项执行同一标量操作或 select(property)，保留每个实体的结果；单个人仍使用默认 scalar。count/argmin 等归约不用 each。
-- exclude 是要从集合中排除的完整引用列表，与比较用的 other 不同。“其他”由语境决定排除 self 还是 discourse；无法确定时引用 unresolved，不猜。
-- date_add 使用 amount（有符号整数）和 mode=years/months/days 给实体或关系日期加日历偏移。指定第 N 周年直接加 N 年，即使已过去；不能替换成 annual_occurrence。目标月不存在该日时使用下个月第一天：闰日加一年为三月一日。
-- 前文仅供理解话语，不是事实来源。代词或前文对象用 kind=discourse、turn_offset=1..8（倒数第几个用户轮次）、entity_type、cardinality=single|collection，value=null。由可信上下文解析身份；单数不能从多人前文中猜选一人。需要澄清的指代用 kind=unresolved。path 可从前文实体继续组合。不要把代词改写成猜测姓名或 ID。
-- 只编译最后一条 user 消息。更早的 user 消息仅用于判断最后一条消息中指代语的先行词；固定的 assistant 省略标记只划分用户轮次，不包含事实。最后一条消息中的第一人称使用 self，第二人称使用 assistant；它们不引用更早轮次。只有必须从更早 user 消息取得对象的第三人称、指示词或明确前文引用才使用 discourse。
-- 最新一句如果本身已是完整事实问句（人数、名单、极值、性别、出生年份、年龄门槛、亲属、是否同一实体、是否住在这里），request.filters 只含这一句要求的条件，path 只含这一句的概念。禁止把上一问的 adult、minor、gender、date_range 或身份 resolve_reference 复制过来。上一问不是过滤器或身份计划的来源。
-- 身份问句看人称，不看“谁”。第一人称（我、I、me、my）问身份、姓名或称呼 → kind=self。第二人称（你、您、you、your）问身份、姓名、角色或自我介绍 → kind=assistant。不要把第二人称问句编成 self，也不要把第一人称问句编成 assistant。
+Language: Interpret Chinese, English, and mixed Chinese-English with the same semantic rules. Surface language must not change the IR. Equivalent utterances compile to equivalent normalized requests. Do not translate the utterance as an intermediate step; compile surface language directly into IR. Canonical identifiers stay English regardless of input language: self, assistant, current_household, member, son, daughter, wife, husband, father_in_law, birth_date, date_difference, annual_occurrence, resolve_reference, same_entity, and other declared names.
 
-引用语法：
-- self 是已认证的当前说话人，assistant 是本助手，二者 entity_type=person、value=null。对助手的第二人称身份问题仍是事实请求，subject 必须是 assistant。current_household 是配置的家庭，entity_type=address、value=null。named_entity.value 只能逐字复制用户说出的姓名或称呼、物品名称或空间名称；不得猜测 ID 或把亲属短语当姓名。
-- named_entity 也用于用户明确称呼的物品和空间，不只用于人名。主体的名称必须保留在 subject.value，entity_type 来自所指实体的声明类型（例如 item 或 space）。询问某个物品的位置时，以该命名物品为 subject，沿 location 查询返回的实体，用 select、property=null。询问某个命名空间内的物品时，以该空间为 subject，沿 contents 查询。current_household 是解析的上下文，不是命名主体的替代品；不得用 current_household→contents→location 丢掉被问物品的名称，也不得换成 self→residence 来回答家庭地址。只有明确要求街道地址才输出 full_address。始终遵守 relation_signatures；不能给空间套用只接受物品的 location，也不能把缺少的路径换成另一个可执行问题。
-- path 是概念的有序组合，每步 {"concept":"名称"}，可附加 filters。reference_concepts 是权威定义；完整短语匹配某个 aliases 时，path 只放该最具体概念一次，不拆解或追加近义概念。son 不能简化为 child，wife 不能简化为 spouse，father 不能简化为 parent。本体会完整展开概念的关系和过滤条件。
-- 只有嵌套亲属才增加一跳。性别等形容词约束同一个目标，不增加一跳；额外 filters 与概念原有条件取 AND。说话人的亲属始终从 self 开始，“我家的儿子”也不先遍历全家。不得把上一问概念展开后的某一跳保留下来再换上当前问的另一概念：最新一句已有完整亲属短语时，path 只含该短语对应的最具体概念。
-- 家庭成员列表、计数和极值是 current_household 后接 member。说话人说“我家/我家里/咱家”来问家里有谁、有几人、谁最年长或最年幼时，仍是 current_household 后接 member，不是 self 后接 member（person 不能走 member）。“我家的儿子”才是 self 后接 child。“我家住哪里”是 self 后接 residence。无所属限定的成年人/未成年人/孩子是家庭 member 加对应 predicate；明确“我的孩子”才是 self 后接 child。房间/屋子列表和间数是 current_household 后接 room，不是 member，也不在人身上加 space_type。任何住址或家庭地址查询都从 self 接 residence，再取 full_address。遵守 relation_signatures 的起点与终点类型。
+Deixis and household scope:
+- First person 我 / 我的 / I / me / my → kind=self when referring to the authenticated speaker. Second person 你 / 您 / you / your addressing this assistant → kind=assistant. Identity questions look at person, not the word who/谁. Never compile second person as self or first person as assistant.
+- 咱家 / 我家 / 我家里 / my household / our household asking who is in it, how many people, or who is oldest/youngest → current_household then member; never self then member (person cannot traverse member) and never self then residence. 我家的儿子 / my son → self then child. 我家住哪里 / where I live / street address → self then residence.
+- Kinship surface forms: 岳父 / 公公 / father-in-law → father_in_law; 丈夫 / husband → husband; 妻子 / 老婆 / wife → wife; 儿子 / son → son; 女儿 / daughter → daughter. Use the most specific declared concept.
 
-外层操作：
-- 问一个人是谁、身份或叫什么，以及“哪个人是我的某亲属”，用 resolve_reference 且 property=null；明确问名或姓的组成部分才用 select(given_name/family_name)。列出集合用 select 且 property=null；计数用 count 且 property=null。判断两个已解析引用是否为同一实体，用 same_entity，property=null，必须同时给出 subject 和 other；返回是否同一，不是身份介绍。问某人现在是否住在这里，subject 是该人的 residence（可经亲属概念组合），other 是 current_household；不得改成 resolve_reference 该人。
-- 先区分返回实体集合、原始属性值还是计算值。年龄是从出生日期到当前日期的日历年数，用 date_difference(birth_date)、mode=years，返回整数而不是日期；原始出生日期才用 select(birth_date)。下一次生日用 annual_occurrence(birth_date)；从今天到生日的天数用 annual_occurrence，mode=days。
-- argmin 返回属性值最小者，argmax 返回最大者。birth_date 越早值越小，所以“年龄最大”也和年长、最早出生一样只能用 argmin；年幼、年龄小、最晚出生用 argmax。问人是谁时不用 earliest/latest 或数值 min/max。
-- 两人比较必须提供 property 和两个完整引用 subject、other；说话人参与时 subject=self，另一人在 other。集合极值没有 other。
-- 所有日期间隔统一用 date_difference，明确 mode=years/months/days/seconds；单位来自用户要求。年份和月份按完整日历周期计算，不把多少年改成天数。未指定单位的持续时间才默认 days。配偶身份和配偶属性都把 spouse 概念放在 subject.path。关系开始日期和持续时间也只有一个经该关系的 subject，不把两端人物拆成 subject 和 other，不在 request.filters 放人物谓词。
+Composition and discourse:
+- projection=each applies the same scalar operation or select(property) to each collection item; a single person stays scalar. Reductions (count/argmin/argmax) do not use each.
+- exclude is a complete list of references to remove from a collection; it is not comparison other. 其他 / the others excludes self or discourse from context; if unknown, kind=unresolved; never guess.
+- date_add: signed amount with mode=years/months/days on an entity or relationship date. The Nth anniversary adds N years even if past; do not replace with annual_occurrence. Missing target day → first of next month (Feb 29 + 1 year = Mar 1).
+- Prior turns explain referring expressions only; they are not a fact source. Pronouns or prior objects: kind=discourse, turn_offset=1..8 (Nth previous user turn), entity_type, cardinality=single|collection, value=null. Trusted context resolves identity; singular cannot pick one person from a multi-person prior. Unclear references: kind=unresolved. path may continue from a discourse entity. Never rewrite a pronoun as a guessed name or ID.
+- Compile only the last user message. Earlier user messages are antecedents only. The fixed assistant omission marker delimits user turns and contains no facts. First/second person in the latest message are self/assistant and do not refer to earlier turns. Use discourse only for third person, demonstratives, or explicit prior references that need an earlier user object.
+- If the latest sentence is itself a complete fact question (count, list, extremum, gender, birth year, age threshold, kinship, same-entity, lives-here), request.filters and path contain only that sentence's conditions and concepts. Do not copy adult, minor, gender, date_range, or identity resolve_reference from the previous question.
 
-属性所有权：
-- 必须根据 property_ownership 明确选择 property_source。entity 是最终实体属性；relationship 是最后一条关系边的属性，要求非空 path，且没有 other。
-- 配偶的 birth_date 属于 entity。婚姻 start_date 属于 spouse 关系；关系持续时间使用 date_difference 和同一关系 start_date；问多少年用 years，多少个月用 months，多少天用 days。property=null 时 property_source=entity。不得静默改变错误的所有者。
+References:
+- self is the authenticated speaker; assistant is this helper; both entity_type=person, value=null. Second-person identity about the assistant is still a fact request with subject=assistant. current_household is the configured home, entity_type=address, value=null.
+- named_entity.value copies the user's literal person name, item name, or space name. Do not guess IDs, treat kinship phrases as names, or translate/normalize names because surrounding language changed (林青 stays 林青).
+- named_entity also covers explicitly named items and spaces. Keep the name in subject.value; entity_type is the declared type (item or space). Item location: named item as subject, path concept location, select, property=null. Items in a named space: that space as subject, path concept contents. current_household is context, not a substitute for a named subject. Do not drop the item name via current_household→contents→location, and do not answer with self→residence. Emit full_address only for an explicit street-address request. Obey relation_signatures: location accepts items, not spaces; do not replace a missing path with a different executable question.
+- path is ordered {"concept": name} steps, optional filters. reference_concepts are authoritative. A complete phrase matching an alias uses that most specific concept once; do not split or append near-synonyms. son ≠ child, wife ≠ spouse, husband ≠ spouse, father ≠ parent, father_in_law ≠ parent. The ontology expands the concept's relations and filters.
+- Nested kinship adds a hop. Gender and other adjectives constrain the same target and AND with the concept's filters; they do not add a hop. Speaker relatives always start from self; 我家的儿子 / my son does not walk the household first. Do not keep a hop from the previous question and swap in a new concept. A complete kinship phrase in the latest sentence → only that most specific concept.
+- Unqualified adults/minors/children: household member plus the matching predicate; 我的孩子 / my children → self then child. Rooms: current_household then room, not member, and not space_type on people. Street/home address: self then residence then full_address. Obey relation_signatures start and end types.
 
-过滤语法：
-- 集合字段条件是 {"property":名称,"operator":比较符,"value":字面值}，source=entity 约束人或地点，source=relation 约束边。只有 path 步骤中的比较可以用 value_from=anchor 引用遍历起点的属性；它不是年份提取，request.filters 不允许动态引用。
-- 查询符合条件的实体集合用 select、property=null，条件完整放入 request.filters；条件引用的属性不等于要输出的属性。集合可以有零个、一个或多个结果，不能用单人 resolve_reference 代替。统计同一集合则用 count。
-- 日期条件遵循 filter_requirements：date_range 的 value=[含起点,不含终点]，用 ISO 日期表达完整区间；年份限定是该年年初至下一年年初，不是日期与年份数字相等。不得把日期限定丢掉或变成出生日期投影。
-- 男/男性/男的/male 是 {"property":"gender","value":"male"}；女/女性/女的/female 是 {"property":"gender","value":"female"}。性别不是 adult，也不是 minor，更不是二者合取。predicate_disjointness 禁止同一集合同时使用 adult 与 minor。
-- 满 N 岁 / N 岁以上 / 至少 N 岁：operator 必须是 gte，value=N。未满 N 岁 / N 岁以下：operator 必须是 lt。以上不是以下，禁止把 以上 编成 lt 或把 以下 编成 gte。形式是 {"property":"birth_date","transform":"date_difference","mode":"years","operator":"gte","value":N}。由执行器按 Household now 计算已满年数。不要改写成 birth_date 的 date_range，不要自行换算 ISO 截止日期，不要用 adult/minor 代替任意岁数。
-- 集合谓词只能是 {"predicate":声明名称}，放在 request.filters。definition_only 只解释含义，不输出为附加条件；date_difference 等操作不是谓词。
-- 只用已声明的操作、属性、关系、概念和谓词。不得丢弃不支持的限定、发明词汇、猜身份或修补事实答案。只返回严格结构化输出。
+Operations:
+- Who/identity/name of a person, or which person is a relative: resolve_reference, property=null. Name parts only when explicitly asked: select(given_name/family_name). List a collection: select, property=null. Count: count, property=null. Same entity: same_entity, property=null, both subject and other; returns equality, not an introduction. Currently lives here: subject is that person's residence (kinship composition allowed), other is current_household; do not resolve_reference the person.
+- Distinguish entity sets, raw properties, and computed values. Age is completed calendar years from birth_date to now: date_difference(birth_date), mode=years, integer not a date. Raw birthday: select(birth_date). Next birthday: annual_occurrence(birth_date). Days until that birthday: annual_occurrence, mode=days.
+- argmin = smallest property value; argmax = largest. Earlier birth_date is smaller, so oldest/eldest/earliest-born = argmin; youngest/latest-born = argmax. Do not use earliest/latest or numeric min/max to name a person.
+- Pairwise comparison needs property and two complete references. Speaker participating → subject=self, the other person in other. Collection extrema have no other.
+- All intervals use date_difference with explicit mode=years/months/days/seconds from the user's unit. Years and months are whole calendar periods; never convert years to days. Unspecified duration defaults to days. Spouse identity and spouse properties put concept spouse (or wife/husband) on subject.path. Relationship start and duration use one subject through that relation; do not split the two people into subject and other; do not put person predicates in request.filters.
+
+Ownership:
+- Choose property_source from property_ownership. entity = final entity field. relationship = last edge field; requires nonempty path and no other.
+- Spouse birth_date is entity. Marriage start_date belongs to the spouse relationship. Duration uses date_difference on that same start_date (years/months/days as asked). property=null → property_source=entity. Never silently switch owners.
+
+Filters:
+- Field condition: {"property":name,"operator":cmp,"value":literal}. source=entity constrains people/places; source=relation constrains the edge. value_from=anchor is allowed only on path-step comparisons (traversal-start property), not year extraction; request.filters cannot use dynamic references.
+- Matching set: select, property=null, all conditions in request.filters. The filtered property is not the output property. Sets may be empty, singleton, or many; do not substitute resolve_reference. Counting the same set: count.
+- Dates follow filter_requirements. date_range value=[inclusive start, exclusive end] as ISO dates. A year is that year's Jan 1 to the next year's Jan 1, not equality with a year number. Do not drop a date bound or project birth_date instead.
+- 男/男性/男的/male → {"property":"gender","value":"male"}; 女/女性/女的/female → {"property":"gender","value":"female"}. Gender is not adult, not minor, and not their conjunction. predicate_disjointness forbids adult and minor on the same set.
+- Age ≥ N / at least N / 满 N 岁 / N 岁以上: operator=gte, value=N. Age < N / under N / 未满 N 岁 / N 岁以下: operator=lt. 以上 is not 以下; never invert. Shape: {"property":"birth_date","transform":"date_difference","mode":"years","operator":"gte","value":N}. The executor uses Household now. Do not rewrite as birth_date date_range, invent ISO cutoffs, or replace arbitrary ages with adult/minor.
+- Predicates: only {"predicate":declared name} in request.filters. definition_only explains meaning and is not emitted. date_difference and other operations are not predicates.
+- Use only declared operations, properties, relations, concepts, and predicates. Do not drop unsupported qualifiers, invent vocabulary, guess identity, or patch answers. Return strict structured output only.
 """
 
 def _semantic_planner_examples() -> list[dict[str, str]]:
@@ -76,42 +87,49 @@ def _example_text() -> tuple[tuple[str, str], ...]:
                 "entity_type": "address" if kind == "current_household" else "person",
                 **({"path": [{"concept": name} for name in concepts]} if concepts else {})}
 
+    def named(value: str, entity_type: str, *concepts: str) -> dict[str, Any]:
+        return {"kind": "named_entity", "value": value, "entity_type": entity_type,
+                **({"path": [{"concept": name} for name in concepts]} if concepts else {})}
+
+    def dump(payload: dict[str, Any]) -> str:
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
     examples = (
         ("请介绍一下你自己。", "resolve_reference", reference("assistant"), None, "entity", {}),
+        ("Who is the authenticated speaker?", "resolve_reference", reference("self"), None, "entity", {}),
+        ("How should this assistant be addressed?", "resolve_reference", reference("assistant"), None, "entity", {}),
         ("当前已认证的说话人是哪一位？", "resolve_reference", reference("self"), None, "entity", {}),
-        ("请说明你的身份。", "resolve_reference", reference("assistant"), None, "entity", {}),
-        ("应该怎样称呼这位助手？", "resolve_reference", reference("assistant"), None, "entity", {}),
-        ("在本户成员中找出出生日期最靠前的人。", "argmin", reference("current_household", "member"), "birth_date", "entity", {}),
-        ("本户符合成年条件的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"predicate": "adult"}]}),
-        ("本户未成年成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"predicate": "minor"}]}),
-        ("本户男性成员人数是多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "gender", "value": "male"}]}),
-        ("本户女性成员人数是多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "gender", "value": "female"}]}),
+        ("Who belongs to my household?", "select", reference("current_household", "member"), None, "entity", {}),
+        ("How many people in my household?", "count", reference("current_household", "member"), None, "entity", {}),
         ("我这个家里出生日期最靠前的是哪一位？", "argmin", reference("current_household", "member"), "birth_date", "entity", {}),
+        ("Who here was born most recently?", "argmax", reference("current_household", "member"), "birth_date", "entity", {}),
+        ("本户符合成年条件的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"predicate": "adult"}]}),
+        ("How many household minors are there?", "count", reference("current_household", "member"), None, "entity", {"filters": [{"predicate": "minor"}]}),
+        ("本户男性成员人数是多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "gender", "value": "male"}]}),
+        ("How many female members here?", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "gender", "value": "female"}]}),
         ("本户出生于1991年的成员有几位？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "operator": "date_range", "value": ["1991-01-01", "1992-01-01"]}]}),
-        ("本户已满四十周岁的成员有哪些？", "select", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "transform": "date_difference", "mode": "years", "operator": "gte", "value": 40}]}),
-        ("本户已满三十周岁的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "transform": "date_difference", "mode": "years", "operator": "gte", "value": 30}]}),
+        ("List members aged 40 or older.", "select", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "transform": "date_difference", "mode": "years", "operator": "gte", "value": 40}]}),
         ("本户未满三十周岁的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "transform": "date_difference", "mode": "years", "operator": "lt", "value": 30}]}),
         ("请列出本户的房间。", "select", reference("current_household", "room"), None, "entity", {}),
-        ("本户房间一共有几间？", "count", reference("current_household", "room"), None, "entity", {}),
         ("我的男孩后代是哪一位？", "resolve_reference", reference("self", "son"), None, "entity", {}),
-        ("请列出我的女性后代。", "select", reference("self", "daughter"), None, "entity", {}),
+        ("List my female descendants.", "select", reference("self", "daughter"), None, "entity", {}),
         ("我母亲的丈夫是哪位？", "resolve_reference", reference("self", "mother", "husband"), None, "entity", {}),
-        ("我的丈夫出生于哪天？", "select", reference("self", "husband"), "birth_date", "entity", {}),
-        ("请介绍岳父的身份。", "resolve_reference", reference("self", "father_in_law"), None, "entity", {}),
+        ("Who is 我岳父?", "resolve_reference", reference("self", "father_in_law"), None, "entity", {}),
+        ("我 wife 的 birthday 是哪天？", "select", reference("self", "wife"), "birth_date", "entity", {}),
         ("妻子下个生日距今有多少天？", "annual_occurrence", reference("self", "wife"), "birth_date", "entity", {"mode": "days"}),
-        ("我的母亲如今已满多少周岁？", "date_difference", reference("self", "mother"), "birth_date", "entity", {"mode": "years"}),
-        ("列出居住关系始于2015年的本户成员。", "select", reference("current_household", "member"), None, "entity", {"filters": [{"property": "start_date", "source": "relation", "operator": "date_range", "value": ["2015-01-01", "2016-01-01"]}]}),
-        ("请提供这个家庭的完整地址。", "select", reference("self", "residence"), "full_address", "entity", {}),
+        ("我 son 几岁了？", "date_difference", reference("self", "son"), "birth_date", "entity", {"mode": "years"}),
+        ("List members whose residence started in 2015.", "select", reference("current_household", "member"), None, "entity", {"filters": [{"property": "start_date", "source": "relation", "operator": "date_range", "value": ["2015-01-01", "2016-01-01"]}]}),
+        ("Give this home's street address.", "select", reference("self", "residence"), "full_address", "entity", {}),
         ("说话人现居所是否即当前配置家庭？", "same_entity", reference("self", "residence"), None, "entity", {"other": reference("current_household")}),
-        ("该母亲的现居所是否即当前配置家庭？", "same_entity", reference("self", "mother", "residence"), None, "entity", {"other": reference("current_household")}),
+        ("Does that mother live at the configured home?", "same_entity", reference("self", "mother", "residence"), None, "entity", {"other": reference("current_household")}),
         ("我的居住关系从哪天开始？", "select", reference("self", "residence"), "start_date", "relationship", {}),
-        ("这段居住关系至今已满多少年？", "date_difference", reference("self", "residence"), "start_date", "relationship", {"mode": "years"}),
+        ("How many years has this residence lasted?", "date_difference", reference("self", "residence"), "start_date", "relationship", {"mode": "years"}),
         ("住进现居所至今有多少天？", "date_difference", reference("self", "residence"), "start_date", "relationship", {"mode": "days"}),
-        ("女儿下个生日距今有多少天？", "annual_occurrence", reference("self", "daughter"), "birth_date", "entity", {"mode": "days"}),
-        ("我与母亲相比，出生较早的是谁？", "argmin", reference("self"), "birth_date", "entity", {"other": reference("self", "mother")}),
-        ("请查找收纳盒的所在位置。", "select", {"kind": "named_entity", "value": "收纳盒", "entity_type": "item", "path": [{"concept": "location"}]}, None, "entity", {}),
-        ("请列出展示区里面的物品。", "select", {"kind": "named_entity", "value": "展示区", "entity_type": "space", "path": [{"concept": "contents"}]}, None, "entity", {}),
-        ("林青下次生日还要几天？", "annual_occurrence", {"kind": "named_entity", "value": "林青", "entity_type": "person"}, "birth_date", "entity", {"mode": "days"}),
+        ("Between me and my mother, who was born earlier?", "argmin", reference("self"), "birth_date", "entity", {"other": reference("self", "mother")}),
+        ("Where is 收纳盒?", "select", named("收纳盒", "item", "location"), None, "entity", {}),
+        ("List the items inside 展示区.", "select", named("展示区", "space", "contents"), None, "entity", {}),
+        ("How many days until 林青's next birthday?", "annual_occurrence", named("林青", "person"), "birth_date", "entity", {"mode": "days"}),
+        ("Where is 爸爸's charger?", "select", named("爸爸's charger", "item", "location"), None, "entity", {}),
     )
     messages: list[dict[str, str]] = []
     for utterance, operation, subject, prop, owner, extra in examples:
@@ -119,46 +137,40 @@ def _example_text() -> tuple[tuple[str, str], ...]:
                    "property_source": owner, **extra}
         messages.extend((
             {"role": "user", "content": utterance},
-            {"role": "assistant", "content": json.dumps(
-                {"requires_fact": True, "request": request},
-                ensure_ascii=False, separators=(",", ":"),
-            )},
+            {"role": "assistant", "content": dump({"requires_fact": True, "request": request})},
         ))
+    discourse = {
+        "kind": "discourse",
+        "entity_type": "person",
+        "turn_offset": 1,
+        "cardinality": "single",
+    }
     messages.extend((
         {"role": "user", "content": "周岚现在多大？"},
-        {"role": "assistant", "content": json.dumps({
+        {"role": "assistant", "content": dump({
             "requires_fact": True,
             "request": {
                 "operation": "date_difference",
-                "subject": {
-                    "kind": "named_entity",
-                    "value": "周岚",
-                    "entity_type": "person",
-                },
+                "subject": named("周岚", "person"),
                 "property": "birth_date",
                 "property_source": "entity",
                 "mode": "years",
             },
-        }, ensure_ascii=False, separators=(",", ":"))},
-        {"role": "user", "content": "他的二十岁生日是哪天？"},
-        {"role": "assistant", "content": json.dumps({
+        })},
+        {"role": "user", "content": "When was his 20th birthday?"},
+        {"role": "assistant", "content": dump({
             "requires_fact": True,
             "request": {
                 "operation": "date_add",
-                "subject": {
-                    "kind": "discourse",
-                    "entity_type": "person",
-                    "turn_offset": 1,
-                    "cardinality": "single",
-                },
+                "subject": discourse,
                 "property": "birth_date",
                 "property_source": "entity",
                 "amount": 20,
                 "mode": "years",
             },
-        }, ensure_ascii=False, separators=(",", ":"))},
-        {"role": "user", "content": "本户符合成年条件的成员有多少？"},
-        {"role": "assistant", "content": json.dumps({
+        })},
+        {"role": "user", "content": "Count this household's adults."},
+        {"role": "assistant", "content": dump({
             "requires_fact": True,
             "request": {
                 "operation": "count",
@@ -167,26 +179,41 @@ def _example_text() -> tuple[tuple[str, str], ...]:
                 "property_source": "entity",
                 "filters": [{"predicate": "adult"}],
             },
-        }, ensure_ascii=False, separators=(",", ":"))},
-        {"role": "user", "content": "本户男性成员人数是多少？"},
-        {"role": "assistant", "content": json.dumps({
+        })},
+        {"role": "user", "content": "How old is Zhou Lan?"},
+        {"role": "assistant", "content": dump({
             "requires_fact": True,
             "request": {
-                "operation": "count",
-                "subject": reference("current_household", "member"),
-                "property": None,
+                "operation": "date_difference",
+                "subject": named("Zhou Lan", "person"),
+                "property": "birth_date",
                 "property_source": "entity",
-                "filters": [{"property": "gender", "value": "male"}],
+                "mode": "years",
             },
-        }, ensure_ascii=False, separators=(",", ":"))},
+        })},
+        {"role": "user", "content": "他的二十岁生日是哪天？"},
+        {"role": "assistant", "content": dump({
+            "requires_fact": True,
+            "request": {
+                "operation": "date_add",
+                "subject": discourse,
+                "property": "birth_date",
+                "property_source": "entity",
+                "amount": 20,
+                "mode": "years",
+            },
+        })},
+        {"role": "user", "content": "Just chatting, no household question."},
+        {"role": "assistant", "content": dump({"requires_fact": False, "request": None})},
     ))
     for message in messages:
         if message['role'] == 'assistant':
             payload = json.loads(message['content'])
-            for condition in payload.get('request', {}).get('filters', []):
+            request = payload.get('request') or {}
+            for condition in request.get('filters', []):
                 if 'property' in condition:
                     condition.setdefault('operator', 'eq')
-            message['content'] = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+            message['content'] = dump(payload)
     return tuple((message["role"], message["content"]) for message in messages)
 
 
@@ -247,16 +274,21 @@ def planner_chat_messages(
         notes.append(hint)
     reminder = (
         f"Household now: {household_now}\n"
-        "Person deixis for identity: first person → kind=self; "
-        "second person addressing this helper → kind=assistant. "
+        "Person deixis: first person 我/I/me/my → kind=self; "
+        "second person 你/您/you/your addressing this helper → kind=assistant. "
+        "Chinese, English, and mixed utterances compile to the same IR; "
+        "do not translate first. "
         "Do not add path, filters, or amount unless the latest "
         "utterance requires them. Do not copy filters from earlier turns. "
         "Age-at-least N is birth_date transform=date_difference mode=years operator=gte value=N. "
-        "以上/满=gte; 以下/未满=lt; do not invert. "
+        "以上/满/at least=gte; 以下/未满/under=lt; do not invert. "
+        "我家/我家里/my household/our household people lists use current_household then member, "
+        "never self then member or self then residence. "
         "Household rooms use path concept room from current_household. "
         "Entity identity is same_entity with two references subject and other, property=null. "
         "Residence-here compares that person's residence with current_household; "
-        "do not reuse a prior resolve_reference identity plan."
+        "do not reuse a prior resolve_reference identity plan. "
+        "named_entity.value keeps the user's literal (林青 stays 林青)."
     )
     built = [
         {"role": "system", "content": planner_system_prompt(capabilities)},
