@@ -91,7 +91,7 @@ pairs:
     zh: 收纳盒在哪里？
     en: Where is the storage box?
     expected:
-      operation: select
+      operation: resolve_reference
       subject:
         kind: named_entity
         value: 收纳盒
@@ -407,3 +407,36 @@ stress:
     language: en
     utterance: Just chatting about the weather.
     requires_fact: false
+  - id: fridge_zh
+    category: object_locations
+    language: zh
+    utterance: 冰箱在哪里
+    expected:
+      operation: resolve_reference
+      subject:
+        kind: named_entity
+        value: 冰箱
+        entity_type: item
+        path: [{concept: location}]
+  - id: milk_zh
+    category: object_locations
+    language: zh
+    utterance: 牛奶在哪里
+    expected:
+      operation: resolve_reference
+      subject:
+        kind: named_entity
+        value: 牛奶
+        entity_type: item
+        path: [{concept: location}]
+  - id: washer_zh
+    category: object_locations
+    language: zh
+    utterance: 洗衣机在哪里
+    expected:
+      operation: resolve_reference
+      subject:
+        kind: named_entity
+        value: 洗衣机
+        entity_type: item
+        path: [{concept: location}]

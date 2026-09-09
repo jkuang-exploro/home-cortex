@@ -14,12 +14,15 @@ from home_cortex.semantic_facts import (
     AgentRequestContext,
     FactRenderer,
     HouseholdFactEngine,
+    SemanticFactPlanner,
     SemanticFactRequest,
     SemanticFilter,
     SemanticReference,
     SemanticRelationStep,
     SemanticSchemaRegistry,
     _invalid_plan_retry_hint,
+    _object_location_hint,
+    _object_location_mismatch,
 )
 from home_cortex.semantic_ontology import SemanticOntology
 from test_semantic_contract import household
@@ -64,6 +67,7 @@ def _contained_households(root) -> None:
         {"id": "item:house_b", "name": "House B", "item_type": "house"},
         {"id": "item:milk_a", "name": "Milk", "item_type": "food"},
         {"id": "item:milk_b", "name": "Milk", "item_type": "food"},
+        {"id": "item:fridge_a", "name": {"zh": "冰箱", "en": "Fridge"}, "item_type": "refrigerator"},
     ])
     _write(root, "nodes", "space", [
         {"id": "space:kitchen_a", "name": "Kitchen A", "space_type": "room"},
@@ -78,6 +82,7 @@ def _contained_households(root) -> None:
         {"from": "item:house_b", "to": "address:b"},
         {"from": "item:milk_a", "to": "space:kitchen_a"},
         {"from": "item:milk_b", "to": "space:kitchen_b"},
+        {"from": "item:fridge_a", "to": "space:kitchen_a"},
     ])
     _write(root, "edges", "hosted_by", [
         {"from": "space:kitchen_a", "to": "item:house_a"},
@@ -124,6 +129,24 @@ async def test_declared_room_path_and_named_item_location_are_household_scoped(t
     assert location_result.status == "found"
     assert location_result.value["id"] == "space:kitchen_a"
     assert "Kitchen A" in FactRenderer().render(location, location_result, context)
+
+    fridge_payload = engine.schema.expand_planner_concepts({
+        "request": {
+            "operation": "select",
+            "subject": {
+                "kind": "named_entity",
+                "entity_type": "item",
+                "value": "冰箱",
+                "path": [{"concept": "location"}],
+            },
+        }
+    })
+    fridge = SemanticFactRequest.model_validate(fridge_payload["request"])
+    assert engine.schema.validates(fridge)
+    fridge_result, *_ = await engine.execute(fridge, context)
+    assert fridge_result.status == "found"
+    located = fridge_result.value if isinstance(fridge_result.value, list) else [fridge_result.value]
+    assert [item["id"] for item in located] == ["space:kitchen_a"]
 
     v2_schema = SemanticSchemaRegistry(
         RuntimeSchemaCatalog.from_data_dir(tmp_path, engine.schema.edge_registry),
@@ -247,6 +270,105 @@ def test_retry_hint_covers_self_member_and_disjoint_predicates(tmp_path):
     assert engine.schema.validation_code(identity) == "INVALID_PLAN"
     hint = _invalid_plan_retry_hint(engine.schema, identity)
     assert hint and "same_entity" in hint and "other" in hint
+    household_location = SemanticFactRequest(
+        operation="select",
+        subject=SemanticReference(
+            kind="current_household",
+            entity_type="address",
+            path=(
+                SemanticRelationStep(relation="contents"),
+                SemanticRelationStep(relation="location"),
+            ),
+        ),
+    )
+    hint = _invalid_plan_retry_hint(engine.schema, household_location)
+    assert hint and "named_entity" in hint and "location" in hint
+    person_location = SemanticFactRequest(
+        operation="select",
+        subject=SemanticReference(
+            kind="named_entity",
+            entity_type="person",
+            value="花瓶",
+            path=(SemanticRelationStep(relation="location"),),
+        ),
+    )
+    hint = _invalid_plan_retry_hint(engine.schema, person_location)
+    assert hint and "entity_type=item" in hint
+    named_adult = SemanticFactRequest(
+        operation="select",
+        subject=SemanticReference(
+            kind="named_entity",
+            entity_type="person",
+            value="冰箱",
+        ),
+        filters=(SemanticFilter(predicate="adult"),),
+    )
+    hint = _invalid_plan_retry_hint(engine.schema, named_adult)
+    assert hint and "location" in hint and "item" in hint
+
+
+@pytest.mark.parametrize("utterance", ["冰箱在哪里", "牛奶在哪里", "洗衣机在哪里", "Where is the kettle?"])
+def test_object_location_hint_compiles_named_item_not_person(utterance):
+    hint = _object_location_hint(utterance)
+    assert hint and "entity_type=item" in hint and "location" in hint
+    wrong = SemanticFactRequest(
+        operation="resolve_reference",
+        subject=SemanticReference(kind="named_entity", value="冰箱", entity_type="person"),
+    )
+    assert _object_location_mismatch(utterance, wrong)
+    right = SemanticFactRequest(
+        operation="resolve_reference",
+        subject=SemanticReference(
+            kind="named_entity",
+            value="冰箱" if "在哪里" in utterance else "kettle",
+            entity_type="item",
+            path=(SemanticRelationStep(relation="location"),),
+        ),
+    )
+    assert _object_location_mismatch(utterance, right) is None
+
+
+@pytest.mark.parametrize("utterance", ["我家在哪里", "Where is my son?", "家里有几个房间", "Who am I?"])
+def test_object_location_hint_ignores_residence_and_identity(utterance):
+    assert _object_location_hint(utterance) is None
+
+
+@pytest.mark.asyncio
+async def test_object_where_question_completes_extracted_name_to_item_location(tmp_path):
+    _contained_households(tmp_path)
+    engine, context = _engine(tmp_path)
+
+    class Interpreter:
+        async def plan_semantic_fact(self, *_args, **_kwargs):
+            return {
+                "requires_fact": True,
+                "request": {
+                    "operation": "select",
+                    "subject": {
+                        "kind": "named_entity",
+                        "value": "冰箱",
+                        "entity_type": "person",
+                    },
+                    "property": None,
+                    "property_source": "entity",
+                    "filters": [{"predicate": "adult"}],
+                },
+            }
+
+    outcome = await SemanticFactPlanner(Interpreter(), engine.schema).plan(
+        [{"role": "user", "content": "冰箱在哪里"}],
+        context,
+    )
+    request = outcome.plan.request
+    assert request is not None
+    assert request.operation == "resolve_reference"
+    assert request.subject.kind == "named_entity"
+    assert request.subject.value == "冰箱"
+    assert request.subject.entity_type == "item"
+    assert [step.relation for step in request.subject.path] == ["location"]
+    result, *_ = await engine.execute(request, context)
+    assert result.status == "found"
+    assert result.value["id"] == "space:kitchen_a"
 
 
 @pytest.mark.asyncio

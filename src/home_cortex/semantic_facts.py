@@ -850,7 +850,13 @@ class SemanticSchemaRegistry:
                 {
                     "type": "object",
                     "additionalProperties": False,
-                    "description": "A name copied verbatim from the user utterance; never a pronoun.",
+                    "description": (
+                        "A name copied verbatim from the user utterance; never "
+                        "a pronoun. entity_type=item for objects, space for "
+                        "named rooms/areas, person for people. Object "
+                        "在哪里/where is uses entity_type=item and path "
+                        "concept location."
+                    ),
                     "properties": {
                         "kind": {"type": "string", "const": "named_entity"},
                         "value": {"type": "string", "maxLength": 256},
@@ -946,7 +952,20 @@ class SemanticSchemaRegistry:
                     expanded.extend(steps)
                 else:
                     expanded.append(step)
-            request[key] = {**reference, "path": expanded}
+            completed = {**reference, "path": expanded}
+            if completed.get("kind") == "named_entity" and expanded:
+                relation = expanded[0].get("relation") if isinstance(expanded[0], Mapping) else None
+                if isinstance(relation, str):
+                    legal = {
+                        entity_type
+                        for entity_type in self.catalog.entities
+                        if self._traversal_target_types(
+                            relation, frozenset({entity_type})
+                        )
+                    }
+                    if len(legal) == 1 and completed.get("entity_type") not in legal:
+                        completed = {**completed, "entity_type": next(iter(legal))}
+            request[key] = completed
         return {**payload, "request": request}
 
     def semantic_properties(self, entity_type: str) -> frozenset[str]:
@@ -1394,8 +1413,9 @@ class SemanticFactPlanner:
             if attempts == 2:
                 previous = validation or _structural_validation_code(structural_error)
                 hint = _identity_person_mismatch(utterance, last_invalid_request)
+                location = _object_location_mismatch(utterance, last_invalid_request)
                 grammar = _invalid_plan_retry_hint(self.schema, last_invalid_request)
-                extra = " ".join(part for part in (hint, grammar) if part)
+                extra = " ".join(part for part in (hint, location, grammar) if part)
                 planner_messages.append(
                     {
                         "role": "system",
@@ -1438,8 +1458,33 @@ class SemanticFactPlanner:
                         person_error = _identity_person_mismatch(
                             utterance, candidate.request
                         )
+                        location_error = _object_location_mismatch(
+                            utterance, candidate.request
+                        )
                         if person_error:
                             validation = "INVALID_PLAN"
+                        elif location_error:
+                            completed = _complete_named_object_location(
+                                candidate.request
+                            )
+                            if completed is None:
+                                validation = "INVALID_PLAN"
+                            else:
+                                candidate = SemanticPlan(
+                                    requires_fact=True, request=completed
+                                )
+                                validation = self.schema.validation_code(
+                                    completed
+                                )
+                    elif _object_location_mismatch(utterance, candidate.request):
+                        completed = _complete_named_object_location(
+                            candidate.request
+                        )
+                        if completed is not None:
+                            candidate = SemanticPlan(
+                                requires_fact=True, request=completed
+                            )
+                            validation = self.schema.validation_code(completed)
                     if validation != "VALID":
                         last_invalid_request = candidate.request
                 validation_ms += (perf_counter() - validate_started) * 1000
@@ -3341,6 +3386,10 @@ _FIRST_PERSON_IDENTITY = re.compile(
     r"(?is)^(?:who am i\b|what(?:'s| is) my name\b)|"
     r"^我\s*(?:是\s*(?:谁|哪)|的名字|叫什么|的身份)"
 )
+_NAMED_OBJECT_LOCATION = re.compile(
+    r"(?is)^(?:where(?:'s| is) (?:the )?(?!my\b).+|"
+    r"(?!(?:我家|家里|咱家|我这个家)\s*).{1,24}在哪里)"
+)
 
 
 def _identity_person_hint(utterance: str) -> str | None:
@@ -3356,6 +3405,17 @@ def _identity_person_hint(utterance: str) -> str | None:
             "subject.kind must be self, path must be empty, property=null."
         )
     return None
+
+
+def _object_location_hint(utterance: str) -> str | None:
+    if not _NAMED_OBJECT_LOCATION.match(utterance.strip()):
+        return None
+    return (
+        "The latest utterance asks where a named object is. "
+        "subject.kind=named_entity, entity_type=item, path concept "
+        "location, resolve_reference, property=null. Not a person and "
+        "not adult/minor."
+    )
 
 
 def _invalid_plan_retry_hint(
@@ -3376,6 +3436,42 @@ def _invalid_plan_retry_hint(
         notes.append(
             "self cannot traverse member; household people use "
             "current_household then member."
+        )
+    if "location" in hops and request.subject.kind == "current_household":
+        notes.append(
+            "item location uses named_entity entity_type=item then concept "
+            "location; current_household cannot traverse location."
+        )
+    if (
+        request.subject.kind == "named_entity"
+        and "location" in hops
+        and request.subject.entity_type != "item"
+    ):
+        notes.append(
+            "location accepts items, not persons or spaces; named objects "
+            "use entity_type=item."
+        )
+    named_predicates = {
+        item.predicate for item in request.filters if item.predicate
+    }
+    if request.subject.kind == "named_entity" and named_predicates.intersection(
+        {"adult", "minor"}
+    ):
+        notes.append(
+            "named objects are not household members and do not take "
+            "adult/minor. A named item's location is entity_type=item then "
+            "concept location, resolve_reference, property=null."
+        )
+    if (
+        request.subject.kind == "named_entity"
+        and not hops
+        and request.operation == "select"
+        and request.property is None
+    ):
+        notes.append(
+            "select with property=null needs a collection path. Item "
+            "location uses named_entity entity_type=item then concept "
+            "location; resolve_reference, property=null."
         )
     filter_properties = {
         item.property for item in request.filters if item.property
@@ -3403,6 +3499,44 @@ def _invalid_plan_retry_hint(
             "other is required; not a stored property and not resolve_reference."
         )
     return " ".join(notes) or None
+
+
+def _object_location_mismatch(
+    utterance: str, request: SemanticFactRequest | None
+) -> str | None:
+    """Reject object-location plans that name a person or omit location."""
+    hint = _object_location_hint(utterance)
+    if hint is None:
+        return None
+    if request is None:
+        return hint
+    hops = [step.relation for step in request.subject.path]
+    if (
+        request.subject.kind == "named_entity"
+        and request.subject.entity_type in {None, "item"}
+        and "location" in hops
+        and request.property is None
+        and not request.filters
+    ):
+        return None
+    return hint
+
+
+def _complete_named_object_location(
+    request: SemanticFactRequest,
+) -> SemanticFactRequest | None:
+    """Fill item+location around a name the interpreter already extracted."""
+    if request.subject.kind != "named_entity" or not request.subject.value:
+        return None
+    return SemanticFactRequest(
+        operation="resolve_reference",
+        subject=SemanticReference(
+            kind="named_entity",
+            value=request.subject.value,
+            entity_type="item",
+            path=(SemanticRelationStep(relation="location"),),
+        ),
+    )
 
 
 def _identity_person_mismatch(

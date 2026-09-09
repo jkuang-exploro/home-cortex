@@ -153,7 +153,8 @@ def test_examples_cover_required_concepts_and_preserve_literals():
     assert "请介绍一下你自己。" in users
     assert "Who is the authenticated speaker?" in users
     assert "Who belongs to my household?" in users
-    assert "Where is 收纳盒?" in users
+    assert "花瓶在哪里？" in users
+    assert "Where is the kettle?" in users
     assert "我 son 几岁了？" in users
     assert "Who is 我岳父?" in users
     assert "我 wife 的 birthday 是哪天？" in users
@@ -172,9 +173,16 @@ def test_examples_cover_required_concepts_and_preserve_literals():
     assert wife["property"] == "birth_date"
     named = by_user["How many days until 林青's next birthday?"]["request"]
     assert named["subject"]["value"] == "林青"
-    charger = by_user["Where is 爸爸's charger?"]["request"]
-    assert charger["subject"]["value"] == "爸爸's charger"
-    assert charger["subject"]["entity_type"] == "item"
+    vase = by_user["花瓶在哪里？"]["request"]
+    assert vase["operation"] == "resolve_reference"
+    assert vase["subject"]["kind"] == "named_entity"
+    assert vase["subject"]["value"] == "花瓶"
+    assert vase["subject"]["entity_type"] == "item"
+    assert [step["concept"] for step in vase["subject"]["path"]] == ["location"]
+    kettle = by_user["Where is the kettle?"]["request"]
+    assert kettle["operation"] == "resolve_reference"
+    assert kettle["subject"]["value"] == "kettle"
+    assert kettle["subject"]["entity_type"] == "item"
     chat = by_user["Just chatting, no household question."]
     assert chat == {"requires_fact": False, "request": None}
 
@@ -292,6 +300,30 @@ def test_discourse_contract_does_not_guess_names():
         assert follow["subject"].get("value") is None
         assert follow["operation"] == "date_add"
         assert follow["amount"] == 20
+
+
+def test_named_item_where_queries_use_item_location():
+    schema = _schema()
+    dataset = load_bilingual_dataset()
+    by_id = {item["id"]: item for item in dataset["stress"]}
+    for case_id, value in (
+        ("fridge_zh", "冰箱"),
+        ("milk_zh", "牛奶"),
+        ("washer_zh", "洗衣机"),
+    ):
+        plan = _canonical(schema, by_id[case_id]["expected"])
+        assert plan["operation"] == "resolve_reference"
+        assert plan["subject"]["kind"] == "named_entity"
+        assert plan["subject"]["value"] == value
+        assert plan["subject"]["entity_type"] == "item"
+        assert [step["relation"] for step in plan["subject"]["path"]] == ["location"]
+        assert schema.validates(
+            SemanticFactRequest.model_validate(
+                schema.expand_planner_concepts(
+                    {"requires_fact": True, "request": by_id[case_id]["expected"]}
+                )["request"]
+            )
+        )
 
 
 def test_negative_bilingual_contract_forbids_speaker_and_path_regressions():

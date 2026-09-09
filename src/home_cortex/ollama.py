@@ -48,7 +48,7 @@ Composition and discourse:
 References:
 - self is the authenticated speaker; assistant is this helper; both entity_type=person, value=null. Second-person identity about the assistant is still a fact request with subject=assistant. current_household is the configured home, entity_type=address, value=null.
 - named_entity.value copies the user's literal person name, item name, or space name. Do not guess IDs, treat kinship phrases as names, or translate/normalize names because surrounding language changed (林青 stays 林青).
-- named_entity also covers explicitly named items and spaces. Keep the name in subject.value; entity_type is the declared type (item or space). Item location: named item as subject, path concept location, select, property=null. Items in a named space: that space as subject, path concept contents. current_household is context, not a substitute for a named subject. Do not drop the item name via current_household→contents→location, and do not answer with self→residence. Emit full_address only for an explicit street-address request. Obey relation_signatures: location accepts items, not spaces; do not replace a missing path with a different executable question.
+- named_entity also covers explicitly named items and spaces. Keep the name in subject.value; entity_type is the declared type (item or space). 花瓶在哪里 / where is the kettle: named item as subject, entity_type=item, path concept location, resolve_reference, property=null. 在哪里/where is attaches to that named object; it is not a household concept, not adult/minor, and the object is not a person. Items in a named space: that space as subject, path concept contents, select. current_household is context, not a substitute for a named subject. Do not drop the item name via current_household→contents→location, and do not answer with self→residence. Emit full_address only for an explicit street-address request. Obey relation_signatures: location accepts items, not spaces; do not replace a missing path with a different executable question.
 - path is ordered {"concept": name} steps, optional filters. reference_concepts are authoritative. A complete phrase matching an alias uses that most specific concept once; do not split or append near-synonyms. son ≠ child, wife ≠ spouse, husband ≠ spouse, father ≠ parent, father_in_law ≠ parent. The ontology expands the concept's relations and filters.
 - Nested kinship adds a hop. Gender and other adjectives constrain the same target and AND with the concept's filters; they do not add a hop. Speaker relatives always start from self; 我家的儿子 / my son does not walk the household first. Do not keep a hop from the previous question and swap in a new concept. A complete kinship phrase in the latest sentence → only that most specific concept.
 - Unqualified adults/minors/children: household member plus the matching predicate; 我的孩子 / my children → self then child. Rooms: current_household then room, not member, and not space_type on people. Street/home address: self then residence then full_address. Obey relation_signatures start and end types.
@@ -126,10 +126,10 @@ def _example_text() -> tuple[tuple[str, str], ...]:
         ("How many years has this residence lasted?", "date_difference", reference("self", "residence"), "start_date", "relationship", {"mode": "years"}),
         ("住进现居所至今有多少天？", "date_difference", reference("self", "residence"), "start_date", "relationship", {"mode": "days"}),
         ("Between me and my mother, who was born earlier?", "argmin", reference("self"), "birth_date", "entity", {"other": reference("self", "mother")}),
-        ("Where is 收纳盒?", "select", named("收纳盒", "item", "location"), None, "entity", {}),
+        ("花瓶在哪里？", "resolve_reference", named("花瓶", "item", "location"), None, "entity", {}),
+        ("Where is the kettle?", "resolve_reference", named("kettle", "item", "location"), None, "entity", {}),
         ("List the items inside 展示区.", "select", named("展示区", "space", "contents"), None, "entity", {}),
         ("How many days until 林青's next birthday?", "annual_occurrence", named("林青", "person"), "birth_date", "entity", {"mode": "days"}),
-        ("Where is 爸爸's charger?", "select", named("爸爸's charger", "item", "location"), None, "entity", {}),
     )
     messages: list[dict[str, str]] = []
     for utterance, operation, subject, prop, owner, extra in examples:
@@ -259,7 +259,7 @@ def planner_chat_messages(
             "role": "user",
             "content": str(message.get("content", "")),
         })
-    from .semantic_facts import _identity_person_hint
+    from .semantic_facts import _identity_person_hint, _object_location_hint
 
     notes = [
         str(message.get("content", "")) for message in messages
@@ -272,6 +272,9 @@ def planner_chat_messages(
     hint = _identity_person_hint(last_user)
     if hint and not any(hint in note for note in notes):
         notes.append(hint)
+    location = _object_location_hint(last_user)
+    if location and not any(location in note for note in notes):
+        notes.append(location)
     reminder = (
         f"Household now: {household_now}\n"
         "Person deixis: first person 我/I/me/my → kind=self; "
@@ -285,6 +288,9 @@ def planner_chat_messages(
         "我家/我家里/my household/our household people lists use current_household then member, "
         "never self then member or self then residence. "
         "Household rooms use path concept room from current_household. "
+        "Named object 在哪里/where is X: named_entity value=X entity_type=item "
+        "path location, resolve_reference; not a person, not adult/minor, "
+        "not current_household. "
         "Entity identity is same_entity with two references subject and other, property=null. "
         "Residence-here compares that person's residence with current_household; "
         "do not reuse a prior resolve_reference identity plan. "
