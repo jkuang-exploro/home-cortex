@@ -1,0 +1,68 @@
+[
+  {
+    "id": "person:beta_self",
+    "name": "林夏",
+    "gender": "female",
+    "dob": "1983-02-11"
+  },
+  {
+    "id": "person:beta_husband",
+    "name": "林海",
+    "gender": "male",
+    "dob": "1981-07-19"
+  },
+  {
+    "id": "person:beta_dau_adult",
+    "name": "林晴",
+    "gender": "female",
+    "dob": "2005-12-01"
+  },
+  {
+    "id": "person:beta_dau_minor",
+    "name": "林露",
+    "gender": "female",
+    "dob": "2013-08-16"
+  },
+  {
+    "id": "person:beta_son_minor",
+    "name": "林川",
+    "gender": "male",
+    "dob": "2016-02-02"
+  },
+  {
+    "id": "person:beta_father",
+    "name": "夏松",
+    "gender": "male",
+    "dob": "1955-03-03"
+  },
+  {
+    "id": "person:beta_mother",
+    "name": "夏荷",
+    "gender": "female",
+    "dob": "1958-11-11"
+  },
+  {
+    "id": "person:beta_fil",
+    "name": "海峰",
+    "gender": "male",
+    "dob": "1949-12-25"
+  },
+  {
+    "id": "person:beta_mil",
+    "name": "海萍",
+    "gender": "female",
+    "dob": "1951-04-04"
+  },
+  {
+    "id": "person:beta_nephew",
+    "name": "林岩",
+    "gender": "male",
+    "dob": "2018-06-06"
+  },
+  {
+    "id": "person:beta_brother",
+    "name": "夏柏",
+    "gender": "male",
+    "dob": "1986-01-01"
+  }
+]

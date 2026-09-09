@@ -19,3 +19,6 @@ artifacts/tier1-baseline/probe.json
 artifacts/tier1-baseline/suite.json
 artifacts/qwen35-semantic-contract/baseline-relevant-rows.json
 !artifacts/**/*-summary.json
+
+# Reproducible, locally frozen evaluation packages; manifests/reports stay tracked.
+artifacts/generic-contracts/*.tar.gz

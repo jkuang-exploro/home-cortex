@@ -1,0 +1,46 @@
+[
+  {
+    "from": "person:alpha_self",
+    "to": "person:alpha_son_adult"
+  },
+  {
+    "from": "person:alpha_wife",
+    "to": "person:alpha_son_adult"
+  },
+  {
+    "from": "person:alpha_self",
+    "to": "person:alpha_son_minor"
+  },
+  {
+    "from": "person:alpha_wife",
+    "to": "person:alpha_son_minor"
+  },
+  {
+    "from": "person:alpha_self",
+    "to": "person:alpha_daughter"
+  },
+  {
+    "from": "person:alpha_wife",
+    "to": "person:alpha_daughter"
+  },
+  {
+    "from": "person:alpha_father",
+    "to": "person:alpha_self"
+  },
+  {
+    "from": "person:alpha_mother",
+    "to": "person:alpha_self"
+  },
+  {
+    "from": "person:alpha_fil",
+    "to": "person:alpha_wife"
+  },
+  {
+    "from": "person:alpha_mil",
+    "to": "person:alpha_wife"
+  },
+  {
+    "from": "person:alpha_sister",
+    "to": "person:alpha_niece"
+  }
+]

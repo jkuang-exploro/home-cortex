@@ -1,0 +1,62 @@
+[
+  {
+    "from": "person:alpha_self",
+    "to": "address:alpha",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:alpha_wife",
+    "to": "address:alpha",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:alpha_son_adult",
+    "to": "address:alpha",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:alpha_son_minor",
+    "to": "address:alpha",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:alpha_daughter",
+    "to": "address:alpha",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:alpha_father",
+    "to": "address:alpha",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:alpha_mother",
+    "to": "address:alpha",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:alpha_fil",
+    "to": "address:alpha",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:alpha_mil",
+    "to": "address:alpha",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:alpha_niece",
+    "to": "address:alpha",
+    "start": "2018-01-01",
+    "end": null
+  }
+]

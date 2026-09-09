@@ -17,6 +17,8 @@ active source code.**
   interpretation, execution, or rendering (`REPORT.md` + `probe-summary.json`).
 - `condition-rendering/` records faithful scope/condition rendering, synthetic
   before/after examples, deterministic verification and presentation limitations.
+- `generic-contracts/` records the opt-in V2 implementation, compatibility checks
+  and frozen candidate manifest for evaluation (`REPORT.md` + `candidate-summary.json`).
 - The **readable, authoritative** provenance is the `*-summary.json` files and the
   `REPORT.md` / `REPORT-qwen35-9b.md` prose. Prefer these.
 - The large per-case JSONs (e.g. `probe-iteration*.json`, `probe.json`,

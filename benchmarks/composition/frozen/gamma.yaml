@@ -1,0 +1,148 @@
+version: 1
+household: gamma
+plans:
+  daughter_identity:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+        filters:
+        - property: gender
+          value: female
+    property_source: entity
+  father_in_law:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+  household_adult_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: adult
+  household_minor_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: minor
+  named_missing_birth:
+    operation: select
+    subject:
+      kind: named_entity
+      entity_type: person
+      value: 顾隐
+    property: birth_date
+    property_source: entity
+  year_1999_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - property: birth_date
+      operator: date_range
+      value:
+      - '1999-01-01'
+      - '2000-01-01'
+forbidden_plans: {}
+probe:
+  frozen_time: '2026-09-03T12:00:00-07:00'
+  default_speaker_id: person:gamma_self
+  household_id: address:gamma
+  household: gamma
+  cases:
+  - id: frz-gamma-F3-1
+    cell: F3
+    utterance: 咱家还没成年的有几位？
+    plan: household_minor_count
+    notes: Gamma minors=4.
+    expected_status: found
+    expected_entity_ids:
+    - person:gamma_dau_a
+    - person:gamma_dau_b
+    - person:gamma_still_minor
+    - person:gamma_roommate_child
+    expected_value: 4
+  - id: frz-gamma-K6-1
+    cell: K6
+    utterance: Name the person who is my father in law.
+    plan: father_in_law
+    notes: Empty in-laws, English held-out.
+    expected_status: relationship_not_found
+  - id: frz-gamma-E2-1
+    cell: E2
+    utterance: 顾隐的出生日期能查到吗？
+    plan: named_missing_birth
+    notes: Missing dob.
+    expected_status: property_unavailable
+    expected_entity_ids:
+    - person:gamma_missing
+  - id: frz-gamma-E4-1
+    cell: E4
+    utterance: 本户已成年的一共几人？
+    plan: household_adult_count
+    notes: Includes 顾成.
+    expected_status: found
+    expected_entity_ids:
+    - person:gamma_self
+    - person:gamma_just_adult
+    - person:gamma_roommate
+    expected_value: 3
+  - id: frz-gamma-E5-1
+    cell: E5
+    utterance: How many household members are still minors?
+    plan: household_minor_count
+    notes: Includes 顾未.
+    expected_status: found
+    expected_entity_ids:
+    - person:gamma_dau_a
+    - person:gamma_dau_b
+    - person:gamma_still_minor
+    - person:gamma_roommate_child
+    expected_value: 4
+  - id: frz-gamma-E6-1
+    cell: E6
+    utterance: 本户在一九九九年出生的有几位？
+    plan: year_1999_count
+    notes: Zero-match year.
+    expected_status: found
+    expected_entity_ids: []
+    expected_value: 0
+  - id: frz-gamma-E8-1
+    cell: E8
+    utterance: 我闺女是哪位？
+    plan: daughter_identity
+    notes: Ambiguous daughters.
+    speaker_id: person:gamma_self
+    expected_status: ambiguous
+  - id: frz-gamma-E8-2
+    cell: E8
+    utterance: 我闺女是哪位？
+    plan: daughter_identity
+    notes: 顾苗 only.
+    speaker_id: person:gamma_roommate
+    expected_status: found
+    expected_entity_ids:
+    - person:gamma_roommate_child

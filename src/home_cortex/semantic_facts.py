@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from copy import deepcopy
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -29,6 +30,7 @@ from .operator_registry import (
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_ontology import SemanticOntology
 from .semantic_display import SemanticDisplay
+from .semantic_contracts import ResolvedSemanticContract
 from .text import latest_user_message, safe_log_token
 
 logger = logging.getLogger("uvicorn.error.home_cortex.semantic_facts")
@@ -87,6 +89,8 @@ ResolutionStatus = Literal[
     "missing_context",
     "relationship_not_found",
     "property_unavailable",
+    "filter_input_missing",
+    "filter_unsupported",
 ]
 PlannerValidationCode = Literal[
     "VALID",
@@ -411,8 +415,133 @@ class SemanticSchemaRegistry:
         self._capability_cache: dict[str, Any] | None = None
         self._planner_capability_cache: dict[str, Any] | None = None
         self._planner_schema_cache: dict[str, Any] | None = None
+        self.contracts = None
+        if self.ontology.version == 2:
+            self.contracts = ResolvedSemanticContract(self)
+        self._available_predicates = frozenset(
+            name for name, definition in self.ontology.collection_predicates.items()
+            if self.contracts is None or all(
+                (owner, definition.fallback.property) in self.contracts.entity_bindings
+                for owner in definition.entity_types
+            )
+        )
+        self._available_concepts = self._resolve_available_concepts()
+
+    def _ontology_payload(self) -> dict[str, Any]:
+        payload = self.ontology.planner_payload()
+        payload['reference_concepts'] = {
+            name: value for name, value in payload['reference_concepts'].items()
+            if name in self._available_concepts
+        }
+        payload['collection_predicates'] = {
+            name: value for name, value in payload['collection_predicates'].items()
+            if name in self._available_predicates
+        }
+        if self.contracts is not None:
+            available = self.contracts.payload()
+            payload['properties'] = {name: value for name, value in payload['properties'].items() if name in available}
+        return payload
+
+    def _resolve_available_concepts(self) -> frozenset[str]:
+        if self.contracts is None:
+            return frozenset(self.ontology.reference_concepts)
+        available = set()
+        for name, concept in self.ontology.reference_concepts.items():
+            for root in self.catalog.entities:
+                types = frozenset({root})
+                valid = True
+                for step in concept.path:
+                    targets = self._traversal_target_types(step.relation, types)
+                    if not targets:
+                        valid = False
+                        break
+                    for item in step.filters:
+                        contract = self.contracts.properties[item.property]
+                        if item.source == 'entity':
+                            if not targets.issubset(contract.entities):
+                                raise ValueError(f'Invalid entity owner in concept {name}')
+                            valid &= self._semantic_kind(targets, item.property) is not None
+                            if item.value_from:
+                                anchor = self.contracts.properties[item.value_property or item.property]
+                                valid &= (root, item.value_property or item.property) in self.contracts.entity_bindings
+                                if contract.type != anchor.type:
+                                    raise ValueError(f'Incompatible anchor in concept {name}')
+                        else:
+                            valid &= (step.relation, item.property) in self.contracts.relation_bindings
+                    types = targets
+                if valid:
+                    available.add(name)
+                    break
+        return frozenset(available)
+
+    def contract_error(self, request: SemanticFactRequest) -> str | None:
+        """Internal, non-sensitive diagnostics; never rewrites the submitted IR."""
+        if self.contracts is None:
+            return None
+        references = (request.subject,) + ((request.other,) if request.other else ()) + request.exclude
+        for reference in references:
+            types = self._base_entity_types(reference)
+            anchor_types = types
+            for step in reference.path:
+                types = self._traversal_target_types(step.relation, types)
+                if not types:
+                    return 'INVALID_PATH'
+                for item in step.filters:
+                    if error := self._contract_filter_error(item, types, step.relation, anchor_types):
+                        return error
+        types = self._reference_entity_types(request.subject)
+        relation = request.subject.path[-1].relation if request.subject.path else None
+        names = {item.predicate for item in request.filters if item.predicate}
+        for name in names:
+            definition = self.ontology.collection_predicates.get(name)
+            if definition and names.intersection(definition.disjoint_with):
+                return 'CONTRADICTORY_PREDICATES'
+        for item in request.filters:
+            if item.predicate:
+                continue  # Existing predicate applicability/shape checks remain authoritative.
+            if error := self._contract_filter_error(item, types or frozenset(), relation, frozenset()):
+                return error
+        return None
+
+    def _contract_filter_error(self, item, types, relation, anchor_types) -> str | None:
+        contract = self.contracts.properties.get(item.property)
+        if contract is None:
+            return 'UNKNOWN_PROPERTY'
+        if item.source == 'entity':
+            if not types or any((owner, item.property) not in self.contracts.entity_bindings for owner in types):
+                return 'PROPERTY_NOT_APPLICABLE'
+        elif (relation, item.property) not in self.contracts.relation_bindings:
+            return 'PROPERTY_NOT_APPLICABLE'
+        if item.value_from:
+            name = item.value_property or item.property
+            other = self.contracts.properties.get(name)
+            if not anchor_types or other is None or other.type != contract.type or (
+                (contract.values or other.values)
+                and {value for value, _ in contract.values} != {value for value, _ in other.values}
+            ) or any(
+                (owner, name) not in self.contracts.entity_bindings for owner in anchor_types
+            ):
+                return 'INVALID_ANCHOR_TYPE'
+        return contract.literal_error(item.operator, item.value, anchor=item.value_from is not None)
+
+    def value_valid(self, semantic: str, value: Any) -> bool:
+        return self.contracts is None or (
+            semantic in self.contracts.properties and self.contracts.properties[semantic].accepts(value)
+        )
+
+    def validate_filter_value(self, semantic: str, value: Any) -> None:
+        if self.contracts is None:
+            return
+        if value is None:
+            raise _FactFailure('filter_input_missing', missing=(semantic,))
+        if not self.value_valid(semantic, value):
+            raise _FactFailure('filter_unsupported', missing=(semantic,))
 
     def physical_property(self, entity_type: str, semantic: str) -> str | None:
+        if self.ontology.version == 2:
+            definition = self.ontology.properties.get(semantic)
+            if definition is None or entity_type not in definition.contract.entities:
+                return None
         marker = (entity_type, semantic)
         if marker in self._property_cache:
             return self._property_cache[marker]
@@ -449,11 +578,13 @@ class SemanticSchemaRegistry:
             return self.ontology.property_fields(semantic)
         if semantic in self._aliased_physical_properties:
             return ()
+        if self.ontology.version == 2:
+            return ()
         return (semantic,)
 
     def capability_payload(self) -> dict[str, Any]:
         if self._capability_cache is not None:
-            return self._capability_cache
+            return deepcopy(self._capability_cache)
         relations = {
             semantic
             for semantic in self.ontology.base_relations
@@ -486,11 +617,13 @@ class SemanticSchemaRegistry:
                 "date_difference": "one entity OR relationship date to household_now; mode explicitly chooses years|months|days|seconds. Calendar years/months count full anniversaries, signed toward zero; never divide days by a fixed ratio. Age, tenure and elapsed relationship time use this same operation.",
                 "unit_conversion": "numeric property + from_unit + to_unit",
             },
-            "reference_ontology": self.ontology.planner_payload(),
-            "collection_predicates": sorted(self.ontology.collection_predicates),
+            "reference_ontology": self._ontology_payload(),
+            "collection_predicates": sorted(self._available_predicates),
             "property_sources": ["entity", "relationship"],
         }
-        return self._capability_cache
+        if self.contracts is not None:
+            self._capability_cache['property_contracts'] = self.contracts.payload()
+        return deepcopy(self._capability_cache)
 
     @stage("schema.capabilities")
     def planner_capability_payload(self) -> dict[str, Any]:
@@ -537,7 +670,14 @@ class SemanticSchemaRegistry:
                 "reference_concepts": ontology["reference_concepts"],
                 "collection_predicates": ontology["collection_predicates"],
             }
-        return self._planner_capability_cache
+            if self.contracts is not None:
+                self._planner_capability_cache['property_contracts'] = self.contracts.payload()
+                self._planner_capability_cache['predicate_disjointness'] = {
+                    name: list(definition.disjoint_with)
+                    for name, definition in self.ontology.collection_predicates.items()
+                    if definition.disjoint_with and name in self._available_predicates
+                }
+        return deepcopy(self._planner_capability_cache)
 
     @stage("schema.output")
     def planner_output_schema(self) -> dict[str, Any]:
@@ -562,7 +702,7 @@ class SemanticSchemaRegistry:
             definitions["SemanticReference"]["properties"]["path"]["items"] = {
                 "type": "object", "additionalProperties": False,
                 "properties": {
-                    "concept": {"type": "string", "enum": sorted(self.ontology.reference_concepts)},
+                    "concept": {"type": "string", "enum": sorted(self._available_concepts)},
                     "filters": {"type": "array", "items": {"$ref": "#/$defs/SemanticFilter"}},
                 },
                 "required": ["concept"],
@@ -695,8 +835,13 @@ class SemanticSchemaRegistry:
                     "required": ["kind"],
                 },
             ]}
+            if self.contracts is not None:
+                definitions['SemanticFilter'] = self.contracts.filters_schema(traversal=True, predicates=())
+                definitions['SemanticCollectionFilter'] = self.contracts.filters_schema(
+                    traversal=False, predicates=tuple(sorted(self._available_predicates))
+                )
             self._planner_schema_cache = _prefer_null_union(schema)
-        return self._planner_schema_cache
+        return deepcopy(self._planner_schema_cache)
 
     def expand_planner_concepts(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
         """Expand only explicitly selected ontology aliases, without interpreting text.
@@ -708,7 +853,7 @@ class SemanticSchemaRegistry:
         if not isinstance(raw, Mapping):
             return payload
         request = dict(raw)
-        concepts = self.ontology.planner_payload()["reference_concepts"]
+        concepts = self._ontology_payload()["reference_concepts"]
         if isinstance(request.get("exclude"), (list, tuple)):
             request["exclude"] = [
                 self.expand_planner_concepts({"request": {"subject": reference}})["request"]["subject"]
@@ -754,6 +899,7 @@ class SemanticSchemaRegistry:
             if physical != "id"
             and physical not in self._RESOLVER_METADATA_PROPERTIES
             and physical not in self._aliased_physical_properties
+            and self.ontology.version == 1
         )
         return frozenset(properties)
 
@@ -769,23 +915,33 @@ class SemanticSchemaRegistry:
             semantic_property
             for semantic_property in self.ontology.properties
             if self.relation_property(relation, semantic_property) is not None
+            and (self.contracts is None or (semantic, semantic_property) in self.contracts.relation_bindings)
         }
         properties.update(
             physical
             for physical in schema.properties
             if physical not in self._RESOLVER_METADATA_PROPERTIES
             and physical not in self._aliased_physical_properties
+            and self.ontology.version == 1
         )
         return frozenset(properties)
 
     def validation_code(self, request: SemanticFactRequest) -> PlannerValidationCode:
         """Return a stable, non-sensitive reason for semantic-plan rejection."""
         references = (request.subject,) + ((request.other,) if request.other else ()) + request.exclude
+        if self.contracts is not None and self.contract_error(request) is not None:
+            return 'INVALID_PLAN'
         for reference in references:
             for step in reference.path:
                 if self.physical_relation(step.relation) is None:
                     return "UNKNOWN_RELATION"
         if request.property is not None:
+            if self.contracts is not None:
+                contract = self.contracts.properties.get(request.property)
+                if contract is not None and contract.values and request.operation in {
+                    'argmin', 'argmax', 'min', 'max', 'latest', 'earliest'
+                }:
+                    return 'INVALID_PLAN'
             if request.property_source == "relationship":
                 if self._final_relation_kind(request.subject, request.property) is None:
                     return "UNKNOWN_PROPERTY"
@@ -889,7 +1045,7 @@ class SemanticSchemaRegistry:
                 return "INVALID_PLAN"
             if item.predicate is not None:
                 definition = self.ontology.collection_predicates.get(item.predicate)
-                if definition is None or not final_types[id(request.subject)].issubset(
+                if definition is None or item.predicate not in self._available_predicates or not final_types[id(request.subject)].issubset(
                     definition.entity_types
                 ):
                     return "INVALID_PLAN"
@@ -1013,6 +1169,10 @@ class SemanticSchemaRegistry:
     ) -> str | None:
         if not reference.path or semantic_property is None:
             return None
+        if self.contracts is not None:
+            if (reference.path[-1].relation, semantic_property) not in self.contracts.relation_bindings:
+                return None
+            return self.contracts.properties[semantic_property].type.execution_kind
         resolved = self.physical_relation(reference.path[-1].relation)
         if resolved is None:
             return None
@@ -1078,6 +1238,10 @@ class SemanticSchemaRegistry:
     ) -> str | None:
         if semantic_property is None:
             return None
+        if self.contracts is not None:
+            if not entity_types or any((owner, semantic_property) not in self.contracts.entity_bindings for owner in entity_types):
+                return None
+            return self.contracts.properties[semantic_property].type.execution_kind
         kinds = {
             self.catalog.entity_field_type(entity_type, physical)
             for entity_type in entity_types
@@ -1088,8 +1252,10 @@ class SemanticSchemaRegistry:
             return None
         return next(iter(kinds))
 
-    @staticmethod
-    def _valid_predicate(item: SemanticFilter, field_kind: str) -> bool:
+    def _valid_predicate(self, item: SemanticFilter, field_kind: str) -> bool:
+        if self.contracts is not None:
+            contract = self.contracts.properties.get(item.property)
+            return contract is not None and contract.literal_error(item.operator, item.value, anchor=item.value_from is not None) is None
         definition = OPERATORS[item.operator]
         if field_kind == "unknown" and "any" not in definition.field_kinds:
             return False
@@ -1302,6 +1468,8 @@ class EntityResolver:
                 "entity_not_found": "not_found",
                 "relationship_not_found": "relationship_not_found",
                 "property_unavailable": "property_unavailable",
+                "filter_input_missing": "filter_input_missing",
+                "filter_unsupported": "filter_unsupported",
                 "ambiguous": "ambiguous",
                 "computation_input_missing": "invalid_reference",
                 "computation_impossible": "invalid_reference",
@@ -1461,6 +1629,7 @@ class EntityResolver:
                     evidence=FactEvidence(semantic_property=item.property),
                     missing=(item.property,),
                 )
+            self.schema.validate_filter_value(item.property, edge.get(physical))
             if not evaluate_predicate(item.operator, edge.get(physical), item.value):
                 return False
         return True
@@ -1500,6 +1669,7 @@ class EntityResolver:
             )
             predicates: list[bool] = []
             for item, physical in mapped:
+                self.schema.validate_filter_value(item.property, record.get(physical))
                 expected = item.value
                 if item.value_from == "anchor":
                     expected = await self._anchor_property(
@@ -1533,6 +1703,7 @@ class EntityResolver:
                 evidence=FactEvidence(semantic_property=semantic_property),
                 missing=(semantic_property,),
             )
+        self.schema.validate_filter_value(semantic_property, anchor[physical])
         return anchor[physical]
 
 class HouseholdFactEngine:
@@ -1603,6 +1774,8 @@ class HouseholdFactEngine:
                 "missing_context": "caller_context_missing",
                 "relationship_not_found": "relationship_not_found",
                 "property_unavailable": "property_unavailable",
+                "filter_input_missing": "filter_input_missing",
+                "filter_unsupported": "filter_unsupported",
             }[failed.status]
             if "discourse_antecedent" in failed.missing_requirements and status == "caller_context_missing":
                 status = "discourse_context_missing"
@@ -1974,6 +2147,7 @@ class HouseholdFactEngine:
         )
         if physical not in record or record.get(physical) is None:
             raise _FactFailure("filter_input_missing", missing=(item.property,))
+        self.schema.validate_filter_value(item.property, record.get(physical))
         return evaluate_predicate(item.operator, record.get(physical), item.value)
 
     def _relation_filter_matches(
@@ -1992,6 +2166,8 @@ class HouseholdFactEngine:
         values = [edge.get(physical) for edge in edges if edge.get(physical) is not None]
         if not values:
             raise _FactFailure("filter_input_missing", missing=(item.property,))
+        for value in values:
+            self.schema.validate_filter_value(item.property, value)
         return any(evaluate_predicate(item.operator, value, item.value) for value in values)
 
     async def _semantic_predicate_matches(
@@ -2024,6 +2200,10 @@ class HouseholdFactEngine:
             if role_property is not None
             and edge.get(role_property) in definition.recognized_values
         }
+        if self.schema.contracts is not None and role_property is not None:
+            for edge in edges:
+                if edge.get(role_property) is not None:
+                    self.schema.validate_filter_value(definition.relation_property, edge[role_property])
         if recognized_roles:
             decisions = {
                 role in definition.matching_values for role in recognized_roles
@@ -2049,6 +2229,7 @@ class HouseholdFactEngine:
                 "filter_input_missing",
                 missing=(predicate, fallback.property),
             )
+        self.schema.validate_filter_value(fallback.property, raw_value)
         normalized = {"value": raw_value}
         try:
             if fallback.require_past and execute_operator(
@@ -2111,6 +2292,7 @@ class HouseholdFactEngine:
             physical is None
             or physical not in relationship
             or relationship.get(physical) is None
+            or not self.schema.value_valid(request.property, relationship.get(physical))
         ):
             return FactResult(
                 "relation_property_unavailable",
@@ -2150,7 +2332,8 @@ class HouseholdFactEngine:
     def _property(self, entity: Mapping[str, Any], semantic: str) -> Any | FactResult:
         entity_type = _entity_type(entity)
         physical = self.schema.physical_property(entity_type, semantic)
-        if physical is None or physical not in entity or entity.get(physical) is None:
+        if (physical is None or physical not in entity or entity.get(physical) is None
+            or not self.schema.value_valid(semantic, entity.get(physical))):
             return FactResult(
                 "property_unavailable",
                 evidence=FactEvidence(

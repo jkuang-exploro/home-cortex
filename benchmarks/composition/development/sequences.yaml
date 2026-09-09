@@ -1,0 +1,391 @@
+version: 1
+plans:
+  discourse_birthday_days:
+    operation: annual_occurrence
+    subject:
+      kind: discourse
+      entity_type: person
+      turn_offset: 1
+      cardinality: single
+    property: birth_date
+    property_source: entity
+    mode: days
+  discourse_oldest:
+    operation: argmin
+    subject:
+      kind: discourse
+      entity_type: person
+      turn_offset: 1
+      cardinality: collection
+    property: birth_date
+    property_source: entity
+  father:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+  father_in_law:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+  household_adult_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: adult
+  household_adult_female_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: adult
+    - property: gender
+      value: female
+  household_female_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - property: gender
+      value: female
+  household_list:
+    operation: select
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+  household_male_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - property: gender
+      value: male
+  self_children_list:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+    property_source: entity
+  wife_birth_select:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+    property_source: entity
+  wife_birthday_days:
+    operation: annual_occurrence
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+    property_source: entity
+    mode: days
+forbidden_plans:
+  adult_and_minor:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: adult
+    - predicate: minor
+  father_then_spouse:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+      - relation: spouse
+    property_source: entity
+  household_adult_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: adult
+  household_female_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - property: gender
+      value: female
+  household_oldest:
+    operation: argmin
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property: birth_date
+    property_source: entity
+  self_children_list:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+    property_source: entity
+  self_member:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: member
+    property_source: entity
+  spouse_father_in_law:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+      - relation: spouse
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+  wife_birth_select:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+    property_source: entity
+  wife_birthday_days:
+    operation: annual_occurrence
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+    property_source: entity
+    mode: days
+sequences:
+- id: dev-seq-G1
+  household: alpha
+  speaker_id: person:alpha_self
+  cell: G1
+  notes: After adult count, gender count must drop adult.
+  turns:
+  - utterance: 家里有几个成年人
+    plan: household_adult_count
+  - utterance: 家里有几个男的
+    plan: household_male_count
+    forbidden_plans:
+    - household_adult_count
+    - adult_and_minor
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_self
+    - person:alpha_son_adult
+    - person:alpha_son_minor
+    - person:alpha_father
+    - person:alpha_fil
+    expected_value: 5
+  frozen_time: '2026-09-03T12:00:00-07:00'
+- id: dev-seq-G2
+  household: alpha
+  speaker_id: person:alpha_self
+  cell: G2
+  notes: FIL after father must not emit father then spouse.
+  turns:
+  - utterance: 我的父亲是哪位
+    plan: father
+  - utterance: 我的岳父是哪位
+    plan: father_in_law
+    forbidden_plans:
+    - father_then_spouse
+    - spouse_father_in_law
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_fil
+  frozen_time: '2026-09-03T12:00:00-07:00'
+- id: dev-seq-G3
+  household: alpha
+  speaker_id: person:alpha_self
+  cell: G3
+  notes: Wife countdown after FIL; no leftover in-law hops.
+  turns:
+  - utterance: 我的岳父是哪位
+    plan: father_in_law
+  - utterance: 我妻子下个生日还有多少天
+    plan: wife_birthday_days
+    forbidden_plans:
+    - wife_birth_select
+    expected_status: found
+    expected_unit: days
+    expected_entity_ids:
+    - person:alpha_wife
+    expected_value: 229
+  frozen_time: '2026-09-03T12:00:00-07:00'
+- id: dev-seq-G4
+  household: alpha
+  speaker_id: person:alpha_self
+  cell: G4
+  notes: Same last utterance as standalone O1 after unrelated list.
+  turns:
+  - utterance: 请列出家里的人
+    plan: household_list
+  - utterance: 我妻子的出生日期是哪天
+    plan: wife_birth_select
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_wife
+    expected_value: '1982-04-20'
+  frozen_time: '2026-09-03T12:00:00-07:00'
+- id: dev-seq-G5
+  household: alpha
+  speaker_id: person:alpha_self
+  cell: G5
+  notes: After my children, 我家里都有谁 is still household members.
+  turns:
+  - utterance: 请列出我的孩子
+    plan: self_children_list
+  - utterance: 我家里都有谁
+    plan: household_list
+    forbidden_plans:
+    - self_member
+    - self_children_list
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_self
+    - person:alpha_wife
+    - person:alpha_son_adult
+    - person:alpha_son_minor
+    - person:alpha_daughter
+    - person:alpha_father
+    - person:alpha_mother
+    - person:alpha_fil
+    - person:alpha_mil
+    - person:alpha_niece
+  frozen_time: '2026-09-03T12:00:00-07:00'
+- id: dev-seq-G6
+  household: alpha
+  speaker_id: person:alpha_self
+  cell: G6
+  notes: Adult female after female count must add adult and keep gender.
+  turns:
+  - utterance: 家里有几个女的
+    plan: household_female_count
+  - utterance: 家里有几个成年女性
+    plan: household_adult_female_count
+    forbidden_plans:
+    - household_female_count
+    - household_adult_count
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_wife
+    - person:alpha_mother
+    - person:alpha_mil
+    expected_value: 3
+  frozen_time: '2026-09-03T12:00:00-07:00'
+- id: dev-seq-G7
+  household: alpha
+  speaker_id: person:alpha_self
+  cell: G7
+  notes: '他们 who is oldest: discourse collection only.'
+  turns:
+  - utterance: 请列出家里的人
+    plan: household_list
+  - utterance: 他们谁最年长
+    plan: discourse_oldest
+    forbidden_plans:
+    - household_oldest
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_fil
+  frozen_time: '2026-09-03T12:00:00-07:00'
+- id: dev-seq-G8
+  household: alpha
+  speaker_id: person:alpha_self
+  cell: G8
+  notes: '她 countdown: discourse only, not restart-as-wife.'
+  turns:
+  - utterance: 我妻子的出生日期是哪天
+    plan: wife_birth_select
+  - utterance: 她下个生日还有几天
+    plan: discourse_birthday_days
+    forbidden_plans:
+    - wife_birthday_days
+    - wife_birth_select
+    expected_status: found
+    expected_unit: days
+    expected_entity_ids:
+    - person:alpha_wife
+    expected_value: 229
+  frozen_time: '2026-09-03T12:00:00-07:00'

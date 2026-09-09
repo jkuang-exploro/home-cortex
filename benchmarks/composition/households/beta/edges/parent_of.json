@@ -1,0 +1,46 @@
+[
+  {
+    "from": "person:beta_self",
+    "to": "person:beta_dau_adult"
+  },
+  {
+    "from": "person:beta_husband",
+    "to": "person:beta_dau_adult"
+  },
+  {
+    "from": "person:beta_self",
+    "to": "person:beta_dau_minor"
+  },
+  {
+    "from": "person:beta_husband",
+    "to": "person:beta_dau_minor"
+  },
+  {
+    "from": "person:beta_self",
+    "to": "person:beta_son_minor"
+  },
+  {
+    "from": "person:beta_husband",
+    "to": "person:beta_son_minor"
+  },
+  {
+    "from": "person:beta_father",
+    "to": "person:beta_self"
+  },
+  {
+    "from": "person:beta_mother",
+    "to": "person:beta_self"
+  },
+  {
+    "from": "person:beta_fil",
+    "to": "person:beta_husband"
+  },
+  {
+    "from": "person:beta_mil",
+    "to": "person:beta_husband"
+  },
+  {
+    "from": "person:beta_brother",
+    "to": "person:beta_nephew"
+  }
+]

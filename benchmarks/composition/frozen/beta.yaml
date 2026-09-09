@@ -1,0 +1,204 @@
+version: 1
+household: beta
+plans:
+  father_in_law:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+  household_adult_female_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: adult
+    - property: gender
+      value: female
+  household_female_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - property: gender
+      value: female
+  household_male_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - property: gender
+      value: male
+  household_minor_list:
+    operation: select
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: minor
+  husband_father:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: male
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+  self_children_list:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+    property_source: entity
+  self_daughters_list:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+        filters:
+        - property: gender
+          value: female
+    property_source: entity
+  wife_father:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+forbidden_plans: {}
+probe:
+  frozen_time: '2026-09-03T12:00:00-07:00'
+  default_speaker_id: person:beta_self
+  household_id: address:beta
+  household: beta
+  cases:
+  - id: frz-beta-F1-1
+    cell: F1
+    utterance: How many females live in this household?
+    plan: household_female_count
+    notes: English female count, beta ids.
+    expected_status: found
+    expected_entity_ids:
+    - person:beta_self
+    - person:beta_dau_adult
+    - person:beta_dau_minor
+    - person:beta_mother
+    - person:beta_mil
+    expected_value: 5
+  - id: frz-beta-F4-1
+    cell: F4
+    utterance: How many adult women are in this household?
+    plan: household_adult_female_count
+    notes: Adult women=4.
+    expected_status: found
+    expected_entity_ids:
+    - person:beta_self
+    - person:beta_dau_adult
+    - person:beta_mother
+    - person:beta_mil
+    expected_value: 4
+  - id: frz-beta-F7-1
+    cell: F7
+    utterance: 本户男性成员有几位？
+    plan: household_male_count
+    notes: Beta males, ids required.
+    expected_status: found
+    expected_entity_ids:
+    - person:beta_husband
+    - person:beta_son_minor
+    - person:beta_father
+    - person:beta_fil
+    - person:beta_nephew
+    expected_value: 5
+  - id: frz-beta-C1-1
+    cell: C1
+    utterance: 把我自己的子女都列出来
+    plan: self_children_list
+    notes: My children on beta.
+    expected_status: found
+    expected_entity_ids:
+    - person:beta_dau_adult
+    - person:beta_dau_minor
+    - person:beta_son_minor
+  - id: frz-beta-C2-1
+    cell: C2
+    utterance: 本户的小孩子都有谁
+    plan: household_minor_list
+    notes: Household minors on beta.
+    expected_status: found
+    expected_entity_ids:
+    - person:beta_dau_minor
+    - person:beta_son_minor
+    - person:beta_nephew
+  - id: frz-beta-C3-1
+    cell: C3
+    utterance: 我自己的千金都有谁
+    plan: self_daughters_list
+    notes: My daughters.
+    expected_status: found
+    expected_entity_ids:
+    - person:beta_dau_adult
+    - person:beta_dau_minor
+  - id: frz-beta-K1-1
+    cell: K1
+    utterance: 请指出我的公公是哪一位？
+    plan: father_in_law
+    notes: 公公 = FIL on female speaker.
+    expected_status: found
+    expected_entity_ids:
+    - person:beta_fil
+  - id: frz-beta-K2-1
+    cell: K2
+    utterance: Which person is my wife's father?
+    plan: wife_father
+    notes: Female speaker, no wife → relationship_not_found. Not repaired to FIL.
+    expected_status: relationship_not_found
+  - id: frz-beta-K5-1
+    cell: K5
+    utterance: 我先生的父亲叫什么身份？
+    plan: husband_father
+    notes: husband then father resolve_reference.
+    expected_status: found
+    expected_entity_ids:
+    - person:beta_fil

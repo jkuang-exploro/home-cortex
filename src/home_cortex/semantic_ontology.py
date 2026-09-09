@@ -10,6 +10,7 @@ from typing import Any, Mapping
 import yaml
 
 from .operator_registry import OPERATORS, PREDICATE_OPERATORS
+from .semantic_contracts import PropertyContract, strings
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ class OntologyProperty:
     label: tuple[tuple[str, str], ...] = ()
     # Presentation only: this does not declare a closed domain or normalize values.
     value_labels: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = ()
+    contract: PropertyContract | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +70,7 @@ class OntologyCollectionPredicate:
     fallback: OntologyPredicateFallback
     default_scope_relation: str | None = None
     label: tuple[tuple[str, str], ...] = ()
+    disjoint_with: tuple[str, ...] = ()
 
 
 class SemanticOntology:
@@ -81,7 +84,9 @@ class SemanticOntology:
         reference_concepts: Mapping[str, OntologyReferenceConcept],
         policy_values: Mapping[str, int | float],
         collection_predicates: Mapping[str, OntologyCollectionPredicate],
+        version: int = 1,
     ) -> None:
+        self.version = version
         self.properties = MappingProxyType(dict(properties))
         self.base_relations = MappingProxyType(dict(base_relations))
         self.reference_concepts = MappingProxyType(dict(reference_concepts))
@@ -131,10 +136,11 @@ class SemanticOntology:
         extra = sorted(set(raw) - allowed)
         if extra:
             raise ValueError(f"Unknown semantic ontology fields: {', '.join(extra)}")
-        if raw.get("version") != 1:
-            raise ValueError("Semantic ontology version must be 1")
+        version = raw.get("version")
+        if type(version) is not int or version not in {1, 2}:
+            raise ValueError("Semantic ontology version must be 1 or 2")
 
-        properties = _parse_properties(raw.get("properties"), path)
+        properties = _parse_properties(raw.get("properties"), path, version)
         base_relations = _parse_base_relations(raw.get("base_relations"), path)
         concepts = _parse_reference_concepts(
             raw.get("reference_concepts"),
@@ -146,6 +152,7 @@ class SemanticOntology:
             raw.get("collection_predicates", {}),
             policy_values,
             path,
+            version,
         )
         invalid_scope_relations = {
             definition.default_scope_relation
@@ -158,12 +165,50 @@ class SemanticOntology:
                 "Collection predicates reference unknown scope relations: "
                 + ", ".join(sorted(invalid_scope_relations))
             )
+        if version == 2:
+            for name, definition in properties.items():
+                if set(definition.contract.relationships) - set(base_relations):
+                    raise ValueError(f"Unknown relationship owner for {name}")
+            for concept in concepts.values():
+                for step in concept.path:
+                    for item in step.filters:
+                        definition = properties.get(item.property)
+                        if definition is None or definition.contract.literal_error(
+                            item.operator, item.value, anchor=item.value_from is not None
+                        ) or (item.value_property and item.value_property not in properties):
+                            raise ValueError(f"Invalid contract filter in concept {concept.name}")
+                        if item.source == 'relation' and step.relation not in definition.contract.relationships:
+                            raise ValueError(f"Invalid relationship property in concept {concept.name}")
+            for name, predicate in collection_predicates.items():
+                if predicate.relation_property not in properties or predicate.fallback.property not in properties:
+                    raise ValueError(f"Unknown property in predicate {name}")
+                fallback = properties[predicate.fallback.property].contract
+                if not set(predicate.entity_types).issubset(fallback.entities):
+                    raise ValueError(f"Invalid fallback owner in predicate {name}")
+                transform = OPERATORS[predicate.fallback.transform]
+                if 'any' not in transform.field_kinds and not fallback.type.kinds.issubset(transform.field_kinds):
+                    raise ValueError(f"Invalid fallback type in predicate {name}")
+                role = properties[predicate.relation_property].contract
+                if predicate.default_scope_relation and predicate.default_scope_relation not in role.relationships:
+                    raise ValueError(f"Invalid role scope in predicate {name}")
+                if not all(role.accepts(value) for value in predicate.recognized_values):
+                    raise ValueError(f"Invalid role values in predicate {name}")
+                for other in predicate.disjoint_with:
+                    if other == name or other not in collection_predicates or name not in collection_predicates[other].disjoint_with:
+                        raise ValueError(f"Disjoint predicates must be known and symmetric: {name}")
+                    counterpart = collection_predicates[other]
+                    if (predicate.relation_property == counterpart.relation_property
+                        and set(predicate.matching_values).intersection(counterpart.matching_values)):
+                        raise ValueError(f"Disjoint predicates have overlapping role matches: {name}")
+                    if predicate.fallback == counterpart.fallback:
+                        raise ValueError(f"Disjoint predicates have identical fallbacks: {name}")
         return cls(
             properties=properties,
             base_relations=base_relations,
             reference_concepts=concepts,
             policy_values=policy_values,
             collection_predicates=collection_predicates,
+            version=version,
         )
 
     @classmethod
@@ -281,6 +326,7 @@ def _parse_collection_predicates(
     raw: Any,
     policy_values: Mapping[str, int | float],
     path: Path,
+    version: int = 1,
 ) -> dict[str, OntologyCollectionPredicate]:
     values = _mapping(raw, "collection_predicates", path)
     result: dict[str, OntologyCollectionPredicate] = {}
@@ -297,6 +343,8 @@ def _parse_collection_predicates(
             "default_scope_relation",
             "label",
         }
+        if version == 2:
+            allowed.add('disjoint_with')
         if extra := sorted(set(item) - allowed):
             raise ValueError(f"Unknown {label} fields: {', '.join(extra)}")
         relation_property = item.get("relation_property")
@@ -370,16 +418,22 @@ def _parse_collection_predicates(
             ),
             default_scope_relation=default_scope_relation,
             label=_parse_labels(item.get("label", {}), f"{label}.label", path),
+            disjoint_with=strings(item.get('disjoint_with', []), 'disjoint_with'),
         )
     return result
 
 
-def _parse_properties(raw: Any, path: Path) -> dict[str, OntologyProperty]:
+def _parse_properties(raw: Any, path: Path, version: int = 1) -> dict[str, OntologyProperty]:
     values = _mapping(raw, "properties", path)
     result: dict[str, OntologyProperty] = {}
     for name, definition in values.items():
         item = _mapping(definition, f"properties.{name}", path)
-        extra = sorted(set(item) - {"fields", "aliases", "ordering", "label", "value_labels"})
+        allowed = {"fields", "aliases", "ordering", "label", "value_labels"}
+        if version == 2:
+            allowed |= {'type', 'applies_to', 'filter_operators', 'values'}
+            if 'values' in item and 'value_labels' in item:
+                raise ValueError('Closed values own their labels; do not duplicate value_labels')
+        extra = sorted(set(item) - allowed)
         if extra:
             raise ValueError(f"Unknown properties.{name} fields: {', '.join(extra)}")
         ordering = _mapping(item.get("ordering", {}), f"properties.{name}.ordering", path)
@@ -394,9 +448,13 @@ def _parse_properties(raw: Any, path: Path) -> dict[str, OntologyProperty]:
             tuple(
                 (value, _parse_labels(labels, f"properties.{name}.value_labels.{value}", path))
                 for value, labels in _mapping(
-                    item.get("value_labels", {}), f"properties.{name}.value_labels", path
+                    ({value: definition.get('label', {}) for value, definition in item.get('values', {}).items()}
+                     if version == 2 and 'values' in item and isinstance(item.get('values', {}), dict)
+                     and all(isinstance(value, dict) for value in item.get('values', {}).values())
+                     else item.get("value_labels", {})), f"properties.{name}.value_labels", path
                 ).items()
             ),
+            PropertyContract.parse(item) if version == 2 else None,
         )
     return result
 

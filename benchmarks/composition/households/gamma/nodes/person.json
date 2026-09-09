@@ -1,0 +1,49 @@
+[
+  {
+    "id": "person:gamma_self",
+    "name": "顾北",
+    "gender": "male",
+    "dob": "1979-10-10"
+  },
+  {
+    "id": "person:gamma_dau_a",
+    "name": "顾棠",
+    "gender": "female",
+    "dob": "2011-03-03"
+  },
+  {
+    "id": "person:gamma_dau_b",
+    "name": "顾薇",
+    "gender": "female",
+    "dob": "2014-09-09"
+  },
+  {
+    "id": "person:gamma_just_adult",
+    "name": "顾成",
+    "gender": "male",
+    "dob": "2008-09-03"
+  },
+  {
+    "id": "person:gamma_still_minor",
+    "name": "顾未",
+    "gender": "male",
+    "dob": "2008-09-04"
+  },
+  {
+    "id": "person:gamma_roommate",
+    "name": "顾南",
+    "gender": "female",
+    "dob": "1985-05-05"
+  },
+  {
+    "id": "person:gamma_roommate_child",
+    "name": "顾苗",
+    "gender": "female",
+    "dob": "2019-01-20"
+  },
+  {
+    "id": "person:gamma_missing",
+    "name": "顾隐",
+    "gender": "male"
+  }
+]

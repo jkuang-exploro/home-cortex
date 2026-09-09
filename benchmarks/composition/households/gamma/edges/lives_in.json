@@ -1,0 +1,44 @@
+[
+  {
+    "from": "person:gamma_self",
+    "to": "address:gamma",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:gamma_dau_a",
+    "to": "address:gamma",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:gamma_dau_b",
+    "to": "address:gamma",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:gamma_just_adult",
+    "to": "address:gamma",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:gamma_still_minor",
+    "to": "address:gamma",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:gamma_roommate",
+    "to": "address:gamma",
+    "start": "2018-01-01",
+    "end": null
+  },
+  {
+    "from": "person:gamma_roommate_child",
+    "to": "address:gamma",
+    "start": "2018-01-01",
+    "end": null
+  }
+]

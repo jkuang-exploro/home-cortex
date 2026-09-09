@@ -1,0 +1,32 @@
+{
+  "scoring_revision": "2026-09-07.2-composition-shapes",
+  "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+  "default_eval_path": "benchmarks/semantic_planner_eval.yaml",
+  "counts": {
+    "development_standalone": 42,
+    "frozen_standalone": 36,
+    "development_sequences": 8,
+    "frozen_sequences": 8
+  },
+  "files": {
+    "annotation-guide.md": "731054b31a36a6bab9414f8de33b7575377e8a84b06e5be16fed8a40f820eda5",
+    "coverage-matrix.md": "9d94afbfc721271cdcda2f8b725543e65a2db1b8c2305058b85b273f662b44b3",
+    "codex-approval.md": "594dfca81883d504980295d1decbf1b89152449486247ef52653616225d3eee0",
+    "README.md": "15e95970e55501783ae6d64e28c607654a4c60b13c35340705fcfda0cf8b8f17",
+    "ontology.yaml": "fb5f4796d0880d702083273f3f9ee9179722eb582acd1741fb9a664c3708d056",
+    "test_composition_eval.py": "de31d1796bb5db70cbf4497d41b7d4f03b15db98fab8d6dc97ab0547ff141a79",
+    "benchmarks/composition/development/alpha.yaml": "45e73e19d86ddd36e7ae42fdefd068791f41cda5452483b4420c7a2b7cc1752f",
+    "benchmarks/composition/development/beta.yaml": "a19befe0458e184605e4296af8928e76eed53fcc8136443d32102d7b4dc64e17",
+    "benchmarks/composition/development/gamma.yaml": "daa2b38cbe12bcd3771164951ff15a758365fb5eefb74e85d76974faa407ef52",
+    "benchmarks/composition/development/sequences.yaml": "b8b1fa4ccff645428f58a64d10a1b57231a6436ab6c140a3d197e1f98fe34cdf",
+    "benchmarks/composition/frozen/alpha.yaml": "c15abf10bcd6885c51ed4244918fc86fff3728827464d5a8a943cb37d3acd1f5",
+    "benchmarks/composition/frozen/beta.yaml": "2a26168a3c9bfa50661033357241f027bf504e83d10b3d601971645823ee00b1",
+    "benchmarks/composition/frozen/gamma.yaml": "276fae773acf9aea5fd3a5a69938606f448bf448a594e0e1b6d130154d7b967a",
+    "benchmarks/composition/frozen/sequences.yaml": "592a03cc0f8570a505116223dab7e767088a94b90223cd7fe15399fb3d3dbdc9",
+    "households/alpha": "8f6e3c8b6c5443d58300a0a2bdb78fc43e12a6d4ef6a7637f3bc755a21047165",
+    "households/beta": "e53503a66a0c381143142ddc5471cbbe33ee83733793cce3fa14f58403c4e389",
+    "households/gamma": "72ef8041879b0c57766485f69ded476eb56475ce4a8b8d66144e9ecdbc10a725"
+  },
+  "household_tree_sha256": "31741fcd303884a43d34d1d25c118db78b2b37366fab1a75d8844bd4c6f7e254",
+  "composition_tree_sha256": "824656541f9d0c784c72cec039d1ee04c2d6d15b4ef1761b933d2aab69e9655e"
+}

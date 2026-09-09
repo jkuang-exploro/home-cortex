@@ -1,0 +1,171 @@
+version: 1
+household: gamma
+plans:
+  daughter_identity:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+        filters:
+        - property: gender
+          value: female
+    property_source: entity
+  father_in_law:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+  household_adult_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: adult
+  household_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+  household_minor_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: minor
+  named_missing_birth:
+    operation: select
+    subject:
+      kind: named_entity
+      entity_type: person
+      value: 顾隐
+    property: birth_date
+    property_source: entity
+  year_1999_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - property: birth_date
+      operator: date_range
+      value:
+      - '1999-01-01'
+      - '2000-01-01'
+forbidden_plans: {}
+probe:
+  frozen_time: '2026-09-03T12:00:00-07:00'
+  default_speaker_id: person:gamma_self
+  household_id: address:gamma
+  household: gamma
+  cases:
+  - id: dev-gamma-S2-1
+    cell: S2
+    utterance: 家里有几个人
+    plan: household_count
+    notes: Seven residents.
+    expected_status: found
+    expected_entity_ids:
+    - person:gamma_self
+    - person:gamma_dau_a
+    - person:gamma_dau_b
+    - person:gamma_just_adult
+    - person:gamma_still_minor
+    - person:gamma_roommate
+    - person:gamma_roommate_child
+    expected_value: 7
+  - id: dev-gamma-F3-1
+    cell: F3
+    utterance: 家里有几个未成年人
+    plan: household_minor_count
+    notes: Four minors including 顾未.
+    expected_status: found
+    expected_entity_ids:
+    - person:gamma_dau_a
+    - person:gamma_dau_b
+    - person:gamma_still_minor
+    - person:gamma_roommate_child
+    expected_value: 4
+  - id: dev-gamma-K6-1
+    cell: K6
+    utterance: 我的岳父是哪位
+    plan: father_in_law
+    notes: No spouse, empty in-laws.
+    expected_status: relationship_not_found
+  - id: dev-gamma-E2-1
+    cell: E2
+    utterance: 顾隐哪天出生
+    plan: named_missing_birth
+    notes: Missing dob is property_unavailable.
+    expected_status: property_unavailable
+    expected_entity_ids:
+    - person:gamma_missing
+  - id: dev-gamma-E4-1
+    cell: E4
+    utterance: 家里有几个成年人
+    plan: household_adult_count
+    notes: Includes 顾成 (18 today), excludes 顾未.
+    expected_status: found
+    expected_entity_ids:
+    - person:gamma_self
+    - person:gamma_just_adult
+    - person:gamma_roommate
+    expected_value: 3
+  - id: dev-gamma-E5-1
+    cell: E5
+    utterance: 家里未成年的有几个
+    plan: household_minor_count
+    notes: Includes 顾未 (17), excludes 顾成.
+    expected_status: found
+    expected_entity_ids:
+    - person:gamma_dau_a
+    - person:gamma_dau_b
+    - person:gamma_still_minor
+    - person:gamma_roommate_child
+    expected_value: 4
+  - id: dev-gamma-E6-1
+    cell: E6
+    utterance: 家里1999年出生的有几个人
+    plan: year_1999_count
+    notes: Zero-match year, found 0.
+    expected_status: found
+    expected_entity_ids: []
+    expected_value: 0
+  - id: dev-gamma-E8-1
+    cell: E8
+    utterance: 我女儿是谁
+    plan: daughter_identity
+    notes: Two daughters, ambiguous.
+    speaker_id: person:gamma_self
+    expected_status: ambiguous
+  - id: dev-gamma-E8-2
+    cell: E8
+    utterance: 我女儿是谁
+    plan: daughter_identity
+    notes: Roommate's only daughter 顾苗.
+    speaker_id: person:gamma_roommate
+    expected_status: found
+    expected_entity_ids:
+    - person:gamma_roommate_child

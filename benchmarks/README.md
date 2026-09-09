@@ -9,6 +9,10 @@ not active source code.**
   held-out / synthetic probe datasets used to test compositional generalization.
 - `fixtures/semantic-contract/` — invented household graph records referenced by
   the synthetic probe.
+- `composition/` — Ticket 4 compositional generalization set (annotation guide,
+  coverage matrix, invented households, development vs frozen YAML). Loaded only
+  by `tests/test_composition_eval.py` and `home_cortex.composition_eval`; it does
+  not replace `semantic_planner_eval.yaml` or change `SCORING_REVISION`.
 
 These files are read at fixed paths by `src/home_cortex/semantic_planner_benchmark.py`
 and by `tests/test_semantic_planner_benchmark.py`, so their paths must stay stable.

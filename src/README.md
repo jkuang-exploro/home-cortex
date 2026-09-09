@@ -22,8 +22,13 @@ or normalize input values. Missing labels fall back to English, then the semanti
 key or literal. No new sentence template is needed for an additional filter.
 The model-facing capabilities and output schema omit this display metadata.
 
-This is an additive display extension to ontology version 1, not implementation
-of the proposed version-2 type/value contracts. Deploy the updated loader with the
+The display extension remains compatible with ontology version 1. An opt-in V2
+contract candidate is available in `schemas/semantic/ontology-v2.yaml`; pass the
+loaded ontology into `SemanticSchemaRegistry` for both planner and executor.
+V2 generates typed filter constraints and validates declared types, domains,
+ownership and stored inputs. The default ontology remains V1 pending evaluation.
+See the [contract implementation and evaluation handoff](../artifacts/generic-contracts/REPORT.md).
+Deploy the updated loader with the
 labeled ontology; older loaders reject the new fields. Unlabeled V1 ontologies
 remain supported. See the [before/after report](../artifacts/condition-rendering/REPORT.md)
 for validation and presentation limitations.

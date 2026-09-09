@@ -1,0 +1,20 @@
+[
+  {
+    "from": "person:alpha_self",
+    "to": "person:alpha_wife",
+    "start": "2004-06-18",
+    "end": null
+  },
+  {
+    "from": "person:alpha_father",
+    "to": "person:alpha_mother",
+    "start": "1978-01-01",
+    "end": null
+  },
+  {
+    "from": "person:alpha_fil",
+    "to": "person:alpha_mil",
+    "start": "1975-05-05",
+    "end": null
+  }
+]

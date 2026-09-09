@@ -1,0 +1,22 @@
+[
+  {
+    "from": "person:gamma_self",
+    "to": "person:gamma_dau_a"
+  },
+  {
+    "from": "person:gamma_self",
+    "to": "person:gamma_dau_b"
+  },
+  {
+    "from": "person:gamma_self",
+    "to": "person:gamma_just_adult"
+  },
+  {
+    "from": "person:gamma_self",
+    "to": "person:gamma_still_minor"
+  },
+  {
+    "from": "person:gamma_roommate",
+    "to": "person:gamma_roommate_child"
+  }
+]

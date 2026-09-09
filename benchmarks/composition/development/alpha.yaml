@@ -1,0 +1,591 @@
+version: 1
+household: alpha
+plans:
+  discourse_they:
+    operation: resolve_reference
+    subject:
+      kind: discourse
+      entity_type: person
+      turn_offset: 1
+      cardinality: collection
+    property_source: entity
+  father:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+  father_in_law:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+  household_adult_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: adult
+  household_adult_female_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: adult
+    - property: gender
+      value: female
+  household_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+  household_female_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - property: gender
+      value: female
+  household_female_list:
+    operation: select
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - property: gender
+      value: female
+  household_list:
+    operation: select
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+  household_male_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - property: gender
+      value: male
+  household_minor_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: minor
+  household_minor_female_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: minor
+    - property: gender
+      value: female
+  household_minor_list:
+    operation: select
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: minor
+  household_oldest:
+    operation: argmin
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property: birth_date
+    property_source: entity
+  self_adult_daughters_count:
+    operation: count
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+        filters:
+        - property: gender
+          value: female
+    property_source: entity
+    filters:
+    - predicate: adult
+  self_children_list:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+    property_source: entity
+  self_daughters_list:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+        filters:
+        - property: gender
+          value: female
+    property_source: entity
+  self_sons_count:
+    operation: count
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: child
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+  spouse_father_in_law:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+      - relation: spouse
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+  unresolved_they:
+    operation: resolve_reference
+    subject:
+      kind: unresolved
+      entity_type: person
+    property_source: entity
+  wife_age_years:
+    operation: date_difference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+    property_source: entity
+    mode: years
+  wife_birth_select:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+    property_source: entity
+  wife_birthday_days:
+    operation: annual_occurrence
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+    property: birth_date
+    property_source: entity
+    mode: days
+  wife_father:
+    operation: resolve_reference
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: spouse
+        filters:
+        - property: gender
+          value: female
+      - relation: parent
+        filters:
+        - property: gender
+          value: male
+    property_source: entity
+forbidden_plans:
+  household_adult_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: adult
+  household_female_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - property: gender
+      value: female
+  household_male_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - property: gender
+      value: male
+  household_minor_count:
+    operation: count
+    subject:
+      kind: current_household
+      entity_type: address
+      path:
+      - relation: member
+    property_source: entity
+    filters:
+    - predicate: minor
+  self_member:
+    operation: select
+    subject:
+      kind: self
+      entity_type: person
+      path:
+      - relation: member
+    property_source: entity
+probe:
+  frozen_time: '2026-09-03T12:00:00-07:00'
+  default_speaker_id: person:alpha_self
+  household_id: address:alpha
+  household: alpha
+  cases:
+  - id: dev-alpha-S1-1
+    cell: S1
+    utterance: 请列出家里的人
+    plan: household_list
+    notes: Household members, not self→member.
+    forbidden_plans:
+    - self_member
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_self
+    - person:alpha_wife
+    - person:alpha_son_adult
+    - person:alpha_son_minor
+    - person:alpha_daughter
+    - person:alpha_father
+    - person:alpha_mother
+    - person:alpha_fil
+    - person:alpha_mil
+    - person:alpha_niece
+  - id: dev-alpha-S2-1
+    cell: S2
+    utterance: 家里有几个人
+    plan: household_count
+    notes: Household count 10 with member ids.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_self
+    - person:alpha_wife
+    - person:alpha_son_adult
+    - person:alpha_son_minor
+    - person:alpha_daughter
+    - person:alpha_father
+    - person:alpha_mother
+    - person:alpha_fil
+    - person:alpha_mil
+    - person:alpha_niece
+    expected_value: 10
+  - id: dev-alpha-S3-1
+    cell: S3
+    utterance: 我家里都有谁
+    plan: household_list
+    notes: Still household members. Forbidden self→member.
+    forbidden_plans:
+    - self_member
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_self
+    - person:alpha_wife
+    - person:alpha_son_adult
+    - person:alpha_son_minor
+    - person:alpha_daughter
+    - person:alpha_father
+    - person:alpha_mother
+    - person:alpha_fil
+    - person:alpha_mil
+    - person:alpha_niece
+  - id: dev-alpha-F1-1
+    cell: F1
+    utterance: 家里有几个女的
+    plan: household_female_count
+    notes: Female ≠ adult ≠ minor. Count collides with male=5; assert ids.
+    forbidden_plans:
+    - household_adult_count
+    - household_minor_count
+    - household_male_count
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_wife
+    - person:alpha_daughter
+    - person:alpha_mother
+    - person:alpha_mil
+    - person:alpha_niece
+    expected_value: 5
+  - id: dev-alpha-F2-1
+    cell: F2
+    utterance: 家里有几个成年人
+    plan: household_adult_count
+    notes: Adult predicate, no gender.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_self
+    - person:alpha_wife
+    - person:alpha_son_adult
+    - person:alpha_father
+    - person:alpha_mother
+    - person:alpha_fil
+    - person:alpha_mil
+    expected_value: 7
+  - id: dev-alpha-F3-1
+    cell: F3
+    utterance: 家里有几个未成年人
+    plan: household_minor_count
+    notes: Household minors, not my children.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_son_minor
+    - person:alpha_daughter
+    - person:alpha_niece
+    expected_value: 3
+  - id: dev-alpha-F4-1
+    cell: F4
+    utterance: 家里有几个成年女性
+    plan: household_adult_female_count
+    notes: adult AND gender=female.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_wife
+    - person:alpha_mother
+    - person:alpha_mil
+    expected_value: 3
+  - id: dev-alpha-F5-1
+    cell: F5
+    utterance: 家里有几个未成年女性
+    plan: household_minor_female_count
+    notes: minor AND gender=female; not my daughters.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_daughter
+    - person:alpha_niece
+    expected_value: 2
+  - id: dev-alpha-F6-1
+    cell: F6
+    utterance: 请列出家里的女性
+    plan: household_female_list
+    notes: Female member list.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_wife
+    - person:alpha_daughter
+    - person:alpha_mother
+    - person:alpha_mil
+    - person:alpha_niece
+  - id: dev-alpha-F7-1
+    cell: F7
+    utterance: 家里有几个男的
+    plan: household_male_count
+    notes: Male count collides with female=5; assert ids.
+    forbidden_plans:
+    - household_adult_count
+    - household_female_count
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_self
+    - person:alpha_son_adult
+    - person:alpha_son_minor
+    - person:alpha_father
+    - person:alpha_fil
+    expected_value: 5
+  - id: dev-alpha-C1-1
+    cell: C1
+    utterance: 请列出我的孩子
+    plan: self_children_list
+    notes: Includes adult son; excludes niece.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_son_adult
+    - person:alpha_son_minor
+    - person:alpha_daughter
+  - id: dev-alpha-C2-1
+    cell: C2
+    utterance: 请列出家里的未成年人
+    plan: household_minor_list
+    notes: Minors include niece, exclude adult son.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_son_minor
+    - person:alpha_daughter
+    - person:alpha_niece
+  - id: dev-alpha-C3-1
+    cell: C3
+    utterance: 请列出我的女儿
+    plan: self_daughters_list
+    notes: One daughter; household minor females are two.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_daughter
+  - id: dev-alpha-C4-1
+    cell: C4
+    utterance: 我有几个儿子
+    plan: self_sons_count
+    notes: Two sons vs one household minor male.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_son_adult
+    - person:alpha_son_minor
+    expected_value: 2
+  - id: dev-alpha-K1-1
+    cell: K1
+    utterance: 我的岳父是哪位
+    plan: father_in_law
+    notes: 梅山. Not father, not spouse then FIL.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_fil
+  - id: dev-alpha-K2-1
+    cell: K2
+    utterance: 我妻子的父亲是哪位
+    plan: wife_father
+    notes: wife then father only. Not father_in_law.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_fil
+  - id: dev-alpha-K3-1
+    cell: K3
+    utterance: 我配偶的岳父是哪位
+    plan: spouse_father_in_law
+    notes: Speaker's father 安石, not FIL.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_father
+  - id: dev-alpha-K4-1
+    cell: K4
+    utterance: 我的父亲是哪位
+    plan: father
+    notes: 安石. Distinct from FIL.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_father
+  - id: dev-alpha-O1-1
+    cell: O1
+    utterance: 我妻子的出生日期是哪天
+    plan: wife_birth_select
+    notes: select(birth_date), not annual_occurrence.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_wife
+    expected_value: '1982-04-20'
+  - id: dev-alpha-O2-1
+    cell: O2
+    utterance: 我妻子下个生日还有多少天
+    plan: wife_birthday_days
+    notes: annual_occurrence days, not stored date.
+    expected_status: found
+    expected_unit: days
+    expected_entity_ids:
+    - person:alpha_wife
+    expected_value: 229
+  - id: dev-alpha-O3-1
+    cell: O3
+    utterance: 我妻子现在多少岁
+    plan: wife_age_years
+    notes: date_difference years.
+    expected_status: found
+    expected_unit: years
+    expected_entity_ids:
+    - person:alpha_wife
+    expected_value: 44
+  - id: dev-alpha-O4-1
+    cell: O4
+    utterance: 家里谁最年长
+    plan: household_oldest
+    notes: Oldest household member.
+    expected_status: found
+    expected_entity_ids:
+    - person:alpha_fil
+  - id: dev-alpha-E1-1
+    cell: E1
+    utterance: 我有几个成年女儿
+    plan: self_adult_daughters_count
+    notes: Empty set, count 0 found.
+    expected_status: found
+    expected_entity_ids: []
+    expected_value: 0
+  - id: dev-alpha-E7-1
+    cell: E7
+    utterance: 他们是谁
+    plan: unresolved_they
+    notes: Clarification, not a guessed person.
+    acceptable_plans:
+    - discourse_they
+    acceptable_statuses:
+    - discourse_context_missing
+    expected_status: ambiguous

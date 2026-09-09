@@ -7,7 +7,10 @@ This is the design deliverable for Ticket 2, not a description of deployed behav
 Follow-on status: Ticket 3 implements the display-only slice through optional V1
 `label`/`value_labels` metadata and compositional rendering. See its
 [implementation report](../../artifacts/condition-rendering/REPORT.md).
-The V2 type/domain/compiler migration proposed below remains unimplemented.
+An opt-in V2 type/domain/compiler candidate is now implemented; the default
+ontology remains V1. See the [compatibility and evaluation handoff](../../artifacts/generic-contracts/REPORT.md)
+for implemented boundaries and remaining provider/production checks. This design
+is the proposal baseline, not a claim that every migration phase has completed.
 
 ## 1. Decision
 
