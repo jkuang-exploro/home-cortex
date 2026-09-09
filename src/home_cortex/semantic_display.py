@@ -45,6 +45,74 @@ class SemanticDisplay:
         ) else ()
         return self.label(labels, name)
 
+    def matching_concept(self, reference: SemanticReference):
+        """Return the concept whose complete declared path was executed."""
+        for concept in self.ontology.reference_concepts.values():
+            if len(reference.path) != len(concept.path):
+                continue
+            if all(
+                actual.relation == declared.relation
+                and tuple(
+                    (
+                        item.property,
+                        item.operator,
+                        item.value,
+                        item.source,
+                        item.value_from,
+                        item.value_property,
+                    )
+                    for item in actual.filters
+                )
+                == tuple(
+                    (
+                        item.property,
+                        item.operator,
+                        item.value,
+                        item.source,
+                        item.value_from,
+                        item.value_property,
+                    )
+                    for item in declared.filters
+                )
+                for actual, declared in zip(reference.path, concept.path)
+            ):
+                return concept
+        return None
+
+    def collection_noun(
+        self,
+        reference: SemanticReference,
+        filters: tuple[SemanticFilter, ...],
+    ) -> tuple[str, tuple[SemanticFilter, ...]] | None:
+        """Compose a noun from exact concept and condition display metadata."""
+        concept = self.matching_concept(reference)
+        if concept is None or not (concept.count_label or concept.label):
+            return None
+        noun = self.label(concept.count_label or concept.label, concept.name)
+        modifiers: list[str] = []
+        remaining: list[SemanticFilter] = []
+        for item in filters:
+            if item.predicate:
+                predicate = self.ontology.collection_predicates.get(item.predicate)
+                if predicate and predicate.modifier:
+                    modifiers.append(self.label(predicate.modifier, item.predicate))
+                    continue
+            if (
+                item.source == "entity"
+                and item.property == "gender"
+                and item.operator == "eq"
+                and item.value_from is None
+                and isinstance(item.value, str)
+            ):
+                noun = self.literal("gender", item.value)
+                continue
+            remaining.append(item)
+        if self.zh:
+            noun = "".join(modifiers) + noun
+        elif modifiers:
+            noun = " ".join((*modifiers, noun))
+        return noun, tuple(remaining)
+
     def literal(self, property_name: str, value: object) -> str:
         definition = self.ontology.properties.get(property_name)
         labels = dict(definition.value_labels).get(value, ()) if definition and isinstance(value, str) else ()

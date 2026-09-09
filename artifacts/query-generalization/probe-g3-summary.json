@@ -1,0 +1,3955 @@
+{
+  "started": "2026-09-09T02:45:59.972918Z",
+  "model": "qwen3.5:9b",
+  "ollama_url": "http://ollama:11434",
+  "profiles": {
+    "v1": {
+      "ontology_version": 1,
+      "contracts": false,
+      "n": 49,
+      "buckets": {
+        "match": 31,
+        "wrong_but_legal": 11,
+        "schema_rejection": 6,
+        "execution_failure": 1
+      },
+      "first_pass_matches": 31,
+      "rows_with_retry": 8,
+      "decoder_errors": 4,
+      "llm_calls": 57,
+      "latency_ms_mean": 1867.1,
+      "rows": [
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1092.87,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_self",
+            "person:alpha_wife",
+            "person:alpha_son_adult",
+            "person:alpha_son_minor",
+            "person:alpha_daughter",
+            "person:alpha_father",
+            "person:alpha_mother",
+            "person:alpha_fil",
+            "person:alpha_mil",
+            "person:alpha_niece"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-S1-1",
+          "cell": "S1",
+          "utterance": "Who are the people in this household?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1374.6,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_self",
+            "person:alpha_wife",
+            "person:alpha_son_adult",
+            "person:alpha_son_minor",
+            "person:alpha_daughter",
+            "person:alpha_father",
+            "person:alpha_mother",
+            "person:alpha_fil",
+            "person:alpha_mil",
+            "person:alpha_niece"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-S2-1",
+          "cell": "S2",
+          "utterance": "本户现在一共几位成员？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1375.5,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_self",
+            "person:alpha_wife",
+            "person:alpha_son_adult",
+            "person:alpha_son_minor",
+            "person:alpha_daughter",
+            "person:alpha_father",
+            "person:alpha_mother",
+            "person:alpha_fil",
+            "person:alpha_mil",
+            "person:alpha_niece"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-S3-1",
+          "cell": "S3",
+          "utterance": "咱家这户人都有哪些？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1524.35,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_self",
+            "person:alpha_wife",
+            "person:alpha_son_adult",
+            "person:alpha_father",
+            "person:alpha_mother",
+            "person:alpha_fil",
+            "person:alpha_mil"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-F2-1",
+          "cell": "F2",
+          "utterance": "本户已满十八岁的成员有几位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1623.41,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                },
+                {
+                  "relation": "child",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "minor",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_daughter"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-alpha-F5-1",
+          "cell": "F5",
+          "utterance": "本户未成年的女孩子有几个？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 2,
+          "decoder_error": null,
+          "llm_calls": 2,
+          "planner_latency_ms": 3583.85,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "property": "gender",
+                "operator": "eq",
+                "value": "female",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_wife",
+            "person:alpha_mother",
+            "person:alpha_mil"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-alpha-F6-1",
+          "cell": "F6",
+          "utterance": "List the women who live here.",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1531.73,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "minor",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_son_minor",
+            "person:alpha_daughter",
+            "person:alpha_niece"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-C2-1",
+          "cell": "C2",
+          "utterance": "Who in this household is still a minor?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1350.57,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "child",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_son_adult",
+            "person:alpha_son_minor"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-C4-1",
+          "cell": "C4",
+          "utterance": "我名下的儿子一共几个？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1434.69,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_fil"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-K2-1",
+          "cell": "K2",
+          "utterance": "我老婆她爸是哪一位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1487.97,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": []
+                },
+                {
+                  "relation": "spouse",
+                  "filters": []
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_father"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-K3-1",
+          "cell": "K3",
+          "utterance": "我爱人的岳父是谁？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1358.32,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_father"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-K4-1",
+          "cell": "K4",
+          "utterance": "我自己的爸爸是哪一位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1394.27,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_wife"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-O1-1",
+          "cell": "O1",
+          "utterance": "What is my wife's date of birth on record?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1392.09,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_wife"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-O1-2",
+          "cell": "O1",
+          "utterance": "我妻子出生那天是哪一号？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1521.99,
+          "plan": {
+            "operation": "annual_occurrence",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": [],
+            "mode": "days"
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_wife"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-O2-1",
+          "cell": "O2",
+          "utterance": "我太太距离下次过生日还有几天？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1508.01,
+          "plan": {
+            "operation": "date_difference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": [],
+            "mode": "years"
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_wife"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-alpha-O3-1",
+          "cell": "O3",
+          "utterance": "我太太今年满几周岁了？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1449.66,
+          "plan": {
+            "operation": "argmin",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_fil"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-O4-1",
+          "cell": "O4",
+          "utterance": "本户出生最早的是哪一位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1500.37,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "child",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-E1-1",
+          "cell": "E1",
+          "utterance": "How many of my daughters are adults?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1164.26,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "unresolved",
+              "entity_type": "person",
+              "path": [],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "ambiguous",
+          "entity_ids": [],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-E7-1",
+          "cell": "E7",
+          "utterance": "Who are they?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1906.98,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "property": "gender",
+                "operator": "eq",
+                "value": "female",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_wife",
+            "person:alpha_mother",
+            "person:alpha_mil"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-alpha-F4-2",
+          "cell": "F4",
+          "utterance": "成年的女性成员有几位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1658.6,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "predicate": "minor",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-beta-F1-1",
+          "cell": "F1",
+          "utterance": "How many females live in this household?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1664.04,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_self",
+            "person:beta_husband",
+            "person:beta_dau_adult",
+            "person:beta_father",
+            "person:beta_mother",
+            "person:beta_fil",
+            "person:beta_mil"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-beta-F4-1",
+          "cell": "F4",
+          "utterance": "How many adult women are in this household?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1737.98,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_self",
+            "person:beta_husband",
+            "person:beta_dau_adult",
+            "person:beta_father",
+            "person:beta_mother",
+            "person:beta_fil",
+            "person:beta_mil"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-beta-F7-1",
+          "cell": "F7",
+          "utterance": "本户男性成员有几位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "INVALID_PLAN",
+          "attempts": 2,
+          "decoder_error": "ValueError",
+          "llm_calls": 2,
+          "planner_latency_ms": 2986.11,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "frz-beta-C1-1",
+          "cell": "C1",
+          "utterance": "把我自己的子女都列出来",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1546.17,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "minor",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_dau_minor",
+            "person:beta_son_minor",
+            "person:beta_nephew"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-beta-C2-1",
+          "cell": "C2",
+          "utterance": "本户的小孩子都有谁",
+          "kind": "frozen"
+        },
+        {
+          "validation": "INVALID_PLAN",
+          "attempts": 2,
+          "decoder_error": "ValueError",
+          "llm_calls": 2,
+          "planner_latency_ms": 3085.33,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "frz-beta-C3-1",
+          "cell": "C3",
+          "utterance": "我自己的千金都有谁",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1464.79,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": []
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_fil"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-beta-K1-1",
+          "cell": "K1",
+          "utterance": "请指出我的公公是哪一位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1449.19,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "relationship_not_found",
+          "entity_ids": [],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-beta-K2-1",
+          "cell": "K2",
+          "utterance": "Which person is my wife's father?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1480.46,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_fil"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-beta-K5-1",
+          "cell": "K5",
+          "utterance": "我先生的父亲叫什么身份？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1549.18,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "minor",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:gamma_dau_a",
+            "person:gamma_dau_b",
+            "person:gamma_still_minor",
+            "person:gamma_roommate_child"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-F3-1",
+          "cell": "F3",
+          "utterance": "咱家还没成年的有几位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1437.66,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": []
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "relationship_not_found",
+          "entity_ids": [],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-K6-1",
+          "cell": "K6",
+          "utterance": "Name the person who is my father in law.",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1273.32,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "named_entity",
+              "value": "顾隐",
+              "entity_type": "person",
+              "path": [],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "property_unavailable",
+          "entity_ids": [
+            "person:gamma_missing"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-E2-1",
+          "cell": "E2",
+          "utterance": "顾隐的出生日期能查到吗？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1568.89,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:gamma_self",
+            "person:gamma_just_adult",
+            "person:gamma_roommate"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-E4-1",
+          "cell": "E4",
+          "utterance": "本户已成年的一共几人？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1552.52,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "minor",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:gamma_dau_a",
+            "person:gamma_dau_b",
+            "person:gamma_still_minor",
+            "person:gamma_roommate_child"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-E5-1",
+          "cell": "E5",
+          "utterance": "How many household members are still minors?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 2194.37,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "property": "birth_date",
+                "operator": "date_range",
+                "value": [
+                  "1999-01-01",
+                  "2000-01-01"
+                ],
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-E6-1",
+          "cell": "E6",
+          "utterance": "本户在一九九九年出生的有几位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1358.85,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "child",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "ambiguous",
+          "entity_ids": [],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-E8-1",
+          "cell": "E8",
+          "utterance": "我闺女是哪位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 985.7,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "child",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:gamma_roommate_child"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-E8-2",
+          "cell": "E8",
+          "utterance": "我闺女是哪位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1826.54,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_self",
+            "person:beta_husband",
+            "person:beta_dau_adult",
+            "person:beta_father",
+            "person:beta_mother",
+            "person:beta_fil",
+            "person:beta_mil"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-seq-G1",
+          "cell": "G1",
+          "utterance": "本户男性成员有几位？",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1481.25,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": []
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_fil"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-seq-G2",
+          "cell": "G2",
+          "utterance": "请指出我的公公是哪一位？",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1532.44,
+          "plan": {
+            "operation": "annual_occurrence",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": [],
+            "mode": "days"
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_husband"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-seq-G3",
+          "cell": "G3",
+          "utterance": "我先生下次生日还有几天？",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1429.94,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_husband"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-seq-G4",
+          "cell": "G4",
+          "utterance": "What is my husband's date of birth on record?",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1417.51,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_self",
+            "person:beta_husband",
+            "person:beta_dau_adult",
+            "person:beta_dau_minor",
+            "person:beta_son_minor",
+            "person:beta_father",
+            "person:beta_mother",
+            "person:beta_fil",
+            "person:beta_mil",
+            "person:beta_nephew"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-seq-G5",
+          "cell": "G5",
+          "utterance": "咱家这户人都有哪些？",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 2,
+          "decoder_error": null,
+          "llm_calls": 2,
+          "planner_latency_ms": 9549.24,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_self",
+            "person:beta_husband",
+            "person:beta_dau_adult",
+            "person:beta_father",
+            "person:beta_mother",
+            "person:beta_fil",
+            "person:beta_mil"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-seq-G6",
+          "cell": "G6",
+          "utterance": "How many adult women are in this household?",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1442.28,
+          "plan": {
+            "operation": "earliest",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_self",
+            "person:beta_husband",
+            "person:beta_dau_adult",
+            "person:beta_dau_minor",
+            "person:beta_son_minor",
+            "person:beta_father",
+            "person:beta_mother",
+            "person:beta_fil",
+            "person:beta_mil",
+            "person:beta_nephew"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-seq-G7",
+          "cell": "G7",
+          "utterance": "Which of them was born first?",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1457.22,
+          "plan": {
+            "operation": "annual_occurrence",
+            "subject": {
+              "kind": "discourse",
+              "entity_type": "person",
+              "path": [],
+              "turn_offset": 1,
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": [],
+            "mode": "days"
+          },
+          "result_status": "discourse_context_missing",
+          "entity_ids": [],
+          "bucket": "execution_failure",
+          "population_ok": false,
+          "id": "frz-seq-G8",
+          "cell": "G8",
+          "utterance": "她下个生日还有几天？",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 2,
+          "decoder_error": null,
+          "llm_calls": 2,
+          "planner_latency_ms": 2521.97,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [],
+              "cardinality": "single"
+            },
+            "property": "full_address",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "address:alpha"
+          ],
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "loc-rooms-zh",
+          "cell": "location",
+          "utterance": "家里有几个房间",
+          "kind": "location"
+        },
+        {
+          "validation": "INVALID_PLAN",
+          "attempts": 2,
+          "decoder_error": "ValueError",
+          "llm_calls": 2,
+          "planner_latency_ms": 2884.07,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "loc-rooms-en",
+          "cell": "location",
+          "utterance": "How many rooms are in this household?",
+          "kind": "location"
+        },
+        {
+          "validation": "INVALID_PLAN",
+          "attempts": 2,
+          "decoder_error": "ValueError",
+          "llm_calls": 2,
+          "planner_latency_ms": 3040.06,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "loc-milk-zh",
+          "cell": "location",
+          "utterance": "牛奶在哪里",
+          "kind": "location"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 2,
+          "decoder_error": null,
+          "llm_calls": 2,
+          "planner_latency_ms": 2695.29,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_self"
+          ],
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "loc-milk-en",
+          "cell": "location",
+          "utterance": "Where is the milk?",
+          "kind": "location"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1641.67,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "predicate": "minor",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "loc-unsupported-item-type",
+          "cell": "location",
+          "utterance": "家里食物类物品有几件",
+          "kind": "location"
+        }
+      ]
+    },
+    "v2": {
+      "ontology_version": 2,
+      "contracts": true,
+      "n": 49,
+      "buckets": {
+        "match": 29,
+        "wrong_but_legal": 9,
+        "schema_rejection": 10,
+        "execution_failure": 1
+      },
+      "first_pass_matches": 29,
+      "rows_with_retry": 13,
+      "decoder_errors": 10,
+      "llm_calls": 62,
+      "latency_ms_mean": 2681.84,
+      "rows": [
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 5179.22,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_self",
+            "person:alpha_wife",
+            "person:alpha_son_adult",
+            "person:alpha_son_minor",
+            "person:alpha_daughter",
+            "person:alpha_father",
+            "person:alpha_mother",
+            "person:alpha_fil",
+            "person:alpha_mil",
+            "person:alpha_niece"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-S1-1",
+          "cell": "S1",
+          "utterance": "Who are the people in this household?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1440.73,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_self",
+            "person:alpha_wife",
+            "person:alpha_son_adult",
+            "person:alpha_son_minor",
+            "person:alpha_daughter",
+            "person:alpha_father",
+            "person:alpha_mother",
+            "person:alpha_fil",
+            "person:alpha_mil",
+            "person:alpha_niece"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-S2-1",
+          "cell": "S2",
+          "utterance": "本户现在一共几位成员？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1436.28,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_self",
+            "person:alpha_wife",
+            "person:alpha_son_adult",
+            "person:alpha_son_minor",
+            "person:alpha_daughter",
+            "person:alpha_father",
+            "person:alpha_mother",
+            "person:alpha_fil",
+            "person:alpha_mil",
+            "person:alpha_niece"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-S3-1",
+          "cell": "S3",
+          "utterance": "咱家这户人都有哪些？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1597.17,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_self",
+            "person:alpha_wife",
+            "person:alpha_son_adult",
+            "person:alpha_father",
+            "person:alpha_mother",
+            "person:alpha_fil",
+            "person:alpha_mil"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-F2-1",
+          "cell": "F2",
+          "utterance": "本户已满十八岁的成员有几位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1689.75,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                },
+                {
+                  "relation": "child",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "minor",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_daughter"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-alpha-F5-1",
+          "cell": "F5",
+          "utterance": "本户未成年的女孩子有几个？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 2,
+          "decoder_error": null,
+          "llm_calls": 2,
+          "planner_latency_ms": 3696.88,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "property": "gender",
+                "operator": "eq",
+                "value": "female",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_wife",
+            "person:alpha_mother",
+            "person:alpha_mil"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-alpha-F6-1",
+          "cell": "F6",
+          "utterance": "List the women who live here.",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1575.25,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "minor",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_son_minor",
+            "person:alpha_daughter",
+            "person:alpha_niece"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-C2-1",
+          "cell": "C2",
+          "utterance": "Who in this household is still a minor?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1386.77,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "child",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_son_adult",
+            "person:alpha_son_minor"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-C4-1",
+          "cell": "C4",
+          "utterance": "我名下的儿子一共几个？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1484.11,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_fil"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-K2-1",
+          "cell": "K2",
+          "utterance": "我老婆她爸是哪一位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1544.11,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": []
+                },
+                {
+                  "relation": "spouse",
+                  "filters": []
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_father"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-K3-1",
+          "cell": "K3",
+          "utterance": "我爱人的岳父是谁？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1387.3,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_father"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-K4-1",
+          "cell": "K4",
+          "utterance": "我自己的爸爸是哪一位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1436.78,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_wife"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-O1-1",
+          "cell": "O1",
+          "utterance": "What is my wife's date of birth on record?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1426.8,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_wife"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-O1-2",
+          "cell": "O1",
+          "utterance": "我妻子出生那天是哪一号？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1550.19,
+          "plan": {
+            "operation": "annual_occurrence",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": [],
+            "mode": "days"
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_wife"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-O2-1",
+          "cell": "O2",
+          "utterance": "我太太距离下次过生日还有几天？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1534.84,
+          "plan": {
+            "operation": "date_difference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": [],
+            "mode": "years"
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_wife"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-alpha-O3-1",
+          "cell": "O3",
+          "utterance": "我太太今年满几周岁了？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1494.19,
+          "plan": {
+            "operation": "argmin",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_fil"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-O4-1",
+          "cell": "O4",
+          "utterance": "本户出生最早的是哪一位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1545.57,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "child",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-E1-1",
+          "cell": "E1",
+          "utterance": "How many of my daughters are adults?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1186.08,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "unresolved",
+              "entity_type": "person",
+              "path": [],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "ambiguous",
+          "entity_ids": [],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-alpha-E7-1",
+          "cell": "E7",
+          "utterance": "Who are they?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 2002.86,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "property": "gender",
+                "operator": "eq",
+                "value": "female",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:alpha_wife",
+            "person:alpha_mother",
+            "person:alpha_mil"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-alpha-F4-2",
+          "cell": "F4",
+          "utterance": "成年的女性成员有几位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "INVALID_PLAN",
+          "attempts": 2,
+          "decoder_error": "ValueError",
+          "llm_calls": 2,
+          "planner_latency_ms": 3426.9,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "frz-beta-F1-1",
+          "cell": "F1",
+          "utterance": "How many females live in this household?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "MALFORMED_OUTPUT",
+          "attempts": 2,
+          "decoder_error": "JSONDecodeError",
+          "llm_calls": 2,
+          "planner_latency_ms": 15799.54,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "frz-beta-F4-1",
+          "cell": "F4",
+          "utterance": "How many adult women are in this household?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 2,
+          "decoder_error": null,
+          "llm_calls": 2,
+          "planner_latency_ms": 3483.07,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              },
+              {
+                "property": "gender",
+                "operator": "eq",
+                "value": "male",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_husband",
+            "person:beta_father",
+            "person:beta_fil"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-beta-F7-1",
+          "cell": "F7",
+          "utterance": "本户男性成员有几位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "INVALID_PLAN",
+          "attempts": 2,
+          "decoder_error": "ValueError",
+          "llm_calls": 2,
+          "planner_latency_ms": 3032.11,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "frz-beta-C1-1",
+          "cell": "C1",
+          "utterance": "把我自己的子女都列出来",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1550.68,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "minor",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_dau_minor",
+            "person:beta_son_minor",
+            "person:beta_nephew"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-beta-C2-1",
+          "cell": "C2",
+          "utterance": "本户的小孩子都有谁",
+          "kind": "frozen"
+        },
+        {
+          "validation": "INVALID_PLAN",
+          "attempts": 2,
+          "decoder_error": "ValueError",
+          "llm_calls": 2,
+          "planner_latency_ms": 2841.16,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "frz-beta-C3-1",
+          "cell": "C3",
+          "utterance": "我自己的千金都有谁",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1461.42,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": []
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_fil"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-beta-K1-1",
+          "cell": "K1",
+          "utterance": "请指出我的公公是哪一位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1459.16,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "relationship_not_found",
+          "entity_ids": [],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-beta-K2-1",
+          "cell": "K2",
+          "utterance": "Which person is my wife's father?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1488.54,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": []
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_fil"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-beta-K5-1",
+          "cell": "K5",
+          "utterance": "我先生的父亲叫什么身份？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1571.99,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "minor",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:gamma_dau_a",
+            "person:gamma_dau_b",
+            "person:gamma_still_minor",
+            "person:gamma_roommate_child"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-F3-1",
+          "cell": "F3",
+          "utterance": "咱家还没成年的有几位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1470.87,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": []
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "relationship_not_found",
+          "entity_ids": [],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-K6-1",
+          "cell": "K6",
+          "utterance": "Name the person who is my father in law.",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1276.51,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "named_entity",
+              "value": "顾隐",
+              "entity_type": "person",
+              "path": [],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "property_unavailable",
+          "entity_ids": [
+            "person:gamma_missing"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-E2-1",
+          "cell": "E2",
+          "utterance": "顾隐的出生日期能查到吗？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1567.72,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "adult",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:gamma_self",
+            "person:gamma_just_adult",
+            "person:gamma_roommate"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-E4-1",
+          "cell": "E4",
+          "utterance": "本户已成年的一共几人？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1561.3,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "predicate": "minor",
+                "operator": "eq",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:gamma_dau_a",
+            "person:gamma_dau_b",
+            "person:gamma_still_minor",
+            "person:gamma_roommate_child"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-E5-1",
+          "cell": "E5",
+          "utterance": "How many household members are still minors?",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 2350.01,
+          "plan": {
+            "operation": "count",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [
+              {
+                "property": "birth_date",
+                "operator": "eq",
+                "value": "1999-01-01",
+                "source": "entity"
+              },
+              {
+                "property": "birth_date",
+                "operator": "lt",
+                "value": "2000-01-01",
+                "source": "entity"
+              }
+            ],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-gamma-E6-1",
+          "cell": "E6",
+          "utterance": "本户在一九九九年出生的有几位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1387.48,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "child",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "ambiguous",
+          "entity_ids": [],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-E8-1",
+          "cell": "E8",
+          "utterance": "我闺女是哪位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1003.02,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "child",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "female",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:gamma_roommate_child"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-gamma-E8-2",
+          "cell": "E8",
+          "utterance": "我闺女是哪位？",
+          "kind": "frozen"
+        },
+        {
+          "validation": "INVALID_PLAN",
+          "attempts": 2,
+          "decoder_error": "ValueError",
+          "llm_calls": 2,
+          "planner_latency_ms": 9848.14,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "frz-seq-G1",
+          "cell": "G1",
+          "utterance": "本户男性成员有几位？",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1468.13,
+          "plan": {
+            "operation": "resolve_reference",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": []
+                },
+                {
+                  "relation": "parent",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_fil"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-seq-G2",
+          "cell": "G2",
+          "utterance": "请指出我的公公是哪一位？",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1516.32,
+          "plan": {
+            "operation": "annual_occurrence",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": [],
+            "mode": "days"
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_husband"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-seq-G3",
+          "cell": "G3",
+          "utterance": "我先生下次生日还有几天？",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1443.45,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "spouse",
+                  "filters": [
+                    {
+                      "property": "gender",
+                      "operator": "eq",
+                      "value": "male",
+                      "source": "entity"
+                    }
+                  ]
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_husband"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-seq-G4",
+          "cell": "G4",
+          "utterance": "What is my husband's date of birth on record?",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1403.24,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_self",
+            "person:beta_husband",
+            "person:beta_dau_adult",
+            "person:beta_dau_minor",
+            "person:beta_son_minor",
+            "person:beta_father",
+            "person:beta_mother",
+            "person:beta_fil",
+            "person:beta_mil",
+            "person:beta_nephew"
+          ],
+          "bucket": "match",
+          "population_ok": true,
+          "id": "frz-seq-G5",
+          "cell": "G5",
+          "utterance": "咱家这户人都有哪些？",
+          "kind": "sequence"
+        },
+        {
+          "validation": "MALFORMED_OUTPUT",
+          "attempts": 2,
+          "decoder_error": "JSONDecodeError",
+          "llm_calls": 2,
+          "planner_latency_ms": 15947.38,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "frz-seq-G6",
+          "cell": "G6",
+          "utterance": "How many adult women are in this household?",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1479.0,
+          "plan": {
+            "operation": "earliest",
+            "subject": {
+              "kind": "current_household",
+              "entity_type": "address",
+              "path": [
+                {
+                  "relation": "member",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "person:beta_self",
+            "person:beta_husband",
+            "person:beta_dau_adult",
+            "person:beta_dau_minor",
+            "person:beta_son_minor",
+            "person:beta_father",
+            "person:beta_mother",
+            "person:beta_fil",
+            "person:beta_mil",
+            "person:beta_nephew"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "frz-seq-G7",
+          "cell": "G7",
+          "utterance": "Which of them was born first?",
+          "kind": "sequence"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 1,
+          "decoder_error": null,
+          "llm_calls": 1,
+          "planner_latency_ms": 1489.16,
+          "plan": {
+            "operation": "annual_occurrence",
+            "subject": {
+              "kind": "discourse",
+              "entity_type": "person",
+              "path": [],
+              "turn_offset": 1,
+              "cardinality": "single"
+            },
+            "property": "birth_date",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": [],
+            "mode": "days"
+          },
+          "result_status": "discourse_context_missing",
+          "entity_ids": [],
+          "bucket": "execution_failure",
+          "population_ok": false,
+          "id": "frz-seq-G8",
+          "cell": "G8",
+          "utterance": "她下个生日还有几天？",
+          "kind": "sequence"
+        },
+        {
+          "validation": "INVALID_PLAN",
+          "attempts": 2,
+          "decoder_error": "ValueError",
+          "llm_calls": 2,
+          "planner_latency_ms": 2793.66,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "loc-rooms-zh",
+          "cell": "location",
+          "utterance": "家里有几个房间",
+          "kind": "location"
+        },
+        {
+          "validation": "INVALID_PLAN",
+          "attempts": 2,
+          "decoder_error": "ValueError",
+          "llm_calls": 2,
+          "planner_latency_ms": 2964.69,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "loc-rooms-en",
+          "cell": "location",
+          "utterance": "How many rooms are in this household?",
+          "kind": "location"
+        },
+        {
+          "validation": "INVALID_PLAN",
+          "attempts": 2,
+          "decoder_error": "ValueError",
+          "llm_calls": 2,
+          "planner_latency_ms": 3360.4,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "loc-milk-zh",
+          "cell": "location",
+          "utterance": "牛奶在哪里",
+          "kind": "location"
+        },
+        {
+          "validation": "VALID",
+          "attempts": 2,
+          "decoder_error": null,
+          "llm_calls": 2,
+          "planner_latency_ms": 3016.35,
+          "plan": {
+            "operation": "select",
+            "subject": {
+              "kind": "self",
+              "entity_type": "person",
+              "path": [
+                {
+                  "relation": "residence",
+                  "filters": []
+                }
+              ],
+              "cardinality": "single"
+            },
+            "property": "full_address",
+            "property_source": "entity",
+            "filters": [],
+            "projection": "scalar",
+            "exclude": []
+          },
+          "result_status": "found",
+          "entity_ids": [
+            "address:alpha"
+          ],
+          "bucket": "wrong_but_legal",
+          "population_ok": null,
+          "id": "loc-milk-en",
+          "cell": "location",
+          "utterance": "Where is the milk?",
+          "kind": "location"
+        },
+        {
+          "validation": "INVALID_PLAN",
+          "attempts": 2,
+          "decoder_error": "ValueError",
+          "llm_calls": 2,
+          "planner_latency_ms": 3353.98,
+          "plan": null,
+          "result_status": null,
+          "entity_ids": null,
+          "bucket": "schema_rejection",
+          "population_ok": null,
+          "id": "loc-unsupported-item-type",
+          "cell": "location",
+          "utterance": "家里食物类物品有几件",
+          "kind": "location"
+        }
+      ]
+    }
+  }
+}

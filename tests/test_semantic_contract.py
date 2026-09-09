@@ -114,7 +114,7 @@ async def test_date_filtered_set_preserves_bounds_scope_and_cardinality(househol
     result,*_=await engine.execute(empty,ctx)
     assert result.status=='found' and result.value==[]
     for locale, ending in [('zh', '没有找到符合筛选条件的记录。'), ('en', 'No records match the filters.')]:
-        text = FactRenderer().render(empty,result,replace(ctx,locale=locale))
+        text = FactRenderer(detailed=True).render(empty,result,replace(ctx,locale=locale))
         assert text.endswith(ending)
         assert '1900-01-01' in text and '1901-01-01' in text
     dispatcher.entities['person:b'].pop('dob')
@@ -243,14 +243,16 @@ async def test_final_collection_filter_equivalence_and_intermediate_counterexamp
 
 
 @pytest.mark.asyncio
-async def test_filter_movement_is_not_general_equivalence(household):
+async def test_request_filter_runs_before_scalar_cardinality(household):
     engine,ctx,dispatcher=household
-    # Scalar resolution happens before request filtering, but after path filtering.
+    # The IR placements remain distinct, while collection filtering must happen
+    # before scalar cardinality is enforced.
     scalar=SemanticFactRequest(operation='select',subject=ref(step('child')),property='birth_date',filters=(SemanticFilter(property='gender',value='female'),))
     path=scalar.model_copy(update={'subject':ref(step('child','female')),'filters':()})
     first,*_=await engine.execute(scalar,ctx)
     second,*_=await engine.execute(path,ctx)
-    assert first.status=='ambiguous' and second.status=='found'
+    assert first.status == second.status == 'found'
+    assert first.evidence.entity_ids == second.evidence.entity_ids == ('person:daughter',)
     # Missing field handling also differs: never canonicalize all filters globally.
     dispatcher.entities['person:daughter'].pop('gender')
     scalar=scalar.model_copy(update={'property':None})

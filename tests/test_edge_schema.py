@@ -26,6 +26,12 @@ def test_registry_loads_required_relationship_semantics() -> None:
     assert located_in.from_types == ("item",)
     assert located_in.to_types == ("address", "space")
     assert located_in.unique_from is True
+    assert located_in.inverse_name == "contains"
+    assert located_in.scope_parent is True
+    assert hosted_by.scope_parent is True
+    assert registry.scope_parent_relations("item") == ("located_in",)
+    assert registry.scope_parent_relations("space") == ("hosted_by",)
+    assert registry.scope_parent_relations("person") == ()
 
 
 def test_registry_resolves_inverse_without_registering_duplicate_schema() -> None:

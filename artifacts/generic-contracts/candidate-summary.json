@@ -1,7 +1,7 @@
 {
-  "archive": "candidate-1ad58579b9335830.tar.gz",
-  "archive_bytes": 275083,
-  "archive_sha256": "7cdb127bdaaf1e3a794c178f9a66dbbed5a645e2f82fb014fad166998f9e4b6a",
+  "archive": "candidate-ce7a162a07a40829.tar.gz",
+  "archive_bytes": 286145,
+  "archive_sha256": "54bce9933271d4f2d2a2df2bd1f69b12a908e9cf19f67a45d9a65d1c73cd6ed6",
   "composition": {
     "composition_tree_sha256": "824656541f9d0c784c72cec039d1ee04c2d6d15b4ef1761b933d2aab69e9655e",
     "counts": {
@@ -27,15 +27,15 @@
       "households/alpha": "8f6e3c8b6c5443d58300a0a2bdb78fc43e12a6d4ef6a7637f3bc755a21047165",
       "households/beta": "e53503a66a0c381143142ddc5471cbbe33ee83733793cce3fa14f58403c4e389",
       "households/gamma": "72ef8041879b0c57766485f69ded476eb56475ce4a8b8d66144e9ecdbc10a725",
-      "ontology.yaml": "fb5f4796d0880d702083273f3f9ee9179722eb582acd1741fb9a664c3708d056",
+      "ontology.yaml": "29c896a7cc992a6639ba6fee257109c21287f6e8843fb48ba534e297dcc4a9c1",
       "test_composition_eval.py": "de31d1796bb5db70cbf4497d41b7d4f03b15db98fab8d6dc97ab0547ff141a79"
     },
     "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
     "household_tree_sha256": "31741fcd303884a43d34d1d25c118db78b2b37366fab1a75d8844bd4c6f7e254",
     "scoring_revision": "2026-09-07.2-composition-shapes"
   },
-  "file_count": 139,
-  "git_base": "9f42452264a0acc05420bf4430fcba0087b9cc4e",
+  "file_count": 140,
+  "git_base": "adee6e65a986a601646a9836b6be9061d4f3bdcb",
   "local_packages": {
     "fastapi": "0.141.1",
     "ollama": "0.6.2",
@@ -44,83 +44,65 @@
     "pyyaml": "6.0.3"
   },
   "local_python": "3.14.6",
-  "manifest_sha256": "1ad58579b933583064cefb6626500df5fab68491375cd7027e613038ce1fe601",
-  "payload_id": "1ad58579b933583064cefb6626500df5fab68491375cd7027e613038ce1fe601",
-  "verification": {
-    "full_deterministic_suite": {
-      "command": ".venv/bin/python -m pytest -q",
-      "passed": 556,
-      "seconds": 13.77
-    },
-    "git_diff_check": "passed",
-    "isolated_archive_suite": {
-      "command": "python -m pytest -q tests/test_semantic_v2_contracts.py tests/test_composition_eval.py",
-      "passed": 57,
-      "seconds": 5.68
-    },
-    "isolated_source_imports_verified": true,
-    "live_model_measurements": false,
-    "production_deployed": false,
-    "repeated_freeze_identical_sha256": true,
-    "verified_payload_files": 139
-  },
+  "manifest_sha256": "ce7a162a07a40829d5d05dc910025b14eaa202482ba7634687a9269e3fae2dec",
+  "payload_id": "ce7a162a07a40829d5d05dc910025b14eaa202482ba7634687a9269e3fae2dec",
   "views": {
     "alpha-resolved-contract": {
-      "sha256": "a243d68d4cef63262cfa8eed6e845d94f00e37b2fbbbf641e95d90cf827850cb"
+      "sha256": "8aa001a3391a699b062a85aca03f67b798d6f96bbd83523ea9a3e20c4467a49e"
     },
     "beta-resolved-contract": {
-      "sha256": "a243d68d4cef63262cfa8eed6e845d94f00e37b2fbbbf641e95d90cf827850cb"
+      "sha256": "8aa001a3391a699b062a85aca03f67b798d6f96bbd83523ea9a3e20c4467a49e"
     },
     "contract-views/alpha-v1-capabilities.json": {
-      "bytes": 12368,
-      "sha256": "5e69a07d602461175b99c96a19cc89e7dc0ff36583132d722c6aea21df85ac0f"
+      "bytes": 13964,
+      "sha256": "59f1d52e09ac5bcc9698b5eb4733cdfc64420a22f89133c1713e814c1078cc96"
     },
     "contract-views/alpha-v1-output-schema.json": {
-      "bytes": 16851,
-      "sha256": "16f87c36983abe40b802d27c7201edac1f945e47477b332543858ba5eaca7048"
+      "bytes": 17241,
+      "sha256": "d3029dd80e7856fc2ee162b0285ab435f7755be37ea19c52bdc4f3440883af9a"
     },
     "contract-views/alpha-v2-capabilities.json": {
-      "bytes": 14664,
-      "sha256": "b7080e12ebfc36740831df6c9ad351dbb1a4b8bfbb713da953b1650b3a510190"
+      "bytes": 15169,
+      "sha256": "4900443b432e904d63ae91dd5b19b083e0ba43a6406a0a9d666c0f2f12f061fa"
     },
     "contract-views/alpha-v2-output-schema.json": {
-      "bytes": 40226,
-      "sha256": "391b83a0dd48b160a8e4e6e022712dc5a852294d17e9ec00b2674791ecc9fa84"
+      "bytes": 40424,
+      "sha256": "cbb07a5df950a7f78a7ee83d02076c0d594b92d53441864b62dd38e0307420e4"
     },
     "contract-views/beta-v1-capabilities.json": {
-      "bytes": 12368,
-      "sha256": "5e69a07d602461175b99c96a19cc89e7dc0ff36583132d722c6aea21df85ac0f"
+      "bytes": 13964,
+      "sha256": "59f1d52e09ac5bcc9698b5eb4733cdfc64420a22f89133c1713e814c1078cc96"
     },
     "contract-views/beta-v1-output-schema.json": {
-      "bytes": 16851,
-      "sha256": "16f87c36983abe40b802d27c7201edac1f945e47477b332543858ba5eaca7048"
+      "bytes": 17241,
+      "sha256": "d3029dd80e7856fc2ee162b0285ab435f7755be37ea19c52bdc4f3440883af9a"
     },
     "contract-views/beta-v2-capabilities.json": {
-      "bytes": 14664,
-      "sha256": "b7080e12ebfc36740831df6c9ad351dbb1a4b8bfbb713da953b1650b3a510190"
+      "bytes": 15169,
+      "sha256": "4900443b432e904d63ae91dd5b19b083e0ba43a6406a0a9d666c0f2f12f061fa"
     },
     "contract-views/beta-v2-output-schema.json": {
-      "bytes": 40226,
-      "sha256": "391b83a0dd48b160a8e4e6e022712dc5a852294d17e9ec00b2674791ecc9fa84"
+      "bytes": 40424,
+      "sha256": "cbb07a5df950a7f78a7ee83d02076c0d594b92d53441864b62dd38e0307420e4"
     },
     "contract-views/gamma-v1-capabilities.json": {
-      "bytes": 12368,
-      "sha256": "5e69a07d602461175b99c96a19cc89e7dc0ff36583132d722c6aea21df85ac0f"
+      "bytes": 13964,
+      "sha256": "59f1d52e09ac5bcc9698b5eb4733cdfc64420a22f89133c1713e814c1078cc96"
     },
     "contract-views/gamma-v1-output-schema.json": {
-      "bytes": 16851,
-      "sha256": "16f87c36983abe40b802d27c7201edac1f945e47477b332543858ba5eaca7048"
+      "bytes": 17241,
+      "sha256": "d3029dd80e7856fc2ee162b0285ab435f7755be37ea19c52bdc4f3440883af9a"
     },
     "contract-views/gamma-v2-capabilities.json": {
-      "bytes": 14664,
-      "sha256": "b7080e12ebfc36740831df6c9ad351dbb1a4b8bfbb713da953b1650b3a510190"
+      "bytes": 15169,
+      "sha256": "4900443b432e904d63ae91dd5b19b083e0ba43a6406a0a9d666c0f2f12f061fa"
     },
     "contract-views/gamma-v2-output-schema.json": {
-      "bytes": 40226,
-      "sha256": "391b83a0dd48b160a8e4e6e022712dc5a852294d17e9ec00b2674791ecc9fa84"
+      "bytes": 40424,
+      "sha256": "cbb07a5df950a7f78a7ee83d02076c0d594b92d53441864b62dd38e0307420e4"
     },
     "gamma-resolved-contract": {
-      "sha256": "60f9cf3cf9319b76fbf253c0efee680bfeb56def5b100c796dc5d7229a69b04f"
+      "sha256": "7fc597d705f551f5e30cfd75288323d5f5754fdd726f04b63f28b4c02f8dd359"
     }
   }
 }

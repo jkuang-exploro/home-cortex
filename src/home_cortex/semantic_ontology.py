@@ -35,6 +35,7 @@ class OntologyReferenceConcept:
     aliases: tuple[str, ...]
     path: tuple[OntologyRelationStep, ...]
     label: tuple[tuple[str, str], ...] = ()
+    count_label: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,7 @@ class OntologyCollectionPredicate:
     fallback: OntologyPredicateFallback
     default_scope_relation: str | None = None
     label: tuple[tuple[str, str], ...] = ()
+    modifier: tuple[tuple[str, str], ...] = ()
     disjoint_with: tuple[str, ...] = ()
 
 
@@ -165,6 +167,16 @@ class SemanticOntology:
                 "Collection predicates reference unknown scope relations: "
                 + ", ".join(sorted(invalid_scope_relations))
             )
+        for name, predicate in collection_predicates.items():
+            for other in predicate.disjoint_with:
+                if (
+                    other == name
+                    or other not in collection_predicates
+                    or name not in collection_predicates[other].disjoint_with
+                ):
+                    raise ValueError(
+                        f"Disjoint predicates must be known and symmetric: {name}"
+                    )
         if version == 2:
             for name, definition in properties.items():
                 if set(definition.contract.relationships) - set(base_relations):
@@ -194,8 +206,6 @@ class SemanticOntology:
                 if not all(role.accepts(value) for value in predicate.recognized_values):
                     raise ValueError(f"Invalid role values in predicate {name}")
                 for other in predicate.disjoint_with:
-                    if other == name or other not in collection_predicates or name not in collection_predicates[other].disjoint_with:
-                        raise ValueError(f"Disjoint predicates must be known and symmetric: {name}")
                     counterpart = collection_predicates[other]
                     if (predicate.relation_property == counterpart.relation_property
                         and set(predicate.matching_values).intersection(counterpart.matching_values)):
@@ -342,9 +352,9 @@ def _parse_collection_predicates(
             "fallback",
             "default_scope_relation",
             "label",
+            "modifier",
         }
-        if version == 2:
-            allowed.add('disjoint_with')
+        allowed.add('disjoint_with')
         if extra := sorted(set(item) - allowed):
             raise ValueError(f"Unknown {label} fields: {', '.join(extra)}")
         relation_property = item.get("relation_property")
@@ -418,6 +428,9 @@ def _parse_collection_predicates(
             ),
             default_scope_relation=default_scope_relation,
             label=_parse_labels(item.get("label", {}), f"{label}.label", path),
+            modifier=_parse_labels(
+                item.get("modifier", {}), f"{label}.modifier", path
+            ),
             disjoint_with=strings(item.get('disjoint_with', []), 'disjoint_with'),
         )
     return result
@@ -479,7 +492,7 @@ def _parse_reference_concepts(
     result: dict[str, OntologyReferenceConcept] = {}
     for name, definition in values.items():
         item = _mapping(definition, f"reference_concepts.{name}", path)
-        extra = sorted(set(item) - {"aliases", "path", "label"})
+        extra = sorted(set(item) - {"aliases", "path", "label", "count_label"})
         if extra:
             raise ValueError(
                 f"Unknown reference_concepts.{name} fields: {', '.join(extra)}"
@@ -513,6 +526,11 @@ def _parse_reference_concepts(
         result[name] = OntologyReferenceConcept(
             name, aliases, tuple(steps),
             _parse_labels(item.get("label", {}), f"reference_concepts.{name}.label", path),
+            _parse_labels(
+                item.get("count_label", {}),
+                f"reference_concepts.{name}.count_label",
+                path,
+            ),
         )
     return result
 

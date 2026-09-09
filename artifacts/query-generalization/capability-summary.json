@@ -1,0 +1,96 @@
+{
+  "inspected_at_utc": "2026-09-09T02:35:23Z",
+  "host": "home-cortex-0",
+  "access": "ssh jkuang@home-cortex-0; docker exec cortex-cortex-api-1 (read-only). No household record dump. Secrets redacted.",
+  "serving": {
+    "container": "cortex-cortex-api-1",
+    "image_id": "sha256:d21e0910f473829c68b56f6c3d9631f328eb8e345ab586e8248cee90ac910c7e",
+    "container_created_utc": "2026-09-09T02:21:42Z",
+    "python": "3.12.14",
+    "package_path": "/usr/local/lib/python3.12/site-packages/home_cortex",
+    "data_bind": "/home/jkuang/Workspace/home-cortex/data:/app/data:ro",
+    "llm_provider": "ollama",
+    "ollama_model_env": "qwen3.5:9b",
+    "retrieval_limit_setting": 100,
+    "max_tool_records": 25,
+    "planner_num_ctx": 8192,
+    "ollama_num_ctx": 8192,
+    "keep_alive": "24h"
+  },
+  "git": {
+    "host_workspace": "/home/jkuang/Workspace/home-cortex",
+    "commit": "adee6e65a986a601646a9836b6be9061d4f3bdcb",
+    "subject": "V2 contract candidate",
+    "branch": "master...origin/master"
+  },
+  "ollama": {
+    "container": "cortex-ollama-1",
+    "image": "ollama/ollama:0.32.15",
+    "version": "0.32.15",
+    "model": "qwen3.5:9b",
+    "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "size_bytes": 6594474711,
+    "family": "qwen35",
+    "parameter_size": "9.7B",
+    "quantization": "Q4_K_M",
+    "resident": true,
+    "processor": "100% GPU",
+    "effective_context": 8192,
+    "model_card_context_length": 262144
+  },
+  "ontology": {
+    "load_default": "schemas/semantic/ontology.yaml",
+    "active_version": 1,
+    "contracts_active": false,
+    "v1_sha256": "fb5f4796d0880d702083273f3f9ee9179722eb582acd1741fb9a664c3708d056",
+    "v2_file_present": true,
+    "v2_path": "/app/schemas/semantic/ontology-v2.yaml",
+    "v2_sha256": "48cca1ca097f4cf81c281fac7c1fd664373a91d8b7179f01098f1b6c651ab8e8",
+    "v2_loaded_by_serving_process": false,
+    "adult_and_minor": {
+      "v1_validation_code": "VALID",
+      "v1_validates": true,
+      "v1_contract_error": null,
+      "v2_validation_code": "INVALID_PLAN",
+      "v2_validates": false,
+      "v2_contract_error": "CONTRADICTORY_PREDICATES"
+    }
+  },
+  "source_file_sha256": {
+    "semantic_ontology.py": "7b379b14465b852e30c1ff32e240d78f0fb02b2722c6ee2241533baf612d346f",
+    "semantic_facts.py": "caa080082f2246d116f593c53bf877901b9f29ecbd4bedeaa6bdf110b5e00bd7",
+    "semantic_contracts.py": "e59af36b64515d838cf84a0ae9f2e8b2b8303795850762f2b4ef20bb79103569",
+    "agent_service.py": "40055729ca208fb343aefd391d6c502d48e26de06913998dbafe4496829fc5fb",
+    "ollama.py": "bc004e6f6b158d10ace48ba62fd3a33ff8f4f0ab975cea1d99b00fd77650d679"
+  },
+  "data_tree_sha256": "5d065b8e4c99544412e068a5a8f7d619a92e8e8c94d308c45e7fa7bfd035142a",
+  "data_file_sha256": {
+    "Readme.md": "cf2d52a92be0c7a18dcad1c8190cfe3a4c36e47a3fa810a7ac5b8f43a1137b0b",
+    "nodes/person.json": "378023542444f1d4c8c03eac7831882f2de0386c924af23f341963aa870fe1b1",
+    "nodes/address.json": "6031e67061377431566d72e19a7adb2b2826916ac264de423fb23af51a23e4e8",
+    "nodes/space.json": "2bb5528c63c4a429576798c219014b8fce66581fb7e36980fc6a59d1eb9264fc",
+    "nodes/item.json": "de8f4a15c45f9f112535ca56134b2f9ab74700fdbaa02d0c1ecf6e65d38fbc10",
+    "edges/lives_in.json": "ae583589e9bdcebbbdb080625d399fdc522f9c13502d1c0934c8ca8dd00494f4",
+    "edges/located_in.json": "4328d2a3efc76d81c1fb441ac2e23d958166eddcb7d0bdf4f805cc80d0d9363d",
+    "edges/hosted_by.json": "7cc3dac88af65b7dffa0fcb9584f906d2a8ec1699b926800333be2dce74d0571",
+    "edges/parent_of.json": "bc2637feb4a717eaeb3dcd7c0a8ec5b96d28807a3670a771bd2316597bb85307",
+    "edges/spouse_of.json": "f4f8203626b7a1ece17ea190bb93d14a77ed28384d2343b2c7af8ff2832fb430"
+  },
+  "aggregates": {
+    "person": {"n": 8, "gender": {"male": 4, "female": 4}, "with_dob": 8, "lives_in": 5},
+    "address": {"n": 1, "address_type": {"home": 1}},
+    "space": {"n": 13, "space_type": {"room": 7, "outdoor_space": 3, "storage": 3}, "hosted_by": 13},
+    "item": {"n": 10, "with_located_in": 7, "item_type": ["house", "refrigerator", "washing_machine", "clothes_dryer", "sofa", "television", "bed", "desk", "food", "lamp"]},
+    "located_in": {"n": 7, "to_address": 1, "to_space": 6},
+    "hosted_by": {"n": 13, "distinct_host_items": 2},
+    "spaces_with_hosted_item_located_at_address": 10,
+    "name_collisions_within_table": {"person": 0, "address": 0, "space": 0, "item": 0}
+  },
+  "semantic_relations_advertised": ["child", "member", "parent", "residence", "spouse"],
+  "physical_edges": ["hosted_by", "lives_in", "located_in", "parent_of", "spouse_of"],
+  "frozen_contract_package": {
+    "archive": "artifacts/generic-contracts/candidate-1ad58579b9335830.tar.gz",
+    "archive_sha256": "7cdb127bdaaf1e3a794c178f9a66dbbed5a645e2f82fb014fad166998f9e4b6a",
+    "payload_id": "1ad58579b933583064cefb6626500df5fab68491375cd7027e613038ce1fe601"
+  }
+}

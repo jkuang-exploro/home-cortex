@@ -7,3 +7,4 @@ to_types:
 inverse_name: hosts_space
 temporal: false
 unique_from: true
+scope_parent: true

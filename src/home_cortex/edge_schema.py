@@ -22,6 +22,7 @@ class EdgeSchema:
     temporal: bool
     inverse_name: str | None = None
     unique_from: bool = False
+    scope_parent: bool = False
 
 
 @dataclass(frozen=True)
@@ -112,6 +113,21 @@ class EdgeSchemaRegistry:
         self.get(relationship)
         raise AssertionError("unreachable")
 
+    def scope_parent_relations(self, entity_type: str) -> tuple[str, ...]:
+        """Return declared outgoing edges that lead toward household scope.
+
+        This metadata is used only to constrain named-entity resolution. It does
+        not create relationships or infer containment that is absent from the
+        graph.
+        """
+        return tuple(
+            sorted(
+                schema.id
+                for schema in self._schemas.values()
+                if schema.scope_parent and entity_type in schema.from_types
+            )
+        )
+
     def validate_endpoints(self, relationship: str, source_type: str, target_type: str) -> None:
         schema = self.get(relationship)
         forward = source_type in schema.from_types and target_type in schema.to_types
@@ -138,6 +154,7 @@ def _parse_schema(raw: Any, path: Path) -> EdgeSchema:
         "temporal",
         "inverse_name",
         "unique_from",
+        "scope_parent",
     }
     extra = sorted(set(raw) - allowed)
     if extra:
@@ -148,6 +165,7 @@ def _parse_schema(raw: Any, path: Path) -> EdgeSchema:
     to_types = _names(raw.get("to_types"), "to_types", path)
     temporal = _boolean(raw.get("temporal"), "temporal", path)
     unique_from = _boolean(raw.get("unique_from", False), "unique_from", path)
+    scope_parent = _boolean(raw.get("scope_parent", False), "scope_parent", path)
     inverse = raw.get("inverse_name")
     if inverse is not None:
         inverse = _name(inverse, "inverse_name", path)
@@ -167,6 +185,7 @@ def _parse_schema(raw: Any, path: Path) -> EdgeSchema:
         temporal,
         inverse,
         unique_from,
+        scope_parent,
     )
 
 

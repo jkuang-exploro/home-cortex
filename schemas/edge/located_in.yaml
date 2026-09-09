@@ -5,5 +5,7 @@ from_types:
 to_types:
   - address
   - space
+inverse_name: contains
 temporal: false
 unique_from: true
+scope_parent: true

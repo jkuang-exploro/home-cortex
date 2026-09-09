@@ -1,0 +1,449 @@
+[
+  {
+    "id": "C1-scalar",
+    "plan": {
+      "operation": "date_difference",
+      "subject": {
+        "kind": "current_household",
+        "entity_type": "address",
+        "path": [
+          {
+            "relation": "member",
+            "filters": []
+          }
+        ],
+        "cardinality": "single"
+      },
+      "property": "birth_date",
+      "property_source": "entity",
+      "filters": [
+        {
+          "predicate": "minor",
+          "operator": "eq",
+          "source": "entity"
+        }
+      ],
+      "projection": "scalar",
+      "exclude": [],
+      "mode": "years"
+    },
+    "status": "ambiguous",
+    "value": null,
+    "shape": "scalar",
+    "candidate_ids": [
+      "person:son2",
+      "person:daughter",
+      "person:grandson"
+    ],
+    "entity_ids": [],
+    "row_ids": [],
+    "row_statuses": [],
+    "expected_population": [
+      "person:daughter",
+      "person:grandson",
+      "person:son2"
+    ]
+  },
+  {
+    "id": "C1-each",
+    "plan": {
+      "operation": "date_difference",
+      "subject": {
+        "kind": "current_household",
+        "entity_type": "address",
+        "path": [
+          {
+            "relation": "member",
+            "filters": []
+          }
+        ],
+        "cardinality": "single"
+      },
+      "property": "birth_date",
+      "property_source": "entity",
+      "filters": [
+        {
+          "predicate": "minor",
+          "operator": "eq",
+          "source": "entity"
+        }
+      ],
+      "projection": "each",
+      "exclude": [],
+      "mode": "years"
+    },
+    "status": "found",
+    "value": null,
+    "shape": "rows",
+    "candidate_ids": [],
+    "entity_ids": [
+      "person:son2",
+      "person:daughter",
+      "person:grandson"
+    ],
+    "row_ids": [
+      "person:son2",
+      "person:daughter",
+      "person:grandson"
+    ],
+    "row_statuses": [
+      "found",
+      "found",
+      "found"
+    ],
+    "expected_population": [
+      "person:daughter",
+      "person:grandson",
+      "person:son2"
+    ]
+  },
+  {
+    "id": "C2",
+    "plan": {
+      "operation": "date_difference",
+      "subject": {
+        "kind": "current_household",
+        "entity_type": "address",
+        "path": [
+          {
+            "relation": "member",
+            "filters": []
+          }
+        ],
+        "cardinality": "single"
+      },
+      "property": "birth_date",
+      "property_source": "entity",
+      "filters": [
+        {
+          "predicate": "minor",
+          "operator": "eq",
+          "source": "entity"
+        },
+        {
+          "property": "gender",
+          "operator": "eq",
+          "value": "female",
+          "source": "entity"
+        }
+      ],
+      "projection": "scalar",
+      "exclude": [],
+      "mode": "years"
+    },
+    "status": "found",
+    "value": 16,
+    "shape": "scalar",
+    "candidate_ids": [],
+    "entity_ids": [
+      "person:daughter"
+    ],
+    "row_ids": [],
+    "row_statuses": [],
+    "expected_population": [
+      "person:daughter"
+    ]
+  },
+  {
+    "id": "C3",
+    "plan": {
+      "operation": "count",
+      "subject": {
+        "kind": "current_household",
+        "entity_type": "address",
+        "path": [
+          {
+            "relation": "member",
+            "filters": []
+          }
+        ],
+        "cardinality": "single"
+      },
+      "property_source": "entity",
+      "filters": [
+        {
+          "property": "birth_date",
+          "operator": "date_range",
+          "value": [
+            "1999-01-01",
+            "2000-01-01"
+          ],
+          "source": "entity"
+        }
+      ],
+      "projection": "scalar",
+      "exclude": []
+    },
+    "status": "found",
+    "value": 0,
+    "shape": "scalar",
+    "candidate_ids": [],
+    "entity_ids": [],
+    "row_ids": [],
+    "row_statuses": [],
+    "expected_population": []
+  },
+  {
+    "id": "C4",
+    "plan": {
+      "operation": "date_difference",
+      "subject": {
+        "kind": "current_household",
+        "entity_type": "address",
+        "path": [
+          {
+            "relation": "member",
+            "filters": []
+          }
+        ],
+        "cardinality": "single"
+      },
+      "property": "birth_date",
+      "property_source": "entity",
+      "filters": [
+        {
+          "predicate": "minor",
+          "operator": "eq",
+          "source": "entity"
+        }
+      ],
+      "projection": "each",
+      "exclude": [],
+      "mode": "years"
+    },
+    "status": "found",
+    "value": null,
+    "shape": "rows",
+    "candidate_ids": [],
+    "entity_ids": [
+      "person:son2",
+      "person:daughter",
+      "person:grandson"
+    ],
+    "row_ids": [
+      "person:son2",
+      "person:daughter",
+      "person:grandson"
+    ],
+    "row_statuses": [
+      "filter_input_missing",
+      "found",
+      "found"
+    ],
+    "expected_population": [
+      "person:son2",
+      "person:daughter",
+      "person:grandson"
+    ]
+  },
+  {
+    "id": "C5",
+    "plan": {
+      "operation": "date_difference",
+      "subject": {
+        "kind": "named_entity",
+        "value": "son1",
+        "entity_type": "person",
+        "path": [],
+        "cardinality": "single"
+      },
+      "property": "birth_date",
+      "property_source": "entity",
+      "filters": [],
+      "projection": "scalar",
+      "exclude": [],
+      "mode": "years"
+    },
+    "status": "ambiguous",
+    "value": null,
+    "shape": "scalar",
+    "candidate_ids": [
+      "person:b",
+      "person:son1"
+    ],
+    "entity_ids": [
+      "person:b",
+      "person:son1"
+    ],
+    "row_ids": [],
+    "row_statuses": [],
+    "expected_population": [
+      "person:b",
+      "person:son1"
+    ]
+  },
+  {
+    "id": "C6",
+    "plan": {
+      "operation": "resolve_reference",
+      "subject": {
+        "kind": "self",
+        "entity_type": "person",
+        "path": [
+          {
+            "relation": "child",
+            "filters": [
+              {
+                "property": "gender",
+                "operator": "eq",
+                "value": "female",
+                "source": "entity"
+              }
+            ]
+          }
+        ],
+        "cardinality": "single"
+      },
+      "property_source": "entity",
+      "filters": [],
+      "projection": "scalar",
+      "exclude": []
+    },
+    "status": "ambiguous",
+    "value": null,
+    "shape": "scalar",
+    "candidate_ids": [
+      "person:daughter",
+      "person:mother"
+    ],
+    "entity_ids": [],
+    "row_ids": [],
+    "row_statuses": [],
+    "expected_population": [
+      "person:daughter",
+      "person:mother"
+    ]
+  },
+  {
+    "id": "C7",
+    "plan": {
+      "operation": "count",
+      "subject": {
+        "kind": "current_household",
+        "entity_type": "address",
+        "path": [
+          {
+            "relation": "member",
+            "filters": []
+          }
+        ],
+        "cardinality": "single"
+      },
+      "property_source": "entity",
+      "filters": [
+        {
+          "property": "start_date",
+          "operator": "date_range",
+          "value": [
+            "2020-01-01",
+            "2021-01-01"
+          ],
+          "source": "relation"
+        }
+      ],
+      "projection": "scalar",
+      "exclude": []
+    },
+    "status": "found",
+    "value": 1,
+    "shape": "scalar",
+    "candidate_ids": [],
+    "entity_ids": [
+      "person:a"
+    ],
+    "row_ids": [],
+    "row_statuses": [],
+    "expected_population": [
+      "person:a"
+    ]
+  },
+  {
+    "id": "C8",
+    "plan": {
+      "operation": "count",
+      "subject": {
+        "kind": "current_household",
+        "entity_type": "address",
+        "path": [
+          {
+            "relation": "member",
+            "filters": []
+          }
+        ],
+        "cardinality": "single"
+      },
+      "property_source": "entity",
+      "filters": [],
+      "projection": "scalar",
+      "exclude": []
+    },
+    "status": "collection_incomplete",
+    "value": null,
+    "shape": "scalar",
+    "candidate_ids": [],
+    "entity_ids": [],
+    "row_ids": [],
+    "row_statuses": [],
+    "expected_population": [
+      "person:p00",
+      "person:p01",
+      "person:p02",
+      "person:p03",
+      "person:p04",
+      "person:p05",
+      "person:p06",
+      "person:p07",
+      "person:p08",
+      "person:p09",
+      "person:p10",
+      "person:p11",
+      "person:p12",
+      "person:p13",
+      "person:p14",
+      "person:p15",
+      "person:p16",
+      "person:p17",
+      "person:p18",
+      "person:p19",
+      "person:p20",
+      "person:p21",
+      "person:p22",
+      "person:p23",
+      "person:p24",
+      "person:p25",
+      "person:p26",
+      "person:p27",
+      "person:p28",
+      "person:p29"
+    ]
+  },
+  {
+    "id": "C9",
+    "plan": {
+      "operation": "resolve_reference",
+      "subject": {
+        "kind": "named_entity",
+        "value": "Milk",
+        "entity_type": "item",
+        "path": [],
+        "cardinality": "single"
+      },
+      "property_source": "entity",
+      "filters": [],
+      "projection": "scalar",
+      "exclude": []
+    },
+    "status": "found",
+    "value": null,
+    "shape": "entity",
+    "candidate_ids": [],
+    "entity_ids": [
+      "item:milk_a"
+    ],
+    "row_ids": [],
+    "row_statuses": [],
+    "expected_population": [
+      "item:milk_a"
+    ]
+  }
+]

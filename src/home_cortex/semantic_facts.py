@@ -50,6 +50,7 @@ FactStatus = Literal[
     "ambiguous",
     "computation_input_missing",
     "computation_impossible",
+    "collection_incomplete",
 ]
 FactOperation = Literal[
     "resolve_reference",
@@ -91,6 +92,7 @@ ResolutionStatus = Literal[
     "property_unavailable",
     "filter_input_missing",
     "filter_unsupported",
+    "collection_incomplete",
 ]
 PlannerValidationCode = Literal[
     "VALID",
@@ -476,6 +478,11 @@ class SemanticSchemaRegistry:
 
     def contract_error(self, request: SemanticFactRequest) -> str | None:
         """Internal, non-sensitive diagnostics; never rewrites the submitted IR."""
+        names = {item.predicate for item in request.filters if item.predicate}
+        for name in names:
+            definition = self.ontology.collection_predicates.get(name)
+            if definition and names.intersection(definition.disjoint_with):
+                return 'CONTRADICTORY_PREDICATES'
         if self.contracts is None:
             return None
         references = (request.subject,) + ((request.other,) if request.other else ()) + request.exclude
@@ -491,11 +498,6 @@ class SemanticSchemaRegistry:
                         return error
         types = self._reference_entity_types(request.subject)
         relation = request.subject.path[-1].relation if request.subject.path else None
-        names = {item.predicate for item in request.filters if item.predicate}
-        for name in names:
-            definition = self.ontology.collection_predicates.get(name)
-            if definition and names.intersection(definition.disjoint_with):
-                return 'CONTRADICTORY_PREDICATES'
         for item in request.filters:
             if item.predicate:
                 continue  # Existing predicate applicability/shape checks remain authoritative.
@@ -670,13 +672,17 @@ class SemanticSchemaRegistry:
                 "reference_concepts": ontology["reference_concepts"],
                 "collection_predicates": ontology["collection_predicates"],
             }
-            if self.contracts is not None:
-                self._planner_capability_cache['property_contracts'] = self.contracts.payload()
+            if any(
+                definition.disjoint_with
+                for definition in self.ontology.collection_predicates.values()
+            ):
                 self._planner_capability_cache['predicate_disjointness'] = {
                     name: list(definition.disjoint_with)
                     for name, definition in self.ontology.collection_predicates.items()
                     if definition.disjoint_with and name in self._available_predicates
                 }
+            if self.contracts is not None:
+                self._planner_capability_cache['property_contracts'] = self.contracts.payload()
         return deepcopy(self._planner_capability_cache)
 
     @stage("schema.output")
@@ -929,7 +935,7 @@ class SemanticSchemaRegistry:
     def validation_code(self, request: SemanticFactRequest) -> PlannerValidationCode:
         """Return a stable, non-sensitive reason for semantic-plan rejection."""
         references = (request.subject,) + ((request.other,) if request.other else ()) + request.exclude
-        if self.contracts is not None and self.contract_error(request) is not None:
+        if self.contract_error(request) is not None:
             return 'INVALID_PLAN'
         for reference in references:
             for step in reference.path:
@@ -1470,6 +1476,7 @@ class EntityResolver:
                 "property_unavailable": "property_unavailable",
                 "filter_input_missing": "filter_input_missing",
                 "filter_unsupported": "filter_unsupported",
+                "collection_incomplete": "collection_incomplete",
                 "ambiguous": "ambiguous",
                 "computation_input_missing": "invalid_reference",
                 "computation_impossible": "invalid_reference",
@@ -1533,6 +1540,11 @@ class EntityResolver:
                     "household_id": context.household_id,
                 },
             )
+            records = await self._scope_named_records(
+                records,
+                context.household_id,
+                execution,
+            )
             if not records:
                 raise _FactFailure("entity_not_found")
             if len(records) > 1:
@@ -1573,11 +1585,18 @@ class EntityResolver:
                     "entity_id": entity_id,
                     "relation": relation,
                     "include_ended": False,
-                    "limit": self.max_records,
+                    # Fetch one sentinel row beyond the executor's supported
+                    # population so exact counts/lists cannot silently truncate.
+                    "limit": self.max_records + 1,
                 }
                 if direction is not None:
                     arguments["direction"] = direction
                 edges = await execution.records("get_relationships", arguments)
+                if len(edges) > self.max_records:
+                    raise _FactFailure(
+                        "collection_incomplete",
+                        missing=(step.relation,),
+                    )
                 for edge in edges:
                     if not self._edge_matches(edge, relation, step.filters):
                         continue
@@ -1612,6 +1631,84 @@ class EntityResolver:
                 and edge["related_entity"].get("id") in entity_ids
             ]
         return entities, last_relationship_records
+
+    async def _scope_named_records(
+        self,
+        records: Sequence[Mapping[str, Any]],
+        household_id: str | None,
+        execution: "_FactExecution",
+    ) -> list[dict[str, Any]]:
+        """Apply schema-declared containment scope to named records.
+
+        Entity types without a declared scope-parent edge retain their existing
+        resolution behavior. Types with such an edge must have a recorded path
+        to the request's household. This keeps scoping generic across items,
+        spaces, and future contained entity types.
+        """
+        if household_id is None:
+            return [dict(record) for record in records]
+        scoped: list[dict[str, Any]] = []
+        for record in records:
+            entity_id = record.get("id")
+            entity_type = _entity_type(record)
+            parents = self.schema.edge_registry.scope_parent_relations(entity_type)
+            if not parents:
+                scoped.append(dict(record))
+                continue
+            if isinstance(entity_id, str) and await self._belongs_to_household(
+                entity_id,
+                household_id,
+                execution,
+                visited=frozenset(),
+            ):
+                scoped.append(dict(record))
+        return scoped
+
+    async def _belongs_to_household(
+        self,
+        entity_id: str,
+        household_id: str,
+        execution: "_FactExecution",
+        *,
+        visited: frozenset[str],
+    ) -> bool:
+        if entity_id == household_id:
+            return True
+        if entity_id in visited or len(visited) >= 12:
+            return False
+        parents = self.schema.edge_registry.scope_parent_relations(
+            entity_id.partition(":")[0]
+        )
+        if not parents:
+            return False
+        next_visited = visited | {entity_id}
+        for relation in parents:
+            edges = await execution.records(
+                "get_relationships",
+                {
+                    "entity_id": entity_id,
+                    "relation": relation,
+                    "direction": "out",
+                    "include_ended": False,
+                    "limit": self.max_records + 1,
+                },
+            )
+            if len(edges) > self.max_records:
+                raise _FactFailure(
+                    "collection_incomplete",
+                    missing=(relation,),
+                )
+            for edge in edges:
+                parent = edge.get("related_entity")
+                parent_id = parent.get("id") if isinstance(parent, Mapping) else None
+                if isinstance(parent_id, str) and await self._belongs_to_household(
+                    parent_id,
+                    household_id,
+                    execution,
+                    visited=next_visited,
+                ):
+                    return True
+        return False
 
     def _edge_matches(
         self,
@@ -1716,6 +1813,8 @@ class HouseholdFactEngine:
     ) -> None:
         self.dispatcher = dispatcher
         self.schema = schema
+        if not 1 <= max_records < 100:
+            raise ValueError("max_records must be between 1 and 99 for completeness checks")
         self.resolver = EntityResolver(
             schema,
             max_records=max_records,
@@ -1736,6 +1835,7 @@ class HouseholdFactEngine:
         expect_many = request.other is None and (
             request.projection == "each" or operation.input_shape == "collection"
             or (request.operation == "select" and request.property is None)
+            or bool(request.filters)
         )
         resolution = await self.resolver.resolve(
             request.subject,
@@ -1776,6 +1876,7 @@ class HouseholdFactEngine:
                 "property_unavailable": "property_unavailable",
                 "filter_input_missing": "filter_input_missing",
                 "filter_unsupported": "filter_unsupported",
+                "collection_incomplete": "collection_incomplete",
             }[failed.status]
             if "discourse_antecedent" in failed.missing_requirements and status == "caller_context_missing":
                 status = "discourse_context_missing"
@@ -1799,22 +1900,25 @@ class HouseholdFactEngine:
         relationship_records = [edge for edge in relationship_records if _related_entity_id(edge) not in excluded_ids]
         computation_started = perf_counter()
         try:
+            filter_failures: list[FactRow] = []
             if request.filters:
-                entities, relationship_records = await self._filter_collection(
+                entities, relationship_records, filter_failures = await self._filter_collection(
                     request,
                     entities,
                     relationship_records,
                     context,
                     execution,
                 )
-            result = await (self._project_each if request.projection == "each" else self._operate)(
-                request,
-                entities,
-                other_entities,
-                relationship_records,
-                context,
-                execution,
-            )
+            if request.projection == "each":
+                result = await self._project_each(
+                    request, entities, other_entities, relationship_records,
+                    context, execution, initial_rows=filter_failures,
+                )
+            else:
+                result = await self._operate(
+                    request, entities, other_entities, relationship_records,
+                    context, execution,
+                )
         except _FactFailure as error:
             result = FactResult(
                 error.status,
@@ -1839,8 +1943,10 @@ class HouseholdFactEngine:
         relationship_records: list[dict[str, Any]],
         context: AgentRequestContext,
         execution: "_FactExecution",
+        *,
+        initial_rows: Sequence[FactRow] = (),
     ) -> FactResult:
-        rows: list[FactRow] = []
+        rows: list[FactRow] = list(initial_rows)
         scalar = request.model_copy(update={"projection": "scalar", "exclude": ()})
         relation = _last_relation(request.subject)
         for entity in entities:
@@ -2074,7 +2180,7 @@ class HouseholdFactEngine:
         relationship_records: list[dict[str, Any]],
         context: AgentRequestContext,
         execution: "_FactExecution",
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[FactRow]]:
         # Relationship projections have edge rows: all edge conditions bind the
         # same final edge, rather than admitting every edge of a matching entity.
         edge_filters = tuple(item for item in request.filters if item.source == "relation")
@@ -2089,6 +2195,7 @@ class HouseholdFactEngine:
                 "filters": tuple(item for item in request.filters if item.source != "relation")
             })
         matched: list[dict[str, Any]] = []
+        failures: list[FactRow] = []
         for entity in entities:
             entity_id = entity.get("id")
             edges = [
@@ -2097,26 +2204,45 @@ class HouseholdFactEngine:
                 if _related_entity_id(edge) == entity_id
             ]
             include = True
-            for item in request.filters:
-                if item.predicate is not None:
-                    include = await self._semantic_predicate_matches(
-                        request,
-                        item.predicate,
-                        entity,
-                        edges,
-                        context,
-                        execution,
+            try:
+                for item in request.filters:
+                    if item.predicate is not None:
+                        include = await self._semantic_predicate_matches(
+                            request,
+                            item.predicate,
+                            entity,
+                            edges,
+                            context,
+                            execution,
+                        )
+                    elif item.source == "relation":
+                        include = self._relation_filter_matches(request, item, edges)
+                    else:
+                        include = await self._entity_filter_matches(
+                            item,
+                            entity,
+                            execution,
+                        )
+                    if not include:
+                        break
+            except _FactFailure as error:
+                if request.projection != "each":
+                    raise
+                visible = await execution.load_if_unnamed(entity)
+                failures.append(
+                    FactRow(
+                        visible,
+                        error.status,
+                        evidence=FactEvidence(
+                            entity_ids=(str(entity_id),) if isinstance(entity_id, str) else (),
+                            relationship=_last_relation(request.subject),
+                            semantic_property=request.property,
+                        ),
+                        missing_requirements=error.missing,
+                        unit=_result_unit(request),
                     )
-                elif item.source == "relation":
-                    include = self._relation_filter_matches(request, item, edges)
-                else:
-                    include = await self._entity_filter_matches(
-                        item,
-                        entity,
-                        execution,
-                    )
-                if not include:
-                    break
+                )
+                continue
             if include:
                 matched.append(entity)
         matched_ids = {
@@ -2128,7 +2254,7 @@ class HouseholdFactEngine:
             edge
             for edge in relationship_records
             if _related_entity_id(edge) in matched_ids
-        ]
+        ], failures
 
     async def _entity_filter_matches(
         self,
@@ -2346,8 +2472,14 @@ class HouseholdFactEngine:
 
 
 class FactRenderer:
-    def __init__(self, ontology: SemanticOntology | None = None) -> None:
+    def __init__(
+        self,
+        ontology: SemanticOntology | None = None,
+        *,
+        detailed: bool = False,
+    ) -> None:
         self.ontology = ontology or SemanticOntology.load_default()
+        self.detailed = detailed
 
     @stage("renderer")
     def render(
@@ -2359,7 +2491,7 @@ class FactRenderer:
         rendered = self._render_result(request, result, context)
         # Describe the expanded, validated IR once, including empty/partial results.
         # Unsupported plans have no executed scope to describe.
-        if result.status != "semantic_plan_unsupported" and (
+        if self.detailed and result.status != "semantic_plan_unsupported" and (
             request.subject.path or request.filters or request.exclude or request.other
             or request.property is not None
             or request.operation == "count" or request.projection == "each"
@@ -2367,7 +2499,55 @@ class FactRenderer:
         ):
             description = SemanticDisplay(self.ontology, context.locale or "en").describe(request)
             return f"{description}\n{rendered}"
+        if not self.detailed and result.status == "found" and not (
+            request.operation == "count"
+            or (request.operation == "select" and request.property is None)
+        ):
+            qualifier = self._condition_qualifier(request, context.locale or "en")
+            if qualifier:
+                separator = "\n" if result.shape == "rows" else ""
+                if separator:
+                    qualifier = qualifier.lstrip()
+                rendered = f"{rendered}{separator}{qualifier}"
         return rendered
+
+    def _condition_qualifier(
+        self,
+        request: SemanticFactRequest,
+        language: str,
+    ) -> str:
+        """Faithfully expose conditions not already carried by relation nouns."""
+        display = SemanticDisplay(self.ontology, language)
+        remaining: list[SemanticFilter] = list(request.filters)
+        noun_relations = {"spouse", "child", "parent"}
+        for step in request.subject.path:
+            for item in step.filters:
+                absorbed_gender = (
+                    step.relation in noun_relations
+                    and item.source == "entity"
+                    and item.property == "gender"
+                    and item.operator == "eq"
+                    and item.value_from is None
+                    and item.value in {"male", "female"}
+                )
+                if not absorbed_gender:
+                    remaining.append(item)
+        clauses: list[str] = []
+        if remaining:
+            clauses.append(
+                display.conditions(
+                    tuple(remaining),
+                    display.reference(request.subject.model_copy(update={"path": ()})),
+                    collection=request.projection != "scalar",
+                )
+            )
+        if request.exclude:
+            excluded = " | ".join(display.reference(item) for item in request.exclude)
+            clauses.append(("排除 " if display.zh else "exclude ") + excluded)
+        if not clauses:
+            return ""
+        joined = ("；" if display.zh else "; ").join(clauses)
+        return f"（条件：{joined}）" if display.zh else f" (Conditions: {joined})"
 
     def _render_result(
         self,
@@ -2391,9 +2571,105 @@ class FactRenderer:
             )
         if result.status == "found" and request.operation == "date_add":
             return f"指定日期是{result.value}。" if language.startswith("zh") else f"The specified date is {result.value}."
+        if not self.detailed and result.status == "found" and (
+            request.operation == "count"
+            or (request.operation == "select" and request.property is None)
+        ):
+            natural = self._collection_result(request, result, language)
+            if natural is not None:
+                return natural
         if language.startswith("zh"):
             return self._zh(request, result, context)
         return self._en(request, result, context)
+
+    def _collection_result(
+        self,
+        request: SemanticFactRequest,
+        result: FactResult,
+        language: str,
+    ) -> str | None:
+        display = SemanticDisplay(self.ontology, language)
+        described = display.collection_noun(request.subject, request.filters)
+        if described is None:
+            return self._generic_collection_result(request, result, display)
+        noun, remaining = described
+        if request.exclude or request.other:
+            return self._generic_collection_result(request, result, display)
+        zh = language.startswith("zh")
+        if request.subject.kind == "current_household":
+            owner = "家里" if zh else "the household"
+        elif request.subject.kind == "self":
+            owner = "您" if zh else "you"
+        elif request.subject.kind == "named_entity" and request.subject.value:
+            owner = str(request.subject.value)
+        else:
+            return self._generic_collection_result(request, result, display)
+        condition = display.conditions(
+            remaining,
+            display.reference(request.subject.model_copy(update={"path": ()})),
+            collection=True,
+        ) if remaining else ""
+        if request.operation == "count":
+            count = int(result.value)
+            if zh:
+                counter = (
+                    "个"
+                    if noun == "人"
+                    else "位" if noun.endswith(("人", "男性", "女性")) else "个"
+                )
+                if count == 0:
+                    target = f"符合{condition}的{noun}" if condition else noun
+                    return f"{owner}没有{target}。"
+                suffix = f"，筛选条件还包括：{condition}" if condition else ""
+                return f"{owner}有{count}{counter}{noun}{suffix}。"
+            plural = noun if count == 1 else {
+                "person": "people",
+            }.get(noun, noun + ("es" if noun.endswith("s") else "s"))
+            qualifier = f" matching {condition}" if condition else ""
+            verb = "is" if count == 1 else "are"
+            return f"There {verb} {count} {plural}{qualifier} in {owner}."
+        values = result.value if isinstance(result.value, list) else []
+        if not values:
+            if zh:
+                target = f"符合{condition}的{noun}" if condition else noun
+                return f"{owner}没有{target}。"
+            target = f"{noun} matching {condition}" if condition else noun
+            return f"There are no {target}s in {owner}."
+        names = ("、" if zh else ", ").join(_name(item, language) for item in values)
+        if zh:
+            suffix = f"（筛选条件还包括：{condition}）" if condition else ""
+            return f"{owner}的{noun}有：{names}{suffix}。"
+        suffix = f" matching {condition}" if condition else ""
+        return f"The {noun}s in {owner}{suffix} are {names}."
+
+    def _generic_collection_result(
+        self,
+        request: SemanticFactRequest,
+        result: FactResult,
+        display: SemanticDisplay,
+    ) -> str:
+        zh = display.zh
+        scope = display.reference(request.subject)
+        clauses: list[str] = []
+        if request.filters:
+            clauses.append(display.conditions(request.filters, scope, collection=True))
+        if request.exclude:
+            excluded = " | ".join(display.reference(item) for item in request.exclude)
+            clauses.append(("排除 " if zh else "exclude ") + excluded)
+        condition = ("；" if zh else "; ").join(clauses)
+        if request.operation == "count":
+            if zh:
+                suffix = f"，条件为{condition}" if condition else ""
+                return f"在{scope}中有{int(result.value)}条记录{suffix}。"
+            suffix = f" matching {condition}" if condition else ""
+            return f"There are {int(result.value)} records in {scope}{suffix}."
+        values = result.value if isinstance(result.value, list) else []
+        names = ("、" if zh else ", ").join(_name(item, "zh" if zh else "en") for item in values)
+        if zh:
+            suffix = f"，条件为{condition}" if condition else ""
+            return f"在{scope}中找到的记录为：{names or '无'}{suffix}。"
+        suffix = f" matching {condition}" if condition else ""
+        return f"The records in {scope}{suffix} are {names or 'none'}."
 
     def _zh(
         self,
@@ -2447,6 +2723,8 @@ class FactRenderer:
             label = _property_label(result.missing_requirements)
             suffix = f"，缺少{label}" if label else ""
             return f"家庭资料不足以完成这项计算{suffix}。"
+        if result.status == "collection_incomplete":
+            return "查询结果超过当前完整性上限，无法给出可靠的总数或完整列表。"
         if request.operation == "count":
             count = int(result.value)
             return f"符合条件的记录数：{count}。"
@@ -2546,6 +2824,7 @@ class FactRenderer:
                     "A required semantic property is unavailable for this computation."
                 ),
                 "computation_impossible": "The available evidence is insufficient for that computation.",
+                "collection_incomplete": "The result exceeds the completeness limit, so an exact total or complete list is unavailable.",
             }[result.status]
         if request.operation == "count":
             return f"The current count is {result.value}."
@@ -3107,6 +3386,7 @@ def _failure_stage(status: FactStatus) -> str | None:
         "operator_unsupported": "operator_validation",
         "computation_input_missing": "computation_input",
         "computation_impossible": "computation",
+        "collection_incomplete": "collection_completeness",
         "semantic_plan_unsupported": "semantic_plan_validation",
     }[status]
 
@@ -3154,6 +3434,10 @@ def _relation_label(
         "parent": "父母",
         "member": "家庭成员",
         "residence": "居住地",
+        "location": "位置",
+        "contents": "包含",
+        "host": "承载位置",
+        "hosted_space": "空间",
     }.get(semantic_relation or _last_relation(reference), "对应的")
 
 
@@ -3198,6 +3482,10 @@ def _relation_noun(step: SemanticRelationStep) -> str:
         ("parent", None): "父母",
         ("member", None): "家庭成员",
         ("residence", None): "住所",
+        ("location", None): "所在位置",
+        ("contents", None): "所含物品",
+        ("host", None): "承载物",
+        ("hosted_space", None): "空间",
     }.get((step.relation, gender), "关联实体")
 
 

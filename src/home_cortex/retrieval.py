@@ -224,12 +224,15 @@ class RetrievalService:
     def _validated_limit(self, limit: int | None) -> int:
         if limit is None:
             return self.limit
+        # Internal semantic execution may request one sentinel row beyond its
+        # advertised result cap to distinguish complete from truncated sets.
+        maximum = min(self.limit + 1, 100)
         if (
             isinstance(limit, bool)
             or not isinstance(limit, int)
-            or not 1 <= limit <= self.limit
+            or not 1 <= limit <= maximum
         ):
-            raise ValueError(f"Limit must be an integer between 1 and {self.limit}")
+            raise ValueError(f"Limit must be an integer between 1 and {maximum}")
         return limit
 
     @staticmethod

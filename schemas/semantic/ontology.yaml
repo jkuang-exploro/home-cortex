@@ -51,6 +51,16 @@ properties:
     label: {en: end date, zh: 结束日期}
     fields: [end, until, end_date]
     aliases: [结束日期, end date, until]
+  item_type:
+    label: {en: item type, zh: 物品类型}
+    fields: [item_type, type]
+    aliases: [物品类型, 类别, item type, product category]
+  space_type:
+    label: {en: space type, zh: 空间类型}
+    value_labels:
+      room: {en: room, zh: 房间}
+    fields: [space_type, type]
+    aliases: [空间类型, 房间类型, space type, room type]
 
 policy_values:
   adulthood_years: 18
@@ -58,6 +68,7 @@ policy_values:
 collection_predicates:
   adult:
     label: {en: adult, zh: 成年人}
+    modifier: {en: adult, zh: 成年}
     aliases: [成年人, 成人, adults]
     entity_types: [person]
     default_scope_relation: member
@@ -71,8 +82,10 @@ collection_predicates:
       require_past: true
       operator: gte
       value_from_policy: adulthood_years
+    disjoint_with: [minor]
   minor:
     label: {en: minor, zh: 未成年人}
+    modifier: {en: minor, zh: 未成年}
     aliases: [未成年人, 孩子, 小孩, minors, child]
     entity_types: [person]
     default_scope_relation: member
@@ -86,6 +99,7 @@ collection_predicates:
       require_past: true
       operator: lt
       value_from_policy: adulthood_years
+    disjoint_with: [adult]
 
 base_relations:
   spouse:
@@ -98,10 +112,19 @@ base_relations:
     edge: has_resident
   residence:
     edge: lives_in
+  location:
+    edge: located_in
+  contents:
+    edge: contains
+  host:
+    edge: hosted_by
+  hosted_space:
+    edge: hosts_space
 
 reference_concepts:
   member:
     label: {en: household member, zh: 家庭成员}
+    count_label: {en: person, zh: 人}
     aliases: [家庭成员, household member, resident]
     path:
       - relation: member
@@ -110,6 +133,27 @@ reference_concepts:
     aliases: [居住地, 住址, residence, home address]
     path:
       - relation: residence
+  location:
+    label: {en: location, zh: 所在位置}
+    aliases: [位置, 所在地, 在哪里, location, located in, where]
+    path:
+      - relation: location
+  contents:
+    label: {en: contained item, zh: 所含物品}
+    aliases: [所含物品, 里面的物品, contained item, contents]
+    path:
+      - relation: contents
+  room:
+    label: {en: room, zh: 房间}
+    count_label: {en: room, zh: 房间}
+    aliases: [房间, 屋子, room, rooms]
+    path:
+      - relation: contents
+        filters:
+          - {property: item_type, value: house}
+      - relation: hosted_space
+        filters:
+          - {property: space_type, value: room}
   spouse:
     label: {en: spouse, zh: 配偶}
     aliases: [配偶, 爱人, spouse, partner]

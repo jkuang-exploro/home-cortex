@@ -19,6 +19,9 @@ active source code.**
   before/after examples, deterministic verification and presentation limitations.
 - `generic-contracts/` records the opt-in V2 implementation, compatibility checks
   and frozen candidate manifest for evaluation (`REPORT.md` + `candidate-summary.json`).
+- `query-generalization/` records the deployed capability audit, synthetic
+  counterexamples, presentation contract, implementation notes, and compact
+  evaluation summaries.
 - The **readable, authoritative** provenance is the `*-summary.json` files and the
   `REPORT.md` / `REPORT-qwen35-9b.md` prose. Prefer these.
 - The large per-case JSONs (e.g. `probe-iteration*.json`, `probe.json`,

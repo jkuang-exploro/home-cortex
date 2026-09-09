@@ -117,7 +117,11 @@ async def benchmark_runtime(
         schema = SemanticSchemaRegistry(catalog)
         llm = language_model_from_settings(settings)
         service = SemanticFactService(
-            HouseholdFactEngine(dispatcher, schema, max_records=settings.retrieval_limit),
+            HouseholdFactEngine(
+                dispatcher,
+                schema,
+                max_records=min(settings.retrieval_limit, 25),
+            ),
             planner=SemanticFactPlanner(llm, schema),
         )
         localized = steward.settings.get("localized_identity", {})
