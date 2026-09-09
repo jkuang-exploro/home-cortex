@@ -12,6 +12,7 @@ dependencies = [
     "ollama>=0.6,<1",
     "pydantic-settings>=2.10,<3",
     "pyyaml>=6,<7",
+    "jsonschema>=4.23,<5",
     "surrealdb>=2,<3",
     "uvicorn[standard]>=0.35,<1",
     "pytest>=8,<9",
@@ -25,6 +26,7 @@ home-cortex-semantic-planner-benchmark = "home_cortex.semantic_planner_benchmark
 
 [project.optional-dependencies]
 dev = [
+    "tiktoken>=0.9,<1",
     "pytest>=8,<9",
     "pytest-asyncio>=1,<2",
     "httpx2>=2,<3",

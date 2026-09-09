@@ -1,4 +1,5 @@
 import json
+from home_cortex.semantic_transport import SemanticTransport
 from typing import Any
 
 import httpx
@@ -137,7 +138,7 @@ async def test_openrouter_planner_uses_json_schema_and_parses_content() -> None:
         return httpx.Response(
             200,
             json=_completion(
-                json.dumps({"requires_fact": False, "request": None}),
+                SemanticTransport({"type": "object"}).encode({"requires_fact": False, "request": None}),
                 usage={"prompt_tokens": 20, "completion_tokens": 8},
             ),
         )

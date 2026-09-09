@@ -377,6 +377,7 @@ class PlannerDiagnostics:
     eval_count: int = 0
     eval_duration_ms: float = 0
     load_duration_ms: float = 0
+    transport: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -1382,6 +1383,7 @@ class SemanticFactPlanner:
         request_ms = 0.0
         validation_ms = 0.0
         runtime: Mapping[str, Any] = {}
+        transport_attempts: list[dict[str, Any]] = []
         utterance = latest_user_message(messages)
         last_invalid_request: SemanticFactRequest | None = None
         for attempts in (1, 2):
@@ -1404,7 +1406,7 @@ class SemanticFactPlanner:
                             "check reference path, first vs second person, "
                             "property ownership, and operation requirements. "
                             + (f"{extra} " if extra else "")
-                            + "Return exactly one JSON object conforming to the "
+                            + "Return exactly one structured value conforming to the "
                             "supplied output schema."
                         ),
                     }
@@ -1452,6 +1454,12 @@ class SemanticFactPlanner:
                 runtime = getattr(self.ollama, "last_planner_runtime", {}) or runtime
                 structural_error = error
             finally:
+                attempt_runtime = getattr(self.ollama, "last_planner_runtime", {}) or {}
+                if attempt_runtime.get("codec_version") is not None:
+                    transport_attempts.append({
+                        **_planner_runtime_fields(attempt_runtime),
+                        "attempt": attempts,
+                    })
                 request_ms += (perf_counter() - request_started) * 1000
         latency_ms = (perf_counter() - started) * 1000
         timing = {
@@ -1460,6 +1468,8 @@ class SemanticFactPlanner:
             "validation_ms": validation_ms,
             **_planner_runtime_fields(runtime),
         }
+        if transport_attempts:
+            timing["transport"]["attempts"] = transport_attempts
         if plan is None:
             code = validation or _structural_validation_code(structural_error)
             raise SemanticPlannerFailure(
@@ -3470,6 +3480,12 @@ def _planner_runtime_fields(runtime: Mapping[str, Any]) -> dict[str, Any]:
         "eval_count": int(number("eval_count")),
         "eval_duration_ms": float(number("eval_duration_ms")),
         "load_duration_ms": float(number("load_duration_ms")),
+        "transport": {key: runtime[key] for key in (
+            "codec_version", "schema_fingerprint", "compact_output_bytes",
+            "expanded_output_bytes", "transport_parse_success", "transport_parse_ms",
+            "compact_prompt_bytes", "compact_schema_bytes", "expanded_schema_bytes",
+            "field_dictionary_fingerprint",
+        ) if key in runtime},
     }
 
 

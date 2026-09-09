@@ -6,6 +6,7 @@ from typing import Any, cast
 from ollama import AsyncClient, ChatResponse
 
 from .profiling import model_call, stage
+from .semantic_transport import transport_for, pack_capabilities, canonical_json, decode_response
 
 
 # Keep the same resident runner configuration across ordinary chat and planning.
@@ -176,7 +177,24 @@ def _example_text() -> tuple[tuple[str, str], ...]:
             },
         }, ensure_ascii=False, separators=(",", ":"))},
     ))
+    for message in messages:
+        if message['role'] == 'assistant':
+            payload = json.loads(message['content'])
+            for condition in payload.get('request', {}).get('filters', []):
+                if 'property' in condition:
+                    condition.setdefault('operator', 'eq')
+            message['content'] = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
     return tuple((message["role"], message["content"]) for message in messages)
+
+
+@lru_cache(maxsize=16)
+def _compact_example_text(schema_text: str) -> tuple[tuple[str, str], ...]:
+    codec = transport_for(json.loads(schema_text))
+    return tuple(
+        (message['role'], codec.encode(json.loads(message['content']), validate=False)
+         if message['role'] == 'assistant' else message['content'])
+        for message in _semantic_planner_examples()
+    )
 
 
 def planner_system_prompt(capabilities: Mapping[str, Any]) -> str:
@@ -195,6 +213,7 @@ def planner_chat_messages(
     capabilities: Mapping[str, Any],
     *,
     household_now: str,
+    output_schema: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Build planner messages: examples plus user turns, no assistant answers."""
     forwarded: list[dict[str, Any]] = []
@@ -242,6 +261,17 @@ def planner_chat_messages(
         {"role": "system", "content": reminder},
         *forwarded,
     ]
+    if output_schema is not None:
+        codec = transport_for(output_schema)
+        built[0]['content'] = (
+            _PLANNER_INSTRUCTIONS + codec.instructions() + '\nCapabilities:\n'
+            + canonical_json(pack_capabilities(capabilities))
+        )
+        # Cache schema-only demonstrations; never cache user turns or identities.
+        built[1:1 + len(_semantic_planner_examples())] = [
+            {'role': role, 'content': content}
+            for role, content in _compact_example_text(canonical_json(output_schema))
+        ]
     if notes:
         built.append({"role": "system", "content": "\n".join(notes)})
     return built
@@ -305,15 +335,18 @@ class OllamaService:
         household_now: str,
     ) -> Mapping[str, Any]:
         """Interpret an open-ended request without exposing physical storage."""
+        codec = transport_for(output_schema)
+        built = planner_chat_messages(
+            messages, capabilities, household_now=household_now, output_schema=output_schema
+        )
+        self.last_planner_runtime = codec.input_metrics(built)
         response = await self._chat(
             model=self.model,
-            messages=planner_chat_messages(
-                messages, capabilities, household_now=household_now
-            ),
+            messages=built,
             stream=False,
             think=False,
             keep_alive=PLANNER_KEEP_ALIVE,
-            format=dict(output_schema),
+            format=codec.schema,
             options={
                 "temperature": 0,
                 "num_ctx": PLANNER_NUM_CTX,
@@ -321,11 +354,8 @@ class OllamaService:
                 "seed": PLANNER_SEED,
             },
         )
-        self.last_planner_runtime = _ollama_runtime_metrics(response)
-        parsed = json.loads(response.message.content or "")
-        if not isinstance(parsed, Mapping):
-            raise ValueError("Semantic fact planner returned a non-object")
-        return parsed
+        self.last_planner_runtime.update(_ollama_runtime_metrics(response))
+        return decode_response(codec, response.message.content or "", self.last_planner_runtime)
 
     async def stream_chat_with_tools(
         self,

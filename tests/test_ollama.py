@@ -1,4 +1,5 @@
 import json
+from home_cortex.semantic_transport import SemanticTransport
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -127,9 +128,7 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
             _chat_response(
                 {
                     "role": "assistant",
-                    "content": json.dumps(
-                        {"requires_fact": False, "request": None}
-                    ),
+                    "content": SemanticTransport({"type": "object"}).encode({"requires_fact": False, "request": None}),
                 }
             )
         ]
@@ -232,9 +231,7 @@ async def test_planner_prompt_keeps_stable_prefix_and_identity_note(
             _chat_response(
                 {
                     "role": "assistant",
-                    "content": json.dumps(
-                        {"requires_fact": False, "request": None}
-                    ),
+                    "content": SemanticTransport({"type": "object"}).encode({"requires_fact": False, "request": None}),
                 }
             )
         ]

@@ -45,7 +45,9 @@ async def build_traffic(root, ordering):
     class Capture:
         async def chat(self, **kwargs):
             self.body = kwargs
-            return module.ChatResponse(message={'role': 'assistant', 'content': '{}'})
+            from home_cortex.semantic_transport import transport_for
+            codec = transport_for(service.engine.schema.planner_output_schema())
+            return module.ChatResponse(message={'role': 'assistant', 'content': codec.encode({'requires_fact': False, 'request': None})})
 
     capture = Capture()
     model = module.OllamaService('http://unused', MODEL, client=capture)
@@ -105,6 +107,7 @@ def run(client, traffic, repeats, warmup):
                 try:
                     parsed = json.loads(content)
                     row['json_object'] = isinstance(parsed, dict)
+                    row['compact_envelope'] = isinstance(parsed, list) and len(parsed) == 2 and parsed[0] == 1
                     row['parsed_output_sha256'] = hashlib.sha256(json.dumps(parsed, sort_keys=True).encode()).hexdigest()
                 except ValueError:
                     row['json_object'] = False
