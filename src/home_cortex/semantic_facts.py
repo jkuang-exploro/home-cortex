@@ -169,6 +169,8 @@ class SemanticFilter(_SemanticModel):
         default=None,
         pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
     )
+    transform: Literal["date_difference"] | None = None
+    mode: Literal["years", "months", "days"] | None = None
 
     @model_validator(mode="after")
     def validate_dynamic_value(self) -> "SemanticFilter":
@@ -180,8 +182,22 @@ class SemanticFilter(_SemanticModel):
             or self.source != "entity"
             or self.value_from is not None
             or self.value_property is not None
+            or self.transform is not None
+            or self.mode is not None
         ):
             raise ValueError("semantic predicates do not accept field-filter options")
+        if self.transform is None:
+            if self.mode is not None:
+                raise ValueError("mode requires transform")
+        else:
+            if self.mode not in {"years", "months", "days"}:
+                raise ValueError("date_difference filters require mode years|months|days")
+            if self.operator not in {"gt", "gte", "lt", "lte", "eq"}:
+                raise ValueError("derived date filters require a scalar comparison")
+            if type(self.value) is not int or self.value < 0 or self.value > 120:
+                raise ValueError("derived date filters require an integer threshold")
+            if self.value_from is not None or self.source != "entity":
+                raise ValueError("derived date filters compare an entity date to household now")
         if self.value_from is not None and self.value is not None:
             raise ValueError("filter cannot define both value and value_from")
         if self.value_property is not None and self.value_from is None:
@@ -506,6 +522,17 @@ class SemanticSchemaRegistry:
         return None
 
     def _contract_filter_error(self, item, types, relation, anchor_types) -> str | None:
+        if item.transform == "date_difference":
+            contract = self.contracts.properties.get(item.property)
+            if contract is None:
+                return "UNKNOWN_PROPERTY"
+            if not contract.type.kinds.intersection({"date", "datetime"}):
+                return "INVALID_LITERAL_TYPE"
+            if item.source != "entity" or (
+                types and any((owner, item.property) not in self.contracts.entity_bindings for owner in types)
+            ):
+                return "PROPERTY_NOT_APPLICABLE"
+            return None
         contract = self.contracts.properties.get(item.property)
         if contract is None:
             return 'UNKNOWN_PROPERTY'
@@ -654,6 +681,7 @@ class SemanticSchemaRegistry:
                 "filter_requirements": {
                     "composition": "request.filters restricts the resolved collection before select/count/aggregation; all conditions are AND. The outer property selects the output, not the field used by a filter.",
                     "date_range": "date/datetime property with value=[inclusive_start, exclusive_end]; use ISO dates. A calendar year Y is [Y-01-01, (Y+1)-01-01).",
+                    "derived_age": "满N岁/N岁以上 is {property:birth_date, transform:date_difference, mode:years, operator:gte, value:N}. N岁以下 uses lt/lte. The executor computes completed units from Household now. Do not invent an ISO cutoff or a birth-year date_range.",
                 },
                 "property_ownership": {
                     "entity": full["semantic_properties"],
@@ -715,6 +743,8 @@ class SemanticSchemaRegistry:
             }
             field_filter = definitions["SemanticFilter"]
             field_filter["properties"].pop("predicate")
+            field_filter["properties"].pop("transform", None)
+            field_filter["properties"].pop("mode", None)
             field_filter["properties"]["property"] = {"type": "string", "enum": properties}
             field_filter["properties"]["value_property"] = {
                 "anyOf": [{"type": "string", "enum": properties}, {"type": "null"}]
@@ -732,6 +762,31 @@ class SemanticSchemaRegistry:
             ]}
             # Anchor-relative comparisons belong to a traversal step. Collection
             # filters have no anchor operand in their executor contract.
+            date_properties = [
+                name for name in properties
+                if name in {"birth_date", "start_date", "end_date"}
+            ]
+            derived_age = {
+                "type": "object",
+                "additionalProperties": False,
+                "description": (
+                    "Compare completed calendar units of a date property "
+                    "against Household now. Age thresholds use this form."
+                ),
+                "properties": {
+                    "property": {"type": "string", "enum": date_properties or properties},
+                    "transform": {"type": "string", "const": "date_difference"},
+                    "mode": {"type": "string", "enum": ["years", "months", "days"]},
+                    "operator": {"type": "string", "enum": ["gt", "gte", "lt", "lte", "eq"]},
+                    "value": {"type": "integer", "minimum": 0, "maximum": 120},
+                    "source": {"type": "string", "enum": ["entity"]},
+                },
+                "required": ["property", "transform", "mode", "operator", "value"],
+            }
+            definitions["SemanticFilter"] = {"anyOf": [
+                *definitions["SemanticFilter"]["anyOf"],
+                derived_age,
+            ]}
             definitions["SemanticCollectionFilter"] = {"anyOf": [
                 {
                     **field_filter,
@@ -742,6 +797,7 @@ class SemanticSchemaRegistry:
                     "required": ["property", "operator", "value"],
                 },
                 definitions["SemanticFilter"]["anyOf"][1],
+                derived_age,
             ]}
             request = definitions["SemanticFactRequest"]
             request["properties"]["operation"]["enum"] = self.planner_capability_payload()["operations"]
@@ -1259,6 +1315,8 @@ class SemanticSchemaRegistry:
         return next(iter(kinds))
 
     def _valid_predicate(self, item: SemanticFilter, field_kind: str) -> bool:
+        if item.transform == "date_difference":
+            return field_kind in {"date", "datetime"}
         if self.contracts is not None:
             contract = self.contracts.properties.get(item.property)
             return contract is not None and contract.literal_error(item.operator, item.value, anchor=item.value_from is not None) is None
@@ -1616,6 +1674,7 @@ class EntityResolver:
                 step.filters,
                 execution,
                 anchors,
+                context,
             )
             if not entities:
                 if allow_empty_collection:
@@ -1742,6 +1801,7 @@ class EntityResolver:
         filters: Sequence[SemanticFilter],
         execution: "_FactExecution",
         anchors: Sequence[Mapping[str, Any]],
+        context: AgentRequestContext,
     ) -> list[dict[str, Any]]:
         entity_filters = [item for item in filters if item.source == "entity"]
         if not entity_filters:
@@ -1772,6 +1832,11 @@ class EntityResolver:
             predicates: list[bool] = []
             for item, physical in mapped:
                 self.schema.validate_filter_value(item.property, record.get(physical))
+                if item.transform:
+                    predicates.append(
+                        self._date_transform_matches(item, record.get(physical), context)
+                    )
+                    continue
                 expected = item.value
                 if item.value_from == "anchor":
                     expected = await self._anchor_property(
@@ -2227,6 +2292,7 @@ class HouseholdFactEngine:
                             item,
                             entity,
                             execution,
+                            context,
                         )
                     if not include:
                         break
@@ -2266,6 +2332,7 @@ class HouseholdFactEngine:
         item: SemanticFilter,
         entity: Mapping[str, Any],
         execution: "_FactExecution",
+        context: AgentRequestContext,
     ) -> bool:
         assert item.property is not None
         physical = self.schema.physical_property(_entity_type(entity), item.property)
@@ -2279,7 +2346,50 @@ class HouseholdFactEngine:
         if physical not in record or record.get(physical) is None:
             raise _FactFailure("filter_input_missing", missing=(item.property,))
         self.schema.validate_filter_value(item.property, record.get(physical))
+        if item.transform:
+            return self._date_transform_matches(item, record.get(physical), context)
         return evaluate_predicate(item.operator, record.get(physical), item.value)
+
+    def _date_transform_matches(
+        self,
+        item: SemanticFilter,
+        raw_value: Any,
+        context: AgentRequestContext,
+    ) -> bool:
+        normalized = {"value": raw_value}
+        try:
+            if execute_operator(
+                "date_difference",
+                OperatorInput(
+                    records=[normalized],
+                    field="value",
+                    mode="seconds",
+                    now=context.current_time,
+                ),
+            ) < 0:
+                raise OperatorExecutionError("derived date filter requires a past date")
+            transform = OPERATORS[item.transform or "date_difference"]
+            transform.validate(
+                field="value",
+                field_kind=infer_field_kind([raw_value]),
+                parameters={"reference": "household_now", "mode": item.mode},
+            )
+            derived = execute_operator(
+                item.transform or "date_difference",
+                OperatorInput(
+                    records=[normalized],
+                    field="value",
+                    reference="household_now",
+                    now=context.current_time,
+                    mode=item.mode,
+                ),
+            )
+        except (OperatorValidationError, OperatorExecutionError, TypeError, ValueError):
+            raise _FactFailure(
+                "filter_input_missing",
+                missing=(item.property,),
+            ) from None
+        return evaluate_predicate(item.operator, derived, item.value)
 
     def _relation_filter_matches(
         self,

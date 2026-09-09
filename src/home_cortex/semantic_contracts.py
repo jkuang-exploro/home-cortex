@@ -203,6 +203,19 @@ class PropertyContract:
                     dynamic.update({'value_from': {'enum': ['anchor']}, 'value_property': {'type': 'string'}})
                     branches.append({'type': 'object', 'additionalProperties': False, 'properties': dynamic,
                                      'required': ['property', 'operator', 'value_from']})
+        if not traversal and 'entity' in sources and self.type.kinds.intersection({'date', 'datetime'}):
+            branches.append({
+                'type': 'object', 'additionalProperties': False,
+                'properties': {
+                    'property': {'enum': [name]},
+                    'transform': {'const': 'date_difference'},
+                    'mode': {'enum': ['years', 'months', 'days']},
+                    'operator': {'enum': ['gt', 'gte', 'lt', 'lte', 'eq']},
+                    'value': {'type': 'integer', 'minimum': 0, 'maximum': 120},
+                    'source': {'enum': ['entity']},
+                },
+                'required': ['property', 'transform', 'mode', 'operator', 'value'],
+            })
         return branches
 
 

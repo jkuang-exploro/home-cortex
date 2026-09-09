@@ -1,6 +1,7 @@
 """Cross-domain execution rules over invented household graphs."""
 
 import json
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -277,3 +278,50 @@ async def test_gender_year_and_age_floor_filters_do_not_need_adult(household):
     assert age_result.status == "found" and age_result.value == 2
     assert oldest_result.status == "found"
     assert oldest_result.value["id"] == "person:father"
+
+
+@pytest.mark.asyncio
+async def test_derived_age_threshold_is_computed_not_a_guessed_date_range(household):
+    engine, context, _ = household
+    members = SemanticReference(
+        kind="current_household",
+        path=(SemanticRelationStep(relation="member"),),
+    )
+    request = SemanticFactRequest(
+        operation="select",
+        subject=members,
+        filters=(
+            SemanticFilter(
+                property="birth_date",
+                transform="date_difference",
+                mode="years",
+                operator="gte",
+                value=35,
+            ),
+        ),
+    )
+    assert engine.schema.validates(request)
+    result, *_ = await engine.execute(request, context)
+    ids = {item["id"] for item in result.value}
+    assert ids == {"person:a", "person:b", "person:father", "person:mother"}
+    text = FactRenderer(engine.schema.ontology).render(
+        request, result, replace(context, locale="zh")
+    )
+    assert "匡" not in text
+    assert "年龄 ≥ 35岁" in text
+    assert "2010-09-08" not in text
+    inverted = SemanticFactRequest(
+        operation="select",
+        subject=members,
+        filters=(
+            SemanticFilter(
+                property="birth_date",
+                operator="date_range",
+                value=("2010-09-08", "2026-09-08"),
+            ),
+        ),
+    )
+    wrong, *_ = await engine.execute(inverted, context)
+    wrong_ids = {item["id"] for item in wrong.value}
+    assert wrong_ids != ids
+    assert engine.schema.validates(inverted)

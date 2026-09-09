@@ -127,6 +127,11 @@ class SemanticDisplay:
         if item.predicate:
             definition = self.ontology.collection_predicates.get(item.predicate)
             return self.label(definition.label if definition else (), item.predicate)
+        if item.transform == "date_difference" and item.mode == "years":
+            operator = {"eq": "=", "ne": "≠", "gt": ">", "gte": "≥", "lt": "<", "lte": "≤"}[item.operator]
+            if self.zh:
+                return f"年龄 {operator} {item.value}岁"
+            return f"age {operator} {item.value} years"
         name = item.property or ""
         owner = "实体" if self.zh else "entity"
         if item.source == "relation":

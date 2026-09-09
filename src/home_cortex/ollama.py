@@ -56,7 +56,7 @@ _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用�
 - 查询符合条件的实体集合用 select、property=null，条件完整放入 request.filters；条件引用的属性不等于要输出的属性。集合可以有零个、一个或多个结果，不能用单人 resolve_reference 代替。统计同一集合则用 count。
 - 日期条件遵循 filter_requirements：date_range 的 value=[含起点,不含终点]，用 ISO 日期表达完整区间；年份限定是该年年初至下一年年初，不是日期与年份数字相等。不得把日期限定丢掉或变成出生日期投影。
 - 男/男性/男的/male 是 {"property":"gender","value":"male"}；女/女性/女的/female 是 {"property":"gender","value":"female"}。性别不是 adult，也不是 minor，更不是二者合取。predicate_disjointness 禁止同一集合同时使用 adult 与 minor。
-- 满 N 岁 / N 岁以上：用 Household now 的日历日减去 N 年得到截止日期 D（ISO 日期）。filters 用 {"property":"birth_date","operator":"lte","value":D}。不要用 adult/minor 代替任意岁数门槛，不要把 value 写成日期数组再配 lt。
+- 满 N 岁 / N 岁以上：{"property":"birth_date","transform":"date_difference","mode":"years","operator":"gte","value":N}。N 岁以下用 lt 或 lte。由执行器按 Household now 计算已满年数。不要改写成 birth_date 的 date_range，不要自行换算 ISO 截止日期，不要用 adult/minor 代替任意岁数。
 - 集合谓词只能是 {"predicate":声明名称}，放在 request.filters。definition_only 只解释含义，不输出为附加条件；date_difference 等操作不是谓词。
 - 只用已声明的操作、属性、关系、概念和谓词。不得丢弃不支持的限定、发明词汇、猜身份或修补事实答案。只返回严格结构化输出。
 """
@@ -86,6 +86,7 @@ def _example_text() -> tuple[tuple[str, str], ...]:
         ("本户女性成员人数是多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "gender", "value": "female"}]}),
         ("我这个家里出生日期最靠前的是哪一位？", "argmin", reference("current_household", "member"), "birth_date", "entity", {}),
         ("本户出生于1991年的成员有几位？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "operator": "date_range", "value": ["1991-01-01", "1992-01-01"]}]}),
+        ("本户已满四十周岁的成员有哪些？", "select", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "transform": "date_difference", "mode": "years", "operator": "gte", "value": 40}]}),
         ("我的男孩后代是哪一位？", "resolve_reference", reference("self", "son"), None, "entity", {}),
         ("请列出我的女性后代。", "select", reference("self", "daughter"), None, "entity", {}),
         ("我母亲的丈夫是哪位？", "resolve_reference", reference("self", "mother", "husband"), None, "entity", {}),
@@ -222,7 +223,7 @@ def planner_chat_messages(
         "second person addressing this helper → kind=assistant. "
         "Do not add path, filters, or amount unless the latest "
         "utterance requires them. Do not copy filters from earlier turns. "
-        "Age-at-least N is birth_date lte (Household now date minus N years)."
+        "Age-at-least N is birth_date transform=date_difference mode=years operator=gte value=N."
     )
     built = [
         {"role": "system", "content": planner_system_prompt(capabilities)},

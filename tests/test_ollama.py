@@ -179,7 +179,7 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
         "second person addressing this helper → kind=assistant. "
         "Do not add path, filters, or amount unless the latest "
         "utterance requires them. Do not copy filters from earlier turns. "
-        "Age-at-least N is birth_date lte (Household now date minus N years)."
+        "Age-at-least N is birth_date transform=date_difference mode=years operator=gte value=N."
     ]
     assert sum(m["role"] == "system" for m in call["messages"]) == 2
     assert "second person addressing this helper" in json.dumps(call["messages"])
