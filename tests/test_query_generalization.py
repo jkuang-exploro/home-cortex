@@ -240,6 +240,13 @@ def test_retry_hint_covers_self_member_and_disjoint_predicates(tmp_path):
     )
     hint = _invalid_plan_retry_hint(engine.schema, space_on_people)
     assert hint and "room" in hint
+    identity = SemanticFactRequest(
+        operation="same_entity",
+        subject=SemanticReference(kind="self", entity_type="person"),
+    )
+    assert engine.schema.validation_code(identity) == "INVALID_PLAN"
+    hint = _invalid_plan_retry_hint(engine.schema, identity)
+    assert hint and "same_entity" in hint and "other" in hint
 
 
 @pytest.mark.asyncio

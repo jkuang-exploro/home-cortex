@@ -17,6 +17,7 @@ def test_registry_is_explicit_generic_and_bounded() -> None:
         "select",
         "traverse",
         "resolve_reference",
+        "same_entity",
         "eq",
         "date_range",
         "count",
@@ -52,6 +53,8 @@ def test_operator_contracts_are_machine_readable() -> None:
     assert OPERATORS["count"].output_kind == "integer"
     assert OPERATORS["average"].field_kinds == {"integer", "number"}
     assert OPERATORS["argmin"].output_kind == "record"
+    assert OPERATORS["same_entity"].output_kind == "boolean"
+    assert OPERATORS["same_entity"].input_shape == "plan"
     assert OPERATORS["completed_years"].output_kind == "integer"
     assert OPERATORS["annual_occurrence"].field_kinds == {"date", "datetime"}
 

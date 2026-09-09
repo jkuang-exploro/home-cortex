@@ -54,6 +54,7 @@ FactStatus = Literal[
 ]
 FactOperation = Literal[
     "resolve_reference",
+    "same_entity",
     "select",
     "count",
     "first",
@@ -637,6 +638,7 @@ class SemanticSchemaRegistry:
             "operation_requirements": {
                 "select": "property=null returns all matching entities, including zero or many; property set returns a single stored property value. Filter properties are not output projections.",
                 "resolve_reference": "returns exactly one entity; not a list of matching entities",
+                "same_entity": "property=null; two resolved references subject and other; returns whether they are the same entity; not identity introduction and not a stored property",
                 "argmin": "ordered property required; collection subject OR two references subject and other; returns entity",
                 "argmax": "ordered property required; collection subject OR two references subject and other; returns entity",
                 "completed_years": "legacy structured-call alias; interpreter uses date_difference with mode=years",
@@ -1150,6 +1152,14 @@ class SemanticSchemaRegistry:
             valid = (
                 request.property is None
                 and request.other is None
+                and not request.filters
+                and request.property_source == "entity"
+            )
+            return "VALID" if valid else "INVALID_PLAN"
+        if request.operation == "same_entity":
+            valid = (
+                request.property is None
+                and request.other is not None
                 and not request.filters
                 and request.property_source == "entity"
             )
@@ -2089,6 +2099,24 @@ class HouseholdFactEngine:
             if isinstance(singular, FactResult):
                 return singular
             return FactResult("found", singular, evidence, shape="entity")
+        if request.operation == "same_entity":
+            left = await self._singular(
+                entities, request, execution, load_full=False
+            )
+            right = await self._singular(
+                other_entities, request, execution, load_full=False
+            )
+            if isinstance(left, FactResult):
+                return left
+            if isinstance(right, FactResult):
+                return right
+            left_id = left.get("id")
+            right_id = right.get("id")
+            if not isinstance(left_id, str) or not isinstance(right_id, str):
+                return FactResult("computation_impossible", evidence=evidence)
+            return FactResult(
+                "found", left_id == right_id, evidence, shape="scalar"
+            )
         if request.operation == "select":
             if request.property_source == "relationship":
                 relationship = self._singular_relationship(
@@ -2904,6 +2932,8 @@ class FactRenderer:
             return f"换算结果是{result.value} {result.unit or request.to_unit}。"
         if request.operation in {"first", "last", "latest", "earliest"}:
             return f"符合条件的是{_name(result.value, 'zh')}。"
+        if request.operation == "same_entity":
+            return "是。" if result.value else "不是。"
         if request.subject.kind == "assistant":
             return f"我是{context.assistant_display_name}。"
         name = _name(result.value, "zh")
@@ -2990,6 +3020,8 @@ class FactRenderer:
             return f"The converted result is {result.value} {result.unit or request.to_unit}."
         if request.operation in {"first", "last", "latest", "earliest"}:
             return f"The matching result is {_name(result.value, 'en')}."
+        if request.operation == "same_entity":
+            return "Yes." if result.value else "No."
         if request.subject.kind == "assistant":
             return f"I am {context.assistant_display_name}, the Home Cortex household assistant."
         return f"The resolved person is {_name(result.value, 'en')}."
@@ -3349,6 +3381,16 @@ def _invalid_plan_retry_hint(
     ):
         notes.append(
             "household rooms use current_household then concept room."
+        )
+    if request.operation == "same_entity" and (
+        request.property is not None
+        or request.other is None
+        or request.filters
+        or request.property_source != "entity"
+    ):
+        notes.append(
+            "same_entity compares two resolved references; property=null; "
+            "other is required; not a stored property and not resolve_reference."
         )
     return " ".join(notes) or None
 

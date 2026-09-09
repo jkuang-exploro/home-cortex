@@ -181,13 +181,18 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
         "utterance requires them. Do not copy filters from earlier turns. "
         "Age-at-least N is birth_date transform=date_difference mode=years operator=gte value=N. "
         "以上/满=gte; 以下/未满=lt; do not invert. "
-        "Household rooms use path concept room from current_household."
+        "Household rooms use path concept room from current_household. "
+        "Entity identity is same_entity with two references subject and other, property=null. "
+        "Residence-here compares that person's residence with current_household; "
+        "do not reuse a prior resolve_reference identity plan."
     ]
     assert sum(m["role"] == "system" for m in call["messages"]) == 2
     assert "second person addressing this helper" in json.dumps(call["messages"])
     assert "self 是已认证的当前说话人" in prompt
     assert "kind=assistant" in prompt
     assert "请介绍一下你自己。" in json.dumps(call["messages"], ensure_ascii=False)
+    assert "该母亲的现居所是否即当前配置家庭？" in json.dumps(call["messages"], ensure_ascii=False)
+    assert "same_entity" in prompt
     assert "逐字复制用户说出的姓名或称呼" in prompt
     assert "property=null" in prompt
     assert "不计算或表述答案" in prompt

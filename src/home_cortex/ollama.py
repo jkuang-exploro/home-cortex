@@ -31,7 +31,7 @@ _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用�
 - date_add 使用 amount（有符号整数）和 mode=years/months/days 给实体或关系日期加日历偏移。指定第 N 周年直接加 N 年，即使已过去；不能替换成 annual_occurrence。目标月不存在该日时使用下个月第一天：闰日加一年为三月一日。
 - 前文仅供理解话语，不是事实来源。代词或前文对象用 kind=discourse、turn_offset=1..8（倒数第几个用户轮次）、entity_type、cardinality=single|collection，value=null。由可信上下文解析身份；单数不能从多人前文中猜选一人。需要澄清的指代用 kind=unresolved。path 可从前文实体继续组合。不要把代词改写成猜测姓名或 ID。
 - 只编译最后一条 user 消息。更早的 user 消息仅用于判断最后一条消息中指代语的先行词；固定的 assistant 省略标记只划分用户轮次，不包含事实。最后一条消息中的第一人称使用 self，第二人称使用 assistant；它们不引用更早轮次。只有必须从更早 user 消息取得对象的第三人称、指示词或明确前文引用才使用 discourse。
-- 最新一句如果本身已是完整事实问句（人数、名单、极值、性别、出生年份、年龄门槛、亲属），request.filters 只含这一句要求的条件，path 只含这一句的概念。禁止把上一问的 adult、minor、gender 或 date_range 复制过来。上一问不是过滤器来源。
+- 最新一句如果本身已是完整事实问句（人数、名单、极值、性别、出生年份、年龄门槛、亲属、是否同一实体、是否住在这里），request.filters 只含这一句要求的条件，path 只含这一句的概念。禁止把上一问的 adult、minor、gender、date_range 或身份 resolve_reference 复制过来。上一问不是过滤器或身份计划的来源。
 - 身份问句看人称，不看“谁”。第一人称（我、I、me、my）问身份、姓名或称呼 → kind=self。第二人称（你、您、you、your）问身份、姓名、角色或自我介绍 → kind=assistant。不要把第二人称问句编成 self，也不要把第一人称问句编成 assistant。
 
 引用语法：
@@ -41,7 +41,7 @@ _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用�
 - 家庭成员列表、计数和极值是 current_household 后接 member。说话人说“我家/我家里/咱家”来问家里有谁、有几人、谁最年长或最年幼时，仍是 current_household 后接 member，不是 self 后接 member（person 不能走 member）。“我家的儿子”才是 self 后接 child。“我家住哪里”是 self 后接 residence。无所属限定的成年人/未成年人/孩子是家庭 member 加对应 predicate；明确“我的孩子”才是 self 后接 child。房间/屋子列表和间数是 current_household 后接 room，不是 member，也不在人身上加 space_type。任何住址或家庭地址查询都从 self 接 residence，再取 full_address。遵守 relation_signatures 的起点与终点类型。
 
 外层操作：
-- 问一个人是谁、身份或叫什么，以及“哪个人是我的某亲属”，用 resolve_reference 且 property=null；明确问名或姓的组成部分才用 select(given_name/family_name)。列出集合用 select 且 property=null；计数用 count 且 property=null。
+- 问一个人是谁、身份或叫什么，以及“哪个人是我的某亲属”，用 resolve_reference 且 property=null；明确问名或姓的组成部分才用 select(given_name/family_name)。列出集合用 select 且 property=null；计数用 count 且 property=null。判断两个已解析引用是否为同一实体，用 same_entity，property=null，必须同时给出 subject 和 other；返回是否同一，不是身份介绍。问某人现在是否住在这里，subject 是该人的 residence（可经亲属概念组合），other 是 current_household；不得改成 resolve_reference 该人。
 - 先区分返回实体集合、原始属性值还是计算值。年龄是从出生日期到当前日期的日历年数，用 date_difference(birth_date)、mode=years，返回整数而不是日期；原始出生日期才用 select(birth_date)。下一次生日用 annual_occurrence(birth_date)；从今天到生日的天数用 annual_occurrence，mode=days。
 - argmin 返回属性值最小者，argmax 返回最大者。birth_date 越早值越小，所以“年龄最大”也和年长、最早出生一样只能用 argmin；年幼、年龄小、最晚出生用 argmax。问人是谁时不用 earliest/latest 或数值 min/max。
 - 两人比较必须提供 property 和两个完整引用 subject、other；说话人参与时 subject=self，另一人在 other。集合极值没有 other。
@@ -100,6 +100,8 @@ def _example_text() -> tuple[tuple[str, str], ...]:
         ("我的母亲如今已满多少周岁？", "date_difference", reference("self", "mother"), "birth_date", "entity", {"mode": "years"}),
         ("列出居住关系始于2015年的本户成员。", "select", reference("current_household", "member"), None, "entity", {"filters": [{"property": "start_date", "source": "relation", "operator": "date_range", "value": ["2015-01-01", "2016-01-01"]}]}),
         ("请提供这个家庭的完整地址。", "select", reference("self", "residence"), "full_address", "entity", {}),
+        ("说话人现居所是否即当前配置家庭？", "same_entity", reference("self", "residence"), None, "entity", {"other": reference("current_household")}),
+        ("该母亲的现居所是否即当前配置家庭？", "same_entity", reference("self", "mother", "residence"), None, "entity", {"other": reference("current_household")}),
         ("我的居住关系从哪天开始？", "select", reference("self", "residence"), "start_date", "relationship", {}),
         ("这段居住关系至今已满多少年？", "date_difference", reference("self", "residence"), "start_date", "relationship", {"mode": "years"}),
         ("住进现居所至今有多少天？", "date_difference", reference("self", "residence"), "start_date", "relationship", {"mode": "days"}),
@@ -229,7 +231,10 @@ def planner_chat_messages(
         "utterance requires them. Do not copy filters from earlier turns. "
         "Age-at-least N is birth_date transform=date_difference mode=years operator=gte value=N. "
         "以上/满=gte; 以下/未满=lt; do not invert. "
-        "Household rooms use path concept room from current_household."
+        "Household rooms use path concept room from current_household. "
+        "Entity identity is same_entity with two references subject and other, property=null. "
+        "Residence-here compares that person's residence with current_household; "
+        "do not reuse a prior resolve_reference identity plan."
     )
     built = [
         {"role": "system", "content": planner_system_prompt(capabilities)},

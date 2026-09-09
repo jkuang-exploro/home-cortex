@@ -446,6 +446,91 @@ def test_ordering_meaning_is_declarative_and_property_specific(household):
     assert 'youngest' in props['birth_date']['ordering']['maximum']
     assert isinstance(props['display_name'],list)
     assert engine.schema.planner_capability_payload()['relation_signatures']['residence']=={'person':['address']}
+    assert 'same_entity' in engine.schema.planner_capability_payload()['operations']
+    assert 'same_entity' in engine.schema.planner_capability_payload()['operation_requirements']
+
+
+@pytest.mark.asyncio
+async def test_same_entity_compares_resolved_ids_including_residence(household):
+    engine, ctx, dispatcher = household
+    speaker = SemanticReference(kind='self', entity_type='person')
+    identity = SemanticFactRequest(
+        operation='same_entity', subject=speaker, other=speaker,
+    )
+    assert engine.schema.validates(identity)
+    same, *_ = await engine.execute(identity, ctx)
+    assert same.status == 'found' and same.value is True
+    assert FactRenderer().render(identity, same, replace(ctx, locale='zh')) == '是。'
+    assert FactRenderer().render(identity, same, replace(ctx, locale='en')) == 'Yes.'
+    different = SemanticFactRequest(
+        operation='same_entity', subject=speaker, other=ref(step('spouse')),
+    )
+    other, *_ = await engine.execute(different, ctx)
+    assert other.status == 'found' and other.value is False
+    assert FactRenderer().render(different, other, replace(ctx, locale='zh')) == '不是。'
+    assert not engine.schema.validates(identity.model_copy(update={'other': None}))
+    assert not engine.schema.validates(identity.model_copy(update={'property': 'birth_date'}))
+    assert not engine.schema.validates(identity.model_copy(
+        update={'property_source': 'relationship', 'subject': ref(step('residence'))},
+    ))
+
+    dispatcher.entities['person:own_mother'] = {
+        'id': 'person:own_mother', 'name': 'Own mother',
+        'gender': 'female', 'dob': '1957-02-02',
+    }
+    dispatcher.edges['parent_of'].append({'from': 'person:own_mother', 'to': 'person:a'})
+    dispatcher.edges['lives_in'].append({
+        'from': 'person:own_mother', 'to': 'address:fictional',
+        'start': '2018-01-01', 'end': None,
+    })
+
+    def composed(*concepts):
+        payload = {
+            'request': {
+                'operation': 'same_entity',
+                'property': None,
+                'property_source': 'entity',
+                'subject': {
+                    'kind': 'self', 'entity_type': 'person',
+                    'path': [{'concept': name} for name in concepts],
+                },
+                'other': {'kind': 'current_household', 'entity_type': 'address', 'value': None},
+            }
+        }
+        request = SemanticFactRequest.model_validate(
+            engine.schema.expand_planner_concepts(payload)['request']
+        )
+        assert engine.schema.validates(request)
+        return request
+
+    here = composed('mother', 'residence')
+    result, *_ = await engine.execute(here, ctx)
+    assert result.status == 'found' and result.value is True
+    assert result.evidence.entity_ids == ('address:fictional', 'address:fictional')
+    speaker_here, *_ = await engine.execute(composed('residence'), ctx)
+    assert speaker_here.status == 'found' and speaker_here.value is True
+
+    dispatcher.entities['address:other'] = {
+        'id': 'address:other', 'full_address': 'Somewhere else',
+    }
+    dispatcher.edges['lives_in'] = [
+        edge for edge in dispatcher.edges['lives_in']
+        if edge.get('from') != 'person:own_mother'
+    ]
+    dispatcher.edges['lives_in'].append({
+        'from': 'person:own_mother', 'to': 'address:other',
+        'start': '2018-01-01', 'end': None,
+    })
+    away, *_ = await engine.execute(here, ctx)
+    assert away.status == 'found' and away.value is False
+    assert FactRenderer().render(here, away, replace(ctx, locale='zh')) == '不是。'
+
+    dispatcher.edges['lives_in'] = [
+        edge for edge in dispatcher.edges['lives_in']
+        if edge.get('from') != 'person:own_mother'
+    ]
+    missing, *_ = await engine.execute(here, ctx)
+    assert missing.status == 'relationship_not_found'
 
 
 @pytest.mark.asyncio
