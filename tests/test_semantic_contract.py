@@ -38,6 +38,10 @@ def household(tmp_path):
         for p,c in [('a','son1'),('a','son2'),('a','daughter'),('b','son1'),('b','son2'),('b','daughter'),('father','b'),('mother','b'),('daughter','grandson')]
     ])
     write('edges', 'lives_in', [{'from':'person:'+i,'to':'address:fictional','start':'2018-01-01','end':None} for i,_,_ in people])
+    write('nodes', 'item', [{'id':'item:house','name':'House','item_type':'house'}])
+    write('nodes', 'space', [{'id':'space:room','name':'Room','space_type':'room'}])
+    write('edges', 'located_in', [{'from':'item:house','to':'address:fictional'}])
+    write('edges', 'hosted_by', [{'from':'space:room','to':'item:house'}])
     registry = EdgeSchemaRegistry.load_default()
     schema = SemanticSchemaRegistry(RuntimeSchemaCatalog.from_data_dir(tmp_path, registry))
     dispatcher = _JsonGraphDispatcher(tmp_path, registry)

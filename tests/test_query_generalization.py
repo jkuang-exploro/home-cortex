@@ -229,6 +229,17 @@ def test_retry_hint_covers_self_member_and_disjoint_predicates(tmp_path):
     assert engine.schema.contract_error(both) == "CONTRADICTORY_PREDICATES"
     hint = _invalid_plan_retry_hint(engine.schema, both)
     assert hint and "gender" in hint
+    space_on_people = SemanticFactRequest(
+        operation="select",
+        subject=SemanticReference(
+            kind="current_household",
+            entity_type="address",
+            path=(SemanticRelationStep(relation="member"),),
+        ),
+        filters=(SemanticFilter(property="space_type", value="room"),),
+    )
+    hint = _invalid_plan_retry_hint(engine.schema, space_on_people)
+    assert hint and "room" in hint
 
 
 @pytest.mark.asyncio
@@ -325,3 +336,33 @@ async def test_derived_age_threshold_is_computed_not_a_guessed_date_range(househ
     wrong_ids = {item["id"] for item in wrong.value}
     assert wrong_ids != ids
     assert engine.schema.validates(inverted)
+    older = SemanticFactRequest(
+        operation="count",
+        subject=members,
+        filters=(
+            SemanticFilter(
+                property="birth_date",
+                transform="date_difference",
+                mode="years",
+                operator="gte",
+                value=30,
+            ),
+        ),
+    )
+    younger = older.model_copy(
+        update={
+            "filters": (
+                SemanticFilter(
+                    property="birth_date",
+                    transform="date_difference",
+                    mode="years",
+                    operator="lt",
+                    value=30,
+                ),
+            )
+        }
+    )
+    older_result, *_ = await engine.execute(older, context)
+    younger_result, *_ = await engine.execute(younger, context)
+    assert older_result.value == 4 and younger_result.value == 4
+    assert older_result.value + younger_result.value == 8

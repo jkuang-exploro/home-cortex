@@ -38,7 +38,7 @@ _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用�
 - self 是已认证的当前说话人，assistant 是本助手，二者 entity_type=person、value=null。对助手的第二人称身份问题仍是事实请求，subject 必须是 assistant。current_household 是配置的家庭，entity_type=address、value=null。named_entity.value 只能逐字复制用户说出的姓名或称呼；不得猜测 ID 或把亲属短语当姓名。
 - path 是概念的有序组合，每步 {"concept":"名称"}，可附加 filters。reference_concepts 是权威定义；完整短语匹配某个 aliases 时，path 只放该最具体概念一次，不拆解或追加近义概念。son 不能简化为 child，wife 不能简化为 spouse，father 不能简化为 parent。本体会完整展开概念的关系和过滤条件。
 - 只有嵌套亲属才增加一跳。性别等形容词约束同一个目标，不增加一跳；额外 filters 与概念原有条件取 AND。说话人的亲属始终从 self 开始，“我家的儿子”也不先遍历全家。不得把上一问概念展开后的某一跳保留下来再换上当前问的另一概念：最新一句已有完整亲属短语时，path 只含该短语对应的最具体概念。
-- 家庭成员列表、计数和极值是 current_household 后接 member。说话人说“我家/我家里/咱家”来问家里有谁、有几人、谁最年长或最年幼时，仍是 current_household 后接 member，不是 self 后接 member（person 不能走 member）。“我家的儿子”才是 self 后接 child。“我家住哪里”是 self 后接 residence。无所属限定的成年人/未成年人/孩子是家庭 member 加对应 predicate；明确“我的孩子”才是 self 后接 child。任何住址或家庭地址查询都从 self 接 residence，再取 full_address。遵守 relation_signatures 的起点与终点类型。
+- 家庭成员列表、计数和极值是 current_household 后接 member。说话人说“我家/我家里/咱家”来问家里有谁、有几人、谁最年长或最年幼时，仍是 current_household 后接 member，不是 self 后接 member（person 不能走 member）。“我家的儿子”才是 self 后接 child。“我家住哪里”是 self 后接 residence。无所属限定的成年人/未成年人/孩子是家庭 member 加对应 predicate；明确“我的孩子”才是 self 后接 child。房间/屋子列表和间数是 current_household 后接 room，不是 member，也不在人身上加 space_type。任何住址或家庭地址查询都从 self 接 residence，再取 full_address。遵守 relation_signatures 的起点与终点类型。
 
 外层操作：
 - 问一个人是谁、身份或叫什么，以及“哪个人是我的某亲属”，用 resolve_reference 且 property=null；明确问名或姓的组成部分才用 select(given_name/family_name)。列出集合用 select 且 property=null；计数用 count 且 property=null。
@@ -56,7 +56,7 @@ _PLANNER_INSTRUCTIONS = """你是 Home Cortex 的语义解释器。把最新用�
 - 查询符合条件的实体集合用 select、property=null，条件完整放入 request.filters；条件引用的属性不等于要输出的属性。集合可以有零个、一个或多个结果，不能用单人 resolve_reference 代替。统计同一集合则用 count。
 - 日期条件遵循 filter_requirements：date_range 的 value=[含起点,不含终点]，用 ISO 日期表达完整区间；年份限定是该年年初至下一年年初，不是日期与年份数字相等。不得把日期限定丢掉或变成出生日期投影。
 - 男/男性/男的/male 是 {"property":"gender","value":"male"}；女/女性/女的/female 是 {"property":"gender","value":"female"}。性别不是 adult，也不是 minor，更不是二者合取。predicate_disjointness 禁止同一集合同时使用 adult 与 minor。
-- 满 N 岁 / N 岁以上：{"property":"birth_date","transform":"date_difference","mode":"years","operator":"gte","value":N}。N 岁以下用 lt 或 lte。由执行器按 Household now 计算已满年数。不要改写成 birth_date 的 date_range，不要自行换算 ISO 截止日期，不要用 adult/minor 代替任意岁数。
+- 满 N 岁 / N 岁以上 / 至少 N 岁：operator 必须是 gte，value=N。未满 N 岁 / N 岁以下：operator 必须是 lt。以上不是以下，禁止把 以上 编成 lt 或把 以下 编成 gte。形式是 {"property":"birth_date","transform":"date_difference","mode":"years","operator":"gte","value":N}。由执行器按 Household now 计算已满年数。不要改写成 birth_date 的 date_range，不要自行换算 ISO 截止日期，不要用 adult/minor 代替任意岁数。
 - 集合谓词只能是 {"predicate":声明名称}，放在 request.filters。definition_only 只解释含义，不输出为附加条件；date_difference 等操作不是谓词。
 - 只用已声明的操作、属性、关系、概念和谓词。不得丢弃不支持的限定、发明词汇、猜身份或修补事实答案。只返回严格结构化输出。
 """
@@ -87,6 +87,10 @@ def _example_text() -> tuple[tuple[str, str], ...]:
         ("我这个家里出生日期最靠前的是哪一位？", "argmin", reference("current_household", "member"), "birth_date", "entity", {}),
         ("本户出生于1991年的成员有几位？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "operator": "date_range", "value": ["1991-01-01", "1992-01-01"]}]}),
         ("本户已满四十周岁的成员有哪些？", "select", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "transform": "date_difference", "mode": "years", "operator": "gte", "value": 40}]}),
+        ("本户已满三十周岁的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "transform": "date_difference", "mode": "years", "operator": "gte", "value": 30}]}),
+        ("本户未满三十周岁的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "transform": "date_difference", "mode": "years", "operator": "lt", "value": 30}]}),
+        ("请列出本户的房间。", "select", reference("current_household", "room"), None, "entity", {}),
+        ("本户房间一共有几间？", "count", reference("current_household", "room"), None, "entity", {}),
         ("我的男孩后代是哪一位？", "resolve_reference", reference("self", "son"), None, "entity", {}),
         ("请列出我的女性后代。", "select", reference("self", "daughter"), None, "entity", {}),
         ("我母亲的丈夫是哪位？", "resolve_reference", reference("self", "mother", "husband"), None, "entity", {}),
@@ -223,7 +227,9 @@ def planner_chat_messages(
         "second person addressing this helper → kind=assistant. "
         "Do not add path, filters, or amount unless the latest "
         "utterance requires them. Do not copy filters from earlier turns. "
-        "Age-at-least N is birth_date transform=date_difference mode=years operator=gte value=N."
+        "Age-at-least N is birth_date transform=date_difference mode=years operator=gte value=N. "
+        "以上/满=gte; 以下/未满=lt; do not invert. "
+        "Household rooms use path concept room from current_household."
     )
     built = [
         {"role": "system", "content": planner_system_prompt(capabilities)},

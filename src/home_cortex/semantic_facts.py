@@ -3335,6 +3335,21 @@ def _invalid_plan_retry_hint(
             "self cannot traverse member; household people use "
             "current_household then member."
         )
+    filter_properties = {
+        item.property for item in request.filters if item.property
+    }
+    if "member" in hops and filter_properties.intersection({"space_type", "item_type"}):
+        notes.append(
+            "space_type and item_type are not household-member filters; "
+            "rooms use current_household then concept room."
+        )
+    if request.subject.kind == "current_household" and not hops and (
+        request.property in {"space_type", "item_type"}
+        or filter_properties.intersection({"space_type", "item_type"})
+    ):
+        notes.append(
+            "household rooms use current_household then concept room."
+        )
     return " ".join(notes) or None
 
 
