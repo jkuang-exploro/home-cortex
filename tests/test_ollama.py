@@ -177,8 +177,9 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
         "Household now: 2026-09-03T12:00:00-07:00\n"
         "Person deixis for identity: first person → kind=self; "
         "second person addressing this helper → kind=assistant. "
-        "Do not add path, filters, or amount unless the utterance "
-        "requires them."
+        "Do not add path, filters, or amount unless the latest "
+        "utterance requires them. Do not copy filters from earlier turns. "
+        "Age-at-least N is birth_date lte (Household now date minus N years)."
     ]
     assert sum(m["role"] == "system" for m in call["messages"]) == 2
     assert "second person addressing this helper" in json.dumps(call["messages"])

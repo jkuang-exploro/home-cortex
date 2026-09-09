@@ -1315,6 +1315,7 @@ class SemanticFactPlanner:
         validation_ms = 0.0
         runtime: Mapping[str, Any] = {}
         utterance = latest_user_message(messages)
+        last_invalid_request: SemanticFactRequest | None = None
         for attempts in (1, 2):
             planner_messages: list[dict[str, Any]] = [
                 {"role": "user", "content": str(message.get("content", ""))}
@@ -1322,7 +1323,9 @@ class SemanticFactPlanner:
             ]
             if attempts == 2:
                 previous = validation or _structural_validation_code(structural_error)
-                hint = _identity_person_mismatch(utterance, None)
+                hint = _identity_person_mismatch(utterance, last_invalid_request)
+                grammar = _invalid_plan_retry_hint(self.schema, last_invalid_request)
+                extra = " ".join(part for part in (hint, grammar) if part)
                 planner_messages.append(
                     {
                         "role": "system",
@@ -1332,7 +1335,7 @@ class SemanticFactPlanner:
                             "original meaning using only the advertised grammar; "
                             "check reference path, first vs second person, "
                             "property ownership, and operation requirements. "
-                            + (f"{hint} " if hint else "")
+                            + (f"{extra} " if extra else "")
                             + "Return exactly one JSON object conforming to the "
                             "supplied output schema."
                         ),
@@ -1367,6 +1370,8 @@ class SemanticFactPlanner:
                         )
                         if person_error:
                             validation = "INVALID_PLAN"
+                    if validation != "VALID":
+                        last_invalid_request = candidate.request
                 validation_ms += (perf_counter() - validate_started) * 1000
                 if validation not in {"VALID", "NOT_A_FACT"}:
                     plan = None
@@ -3199,6 +3204,28 @@ def _identity_person_hint(utterance: str) -> str | None:
             "subject.kind must be self, path must be empty, property=null."
         )
     return None
+
+
+def _invalid_plan_retry_hint(
+    schema: SemanticSchemaRegistry,
+    request: SemanticFactRequest | None,
+) -> str | None:
+    """IR-based retry grammar; never matches on utterance text."""
+    if request is None:
+        return None
+    notes: list[str] = []
+    if schema.contract_error(request) == "CONTRADICTORY_PREDICATES":
+        notes.append(
+            "adult and minor cannot be combined. Gender is gender=male or "
+            "gender=female, not those predicates."
+        )
+    hops = [step.relation for step in request.subject.path]
+    if request.subject.kind == "self" and "member" in hops:
+        notes.append(
+            "self cannot traverse member; household people use "
+            "current_household then member."
+        )
+    return " ".join(notes) or None
 
 
 def _identity_person_mismatch(

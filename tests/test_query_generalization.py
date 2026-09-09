@@ -16,9 +16,12 @@ from home_cortex.semantic_facts import (
     SemanticFactRequest,
     SemanticFilter,
     SemanticReference,
+    SemanticRelationStep,
     SemanticSchemaRegistry,
+    _invalid_plan_retry_hint,
 )
 from home_cortex.semantic_ontology import SemanticOntology
+from test_semantic_contract import household
 
 
 V2_ONTOLOGY = Path(__file__).parents[1] / "schemas/semantic/ontology-v2.yaml"
@@ -192,3 +195,85 @@ async def test_large_collection_is_not_reported_as_an_exact_truncated_count(tmp_
     )
     assert result.status == "collection_incomplete"
     assert result.value is None
+
+
+def test_retry_hint_covers_self_member_and_disjoint_predicates(tmp_path):
+    _contained_households(tmp_path)
+    engine, _ = _engine(tmp_path)
+    self_member = SemanticFactRequest(
+        operation="argmin",
+        subject=SemanticReference(
+            kind="self",
+            entity_type="person",
+            path=(SemanticRelationStep(relation="member"),),
+        ),
+        property="birth_date",
+    )
+    hint = _invalid_plan_retry_hint(engine.schema, self_member)
+    assert hint and "current_household" in hint and "member" in hint
+    assert engine.schema.validation_code(self_member) == "INVALID_PLAN"
+
+    both = SemanticFactRequest(
+        operation="count",
+        subject=SemanticReference(
+            kind="current_household",
+            entity_type="address",
+            path=(SemanticRelationStep(relation="member"),),
+        ),
+        filters=(
+            SemanticFilter(predicate="adult"),
+            SemanticFilter(predicate="minor"),
+        ),
+    )
+    assert engine.schema.contract_error(both) == "CONTRADICTORY_PREDICATES"
+    hint = _invalid_plan_retry_hint(engine.schema, both)
+    assert hint and "gender" in hint
+
+
+@pytest.mark.asyncio
+async def test_gender_year_and_age_floor_filters_do_not_need_adult(household):
+    engine, context, _ = household
+    members = SemanticReference(
+        kind="current_household",
+        path=(SemanticRelationStep(relation="member"),),
+    )
+    male = SemanticFactRequest(
+        operation="count",
+        subject=members,
+        filters=(SemanticFilter(property="gender", value="male"),),
+    )
+    year = SemanticFactRequest(
+        operation="count",
+        subject=members,
+        filters=(
+            SemanticFilter(
+                property="birth_date",
+                operator="date_range",
+                value=("2012-01-01", "2013-01-01"),
+            ),
+        ),
+    )
+    age_floor = SemanticFactRequest(
+        operation="count",
+        subject=members,
+        filters=(
+            SemanticFilter(property="birth_date", operator="lte", value="1971-09-03"),
+        ),
+    )
+    oldest = SemanticFactRequest(
+        operation="argmin",
+        subject=members,
+        property="birth_date",
+    )
+    for request in (male, year, age_floor, oldest):
+        assert engine.schema.validates(request)
+        assert engine.schema.contract_error(request) is None
+    male_result, *_ = await engine.execute(male, context)
+    year_result, *_ = await engine.execute(year, context)
+    age_result, *_ = await engine.execute(age_floor, context)
+    oldest_result, *_ = await engine.execute(oldest, context)
+    assert male_result.status == "found" and male_result.value == 5
+    assert year_result.status == "found" and year_result.value == 1
+    assert age_result.status == "found" and age_result.value == 2
+    assert oldest_result.status == "found"
+    assert oldest_result.value["id"] == "person:father"
