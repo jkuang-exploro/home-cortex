@@ -1,0 +1,82 @@
+{
+  "host": "home-cortex-0",
+  "revision": "adeb0674eee8a689965d6c2a1d66bc5743c858c5",
+  "image": "sha256:364bffc215a8af6190dd48aa8e5a1a7361fc669611f8caad44e71c1be041eb3b",
+  "provider": "ollama",
+  "model": "qwen3.5:9b",
+  "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+  "ollama_version": "0.32.15",
+  "num_ctx": 8192,
+  "num_predict": 384,
+  "seed": 0,
+  "temperature": 0,
+  "compact_serving": true,
+  "ontology_version": 1,
+  "ontology_sha256": "29c896a7cc992a6639ba6fee257109c21287f6e8843fb48ba534e297dcc4a9c1",
+  "synthetic_planner_schema_sha256": "c01ea3cfbb94bfdb2e9d15425f85883c401d55c651a0f9492ab2940cdb406a35",
+  "synthetic_fixture_manifest_sha256": "67657260def1c650830df9502c855cb3005db17141728aef6d01b394c3459083",
+  "source_hashes": {
+    "ollama.py": "d5c3fd94cfabb8e21077a0badb88516819b2e3e440ee4355a6f9589f7d4d81cb",
+    "semantic_transport.py": "33e213753c70fe8ab51c6090313b6900a07a376651bc9494b03a8de0d1e7cda9",
+    "semantic_facts.py": "7df200f8c93100057ed54f2636e54b0812cfc67191305f48434bed3035d240a6",
+    "semantic_ontology.py": "eb49fcfef991b1a4f5130d52afcf931b4dcc3e274794f100d7b0c2c027d4d17b"
+  },
+  "scope": "Separate Python processes in API container; installed package and synthetic contract fixture; no production household records, HTTP conversations, or production logs read. No deployment changes.",
+  "question": "你是谁",
+  "compact": {
+    "answer": "老管家无法将这个请求转换为受支持的家庭事实查询。",
+    "status": "semantic_plan_unsupported",
+    "final_validation": "UNKNOWN_PROPERTY",
+    "attempts": 2,
+    "calls": [
+      {
+        "raw": "[1,[true,{\"s\":[\"resolve_reference\",null,\"entity\",[\"assistant\",{\"d\":\"person\",\"z\":null}],{\"f\":[[\"eq\",\"display_name\",null,{}]]}]}]]",
+        "structural_parse": "valid",
+        "semantic_validation": "INVALID_PLAN",
+        "prompt_tokens": 6438,
+        "output_tokens": 44,
+        "prompt_ms": 500.4,
+        "generation_ms": 877.767
+      },
+      {
+        "raw": "[1,[true,{\"s\":[\"resolve_reference\",null,\"entity\",[\"assistant\",{\"d\":\"person\",\"z\":null}],{\"f\":[[\"eq\",\"display_name\",\"林青\",{\"u\":\"relation\"}]]}]}]]",
+        "structural_parse": "valid",
+        "semantic_validation": "UNKNOWN_PROPERTY",
+        "prompt_tokens": 6492,
+        "output_tokens": 49,
+        "prompt_ms": 507.686,
+        "generation_ms": 999.015
+      }
+    ]
+  },
+  "expanded": {
+    "answer": "我是老管家。",
+    "status": "found",
+    "validation": "VALID",
+    "attempts": 1,
+    "calls": [
+      {
+        "raw": "{\"requires_fact\":true,\"request\":{\"operation\":\"resolve_reference\",\"subject\":{\"kind\":\"assistant\",\"value\":null,\"entity_type\":\"person\"},\"property\":null,\"property_source\":\"entity\"}}",
+        "prompt_tokens": 6637,
+        "output_tokens": 38,
+        "prompt_ms": 462.849,
+        "generation_ms": 686.929
+      }
+    ]
+  },
+  "additional_direct_probes": {
+    "questions": [
+      "你是谁",
+      "我是谁"
+    ],
+    "compact": "Both emitted correct identity roots with spurious display_name == null filters",
+    "expanded": "Both emitted correct identity roots without filters",
+    "note": "These were direct interpreter comparisons, not complete caller-resolution tests."
+  },
+  "limitations": [
+    "One full pipeline comparison, not an accuracy or latency benchmark.",
+    "Actual deployed household capabilities and original conversation logs were not inspected.",
+    "No proof that every question fails.",
+    "Exact decoder/model mechanism producing unwanted optional fields remains unisolated."
+  ]
+}

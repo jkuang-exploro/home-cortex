@@ -273,10 +273,7 @@ def dump_planner_payload(root: Path, utterance: str) -> dict[str, Any]:
         [{"role": "user", "content": utterance}],
         capabilities,
         household_now=context.current_time.isoformat(),
-        output_schema=output_schema,
     )
-    from home_cortex.semantic_transport import transport_for
-    output_schema = transport_for(output_schema).schema
     body = {
         "model": MODEL,
         "messages": messages,

@@ -1,5 +1,13 @@
 # Compact semantic transport v1
 
+> **WITHDRAWN FROM SERVING.** The user reported universally negative responses
+> after enabling compact transport. Ollama and OpenRouter now use expanded JSON
+> as their sole serving format. The codec and archive remain offline research
+> artifacts; do not deploy `candidate.tar.gz`. Earlier token/test results below
+> do not demonstrate real-model correctness. A production-host synthetic
+> reproduction now confirms invented filters and semantic validation failures;
+> see `artifacts/compact-transport/production-diagnosis/REPORT.md`.
+
 The codec is an internal serialization boundary. Ollama and OpenRouter decode
 into the same expanded mapping, then `SemanticFactPlanner` performs the existing
 ontology expansion, `SemanticPlan` validation, semantic validation and execution.

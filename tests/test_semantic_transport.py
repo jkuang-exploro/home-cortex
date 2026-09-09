@@ -133,7 +133,16 @@ async def test_retry_diagnostics_preserve_each_transport_attempt(household):
             self.calls.append(kwargs)
             return ChatResponse(message={'role': 'assistant', 'content': self.responses.pop(0)}, prompt_eval_count=111, eval_count=22)
     client = Client()
-    service = OllamaService('http://unused', 'fake', client=client)
+    # Explicit offline adapter: the serving client must not require this codec.
+    from home_cortex.semantic_transport import decode_response
+    class OfflineCompactInterpreter:
+        last_planner_runtime = {}
+        async def plan_semantic_fact(self, messages, capabilities, output_schema, **kwargs):
+            response = await client.chat(messages=messages, format=codec.schema)
+            self.last_planner_runtime = {'prompt_eval_count': response.prompt_eval_count,
+                                         'eval_count': response.eval_count}
+            return decode_response(codec, response.message.content, self.last_planner_runtime)
+    service = OfflineCompactInterpreter()
     outcome = await SemanticFactPlanner(service, engine.schema).plan(
         [{'role': 'user', 'content': 'Count minors in this home.'}], context)
     assert outcome.plan.request.operation == 'count'
@@ -166,3 +175,26 @@ def test_transport_dictionary_version_snapshot():
     codec = SemanticTransport(SemanticPlan.model_json_schema())
     # Changing field allocation requires an intentional codec version change.
     assert (codec.version, fingerprint(codec.aliases)[:8]) == (1, '5ae1d749')
+
+
+@pytest.mark.parametrize(('filter_wire', 'expected_validation'), [
+    ('["eq","display_name",null,{}]', 'INVALID_PLAN'),
+    ('["eq","display_name","林青",{"u":"relation"}]', 'UNKNOWN_PROPERTY'),
+])
+def test_production_identity_counterexamples_are_not_repaired(household, filter_wire, expected_validation):
+    # Captured from qwen3.5:9b / Ollama 0.32.15 with the synthetic contract.
+    # Both outputs parse; the model invented filters absent from the utterance.
+    schema = household[0].schema
+    codec = SemanticTransport(schema.planner_output_schema())
+    wire = '[1,[true,{"s":["resolve_reference",null,"entity",["assistant",{"d":"person","z":null}],{"f":[' + filter_wire + ']}]}]]'
+    plan = codec.decode_plan(wire, schema)
+    assert plan.requires_fact is True
+    assert plan.request.subject.kind == 'assistant'
+    assert len(plan.request.filters) == 1
+    assert schema.validation_code(plan.request) == expected_validation
+    # Control is a different plan, not a repair performed by the codec/runtime.
+    control = SemanticPlan.model_validate({'requires_fact': True, 'request': {
+        'operation': 'resolve_reference', 'subject': {'kind': 'assistant'},
+        'property': None, 'property_source': 'entity',
+    }})
+    assert schema.validation_code(control.request) == 'VALID'

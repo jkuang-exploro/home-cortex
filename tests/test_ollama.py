@@ -1,5 +1,4 @@
 import json
-from home_cortex.semantic_transport import SemanticTransport
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -128,7 +127,9 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
             _chat_response(
                 {
                     "role": "assistant",
-                    "content": SemanticTransport({"type": "object"}).encode({"requires_fact": False, "request": None}),
+                    "content": json.dumps(
+                        {"requires_fact": False, "request": None}
+                    ),
                 }
             )
         ]
@@ -231,7 +232,9 @@ async def test_planner_prompt_keeps_stable_prefix_and_identity_note(
             _chat_response(
                 {
                     "role": "assistant",
-                    "content": SemanticTransport({"type": "object"}).encode({"requires_fact": False, "request": None}),
+                    "content": json.dumps(
+                        {"requires_fact": False, "request": None}
+                    ),
                 }
             )
         ]
@@ -331,3 +334,33 @@ def test_static_prefix_survives_clock_history_and_identity_notes() -> None:
     assert first[:count] == other[:count]
     assert first[count] != other[count]
     assert 'Untrusted answer' not in json.dumps(other)
+
+
+@pytest.mark.asyncio
+async def test_serving_planner_uses_expanded_fact_contract_not_experimental_codec():
+    from home_cortex.semantic_facts import SemanticPlan
+    plan = {'requires_fact': True, 'request': {
+        'operation': 'select', 'subject': {'kind': 'self'},
+        'property': 'birth_date', 'property_source': 'entity',
+    }}
+    schema = SemanticPlan.model_json_schema()
+    client = FakeOllamaClient([_chat_response({'role': 'assistant', 'content': json.dumps(plan)})])
+    service = OllamaService('http://unused', 'fake', client=client)
+    result = await service.plan_semantic_fact(
+        [{'role': 'user', 'content': 'When was I born?'}], {}, schema,
+        household_now='2026-09-09T12:00:00Z')
+    assert result == plan
+    assert client.calls[0]['format'] == schema
+    assert 'Transport v1:' not in client.calls[0]['messages'][0]['content']
+    for message in client.calls[0]['messages']:
+        if message['role'] == 'assistant':
+            assert isinstance(json.loads(message['content']), dict)
+    assert SemanticPlan.model_validate(result).requires_fact is True
+
+
+@pytest.mark.asyncio
+async def test_serving_does_not_treat_compact_output_as_negative_fact():
+    client = FakeOllamaClient([_chat_response({'role': 'assistant', 'content': '[1,[false]]'})])
+    service = OllamaService('http://unused', 'fake', client=client)
+    with pytest.raises(ValueError, match='non-object'):
+        await service.plan_semantic_fact([], {}, {'type': 'object'}, household_now='2026-09-09T12:00:00Z')

@@ -1,5 +1,13 @@
 # Compact transport candidate — local review and Grok handoff
 
+> **WITHDRAWN FROM SERVING.** The user reported universally negative responses
+> after enabling compact transport. Ollama and OpenRouter now use expanded JSON
+> as their sole serving format. The codec and archive remain offline research
+> artifacts; do not deploy `candidate.tar.gz`. Earlier token/test results below
+> do not demonstrate real-model correctness. A production-host synthetic
+> reproduction now confirms invented filters and semantic validation failures;
+> see `artifacts/compact-transport/production-diagnosis/REPORT.md`.
+
 ## Observations
 
 The serving clients now use a versioned, schema-derived positional codec. Internal

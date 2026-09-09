@@ -1,5 +1,4 @@
 import json
-from home_cortex.semantic_transport import SemanticTransport
 from typing import Any
 
 import httpx
@@ -138,7 +137,7 @@ async def test_openrouter_planner_uses_json_schema_and_parses_content() -> None:
         return httpx.Response(
             200,
             json=_completion(
-                SemanticTransport({"type": "object"}).encode({"requires_fact": False, "request": None}),
+                json.dumps({"requires_fact": False, "request": None}),
                 usage={"prompt_tokens": 20, "completion_tokens": 8},
             ),
         )
@@ -227,4 +226,29 @@ async def test_openrouter_http_error_does_not_include_the_api_key() -> None:
     with pytest.raises(RuntimeError, match="HTTP 401") as captured:
         await service.chat([{"role": "user", "content": "hi"}])
     assert "sk-or-test" not in str(captured.value)
+    await service.close()
+
+
+@pytest.mark.asyncio
+async def test_openrouter_serving_fact_contract_is_expanded():
+    from home_cortex.semantic_facts import SemanticPlan
+    plan = {'requires_fact': True, 'request': {
+        'operation': 'count', 'subject': {'kind': 'current_household'},
+        'property': None, 'property_source': 'entity',
+    }}
+    captured = {}
+    def handler(request):
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json=_completion(json.dumps(plan)))
+    service = OpenRouterService('https://openrouter.ai/api/v1', 'fake', api_key='test', client=_client(handler))
+    schema = SemanticPlan.model_json_schema()
+    result = await service.plan_semantic_fact(
+        [{'role': 'user', 'content': 'How many members are in this home?'}], {}, schema,
+        household_now='2026-09-09T12:00:00Z')
+    assert result == plan
+    assert captured['response_format']['json_schema']['schema'] == schema
+    assert 'Transport v1:' not in captured['messages'][0]['content']
+    for message in captured['messages']:
+        if message['role'] == 'assistant':
+            assert isinstance(json.loads(message['content']), dict)
     await service.close()

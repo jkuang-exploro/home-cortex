@@ -15,7 +15,7 @@ from home_cortex.ollama import OllamaService
 from home_cortex.operator_registry import OperatorInput, OperatorExecutionError, execute_operator
 from home_cortex.semantic_facts import (
     DiscourseContext, FactRenderer, SemanticFactRequest, SemanticReference,
-    SemanticRelationStep, SemanticFilter, SemanticPlannerFailure, SemanticPlan,
+    SemanticRelationStep, SemanticFilter, SemanticPlannerFailure,
 )
 from test_semantic_contract import household, ref, step
 
@@ -45,8 +45,7 @@ def anniversary(subject=None, **kwargs):
 
 class Client:
     """Only the LLM transport is mocked; normal service/planner/resolver run."""
-    def __init__(self, *plans, schema):
-        self.schema = schema
+    def __init__(self, *plans):
         self.plans = list(plans)
         self.calls = []
 
@@ -54,28 +53,13 @@ class Client:
         self.calls.append(kwargs)
         plan = self.plans.pop(0)
         payload = {'requires_fact': plan is not None,
-                   'request': plan.model_dump(mode='json', exclude_defaults=True) if plan is not None else None}
-        from home_cortex.semantic_transport import SemanticTransport
-        # Mock the model's advertised concept grammar, not expanded executor IR.
-        def wire_input(value):
-            if isinstance(value, dict):
-                return {('concept' if key == 'relation' else key): wire_input(child)
-                        for key, child in value.items()
-                        if child is not None and child != [] and not (key == 'cardinality' and child == 'single')}
-            if isinstance(value, list):
-                return [wire_input(child) for child in value]
-            return value
-        if plan is not None:
-            payload = wire_input(payload)
-            payload['request']['property'] = plan.property
-            payload['request']['property_source'] = plan.property_source
-        codec = SemanticTransport(self.schema)
-        return ChatResponse(message={'role': 'assistant', 'content': codec.encode(payload, validate=False)})
+                   'request': plan.model_dump(mode='json') if plan is not None else None}
+        return ChatResponse(message={'role': 'assistant', 'content': json.dumps(payload)})
 
 
 def agent_for(household, *plans):
     engine, context, dispatcher = household
-    client = Client(*plans, schema=engine.schema.planner_output_schema())
+    client = Client(*plans)
     agent = AgentService(OllamaService('http://unused', 'fake', client=client), dispatcher,
                          system_prompt='test', tools=get_tool_definitions(['calculate']), schema_catalog=engine.schema.catalog,
                          home_entity_id=context.household_id, clock=lambda: context.current_time)
@@ -328,8 +312,7 @@ async def test_model_cannot_insert_ids_in_exclusion(household):
     agent,_=agent_for(household,query,query)
     with pytest.raises(SemanticPlannerFailure) as failure:
         await agent.semantic_facts.planner.plan([{'role':'user','content':'members'}],household[1])
-    # The constrained transport now rejects forbidden IDs before canonical validation.
-    assert failure.value.diagnostics.validation_result=='MALFORMED_OUTPUT'
+    assert failure.value.diagnostics.validation_result=='MODEL_ORIGINATED_ENTITY_ID'
 
 
 @pytest.mark.asyncio

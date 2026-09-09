@@ -1,4 +1,7 @@
 {
+  "status": "withdrawn_do_not_deploy",
+  "reason": "Withdrawn: reproduced on home-cortex-0 at adeb067 with qwen3.5:9b. Compact identity output invents filters and fails both planner attempts; isolated expanded-format control succeeds. Production was not modified.",
+  "validation_scope": "Original deterministic and archive tests used mocked model output. They did not validate real-model interpretations, negative-response rate, or provider compatibility.",
   "archive": "candidate.tar.gz",
   "archive_sha256": "57ea662d733153f415924d89304904330c6db3ef5f53ec4a0b5afaaa43fd2d17",
   "bytes": 162140,
@@ -71,5 +74,6 @@
     "tests/test_semantic_transport.py": "3d736d7670350f479b2d3ff7e377f2132cb5abdc33019198172378ad3f9e0d74"
   },
   "scope": "Source and synthetic fixtures only; no runtime data, credentials, .env, .git or installed dependencies",
-  "validation": "595 repository tests passed; extracted archive: 28 focused tests passed; offline profile reproduced"
+  "validation": "595 repository tests passed; extracted archive: 28 focused tests passed; offline profile reproduced",
+  "production_diagnosis": "production-diagnosis/REPORT.md"
 }

@@ -9,7 +9,6 @@ from typing import Any
 import httpx
 from ollama import ChatResponse
 
-from .semantic_transport import transport_for, decode_response
 from .profiling import model_call, observe_usage, stream_model_call
 from .ollama import PLANNER_NUM_PREDICT, PLANNER_SEED, planner_chat_messages
 
@@ -64,15 +63,13 @@ class OpenRouterService:
         *,
         household_now: str,
     ) -> Mapping[str, Any]:
-        codec = transport_for(output_schema)
-        built = planner_chat_messages(
-            messages, capabilities, household_now=household_now, output_schema=output_schema
-        )
-        self.last_planner_runtime = codec.input_metrics(built)
+        # Keep serving on the expanded contract; compact transport is offline-only.
         payload = await self._post(
             {
                 "model": self.model,
-                "messages": built,
+                "messages": planner_chat_messages(
+                    messages, capabilities, household_now=household_now
+                ),
                 "temperature": 0,
                 "max_tokens": PLANNER_NUM_PREDICT,
                 "seed": PLANNER_SEED,
@@ -86,15 +83,18 @@ class OpenRouterService:
                             "identity uses kind=self; second-person identity "
                             "uses kind=assistant."
                         ),
-                        "schema": codec.schema,
+                        "schema": dict(output_schema),
                     },
                 },
                 "provider": {"require_parameters": True},
             }
         )
-        self.last_planner_runtime.update(_openrouter_runtime_metrics(payload))
+        self.last_planner_runtime = _openrouter_runtime_metrics(payload)
         content = _message_content(payload)
-        return decode_response(codec, content, self.last_planner_runtime)
+        parsed = _parse_json_object(content)
+        if not isinstance(parsed, Mapping):
+            raise ValueError("Semantic fact planner returned a non-object")
+        return parsed
 
     @stream_model_call("openrouter")
     async def stream_chat_with_tools(
@@ -295,6 +295,16 @@ def _json_arguments(value: Any) -> dict[str, Any]:
         if isinstance(parsed, Mapping):
             return dict(parsed)
     return {}
+
+
+def _parse_json_object(text: str) -> Any:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.strip("`")
+        if stripped[:4].casefold() == "json":
+            stripped = stripped[4:]
+        stripped = stripped.strip()
+    return json.loads(stripped)
 
 
 def _choice_message(payload: Mapping[str, Any]) -> Mapping[str, Any]:

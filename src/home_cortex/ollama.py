@@ -6,7 +6,7 @@ from typing import Any, cast
 from ollama import AsyncClient, ChatResponse
 
 from .profiling import model_call, stage
-from .semantic_transport import transport_for, pack_capabilities, canonical_json, decode_response
+from .semantic_transport import transport_for, pack_capabilities, canonical_json
 
 
 # Keep the same resident runner configuration across ordinary chat and planning.
@@ -334,19 +334,20 @@ class OllamaService:
         *,
         household_now: str,
     ) -> Mapping[str, Any]:
-        """Interpret an open-ended request without exposing physical storage."""
-        codec = transport_for(output_schema)
-        built = planner_chat_messages(
-            messages, capabilities, household_now=household_now, output_schema=output_schema
-        )
-        self.last_planner_runtime = codec.input_metrics(built)
+        """Interpret using the expanded contract validated by the serving path.
+
+        Compact transport is offline-only until real-model acceptance passes.
+        Never infer a negative fact or switch formats from a decoding failure.
+        """
         response = await self._chat(
             model=self.model,
-            messages=built,
+            messages=planner_chat_messages(
+                messages, capabilities, household_now=household_now
+            ),
             stream=False,
             think=False,
             keep_alive=PLANNER_KEEP_ALIVE,
-            format=codec.schema,
+            format=dict(output_schema),
             options={
                 "temperature": 0,
                 "num_ctx": PLANNER_NUM_CTX,
@@ -354,8 +355,11 @@ class OllamaService:
                 "seed": PLANNER_SEED,
             },
         )
-        self.last_planner_runtime.update(_ollama_runtime_metrics(response))
-        return decode_response(codec, response.message.content or "", self.last_planner_runtime)
+        self.last_planner_runtime = _ollama_runtime_metrics(response)
+        parsed = json.loads(response.message.content or "")
+        if not isinstance(parsed, Mapping):
+            raise ValueError("Semantic fact planner returned a non-object")
+        return parsed
 
     async def stream_chat_with_tools(
         self,
