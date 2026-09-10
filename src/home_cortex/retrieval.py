@@ -304,24 +304,23 @@ def _stored_direction(
     schema = resolved.schema
     if schema.symmetric:
         return "both"
+    # Explicit traversal semantics must not be reversed to fit endpoint types.
+    # An impossible direction legitimately returns no relationships.
+    if requested is not None:
+        if not resolved.inverse or requested == "both":
+            return requested
+        return "in" if requested == "out" else "out"
+    if resolved.inverse:
+        return "in"
     source_only = (
         entity_type in schema.from_types and entity_type not in schema.to_types
     )
     target_only = (
         entity_type in schema.to_types and entity_type not in schema.from_types
     )
-    # For differently typed endpoints, the entity's type determines the only
-    # structurally valid stored direction. Do not let a model-supplied direction
-    # turn a valid query into an impossible traversal.
     if source_only:
         return "out"
     if target_only:
-        return "in"
-    if requested is not None:
-        if not resolved.inverse or requested == "both":
-            return requested
-        return "in" if requested == "out" else "out"
-    if resolved.inverse:
         return "in"
     return "both"
 

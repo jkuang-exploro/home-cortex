@@ -246,7 +246,7 @@ async def test_get_relationships_returns_direction_and_filters_relation() -> Non
 
 
 @pytest.mark.asyncio
-async def test_typed_relation_overrides_impossible_requested_direction() -> None:
+async def test_typed_relation_preserves_explicit_requested_direction() -> None:
     database = FakeDatabase({"lives_in": []})
     service = RetrievalService(database, limit=10)  # type: ignore[arg-type]
 
@@ -261,8 +261,8 @@ async def test_typed_relation_overrides_impossible_requested_direction() -> None
         direction="in",
     )
 
-    assert "out = $entity" in database.queries[0][0]
-    assert "in = $entity" in database.queries[1][0]
+    assert "in = $entity" in database.queries[0][0]
+    assert "out = $entity" in database.queries[1][0]
 
 
 @pytest.mark.asyncio
@@ -545,3 +545,32 @@ async def test_get_entity_ignores_colliding_searchable_records() -> None:
     assert exact["id"] == "person:jian_kuang"
     assert exact["name"] == ["Jian Kuang"]
     assert missing is None
+
+
+@pytest.mark.asyncio
+async def test_contents_never_returns_container_location() -> None:
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        await database.client.query(
+            "CREATE item:cabinet SET name = ['Cabinet'];"
+            "CREATE space:workroom SET name = ['Workroom'];"
+            "RELATE item:cabinet->located_in->space:workroom;"
+        )
+        service = RetrievalService(database, limit=10)
+        room_contents = await service.get_relationships(
+            "space:workroom", relation="located_in", direction="in",
+        )
+        assert len(room_contents) == 1
+        assert room_contents[0]["related_entity"]["id"] == "item:cabinet"
+        for relation, direction in (("located_in", "in"), ("contains", None),
+                                    ("contains", "out")):
+            assert await service.get_relationships(
+                "item:cabinet", relation=relation, direction=direction,
+            ) == []
+        location = await service.get_relationships(
+            "item:cabinet", relation="located_in", direction="out",
+        )
+        assert location[0]["related_entity"]["id"] == "space:workroom"
+    finally:
+        await database.close()
