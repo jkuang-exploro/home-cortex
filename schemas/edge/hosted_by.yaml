@@ -4,6 +4,7 @@ from_types:
   - space
 to_types:
   - item
+  - space
 inverse_name: hosts_space
 temporal: false
 unique_from: true

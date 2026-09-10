@@ -131,7 +131,7 @@ remain in human-editable `data/edges/*.json`. The initial registry defines:
 - `lives_in` as a directed temporal Person-to-Address relationship;
 - `located_in` as a directed, non-temporal Item-to-Address-or-Space
   relationship;
-- `hosted_by` as a directed, non-temporal Space-to-Item relationship with the
+- `hosted_by` as a directed, non-temporal Space-to-Item-or-Space relationship with the
   derived inverse name `hosts_space`.
 
 Store each fact once. Model an addressable home as an Address, its physical
@@ -141,6 +141,16 @@ Likewise, do not add `hosts_space.json`; inverse hosted-space traversal uses the
 canonical `hosted_by` table. `get_relationships` consults the registry,
 accepts `out`, `in`, or `both` directions, and excludes ended temporal edges
 unless `include_ended` is true.
+
+Entities may optionally set `collapse: true` (a boolean) to make semantic
+`contents` traversal include items located in all directly or recursively hosted
+spaces. Missing or false preserves direct containment. This is executor metadata;
+the interpreter still emits the ordinary `contents` intent. Hosting cycles fail
+with `computation_impossible` and `hosting_cycle`; oversized adjacency reads fail
+with `collection_incomplete`. Results reuse relationship evidence: each `contents`
+edge retains the item's source ID and its actual location's target ID. No parent
+location edges are synthesized or written. Direct subspace queries and subsequent
+`location` traversals retain the concrete graph semantics.
 
 ## Entity aliases and semantic ontology
 

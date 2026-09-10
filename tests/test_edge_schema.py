@@ -20,7 +20,7 @@ def test_registry_loads_required_relationship_semantics() -> None:
     assert hosted_by.temporal is False
     assert hosted_by.inverse_name == "hosts_space"
     assert hosted_by.from_types == ("space",)
-    assert hosted_by.to_types == ("item",)
+    assert hosted_by.to_types == ("item", "space")
     assert hosted_by.unique_from is True
     located_in = registry.get("located_in")
     assert located_in.from_types == ("item",)

@@ -416,7 +416,7 @@ class ResolutionResult:
 class SemanticSchemaRegistry:
     """Map stable semantic concepts to deployment-specific schema names."""
 
-    _RESOLVER_METADATA_PROPERTIES = frozenset({"aliases", "appellations"})
+    _RESOLVER_METADATA_PROPERTIES = frozenset({"aliases", "appellations", "collapse"})
 
     def __init__(
         self,
@@ -1315,6 +1315,11 @@ class SemanticSchemaRegistry:
         if direction == "out":
             return to_types if source_types.intersection(from_types) else None
         if direction == "in":
+            if semantic_relation == "contents":
+                hosting = self.physical_relation("hosted_space")
+                hosts = self.catalog.relations.get(hosting[0]) if hosting else None
+                if hosts is not None:
+                    to_types = to_types | frozenset(hosts.to_types)
             return from_types if source_types.intersection(to_types) else None
         targets: set[str] = set()
         if source_types.intersection(from_types):
@@ -1716,22 +1721,16 @@ class EntityResolver:
                 entity_id = entity.get("id")
                 if not isinstance(entity_id, str):
                     continue
-                arguments: dict[str, Any] = {
-                    "entity_id": entity_id,
-                    "relation": relation,
-                    "include_ended": False,
-                    # Fetch one sentinel row beyond the executor's supported
-                    # population so exact counts/lists cannot silently truncate.
-                    "limit": self.max_records + 1,
-                }
-                if direction is not None:
-                    arguments["direction"] = direction
-                edges = await execution.records("get_relationships", arguments)
-                if len(edges) > self.max_records:
-                    raise _FactFailure(
-                        "collection_incomplete",
-                        missing=(step.relation,),
-                    )
+                sources = [entity]
+                if step.relation == "contents":
+                    stored = await execution.load(entity)
+                    if stored.get("collapse") is True:
+                        sources.extend(await self._hosted_descendants(stored, execution))
+                edges = []
+                for source in sources:
+                    edges.extend(await self._relation_edges(
+                        str(source["id"]), relation, direction, execution,
+                    ))
                 for edge in edges:
                     if not self._edge_matches(edge, relation, step.filters):
                         continue
@@ -1767,6 +1766,55 @@ class EntityResolver:
                 and edge["related_entity"].get("id") in entity_ids
             ]
         return entities, last_relationship_records
+
+    async def _relation_edges(
+        self, entity_id: str, relation: str, direction: str | None,
+        execution: "_FactExecution",
+    ) -> list[dict[str, Any]]:
+        arguments: dict[str, Any] = {
+            "entity_id": entity_id, "relation": relation,
+            "include_ended": False, "limit": self.max_records + 1,
+        }
+        if direction is not None:
+            arguments["direction"] = direction
+        edges = await execution.records("get_relationships", arguments)
+        if len(edges) > self.max_records:
+            raise _FactFailure("collection_incomplete", missing=(relation,))
+        return edges
+
+    async def _hosted_descendants(
+        self, parent: Mapping[str, Any], execution: "_FactExecution",
+    ) -> list[dict[str, Any]]:
+        """Expand a query view, retaining only authoritative graph edges."""
+        hosting = self.schema.physical_relation("hosted_space")
+        if hosting is None:
+            return []
+        descendants = []
+        visited: set[str] = set()
+        active: set[str] = set()
+        stack = [(dict(parent), False)]
+        while stack:
+            entity, leaving = stack.pop()
+            entity_id = str(entity["id"])
+            if leaving:
+                active.remove(entity_id)
+                continue
+            if entity_id in active:
+                raise _FactFailure("computation_impossible", missing=("hosting_cycle",))
+            if entity_id in visited:
+                continue
+            visited.add(entity_id)
+            active.add(entity_id)
+            stack.append((entity, True))
+            edges = await self._relation_edges(entity_id, *hosting, execution)
+            for edge in edges:
+                child = edge.get("related_entity")
+                if not isinstance(child, Mapping) or _entity_type(child) != "space":
+                    continue
+                execution.remember_relationship("hosted_space", edge)
+                descendants.append(dict(child))
+                stack.append((dict(child), False))
+        return _unique_entities(descendants)
 
     async def _scope_named_records(
         self,

@@ -199,6 +199,8 @@ async def ingest_directory(
         seen_node_ids: set[str] = set()
         for path in paths:
             for record in _records_from_file(path):
+                if "collapse" in record and not isinstance(record["collapse"], bool):
+                    raise ValueError(f"Node in {path} must use collapse as a boolean")
                 _validate_node_name(record, path)
                 raw_id = record.get("id")
                 if not isinstance(raw_id, str):
