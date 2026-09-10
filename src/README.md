@@ -356,6 +356,17 @@ entities, missing fields, incomplete evidence, and stale evidence produce
 different fixed responses rather than model-authored facts. Caller-supplied
 system messages are discarded before the trusted Cortex policy is applied.
 
+## Canonical item mutations
+
+Runtime callers create, move, or delete authoritative Items through
+`ItemWritingService`. Its closed request union exposes only `create`,
+`update_location`, and `delete`, with `preview` and `commit` modes. The service
+validates runtime schema ownership and executes each compound change as one
+SurrealDB transaction. `write_item` is an opt-in LLM tool adapter and is not in
+the steward's default allowlist. See
+[`docs/design/item-writing-api.md`](../docs/design/item-writing-api.md) for the
+request/result contract, transaction boundaries, and ingestion constraint.
+
 ## First run
 
 From `docker/cortex` on the server:

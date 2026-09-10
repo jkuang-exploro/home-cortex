@@ -15,12 +15,14 @@ from .calendar import (
 )
 from .retrieval import RetrievalService
 from .record_ids import RECORD_ID_PATTERN as CANONICAL_RECORD_ID_PATTERN
+from .writing import ItemWritingService, WriteItemToolArguments, WRITE_REQUEST_ADAPTER
 
 TABLE_NAME_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
 RECORD_ID_PATTERN = CANONICAL_RECORD_ID_PATTERN
 _GRAPH_OPERATIONS = frozenset(
     {"resolve_entity_alias", "get_entity", "get_relationships"}
 )
+_MUTATION_OPERATIONS = frozenset({"write_item"})
 
 _caller_entity_id: ContextVar[str | None] = ContextVar(
     "home_cortex_caller_entity_id",
@@ -240,17 +242,36 @@ TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+WRITE_TOOLS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "write_item",
+            "description": (
+                "Propose or commit one authoritative household item mutation. "
+                "Supports only create, update_location, and delete. Preview "
+                "validates and describes the change without persisting it. "
+                "The service owns all graph and transaction mechanics."
+            ),
+            "parameters": WRITE_REQUEST_ADAPTER.json_schema(),
+        },
+    },
+]
+
 
 def get_tool_definitions(tool_names: Sequence[str]) -> list[dict[str, Any]]:
     """Return definitions for an agent's allowlisted tools, in policy order."""
-    catalog = {tool["function"]["name"]: tool for tool in TOOLS}
+    catalog = {
+        tool["function"]["name"]: tool
+        for tool in (*TOOLS, *WRITE_TOOLS)
+    }
     unknown = sorted(set(tool_names) - catalog.keys())
     if unknown:
         raise ValueError(f"Unknown tool names: {', '.join(unknown)}")
     return [catalog[name] for name in tool_names]
 
 
-Handler = Callable[[ToolArguments], Awaitable[Any]]
+Handler = Callable[[BaseModel], Awaitable[Any]]
 
 
 class ToolDispatcher:
@@ -262,16 +283,19 @@ class ToolDispatcher:
         allowed_tools: Sequence[str] | None = None,
         *,
         calendar: CalendarService | None = None,
+        writing: ItemWritingService | None = None,
     ) -> None:
         self.retrieval = retrieval
         self.calendar = calendar
-        argument_models: dict[str, type[ToolArguments]] = {
+        self.writing = writing
+        argument_models: dict[str, type[BaseModel]] = {
             "resolve_entity_alias": ResolveEntityAliasArguments,
             "get_entity": GetEntityArguments,
             "get_relationships": GetRelationshipsArguments,
             "calculate": CalculateArguments,
             "calendar.list_events": ListEventsArguments,
             "calendar.check_availability": CheckAvailabilityArguments,
+            "write_item": WriteItemToolArguments,
         }
         handlers: dict[str, Handler] = {
             "resolve_entity_alias": self._resolve_entity_alias,
@@ -280,13 +304,18 @@ class ToolDispatcher:
             "calculate": self._calculate,
             "calendar.list_events": self._list_events,
             "calendar.check_availability": self._check_availability,
+            "write_item": self._write_item,
         }
         selected_public = tuple(allowed_tools) if allowed_tools is not None else tuple(
-            name for name in handlers if name not in _GRAPH_OPERATIONS
+            name
+            for name in handlers
+            if name not in _GRAPH_OPERATIONS | _MUTATION_OPERATIONS
         )
         unknown = sorted(set(selected_public) - (handlers.keys() - _GRAPH_OPERATIONS))
         if unknown:
             raise ValueError(f"Unknown tool names: {', '.join(unknown)}")
+        if "write_item" in selected_public and self.writing is None:
+            raise ValueError("write_item requires an ItemWritingService")
         self._public_tools = frozenset(selected_public)
         self._argument_models = argument_models
         self._handlers = handlers
@@ -400,7 +429,11 @@ class ToolDispatcher:
             return self._error(
                 tool_name,
                 "tool_execution_failed",
-                "The tool could not complete its read operation",
+                (
+                    "The tool could not complete its mutation"
+                    if tool_name in _MUTATION_OPERATIONS
+                    else "The tool could not complete its read operation"
+                ),
             )
 
         return {
@@ -447,6 +480,12 @@ class ToolDispatcher:
         assert isinstance(arguments, CalculateArguments)
         value = evaluate_expression(arguments.expression)
         return {"result": value}
+
+    async def _write_item(self, arguments: BaseModel) -> dict[str, Any]:
+        assert isinstance(arguments, WriteItemToolArguments)
+        assert self.writing is not None
+        result = await self.writing.mutate(arguments.root)
+        return result.model_dump(mode="json")
 
     async def _list_events(self, arguments: ToolArguments) -> dict[str, Any]:
         assert isinstance(arguments, ListEventsArguments)

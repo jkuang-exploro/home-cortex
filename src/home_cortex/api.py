@@ -40,6 +40,7 @@ from .ollama import language_model_from_settings
 from .retrieval import RetrievalService
 from .calendar import calendar_service_from_settings
 from .tools import ToolDispatcher
+from .writing import ItemWritingService
 
 DEFAULT_AGENT_ID = "steward"
 VIRTUAL_MODEL = get_agent(DEFAULT_AGENT_ID).display_name
@@ -147,6 +148,8 @@ async def lifespan(app: FastAPI):
         edge_registry,
     )
     app.state.schema_catalog = schema_catalog
+    writing = ItemWritingService(database, schema_catalog, edge_registry)
+    app.state.writing = writing
     app.state.greetings = GreetingService(retrieval)
     app.state.conversations = ConversationStore()
     calendar = calendar_service_from_settings(settings)
@@ -168,6 +171,7 @@ async def lifespan(app: FastAPI):
                 retrieval,
                 definition.allowed_tools,
                 calendar=calendar,
+                writing=writing,
             ),
             system_prompt=definition.prompt,
             tools=definition.tool_definitions,

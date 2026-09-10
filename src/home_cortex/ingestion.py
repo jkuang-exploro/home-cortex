@@ -132,7 +132,7 @@ def parse_record_id(value: str, *, source: Path) -> RecordID:
     return RecordID(table, record_id)
 
 
-def _implicit_edge_component(record_id: RecordID) -> str:
+def implicit_edge_component(record_id: RecordID) -> str:
     canonical = canonical_record_id(record_id)
     if ":" not in str(record_id.id):
         return canonical.replace(":", "_", 1)
@@ -159,7 +159,7 @@ def _edge_record_id(
         return edge_id
 
     identifier = (
-        f"{_implicit_edge_component(source)}__{_implicit_edge_component(target)}"
+        f"{implicit_edge_component(source)}__{implicit_edge_component(target)}"
     )
     return RecordID(relation, identifier)
 
