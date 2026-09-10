@@ -152,6 +152,16 @@ edge retains the item's source ID and its actual location's target ID. No parent
 location edges are synthesized or written. Direct subspace queries and subsequent
 `location` traversals retain the concrete graph semantics.
 
+Selecting collapsed contents also returns `content_groups`, preserving each
+item's actual containing space and that space's stored display name. The renderer
+lists one group per nonempty space. The flat entity value remains authoritative
+for counts and further composition; filters and exclusions also restrict the
+groups. Direct subspace queries are not expanded or grouped unless that subspace
+itself declares `collapse: true`. Rendering neither invents contents nor rewrites
+space names. An unspecified named-reference type may remain null for exact-name
+resolution; explicit types remain binding, and cross-type name collisions remain
+ambiguous.
+
 ## Entity aliases and semantic ontology
 
 Household identity comes from node data. A person can have multilingual full

@@ -334,6 +334,12 @@ class FactRow:
 
 
 @dataclass(frozen=True)
+class FactContentGroup:
+    space: Mapping[str, Any]
+    entities: tuple[Mapping[str, Any], ...] = ()
+
+
+@dataclass(frozen=True)
 class FactResult:
     status: FactStatus
     value: Any = None
@@ -344,6 +350,7 @@ class FactResult:
     shape: Literal["scalar", "entity", "entities", "rows"] = "scalar"
     rows: tuple[FactRow, ...] = ()
     focus_entity_ids: tuple[str, ...] = ()
+    content_groups: tuple[FactContentGroup, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -411,6 +418,7 @@ class ResolutionResult:
     candidates: tuple[Mapping[str, Any], ...] = ()
     missing_requirements: tuple[str, ...] = ()
     relationship_records: tuple[Mapping[str, Any], ...] = ()
+    content_groups: tuple[FactContentGroup, ...] = ()
 
 
 class SemanticSchemaRegistry:
@@ -1572,7 +1580,7 @@ class EntityResolver:
         expect_many: bool = False,
     ) -> ResolutionResult:
         try:
-            entities, relationship_records = await self._resolve(
+            entities, relationship_records, content_groups = await self._resolve(
                 reference,
                 context,
                 execution,
@@ -1600,6 +1608,7 @@ class EntityResolver:
                     relationships=tuple(execution.relationship_evidence),
                 ),
                 relationship_records=tuple(relationship_records),
+                content_groups=tuple(content_groups),
             )
         except _FactFailure as error:
             status: ResolutionStatus = {
@@ -1628,7 +1637,7 @@ class EntityResolver:
         execution: "_FactExecution",
         *,
         allow_empty_collection: bool,
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[FactContentGroup]]:
         if reference.kind == "unresolved":
             raise _FactFailure("ambiguous", missing=("semantic_reference",))
         elif reference.kind == "discourse":
@@ -1706,6 +1715,7 @@ class EntityResolver:
         anchors = list(entities)
         last_relation: str | None = None
         last_relationship_records: list[dict[str, Any]] = []
+        last_content_groups: list[FactContentGroup] = []
         for step in reference.path:
             resolved = self.schema.physical_relation(step.relation)
             if resolved is None:
@@ -1717,6 +1727,8 @@ class EntityResolver:
             last_relation = step.relation
             related: list[dict[str, Any]] = []
             step_relationship_records: list[dict[str, Any]] = []
+            grouped: dict[str, tuple[dict[str, Any], list[dict[str, Any]]]] = {}
+            collapsed = False
             for entity in entities:
                 entity_id = entity.get("id")
                 if not isinstance(entity_id, str):
@@ -1725,20 +1737,23 @@ class EntityResolver:
                 if step.relation == "contents":
                     stored = await execution.load(entity)
                     if stored.get("collapse") is True:
+                        collapsed = True
                         sources.extend(await self._hosted_descendants(stored, execution))
-                edges = []
                 for source in sources:
-                    edges.extend(await self._relation_edges(
+                    edges = await self._relation_edges(
                         str(source["id"]), relation, direction, execution,
-                    ))
-                for edge in edges:
-                    if not self._edge_matches(edge, relation, step.filters):
-                        continue
-                    execution.remember_relationship(step.relation, edge)
-                    candidate = edge.get("related_entity")
-                    if isinstance(candidate, Mapping):
-                        related.append(dict(candidate))
-                        step_relationship_records.append(dict(edge))
+                    )
+                    for edge in edges:
+                        if not self._edge_matches(edge, relation, step.filters):
+                            continue
+                        execution.remember_relationship(step.relation, edge)
+                        candidate = edge.get("related_entity")
+                        if isinstance(candidate, Mapping):
+                            related.append(dict(candidate))
+                            step_relationship_records.append(dict(edge))
+                            if step.relation == "contents":
+                                group = grouped.setdefault(str(source["id"]), (dict(source), []))
+                                group[1].append(dict(candidate))
             entities = _unique_entities(related)
             entities = await self._filter_entities(
                 entities,
@@ -1749,7 +1764,7 @@ class EntityResolver:
             )
             if not entities:
                 if allow_empty_collection:
-                    return [], []
+                    return [], [], []
                 raise _FactFailure(
                     "relationship_not_found",
                     evidence=FactEvidence(relationship=last_relation),
@@ -1765,7 +1780,13 @@ class EntityResolver:
                 if isinstance(edge.get("related_entity"), Mapping)
                 and edge["related_entity"].get("id") in entity_ids
             ]
-        return entities, last_relationship_records
+            last_content_groups = [
+                FactContentGroup(space, tuple(_unique_entities([
+                    item for item in items if item.get("id") in entity_ids
+                ])))
+                for space, items in grouped.values()
+            ] if collapsed else []
+        return entities, last_relationship_records, last_content_groups
 
     async def _relation_edges(
         self, entity_id: str, relation: str, direction: str | None,
@@ -2117,6 +2138,16 @@ class HouseholdFactEngine:
                 candidates=error.candidates,
             )
         if result.status == "found":
+            if result.shape == "entities" and resolution.content_groups:
+                visible = {item["id"]: item for item in result.value}
+                groups = tuple(
+                    FactContentGroup(group.space, tuple(
+                        visible[item["id"]] for item in group.entities if item["id"] in visible
+                    ))
+                    for group in resolution.content_groups
+                    if any(item["id"] in visible for item in group.entities)
+                )
+                result = replace(result, content_groups=groups)
             focus = tuple(str(item["id"]) for item in (*entities, *other_entities) if item.get("id"))
             if (request.other is None and request.property_source == "entity"
                 and isinstance(result.value, Mapping) and result.value.get("id")):
@@ -2828,6 +2859,27 @@ class FactRenderer:
         context: AgentRequestContext,
     ) -> str:
         language = context.locale or "en"
+        if (result.status == "found" and result.shape == "entities"
+            and request.operation == "select" and request.property is None
+            and result.content_groups):
+            display = SemanticDisplay(self.ontology, language)
+            simple = (
+                request.subject.kind == "named_entity"
+                and len(request.subject.path) == 1
+                and not request.subject.path[0].filters
+                and not request.filters and not request.exclude and request.other is None
+            )
+            if simple:
+                owner = request.subject.value
+                heading = f"{owner}里有：" if display.zh else f"Contents of {owner}:"
+            else:
+                heading = display.describe(request)
+            lines = [
+                f"{_name(group.space, language)}" + ("：" if display.zh else ": ")
+                + ("、" if display.zh else ", ").join(_name(item, language) for item in group.entities)
+                for group in result.content_groups
+            ]
+            return heading + "\n" + ("；\n".join(lines) + "。" if display.zh else "\n".join(lines))
         if result.status == "ambiguous" and "discourse_antecedent" in result.missing_requirements:
             return "前文包含多个对象，请说明您指的是哪一个。" if language.startswith("zh") else "That earlier turn refers to multiple entities; please clarify which one you mean."
         if result.status == "discourse_context_missing":

@@ -197,7 +197,11 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
         "Entity identity is same_entity with two references subject and other, property=null. "
         "Residence-here compares that person's residence with current_household; "
         "do not reuse a prior resolve_reference identity plan. "
-        "named_entity.value keeps the user's literal (林青 stays 林青)."
+        "named_entity.value keeps the user's literal (林青 stays 林青). "
+        "Listing contents of a named room, container, or subspace uses that "
+        "complete latest name as named_entity, path contents, select. "
+        "current_household then room is only an unqualified household room "
+        "collection, never a replacement for a named room."
     ]
     assert sum(m["role"] == "system" for m in call["messages"]) == 2
     assert "addressing this helper" in json.dumps(call["messages"])

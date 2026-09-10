@@ -188,3 +188,88 @@ async def test_ingestion_supports_optional_boolean_and_nested_hosting(tmp_path):
             await ingest_directory(client, tmp_path)
     finally:
         await client.close()
+
+
+@pytest.mark.asyncio
+async def test_containment_through_ingestion_and_real_dispatcher(tmp_path):
+    """Exercise stored metadata and directed traversal, not the JSON simulator."""
+    from surrealdb import AsyncSurreal
+    from home_cortex.ingestion import ingest_directory
+    from home_cortex.retrieval import RetrievalService
+    from home_cortex.tools import ToolDispatcher
+
+    graph(tmp_path)
+    # Use localized compound names and colon-delimited IDs as in deployed graphs.
+    for path in (tmp_path / 'nodes').glob('*.json'):
+        records = json.loads(path.read_text())
+        for record in records:
+            record['name'] = {'en': record['name'][0]}
+        path.write_text(json.dumps(records))
+    for path in tmp_path.glob('*/*.json'):
+        path.write_text(path.read_text().replace('space:upper', 'space:workshop:cabinet:upper'))
+    for relation in ('lives_in', 'parent_of', 'spouse_of'):
+        (tmp_path / 'edges' / f'{relation}.json').write_text('[]')
+    client = AsyncSurreal('mem://')
+    await client.connect()
+    await client.use('test', 'containment_dispatcher')
+    try:
+        await ingest_directory(client, tmp_path)
+        registry = EdgeSchemaRegistry.load_default(tmp_path)
+        retrieval = RetrievalService(client, data_dir=tmp_path, edge_registry=registry)
+        engine = HouseholdFactEngine(
+            ToolDispatcher(retrieval, ()),
+            SemanticSchemaRegistry(RuntimeSchemaCatalog.from_data_dir(tmp_path, registry)),
+        )
+        assert {item['id'] for item in (await contents(engine)).value} == {
+            'item:cup', 'item:plate', 'item:bowl'}
+        assert [item['id'] for item in (await contents(engine, 'upper', 'space')).value] == ['item:cup']
+        assert [item['id'] for item in (await contents(engine, 'lower', 'space')).value] == ['item:plate']
+        # An omitted type is resolved by exact name; an explicit wrong type
+        # remains a constraint and must not be silently repaired.
+        assert {item['id'] for item in (await contents(engine, entity_type=None)).value} == {
+            'item:cup', 'item:plate', 'item:bowl'}
+        assert [item['id'] for item in (await contents(engine, 'upper', None)).value] == ['item:cup']
+        assert (await contents(engine, 'upper', 'item')).status == 'entity_not_found'
+        await client.query("CREATE item:other SET name = {en: 'upper'};")
+        assert (await contents(engine, 'upper', None)).status == 'ambiguous'
+        assert [item['id'] for item in (await contents(engine, 'upper', 'space')).value] == ['item:cup']
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_collapsed_contents_group_by_authoritative_space(tmp_path):
+    from home_cortex.semantic_facts import FactRenderer
+
+    engine, _ = graph(tmp_path)
+    result = await contents(engine)
+    assert {group.space['id']: {item['id'] for item in group.entities}
+            for group in result.content_groups} == {
+        'space:upper': {'item:cup'}, 'space:lower': {'item:plate'},
+        'space:drawer': {'item:bowl'},
+    }
+    request = SemanticFactRequest.model_validate({
+        'subject': {'kind': 'named_entity', 'value': 'Cabinet', 'entity_type': 'item',
+                    'path': [{'relation': 'contents'}]}, 'operation': 'select',
+    })
+    context = AgentRequestContext(caller_entity_id=None, household_id=None,
+        assistant_id='steward', assistant_display_name='Steward',
+        current_time=datetime(2026, 9, 1), locale='zh')
+    text = FactRenderer().render(request, result, context)
+    assert text.startswith('Cabinet里有：\n')
+    for line in ('upper：cup', 'lower：plate', 'drawer：bowl'):
+        assert line in text
+    assert not (await contents(engine, 'upper', 'space')).content_groups
+    assert not (await contents(engine, operation='count')).content_groups
+    location = request.model_copy(update={'subject': request.subject.model_copy(update={
+        'path': (*request.subject.path, request.subject.path[0].model_copy(update={'relation': 'location'})),
+    })})
+    assert not (await engine.execute(location, context))[0].content_groups
+
+    filtered = request.model_copy(update={'exclude': (
+        request.subject.model_copy(update={'value': 'plate', 'path': ()}),
+    )})
+    filtered_result = (await engine.execute(filtered, context))[0]
+    assert {group.space['id'] for group in filtered_result.content_groups} == {'space:upper', 'space:drawer'}
+    assert {item['id'] for group in filtered_result.content_groups for item in group.entities} == {
+        item['id'] for item in filtered_result.value}
