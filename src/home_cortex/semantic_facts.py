@@ -1636,10 +1636,17 @@ class EntityResolver:
                 raise _FactFailure("caller_context_missing", missing=("discourse_antecedent",))
             ids = discourse.turns[-reference.turn_offset]
             entities = [await execution.load({"id": entity_id}) for entity_id in ids]
+            entities = [
+                entity
+                for entity in entities
+                if _entity_type(entity) == reference.entity_type
+            ]
+            if not entities:
+                raise _FactFailure(
+                    "caller_context_missing", missing=("discourse_antecedent",)
+                )
             if reference.cardinality == "single" and len(entities) != 1:
                 raise _FactFailure("ambiguous", candidates=tuple(entities), missing=("discourse_antecedent",))
-            if any(_entity_type(entity) != reference.entity_type for entity in entities):
-                raise _FactFailure("caller_context_missing", missing=("discourse_antecedent",))
         elif reference.kind == "assistant":
             entities = [
                 {
@@ -2066,6 +2073,25 @@ class HouseholdFactEngine:
             if (request.other is None and request.property_source == "entity"
                 and isinstance(result.value, Mapping) and result.value.get("id")):
                 focus = (str(result.value["id"]),)
+            final_types = {_entity_type(item) for item in entities}
+            if (
+                request.subject.kind == "named_entity"
+                and request.subject.path
+                and request.subject.entity_type not in final_types
+            ):
+                anchor = next(
+                    (
+                        entity_id
+                        for edge in resolution.evidence.relationships
+                        for entity_id in (edge.source_id, edge.target_id)
+                        if entity_id is not None
+                        and entity_id.partition(":")[0]
+                        == request.subject.entity_type
+                    ),
+                    None,
+                )
+                if anchor is not None:
+                    focus = (anchor, *focus)
             result = replace(result, focus_entity_ids=tuple(dict.fromkeys(focus)))
         computation_ms = (perf_counter() - computation_started) * 1000
         return result, execution.query_count, entity_resolution_ms, computation_ms

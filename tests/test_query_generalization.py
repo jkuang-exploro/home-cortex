@@ -12,6 +12,7 @@ from home_cortex.fact_benchmark import _JsonGraphDispatcher
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
 from home_cortex.semantic_facts import (
     AgentRequestContext,
+    DiscourseContext,
     FactRenderer,
     HouseholdFactEngine,
     SemanticFactPlanner,
@@ -67,10 +68,10 @@ def _contained_households(root) -> None:
         {"id": "item:house_b", "name": "House B", "item_type": "house"},
         {"id": "item:milk_a", "name": "Milk", "item_type": "food"},
         {"id": "item:milk_b", "name": "Milk", "item_type": "food"},
-        {"id": "item:fridge_a", "name": {"zh": "冰箱", "en": "Fridge"}, "item_type": "refrigerator"},
+        {"id": "item:fridge_a", "name": {"zh": "冰箱", "en": "Fridge"}, "item_type": "appliance"},
     ])
     _write(root, "nodes", "space", [
-        {"id": "space:kitchen_a", "name": "Kitchen A", "space_type": "room"},
+        {"id": "space:kitchen_a", "name": {"en": "Kitchen A", "zh": "厨房"}, "space_type": "room"},
         {"id": "space:kitchen_b", "name": "Kitchen B", "space_type": "room"},
     ])
     _write(root, "edges", "lives_in", [
@@ -128,7 +129,7 @@ async def test_declared_room_path_and_named_item_location_are_household_scoped(t
     location_result, *_ = await engine.execute(location, context)
     assert location_result.status == "found"
     assert location_result.value["id"] == "space:kitchen_a"
-    assert "Kitchen A" in FactRenderer().render(location, location_result, context)
+    assert "厨房" in FactRenderer().render(location, location_result, context)
 
     fridge_payload = engine.schema.expand_planner_concepts({
         "request": {
@@ -165,6 +166,66 @@ async def test_declared_room_path_and_named_item_location_are_household_scoped(t
         })["request"]
     )
     assert v2_schema.validates(v2_rooms)
+
+
+@pytest.mark.asyncio
+async def test_named_space_contents_filter_by_stored_item_type(tmp_path):
+    _contained_households(tmp_path)
+    engine, context = _engine(tmp_path)
+    payload = engine.schema.expand_planner_concepts({
+        "request": {
+            "operation": "select",
+            "subject": {
+                "kind": "named_entity",
+                "entity_type": "space",
+                "value": "厨房",
+                "path": [{"concept": "contents"}],
+            },
+            "filters": [{"property": "item_type", "value": "appliance"}],
+        }
+    })
+    request = SemanticFactRequest.model_validate(payload["request"])
+
+    assert engine.schema.validation_code(request) == "VALID"
+    result, *_ = await engine.execute(request, context)
+
+    assert result.status == "found"
+    assert [item["id"] for item in result.value] == ["item:fridge_a"]
+
+    location = SemanticFactRequest(
+        operation="resolve_reference",
+        subject=SemanticReference(
+            kind="named_entity",
+            entity_type="item",
+            value="冰箱",
+            path=(SemanticRelationStep(relation="location"),),
+        ),
+    )
+    located, *_ = await engine.execute(location, context)
+    assert located.focus_entity_ids == ("item:fridge_a", "space:kitchen_a")
+
+    other = request.model_copy(update={
+        "exclude": (
+            SemanticReference(
+                kind="discourse",
+                entity_type="item",
+                turn_offset=1,
+            ),
+        )
+    })
+    discourse = DiscourseContext(
+        "conversation",
+        context.caller_entity_id,
+        context.household_id,
+        context.assistant_id,
+        (located.focus_entity_ids,),
+    )
+    other_result, *_ = await engine.execute(
+        other,
+        replace(context, conversation_id="conversation", discourse=discourse),
+    )
+    assert other_result.status == "found"
+    assert other_result.value == []
 
 
 def test_active_contract_rejects_declared_disjoint_predicates(tmp_path):

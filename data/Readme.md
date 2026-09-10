@@ -110,7 +110,11 @@ through `hosted_by`. Every modeled Space has one explicit edge to the physical
 Item that provides it.
 
 An Item is a physical entity tracked as an independent identity unit. Its
-current position uses `located_in` (`item` → `address` or `space`). A Space
+`item_type` is its query category (for example `appliance`, `furniture`, or
+`food`), consistent with `address_type` and `space_type`. Semantic `item_type`
+filters compare this field directly; the ontology does not duplicate category
+membership. Its current position uses `located_in` (`item` → `address` or
+`space`). A Space
 provided or defined by an Item uses `hosted_by` (`space` → `item`). This applies
 equally to house rooms and to container regions such as a refrigerator
 interior. `hosts_space` is derived by reverse traversal and must not have its

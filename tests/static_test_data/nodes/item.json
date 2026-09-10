@@ -6,7 +6,7 @@
   },
   {
     "id": "item:fridge_01",
-    "item_type": "refrigerator",
+    "item_type": "appliance",
     "name": {"en": "Refrigerator", "zh": "冰箱"}
   },
   {
@@ -16,12 +16,12 @@
   },
   {
     "id": "item:lamp",
-    "item_type": "lamp",
+    "item_type": "appliance",
     "name": {"en": "Lamp", "zh": "灯"}
   },
   {
     "id": "item:drawer_1",
-    "item_type": "drawer",
+    "item_type": "furniture",
     "name": {"en": "Drawer 1", "zh": "1 号抽屉"}
   }
 ]

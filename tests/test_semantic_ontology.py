@@ -36,6 +36,9 @@ def test_default_ontology_owns_property_and_kinship_semantics() -> None:
     age_filter = older_brother.path[-1].filters[-1]
     assert age_filter.operator == "lt"
     assert age_filter.value_from == "anchor"
+    assert ontology.property_fields("item_type") == ("item_type",)
+    payload = ontology.planner_payload()["properties"]
+    assert "类别" in payload["item_type"]
 
 
 def test_new_kinship_alias_is_exposed_to_planner_by_ontology_change(

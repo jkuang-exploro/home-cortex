@@ -155,6 +155,7 @@ def test_examples_cover_required_concepts_and_preserve_literals():
     assert "Who belongs to my household?" in users
     assert "花瓶在哪里？" in users
     assert "Where is the kettle?" in users
+    assert "工作间里还有哪些工具？" in users
     assert "我 son 几岁了？" in users
     assert "Who is 我岳父?" in users
     assert "我 wife 的 birthday 是哪天？" in users
@@ -183,6 +184,24 @@ def test_examples_cover_required_concepts_and_preserve_literals():
     assert kettle["operation"] == "resolve_reference"
     assert kettle["subject"]["value"] == "kettle"
     assert kettle["subject"]["entity_type"] == "item"
+    other_tools = by_user["工作间里还有哪些工具？"]["request"]
+    assert other_tools["subject"] == {
+        "kind": "named_entity",
+        "value": "工作间",
+        "entity_type": "space",
+        "path": [{"concept": "contents"}],
+    }
+    assert other_tools["filters"] == [
+        {"property": "item_type", "value": "tool", "operator": "eq"}
+    ]
+    assert other_tools["exclude"] == [
+        {
+            "kind": "discourse",
+            "entity_type": "item",
+            "turn_offset": 1,
+            "cardinality": "single",
+        }
+    ]
     chat = by_user["Just chatting, no household question."]
     assert chat == {"requires_fact": False, "request": None}
 

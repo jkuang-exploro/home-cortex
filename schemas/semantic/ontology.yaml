@@ -53,8 +53,13 @@ properties:
     aliases: [结束日期, end date, until]
   item_type:
     label: {en: item type, zh: 物品类型}
-    fields: [item_type, type]
-    aliases: [物品类型, 类别, item type, product category]
+    value_labels:
+      appliance: {en: appliance, zh: 电器}
+      food: {en: food, zh: 食物}
+      furniture: {en: furniture, zh: 家具}
+      house: {en: house, zh: 房屋}
+    fields: [item_type]
+    aliases: [物品类型, 物品类别, 类别, item type, item category, product category]
   space_type:
     label: {en: space type, zh: 空间类型}
     value_labels:
