@@ -90,10 +90,12 @@ async def test_object_round_trip_preserves_canonical_node_content(
     try:
         await ingest_directory(database, STATIC_TEST_DATA)  # type: ignore[arg-type]
         target = tmp_path / "export"
-        await export_directory(database, target)  # type: ignore[arg-type]
+        result = await export_directory(database, target)  # type: ignore[arg-type]
     finally:
         await database.close()
 
+    assert result.target_dir == str(target.resolve())
+    assert (target / "nodes" / "person.json").is_file()
     for table in ("person", "address", "space", "item"):
         source = _load_json(STATIC_TEST_DATA / "nodes" / f"{table}.json")
         exported = _load_json(target / "nodes" / f"{table}.json")
@@ -377,6 +379,18 @@ async def test_retired_tables_are_omitted_and_reported(tmp_path: Path) -> None:
         "person:alex_example",
         "person:blair_example",
     }
+
+
+@pytest.mark.asyncio
+async def test_export_rejects_current_directory_target(tmp_path: Path) -> None:
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        await ingest_directory(database, STATIC_TEST_DATA)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="cannot be '.'"):
+            await export_directory(database, Path("."))  # type: ignore[arg-type]
+    finally:
+        await database.close()
 
 
 def test_canonical_json_value_converts_record_ids_and_dates() -> None:

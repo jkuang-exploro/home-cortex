@@ -74,6 +74,7 @@ services:
       CALENDAR_BINDINGS: '${CALENDAR_BINDINGS:-[]}'
     volumes:
       - ../../data:/app/data:ro
+      - ../../tmp/db-export:/app/export
     depends_on:
       - surrealdb
       - ollama

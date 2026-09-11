@@ -970,6 +970,15 @@ def test_admin_export_requires_explicit_target_and_accepts_household_api_key(
     assert response.json()["nodes_exported"] == 4
     export.assert_awaited_once()
 
+    relative = client.post(
+        "/admin/export",
+        headers={"Authorization": "Bearer test-cortex-key"},
+        json={"target_dir": "."},
+    )
+    assert relative.status_code == 400
+    assert relative.json()["error"]["code"] == "export_failed"
+    assert "absolute path" in relative.json()["error"]["message"]
+
 
 def test_chat_accepts_mapped_identity(
     api_client: tuple[TestClient, FakeAgent],

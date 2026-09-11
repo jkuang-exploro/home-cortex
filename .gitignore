@@ -1,4 +1,5 @@
 data/*
+tmp/
 .env
 *.secret
 .venv/

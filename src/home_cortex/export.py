@@ -62,6 +62,7 @@ class ExportResult:
     edges_exported: int = 0
     omitted_retired_tables: tuple[str, ...] = ()
     omitted_retired_records: int = 0
+    target_dir: str = ""
 
 
 def canonical_json_value(value: Any) -> Any:
@@ -97,11 +98,10 @@ async def export_directory(
     assumed. Existing ``nodes/`` and ``edges/`` subdirectories under the target
     are replaced only after the database has been read and the staged snapshot
     is complete. Other files in the target, such as ``Readme.md``, are left
-    in place.
+    in place. The returned ``target_dir`` is the resolved absolute path that
+    was written.
     """
-    if not str(target_dir).strip():
-        raise ValueError("An explicit target directory is required")
-    target = Path(target_dir).expanduser()
+    target = _explicit_target_dir(target_dir)
     if target.exists() and not target.is_dir():
         raise ValueError(f"{target} exists and is not a directory")
     for name in ("nodes", "edges"):
@@ -135,6 +135,7 @@ async def export_directory(
         edges_exported=sum(len(records) for records in payload.edges.values()),
         omitted_retired_tables=payload.omitted_retired_tables,
         omitted_retired_records=payload.omitted_retired_records,
+        target_dir=str(target),
     )
 
 
@@ -352,6 +353,19 @@ def _write_json(path: Path, records: list[dict[str, Any]]) -> None:
         json.dumps(records, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def _explicit_target_dir(target_dir: Path) -> Path:
+    if not str(target_dir).strip():
+        raise ValueError("An explicit target directory is required")
+    target = Path(target_dir).expanduser()
+    if str(target) in {".", "./", "..", "../"} or target.name in {"", ".", ".."}:
+        raise ValueError(
+            "target_dir cannot be '.' or '..'; pass an explicit directory. "
+            "The HTTP API writes inside the API process filesystem "
+            "(Docker: /app/export, host: tmp/db-export)."
+        )
+    return target.resolve()
 
 
 def _staging_directory(target: Path) -> Path:

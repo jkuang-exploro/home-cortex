@@ -350,6 +350,13 @@ async def ingest(request: Request) -> dict[str, Any]:
 @app.post("/admin/export")
 async def export(body: ExportRequest, request: Request) -> dict[str, Any]:
     _authenticate_request(request)
+    if not body.target_dir.is_absolute():
+        raise APIError(
+            400,
+            "export_failed",
+            "target_dir must be an absolute path on the API server. "
+            "From Docker Compose use /app/export (host directory tmp/db-export).",
+        )
     try:
         result = await export_directory(
             request.app.state.database,

@@ -42,8 +42,11 @@ for validation and presentation limitations.
   pruning records removed from that table's source files. When `CORTEX_API_KEY`
   is set, this route requires that key.
 - `POST /admin/export` writes the current SurrealDB graph to an explicit
-  `target_dir` as canonical `nodes/` and `edges/` JSON. It does not default to
-  `/app/data`. The same snapshot is available from the CLI as
+  absolute `target_dir` as canonical `nodes/` and `edges/` JSON. The path is
+  on the API server, not the curl client. From Docker Compose use
+  `/app/export`, which is mounted to `tmp/db-export` on the host. It does not
+  default to `/app/data`. The response includes the resolved `target_dir`.
+  The same snapshot is available from the CLI as
   `home-cortex-db-export ./tmp/db-export`. When `CORTEX_API_KEY` is set, this
   route requires that key.
 - `POST /v1/chat` runs the default steward agent for backward compatibility.
