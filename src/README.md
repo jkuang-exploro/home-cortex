@@ -363,18 +363,21 @@ non-temporal edges, reverse duplicates of a symmetric fact, and a registered
 relationship without a corresponding JSON source file. An empty relationship
 must be represented by `[]` so re-ingestion can prune previously stored facts.
 Ingestion also clears records from explicitly retired relationship and node
-tables during ontology migrations. Export is the deterministic inverse: it
-reads SurrealDB and writes canonical `nodes/<table>.json` and
-`edges/<relationship>.json` files. Empty node tables are omitted; registered
-relationships with no facts are written as `[]`. Item shard directories are an
-ingest-only layout and collapse to a single `item.json` on export.
+tables during ontology migrations, including the former `resides_in` table.
+Export is the deterministic inverse: it reads SurrealDB and writes canonical
+`nodes/<table>.json` and `edges/<relationship>.json` files. Empty node tables
+are omitted; registered relationships with no facts are written as `[]`. Item
+shard directories are an ingest-only layout and collapse to a single
+`item.json` on export. Leftover retired tables are omitted from the snapshot
+and named in the export result; unknown relationship tables still fail.
 
 This version renames the former `resides_in` relationship to `lives_in`. Since
 the repository intentionally does not track private household data, rename the
 deployment's `data/edges/resides_in.json` to `lives_in.json` before ingesting.
 Remove `start` and `end` from `parent_of.json`; `parent_of` is non-temporal in
-the V1 schema. The old SurrealDB `resides_in` table is no longer queried, so it
-cannot contribute facts after the application is redeployed.
+the V1 schema. The old SurrealDB `resides_in` table is no longer queried and is
+pruned on ingest, so it cannot contribute facts after the application is
+redeployed.
 
 The agent also applies a deterministic grounding gate. A structured LLM planner
 decides whether a request depends on household world state and plans only

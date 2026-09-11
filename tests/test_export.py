@@ -348,16 +348,35 @@ async def test_failed_export_does_not_clobber_existing_target(tmp_path: Path) ->
 
 
 @pytest.mark.asyncio
-async def test_retired_table_with_records_fails_export(tmp_path: Path) -> None:
+async def test_retired_tables_are_omitted_and_reported(tmp_path: Path) -> None:
     database = MemoryDatabase()
     await database.connect()
     try:
         await ingest_directory(database, STATIC_TEST_DATA)  # type: ignore[arg-type]
         await database.upsert(RecordID("location", "legacy_home"), {"name": "Legacy"})
-        with pytest.raises(ValueError, match="retired tables"):
-            await export_directory(database, tmp_path / "export")  # type: ignore[arg-type]
+        await database.query(
+            "RELATE $source->$edge->$target CONTENT $content;",
+            {
+                "source": RecordID("person", "alex_example"),
+                "edge": RecordID("resides_in", "alex_legacy"),
+                "target": RecordID("address", "test_house"),
+                "content": {"residence_type": "primary"},
+            },
+        )
+        target = tmp_path / "export"
+        result = await export_directory(database, target)  # type: ignore[arg-type]
     finally:
         await database.close()
+
+    assert result.omitted_retired_tables == ("location", "resides_in")
+    assert result.omitted_retired_records == 2
+    assert not (target / "nodes" / "location.json").exists()
+    assert not (target / "edges" / "resides_in.json").exists()
+    lives_in = _load_json(target / "edges" / "lives_in.json")
+    assert {edge["from"] for edge in lives_in} == {
+        "person:alex_example",
+        "person:blair_example",
+    }
 
 
 def test_canonical_json_value_converts_record_ids_and_dates() -> None:

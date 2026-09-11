@@ -13,6 +13,10 @@ context are not involved. Records are converted structurally:
 
 Empty node tables are omitted. Every registered relationship is written, using
 ``[]`` when the table has no facts, so the result is a valid ingest source.
+Known retired tables leftover from schema renames (``resides_in``,
+``contained_in``, ``location``) are omitted and reported; they are not part of
+the canonical JSON schema and ingest would prune them. Unknown relationship
+tables still fail the export.
 
 SurrealDB drops JSON null properties at ingest time. Temporal ``end`` is restored
 as ``null`` when the schema marks the relationship temporal and the stored row
@@ -56,6 +60,8 @@ class ExportResult:
     edge_files: int = 0
     nodes_exported: int = 0
     edges_exported: int = 0
+    omitted_retired_tables: tuple[str, ...] = ()
+    omitted_retired_records: int = 0
 
 
 def canonical_json_value(value: Any) -> Any:
@@ -127,6 +133,8 @@ async def export_directory(
         edge_files=len(payload.edges),
         nodes_exported=sum(len(records) for records in payload.nodes.values()),
         edges_exported=sum(len(records) for records in payload.edges.values()),
+        omitted_retired_tables=payload.omitted_retired_tables,
+        omitted_retired_records=payload.omitted_retired_records,
     )
 
 
@@ -134,6 +142,8 @@ async def export_directory(
 class _CanonicalPayload:
     nodes: dict[str, list[dict[str, Any]]]
     edges: dict[str, list[dict[str, Any]]]
+    omitted_retired_tables: tuple[str, ...] = ()
+    omitted_retired_records: int = 0
 
 
 async def _read_canonical_payload(
@@ -150,16 +160,10 @@ async def _read_canonical_payload(
     for table in sorted(raw_tables):
         raw_records[table] = await _select_table(database, table)
 
-    leftover_retired = sorted(
-        table
-        for table in retired
-        if raw_records.get(table)
+    omitted_retired = tuple(
+        sorted(table for table in retired if raw_records.get(table))
     )
-    if leftover_retired:
-        raise ValueError(
-            "Cannot export retired tables that still contain records: "
-            + ", ".join(leftover_retired)
-        )
+    omitted_retired_records = sum(len(raw_records[table]) for table in omitted_retired)
 
     unregistered_relations: list[str] = []
     node_tables: dict[str, list[dict[str, Any]]] = {}
@@ -189,7 +193,12 @@ async def _read_canonical_payload(
         relation: _canonical_edges(relation, raw_records.get(relation, []), registry.get(relation))
         for relation in registry.relationship_names
     }
-    return _CanonicalPayload(nodes, edges)
+    return _CanonicalPayload(
+        nodes,
+        edges,
+        omitted_retired,
+        omitted_retired_records,
+    )
 
 
 def _canonical_nodes(table: str, records: list[dict[str, Any]]) -> list[dict[str, Any]]:

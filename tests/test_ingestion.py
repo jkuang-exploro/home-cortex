@@ -395,21 +395,31 @@ async def test_reingestion_prunes_records_removed_from_json(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
-async def test_ingestion_prunes_retired_relationship_tables() -> None:
+@pytest.mark.parametrize("relation", ["contained_in", "resides_in"])
+async def test_ingestion_prunes_retired_relationship_tables(relation: str) -> None:
     database = MemoryDatabase()
     await database.connect()
     try:
         await ingest_directory(database, STATIC_TEST_DATA)  # type: ignore[arg-type]
         await database.query(
-            "RELATE $source->contained_in->$target;",
+            "RELATE $source->$edge->$target;",
             {
-                "source": RecordID("space", "kitchen"),
+                "source": RecordID("space", "kitchen")
+                if relation == "contained_in"
+                else RecordID("person", "alex_example"),
+                "edge": RecordID(relation, "legacy"),
                 "target": RecordID("address", "test_house"),
             },
         )
-        legacy = await database.query("SELECT * FROM contained_in;")
+        legacy = await database.query(
+            "SELECT * FROM type::table($table);",
+            {"table": relation},
+        )
         await ingest_directory(database, STATIC_TEST_DATA)  # type: ignore[arg-type]
-        remaining = await database.query("SELECT * FROM contained_in;")
+        remaining = await database.query(
+            "SELECT * FROM type::table($table);",
+            {"table": relation},
+        )
     finally:
         await database.close()
 

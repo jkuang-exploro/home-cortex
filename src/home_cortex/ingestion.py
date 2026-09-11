@@ -18,7 +18,7 @@ from .record_ids import (
 from .schema_catalog import node_table_sources
 
 TABLE_PATTERN = TABLE_NAME_RE
-_RETIRED_EDGE_TABLES = ("contained_in",)
+_RETIRED_EDGE_TABLES = ("contained_in", "resides_in")
 _RETIRED_NODE_TABLES = ("location",)
 
 
