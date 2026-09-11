@@ -104,6 +104,21 @@ class UpdateLocationRequest(_WriteModel):
         return value
 
 
+class UpdateAttributesRequest(_WriteModel):
+    operation: Literal["update_attributes"]
+    item_id: str = Field(pattern=RECORD_ID_PATTERN)
+    properties: dict[str, JsonValue] = Field(min_length=1)
+    mode: WriteMode = "commit"
+    source: MutationSource | None = None
+
+    @field_validator("item_id")
+    @classmethod
+    def require_item_id(cls, value: str) -> str:
+        if split_record_id(value)[0] != "item":
+            raise ValueError("item_id must use the item table")
+        return value
+
+
 class DeleteItemRequest(_WriteModel):
     operation: Literal["delete"]
     item_id: str = Field(pattern=RECORD_ID_PATTERN)
@@ -119,7 +134,7 @@ class DeleteItemRequest(_WriteModel):
 
 
 WriteRequest = Annotated[
-    CreateItemRequest | UpdateLocationRequest | DeleteItemRequest,
+    CreateItemRequest | UpdateLocationRequest | UpdateAttributesRequest | DeleteItemRequest,
     Field(discriminator="operation"),
 ]
 WRITE_REQUEST_ADAPTER = TypeAdapter(WriteRequest)
@@ -139,7 +154,7 @@ class MutationError(_WriteModel):
 
 class MutationResult(_WriteModel):
     status: MutationStatus
-    operation: Literal["create", "update_location", "delete"] | None = None
+    operation: Literal["create", "update_location", "update_attributes", "delete"] | None = None
     entity_id: str | None = None
     affected_nodes: int = 0
     affected_edges: int = 0
@@ -213,7 +228,7 @@ class ItemWritingService:
 
     async def mutate(self, request: WriteRequest | Mapping[str, Any]) -> MutationResult:
         """Validate and apply one semantic mutation without leaking DB errors."""
-        if not isinstance(request, (CreateItemRequest, UpdateLocationRequest, DeleteItemRequest)):
+        if not isinstance(request, (CreateItemRequest, UpdateLocationRequest, UpdateAttributesRequest, DeleteItemRequest)):
             try:
                 request = WRITE_REQUEST_ADAPTER.validate_python(request)
             except (ValidationError, TypeError, ValueError):
@@ -224,6 +239,8 @@ class ItemWritingService:
                     return await self._create(request)
                 if isinstance(request, UpdateLocationRequest):
                     return await self._update_location(request)
+                if isinstance(request, UpdateAttributesRequest):
+                    return await self._update_attributes(request)
                 return await self._delete(request)
             except Exception:
                 _, entity_id, _ = self._request_metadata(request)
@@ -231,7 +248,8 @@ class ItemWritingService:
 
     async def _create(self, request: CreateItemRequest) -> MutationResult:
         entity_id = request.item.id
-        properties_error = self._validate_item_properties(request.item.properties)
+        properties = {"item_type": "unknown", **request.item.properties}
+        properties_error = self._validate_item_properties(properties)
         if properties_error is not None:
             return self._rejected(request, entity_id, properties_error)
         if await self._record(entity_id) is not None:
@@ -246,7 +264,7 @@ class ItemWritingService:
         if location_error is not None:
             return self._rejected(request, entity_id, location_error)
         resulting = {
-            "entity": {"id": entity_id, **request.item.properties},
+            "entity": {"id": entity_id, **properties},
             "location": request.location_id,
         }
         if request.mode == "preview":
@@ -261,7 +279,7 @@ class ItemWritingService:
                     "item": self._record_id(entity_id),
                     "location": self._record_id(request.location_id),
                     "edge": self._location_edge_id(entity_id, request.location_id),
-                    "properties": dict(request.item.properties),
+                    "properties": dict(properties),
                 },
             )
         except Exception:
@@ -330,6 +348,42 @@ class ItemWritingService:
             resulting_state=resulting_state,
         )
 
+    async def _update_attributes(self, request: UpdateAttributesRequest) -> MutationResult:
+        entity_id = request.item_id
+        entity = await self._record(entity_id)
+        if entity is None:
+            return self._result(request, "NOT_FOUND", entity_id, reason="ITEM_NOT_FOUND")
+        writable = {prop.fields[0] for prop in self.ontology.properties.values()
+                    if prop.item_writable and prop.fields}
+        if set(request.properties) - writable:
+            return self._rejected(request, entity_id, MutationError(
+                code="ATTRIBUTE_NOT_WRITABLE", message="Only declared item attributes may be updated"))
+        error = self._validate_item_properties(request.properties, require_name=False)
+        if error:
+            return self._rejected(request, entity_id, error)
+        previous = {key: entity.get(key) for key in request.properties}
+        resulting = dict(request.properties)
+        if previous == resulting:
+            return self._result(request, "NO_CHANGE", entity_id,
+                                previous_state=previous, resulting_state=resulting)
+        if request.mode == "preview":
+            return self._result(request, "PROPOSED", entity_id, affected_nodes=1,
+                                previous_state=previous, resulting_state=resulting)
+        try:
+            await self.database.query("""
+BEGIN TRANSACTION;
+LET $existing = SELECT * FROM ONLY $item;
+IF $existing = NONE { THROW "WRITE_ITEM_MISSING"; };
+IF $existing != $expected { THROW "WRITE_CONFLICT"; };
+UPDATE $item MERGE $properties;
+COMMIT TRANSACTION;
+""", {"item": self._record_id(entity_id), "expected": {**entity, "id": self._record_id(entity_id)},
+       "properties": dict(request.properties)})
+        except Exception:
+            return self._database_rejected(request, entity_id, previous_state=previous)
+        return self._result(request, "APPLIED", entity_id, affected_nodes=1,
+                            previous_state=previous, resulting_state=resulting)
+
     async def _delete(self, request: DeleteItemRequest) -> MutationResult:
         entity_id = request.item_id
         entity = await self._record(entity_id)
@@ -364,7 +418,7 @@ class ItemWritingService:
         )
 
     def _validate_item_properties(
-        self, properties: Mapping[str, Any]
+        self, properties: Mapping[str, Any], *, require_name: bool = True
     ) -> MutationError | None:
         item_schema = self.catalog.entities.get("item")
         if item_schema is None:
@@ -379,6 +433,8 @@ class ItemWritingService:
                 message="Item properties are not declared by the deployed schema",
             )
         for name, value in properties.items():
+            if name == "item_type" and isinstance(value, str) and not value.strip():
+                return MutationError(code="ITEM_TYPE_REQUIRED", message="Item category must be non-empty")
             expected = item_schema.property_types.get(name, "unknown")
             if not self._matches_kind(value, expected):
                 return MutationError(
@@ -387,7 +443,7 @@ class ItemWritingService:
                     message="Item property does not match the deployed schema type",
                 )
         name = properties.get("name")
-        if not self._valid_name(name):
+        if require_name and not self._valid_name(name):
             return MutationError(
                 code="ITEM_NAME_REQUIRED", field="item.properties.name",
                 message="Item name must be non-empty text, aliases, or localized text",
@@ -629,7 +685,7 @@ class ItemWritingService:
     @staticmethod
     def _malformed_result(raw: Any) -> MutationResult:
         operation = raw.get("operation") if isinstance(raw, Mapping) else None
-        if operation not in {"create", "update_location", "delete"}:
+        if operation not in {"create", "update_location", "update_attributes", "delete"}:
             operation = None
         item = raw.get("item") if isinstance(raw, Mapping) else None
         entity_id = (

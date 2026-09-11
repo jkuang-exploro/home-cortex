@@ -378,14 +378,15 @@ system messages are discarded before the trusted Cortex policy is applied.
 
 ## Canonical item mutations
 
-Runtime callers create, move, or delete authoritative Items through
+Runtime callers create, move, update attributes, or delete authoritative Items through
 `ItemWritingService`. Its closed request union exposes only `create`,
-`update_location`, and `delete`, with `preview` and `commit` modes. The service
+`update_location`, `update_attributes`, and `delete`, with `preview` and `commit` modes. The service
 validates runtime schema ownership and executes each compound change as one
 SurrealDB transaction. The steward enables `write_item` through a structured
 current-turn mutation intent. The interpreter emits `requires_fact: false`,
 `request: null`, and a `mutation` containing `operation`, the literal `item_name`,
-the full `location_name` (except deletion), and `mode`. Read requests and mutations
+the full `location_name` for creation/movement, and `mode`. Creation and attribute
+updates carry `attributes` keyed by semantic property names. Read requests and mutations
 are mutually exclusive. The agent invokes the tool after interpretation, including
 for streaming responses. Discourse replay returns mutation intents without running
 them; the ordinary conversation loop cannot invoke `write_item`.
@@ -399,15 +400,35 @@ the fact benchmark do not run the mutation classifier.
 The model-facing adapter resolves names within the configured household, generates
 new IDs server-side, and calls the canonical writer. It does not expose physical
 IDs, properties, or raw graph state to the model. Repeating a creation already
-recorded at the same location is a no-op. An existing item at another location
+recorded at the same location with matching explicit attributes is a no-op.
+Conflicting attributes require an explicit update. An existing item at another location
 requires an explicit move; an ambiguous or missing destination does not write.
 A container name never implies a particular internal space. Confirmation text is
 rendered from the actual mutation status, and preview is explicitly marked unsaved.
 
-The direct Python `ItemWritingService` ID-based request contract is unchanged.
+Writable attributes are declared with `item_writable` types in the ontology;
+the catalog includes those fields even before any item has a value. Current fields
+are item_type, brand, model, color, quantity, unit, description, and expiration_date.
+The user permits inferring a clear item category from its name; uncertain categories
+use `unknown`. Other attributes require explicit input. Every new canonical item
+gets at least item_type; existing uncategorized records can be updated explicitly.
+No retrospective household classification is performed during deployment.
+
+`update_attributes` patches only declared fields and preserves names, locations,
+and unspecified values. Preview and repeat no-ops do not write. A transaction
+compares the current entity against the validated snapshot before merging,
+rejecting concurrent changes. IDs, resolver metadata, and relationships cannot be
+modified through the attribute patch. Removing attributes is not part of this API.
+
+The generic read operation `inspect` returns declared semantic attributes for one
+entity and marks missing values as unrecorded; single-attribute reads remain
+`select(property)`. Both use deterministic retrieval/rendering.
+
+The direct Python `ItemWritingService` contract also adds `update_attributes`,
+using item_id and properties; the name adapter owns semantic-to-storage mapping.
 The `write_item` tool now takes names instead of that low-level contract. The
-offline compact codec is version 2 because the plan schema gained mutation fields;
-old version 1 payloads are rejected rather than reinterpreted. Production continues
+offline compact codec is version 3 because the plan schema gained attribute intents;
+old version 1 and 2 payloads are rejected rather than reinterpreted. Production continues
 using expanded JSON. See
 [`docs/design/item-writing-api.md`](../docs/design/item-writing-api.md) for the
 request/result contract, transaction boundaries, and ingestion constraint.

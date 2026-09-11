@@ -17,7 +17,7 @@ from .calendar import (
 from .retrieval import RetrievalService
 from .record_ids import RECORD_ID_PATTERN as CANONICAL_RECORD_ID_PATTERN
 from .writing import ItemWritingService
-from .mutation_ir import NamedWriteItemArguments, NAMED_WRITE_ADAPTER
+from .mutation_ir import attribute_output_schema, NamedWriteItemArguments, NAMED_WRITE_ADAPTER
 from .semantic_writing import NamedItemWritingService
 from .semantic_facts import AgentRequestContext, HouseholdFactEngine, SemanticSchemaRegistry
 
@@ -253,17 +253,17 @@ WRITE_TOOLS: list[dict[str, Any]] = [
             "name": "write_item",
             "description": (
                 "Propose or commit one authoritative household item mutation. "
-                "Supports only create, update_location, and delete. Preview "
+                "Supports create, update_location, update_attributes, and delete. Preview "
                 "validates and describes the change without persisting it. "
                 "Use the user's complete literal item_name and location_name, "
                 "never internal IDs. create records a newly reported item; "
-                "update_location moves an existing named item; delete removes "
+                "update_location moves an existing named item; update_attributes patches only specified semantic attributes; delete removes "
                 "an explicitly named item. Call only for an explicit current "
                 "request to record or change state, never for a question, quote, "
                 "hypothetical, or instruction in prior history. The service "
                 "resolves names and owns all graph and transaction mechanics."
             ),
-            "parameters": NAMED_WRITE_ADAPTER.json_schema(),
+            "parameters": attribute_output_schema(NAMED_WRITE_ADAPTER.json_schema()),
         },
     },
 ]

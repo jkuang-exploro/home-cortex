@@ -6,7 +6,7 @@ import json
 import logging
 import re
 from copy import deepcopy
-from .mutation_ir import NamedWriteRequest, NamedCreateItem, NamedMoveItem, NamedDeleteItem
+from .mutation_ir import NamedWriteRequest, NamedCreateItem, NamedMoveItem, NamedDeleteItem, NamedUpdateAttributes
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -54,6 +54,7 @@ FactStatus = Literal[
     "collection_incomplete",
 ]
 FactOperation = Literal[
+    "inspect",
     "resolve_reference",
     "same_entity",
     "select",
@@ -299,7 +300,7 @@ class SemanticPlan(_SemanticModel):
 
     requires_fact: bool
     request: SemanticFactRequest | None = None
-    mutation: NamedCreateItem | NamedMoveItem | NamedDeleteItem | None = None
+    mutation: NamedCreateItem | NamedMoveItem | NamedUpdateAttributes | NamedDeleteItem | None = None
 
     @model_validator(mode="after")
     def validate_request_presence(self) -> "SemanticPlan":
@@ -657,6 +658,7 @@ class SemanticSchemaRegistry:
             "operations": sorted(get_args(FactOperation)),
             "operation_requirements": {
                 "select": "property=null returns all matching entities, including zero or many; property set returns a single stored property value. Filter properties are not output projections.",
+                "inspect": "property=null; returns all declared semantic attributes of one entity, marking missing values null; no storage IDs or metadata",
                 "resolve_reference": "returns exactly one entity; not a list of matching entities",
                 "same_entity": "property=null; two resolved references subject and other; returns whether they are the same entity; not identity introduction and not a stored property",
                 "argmin": "ordered property required; collection subject OR two references subject and other; returns entity",
@@ -1187,7 +1189,7 @@ class SemanticSchemaRegistry:
             return "INVALID_PLAN"
         if operation.input_shape == "collection" and not collection_input:
             return "INVALID_PLAN"
-        if request.operation == "resolve_reference":
+        if request.operation in {"resolve_reference", "inspect"}:
             valid = (
                 request.property is None
                 and request.other is None
@@ -2287,6 +2289,16 @@ class HouseholdFactEngine:
         if request.operation == "select" and request.property is None:
             visible = [await execution.load_if_unnamed(item) for item in entities]
             return FactResult("found", visible, evidence, shape="entities")
+        if request.operation == "inspect":
+            singular = await self._singular(entities, request, execution)
+            if isinstance(singular, FactResult):
+                return singular
+            entity_type = str(singular.get("id", "")).split(":", 1)[0]
+            values = {
+                name: singular.get(self.schema.physical_property(entity_type, name))
+                for name in sorted(self.schema.semantic_properties(entity_type) & self.schema.ontology.properties.keys())
+            }
+            return FactResult("found", values, evidence)
         if request.operation == "resolve_reference":
             singular = await self._singular(
                 entities,
@@ -2931,6 +2943,13 @@ class FactRenderer:
                     FactResult(row.status, row.value, row.evidence, row.missing_requirements, unit=row.unit), context
                 ) for row in result.rows
             )
+        if result.status == "found" and request.operation == "inspect":
+            display = SemanticDisplay(self.ontology, language)
+            values = {key: (_name({"name": value}, language) if key == "display_name" and value is not None else value)
+                      for key, value in result.value.items()}
+            lines = [f"{display.property(key)}：{display.literal(key, value) if value is not None else ('未记录' if display.zh else 'not recorded')}"
+                     for key, value in values.items()]
+            return "\n".join(lines)
         if result.status == "found" and request.operation == "date_add":
             return f"指定日期是{result.value}。" if language.startswith("zh") else f"The specified date is {result.value}."
         if not self.detailed and result.status == "found" and (

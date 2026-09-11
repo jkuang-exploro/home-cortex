@@ -52,14 +52,57 @@ properties:
     fields: [end, until, end_date]
     aliases: [结束日期, end date, until]
   item_type:
+    item_writable: string
     label: {en: item type, zh: 物品类型}
     value_labels:
       appliance: {en: appliance, zh: 电器}
       food: {en: food, zh: 食物}
       furniture: {en: furniture, zh: 家具}
       house: {en: house, zh: 房屋}
+      tool: {en: tool, zh: 工具}
+      book: {en: book, zh: 书籍}
+      clothing: {en: clothing, zh: 衣物}
+      unknown: {en: unknown, zh: 未知}
     fields: [item_type]
     aliases: [物品类型, 物品类别, 类别, item type, item category, product category]
+  brand:
+    item_writable: string
+    label: {en: brand, zh: 品牌}
+    fields: [brand]
+    aliases: [品牌, brand]
+  model:
+    item_writable: string
+    label: {en: model, zh: 型号}
+    fields: [model]
+    aliases: [型号, model]
+  color:
+    item_writable: string
+    label: {en: color, zh: 颜色}
+    fields: [color]
+    aliases: [颜色, color]
+  quantity:
+    item_writable: number
+    write_hint: "Only explicitly stated numeric quantity; do not default to 1 from a/an or a singular noun."
+    label: {en: quantity, zh: 数量}
+    fields: [quantity]
+    aliases: [数量, quantity]
+  unit:
+    item_writable: string
+    write_hint: "Only an explicitly supplied counting or measurement unit. No default unit, and do not invent a Chinese measure word for English input."
+    label: {en: unit, zh: 单位}
+    fields: [unit]
+    aliases: [单位, unit]
+  description:
+    item_writable: string
+    write_hint: "Only an explicitly supplied description beyond the identifying noun phrase. Never copy the item name, command, or a generated summary into this field."
+    label: {en: description, zh: 描述}
+    fields: [description]
+    aliases: [描述, description]
+  expiration_date:
+    item_writable: date
+    label: {en: expiration date, zh: 到期日期}
+    fields: [expiration_date]
+    aliases: [到期日期, expiration date]
   space_type:
     label: {en: space type, zh: 空间类型}
     value_labels:

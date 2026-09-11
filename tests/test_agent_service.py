@@ -342,7 +342,7 @@ async def test_mutation_handoff_dispatches_without_freeform_model_answer():
     dispatcher = FakeDispatcher({'ok': True, 'tool': 'write_item', 'result': {'status': 'APPLIED'}})
     result = await _agent(ollama, dispatcher).answer('Record a compass in the study drawer.')
     assert ollama.semantic_plan_calls == 1
-    assert dispatcher.calls == [('write_item', {**args, 'mode': 'commit'})]
+    assert dispatcher.calls == [('write_item', {**args, 'mode': 'commit', 'attributes': {}})]
     assert result.answer == 'Recorded Compass in Study drawer.'
     assert ollama.calls == []
 
@@ -356,7 +356,7 @@ async def test_streamed_mutation_is_dispatched_once_and_rendered_from_result():
     chunks = [chunk async for chunk in _agent(ollama, dispatcher).stream_answer_messages(
         [{'role': 'user', 'content': 'Preview recording a compass in the study drawer.'}])]
     assert 'No change has been saved' in ''.join(chunks)
-    assert dispatcher.calls == [('write_item', args)]
+    assert dispatcher.calls == [('write_item', {**args, 'attributes': {}})]
     assert ollama.calls == []
 
 

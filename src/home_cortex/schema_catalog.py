@@ -14,6 +14,7 @@ from typing import Any, Mapping, get_args
 from .edge_schema import EdgeSchemaRegistry
 from .operator_registry import ValueKind, infer_field_kind
 from .record_ids import TABLE_NAME_RE
+from .semantic_ontology import SemanticOntology
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,15 @@ class RuntimeSchemaCatalog:
                     tuple(fields),
                     _infer_property_types(records, fields),
                 )
+
+        # Declared item attributes remain available before any record has a value.
+        if "item" in entities:
+            item = entities["item"]
+            kinds = dict(item.property_types)
+            for prop in SemanticOntology.load_default().properties.values():
+                if prop.item_writable and prop.fields:
+                    kinds[prop.fields[0]] = prop.item_writable
+            entities["item"] = EntityTypeSchema("item", tuple(sorted(set(item.properties) | kinds.keys())), kinds)
 
         relations: dict[str, RelationTypeSchema] = {}
         edge_dir = data_dir / "edges"

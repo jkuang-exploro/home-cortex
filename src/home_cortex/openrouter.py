@@ -11,7 +11,7 @@ from ollama import ChatResponse
 
 from .profiling import model_call, observe_usage, stream_model_call
 from .ollama import PLANNER_NUM_PREDICT, PLANNER_SEED, planner_chat_messages
-from .mutation_ir import MutationDecision, mutation_messages, read_plan_schema
+from .mutation_ir import MutationDecision, mutation_messages, read_plan_schema, attribute_output_schema
 
 DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1"
 _CHAT_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
@@ -62,7 +62,7 @@ class OpenRouterService:
             "temperature": 0, "max_tokens": PLANNER_NUM_PREDICT, "seed": PLANNER_SEED,
             "response_format": {"type": "json_schema", "json_schema": {
                 "name": "MutationDecision", "strict": False,
-                "schema": MutationDecision.model_json_schema(),
+                "schema": attribute_output_schema(MutationDecision.model_json_schema()),
             }},
             "provider": {"require_parameters": True},
         })

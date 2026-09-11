@@ -48,6 +48,8 @@ class OntologyProperty:
     # Presentation only: this does not declare a closed domain or normalize values.
     value_labels: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = ()
     contract: PropertyContract | None = None
+    item_writable: str | None = None
+    write_hint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -441,7 +443,7 @@ def _parse_properties(raw: Any, path: Path, version: int = 1) -> dict[str, Ontol
     result: dict[str, OntologyProperty] = {}
     for name, definition in values.items():
         item = _mapping(definition, f"properties.{name}", path)
-        allowed = {"fields", "aliases", "ordering", "label", "value_labels"}
+        allowed = {"fields", "aliases", "ordering", "label", "value_labels", "item_writable", "write_hint"}
         if version == 2:
             allowed |= {'type', 'applies_to', 'filter_operators', 'values'}
             if 'values' in item and 'value_labels' in item:
@@ -449,6 +451,11 @@ def _parse_properties(raw: Any, path: Path, version: int = 1) -> dict[str, Ontol
         extra = sorted(set(item) - allowed)
         if extra:
             raise ValueError(f"Unknown properties.{name} fields: {', '.join(extra)}")
+        if item.get("write_hint") is not None and not isinstance(item["write_hint"], str):
+            raise ValueError(f"Invalid properties.{name}.write_hint")
+        writable = item.get("item_writable")
+        if writable not in {None, "string", "number", "integer", "boolean", "date"}:
+            raise ValueError(f"Invalid properties.{name}.item_writable")
         ordering = _mapping(item.get("ordering", {}), f"properties.{name}.ordering", path)
         if set(ordering) - {"minimum", "maximum"}:
             raise ValueError(f"Invalid properties.{name}.ordering directions")
@@ -468,6 +475,8 @@ def _parse_properties(raw: Any, path: Path, version: int = 1) -> dict[str, Ontol
                 ).items()
             ),
             PropertyContract.parse(item) if version == 2 else None,
+            writable,
+            item.get("write_hint"),
         )
     return result
 

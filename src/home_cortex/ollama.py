@@ -7,7 +7,7 @@ from ollama import AsyncClient, ChatResponse
 
 from .profiling import model_call, stage
 from .semantic_transport import transport_for, pack_capabilities, canonical_json
-from .mutation_ir import MutationDecision, mutation_messages, read_plan_schema
+from .mutation_ir import MutationDecision, mutation_messages, read_plan_schema, attribute_output_schema
 
 
 # Keep the same resident runner configuration across ordinary chat and planning.
@@ -56,6 +56,7 @@ References:
 - Unqualified adults/minors/children: household member plus the matching predicate; 我的孩子 / my children → self then child. Rooms: current_household then room, not member, and not space_type on people. Street/home address: self then residence then full_address. Obey relation_signatures start and end types.
 
 Operations:
+- Inspect all recorded attributes/properties of one entity: inspect, property=null, property_source=entity. Asking for one named attribute uses select(property); inspecting attributes never changes them.
 - Who/identity/name of a person, or which person is a relative: resolve_reference, property=null. Name parts only when explicitly asked: select(given_name/family_name). List a collection: select, property=null. Count: count, property=null. Same entity: same_entity, property=null, both subject and other; returns equality, not an introduction. Currently lives here: subject is that person's residence (kinship composition allowed), other is current_household; do not resolve_reference the person.
 - Distinguish entity sets, raw properties, and computed values. Age is completed calendar years from birth_date to now: date_difference(birth_date), mode=years, integer not a date. Raw birthday: select(birth_date). Next birthday: annual_occurrence(birth_date). Days until that birthday: annual_occurrence, mode=days.
 - argmin = smallest property value; argmax = largest. Earlier birth_date is smaller, so oldest/eldest/earliest-born = argmin; youngest/latest-born = argmax. Do not use earliest/latest or numeric min/max to name a person.
@@ -383,7 +384,7 @@ class OllamaService:
         response = await self._chat(
             model=self.model, messages=mutation_messages(messages),
             stream=False, think=False, keep_alive=PLANNER_KEEP_ALIVE,
-            format=MutationDecision.model_json_schema(),
+            format=attribute_output_schema(MutationDecision.model_json_schema()),
             options={"temperature": 0, "num_ctx": PLANNER_NUM_CTX,
                      "num_predict": PLANNER_NUM_PREDICT, "seed": PLANNER_SEED},
         )

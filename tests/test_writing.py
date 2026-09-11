@@ -423,14 +423,14 @@ async def test_item_property_types_and_required_name_are_schema_validated(writin
     assert await record(database, "item:missing_name") is None
 
 
-def test_tool_contract_is_closed_and_has_exactly_three_intents():
+def test_tool_contract_is_closed_and_has_four_intents():
     definition = get_tool_definitions(["write_item"])[0]
     schema = definition["function"]["parameters"]
     serialized = json.dumps(schema)
     assert definition["function"]["name"] == "write_item"
     branches = [schema["$defs"][ref["$ref"].rsplit("/", 1)[-1]] for ref in schema["oneOf"]]
     assert {branch["properties"]["operation"]["const"] for branch in branches} == {
-        "create", "update_location", "delete"
+        "create", "update_location", "update_attributes", "delete"
     }
     assert "surrealql" not in serialized.lower()
     assert "where" not in serialized.lower()
@@ -533,3 +533,133 @@ async def test_named_tool_destination_is_scoped_to_configured_household(writing_
     })
     assert response['result']['status'] == 'NOT_FOUND'
     assert response['result']['reason'] == 'LOCATION_ENTITY_NOT_FOUND'
+
+
+@pytest.mark.asyncio
+async def test_named_attributes_create_patch_preview_and_read(writing_service):
+    service, database, registry, catalog = writing_service
+    retrieval = RetrievalService(database, edge_registry=registry)
+    dispatcher = ToolDispatcher(retrieval, ['write_item'], writing=service)
+    create = {'operation': 'create', 'item_name': 'Invented meter', 'location_name': 'Kitchen',
+              'attributes': {'item_type': 'tool', 'color': 'red', 'brand': 'Invented brand', 'quantity': 2}}
+    result = await dispatcher.dispatch('write_item', create)
+    assert result['result']['status'] == 'APPLIED'
+    item = (await retrieval.resolve_entity_alias('Invented meter'))[0]
+    item = await retrieval.get_entity(item['id'])
+    assert item['item_type'] == 'tool' and item['color'] == 'red'
+    old_location = await locations(database, item['id'].split(':', 1)[1])
+    update = {'operation': 'update_attributes', 'item_name': 'Invented meter',
+              'attributes': {'color': 'blue', 'item_type': 'appliance', 'expiration_date': '2028-01-01'}}
+    assert (await dispatcher.dispatch('write_item', {**update, 'mode': 'preview'}))['result']['status'] == 'PROPOSED'
+    assert (await retrieval.get_entity(item['id']))['color'] == 'red'
+    result = await dispatcher.dispatch('write_item', update)
+    assert result['result']['status'] == 'APPLIED', result
+    stored = await retrieval.get_entity(item['id'])
+    assert stored['color'] == 'blue' and stored['item_type'] == 'appliance'
+    assert stored['name'] == item['name'] and stored['brand'] == 'Invented brand' and stored['quantity'] == 2
+    assert await locations(database, item['id'].split(':', 1)[1]) == old_location
+    assert (await dispatcher.dispatch('write_item', update))['result']['status'] == 'NO_CHANGE'
+    assert (await dispatcher.dispatch('write_item', create))['result']['status'] == 'CONFLICT'
+    assert 'item:' not in json.dumps(result)
+    # Updated attributes are available through the existing semantic read executor.
+    from datetime import datetime
+    from home_cortex.semantic_facts import HouseholdFactEngine, SemanticSchemaRegistry, SemanticFactRequest, AgentRequestContext
+    engine = HouseholdFactEngine(dispatcher, SemanticSchemaRegistry(catalog))
+    request = SemanticFactRequest.model_validate({'operation': 'select', 'property': 'color',
+        'subject': {'kind': 'named_entity', 'value': 'Invented meter', 'entity_type': 'item'}})
+    context = AgentRequestContext(caller_entity_id=None, household_id=None, assistant_id='test',
+        assistant_display_name='Test', current_time=datetime(2026, 9, 10), locale='en')
+    result = (await engine.execute(request, context))[0]
+    assert result.status == 'found' and result.value == 'blue'
+    from home_cortex.semantic_facts import FactRenderer
+    inspection = request.model_copy(update={'operation': 'inspect', 'property': None})
+    assert engine.schema.validates(inspection)
+    result = (await engine.execute(inspection, context))[0]
+    assert result.status == 'found'
+    assert result.value['color'] == 'blue' and result.value['model'] is None
+    assert 'id' not in result.value and 'collapse' not in result.value
+    assert 'not recorded' in FactRenderer(engine.schema.ontology).render(inspection, result, context)
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('attributes', [
+    {'id': 'item:other'}, {'collapse': True}, {'location': 'space:kitchen'},
+    {'color': 7}, {'quantity': True}, {'expiration_date': 'not a date'}, {'item_type': ''},
+])
+async def test_attribute_update_rejects_invalid_fields_without_changes(writing_service, attributes):
+    service, database, registry, _ = writing_service
+    dispatcher = ToolDispatcher(RetrievalService(database, edge_registry=registry), ['write_item'], writing=service)
+    before = await service._record('item:milk')
+    result = await dispatcher.dispatch('write_item', {'operation': 'update_attributes', 'item_name': 'Milk', 'attributes': attributes})
+    assert result['result']['status'] == 'REJECTED'
+    assert await service._record('item:milk') == before
+
+
+@pytest.mark.asyncio
+async def test_uncategorized_create_gets_unknown_and_existing_item_can_be_backfilled(writing_service):
+    service, database, registry, _ = writing_service
+    dispatcher = ToolDispatcher(RetrievalService(database, edge_registry=registry), ['write_item'], writing=service)
+    result = await dispatcher.dispatch('write_item', {'operation': 'create', 'item_name': 'Unidentified object', 'location_name': 'Kitchen'})
+    assert result['result']['status'] == 'APPLIED'
+    item = (await dispatcher.retrieval.resolve_entity_alias('Unidentified object'))[0]
+    assert item['item_type'] == 'unknown'
+    await database.client.query('UPDATE item:milk UNSET item_type;')
+    result = await dispatcher.dispatch('write_item', {'operation': 'update_attributes', 'item_name': 'Milk', 'attributes': {'item_type': 'food'}})
+    assert result['result']['status'] == 'APPLIED'
+    assert (await service._record('item:milk'))['item_type'] == 'food'
+
+
+@pytest.mark.asyncio
+async def test_attribute_transaction_rolls_back_on_failure(writing_service):
+    service, database, registry, catalog = writing_service
+    class BrokenTransaction:
+        async def query(self, statement, variables=None):
+            if 'UPDATE $item MERGE' in statement:
+                statement = statement.replace('COMMIT TRANSACTION;', 'THROW "INJECTED";\nCOMMIT TRANSACTION;')
+            return await database.query(statement, variables)
+    writer = ItemWritingService(BrokenTransaction(), catalog, registry)
+    before = await service._record('item:milk')
+    result = await writer.mutate({'operation': 'update_attributes', 'item_id': 'item:milk', 'properties': {'color': 'green'}})
+    assert result.status == 'REJECTED'
+    assert await service._record('item:milk') == before
+
+
+@pytest.mark.asyncio
+async def test_attribute_update_rejects_stale_snapshot(writing_service):
+    service, database, registry, catalog = writing_service
+    class ConcurrentChange:
+        async def query(self, statement, variables=None):
+            if 'UPDATE $item MERGE' in statement:
+                await database.client.query("UPDATE item:milk SET color = 'concurrent';")
+            return await database.query(statement, variables)
+    writer = ItemWritingService(ConcurrentChange(), catalog, registry)
+    result = await writer.mutate({'operation': 'update_attributes', 'item_id': 'item:milk', 'properties': {'color': 'stale'}})
+    assert result.status == 'REJECTED'
+    assert (await service._record('item:milk'))['color'] == 'concurrent'
+
+
+def test_attribute_generation_schema_is_closed_and_typed():
+    from jsonschema import Draft202012Validator
+    from home_cortex.mutation_ir import MutationDecision, attribute_output_schema
+    schema = attribute_output_schema(MutationDecision.model_json_schema())
+    validator = Draft202012Validator(schema)
+    def decision(attributes):
+        return {'requires_mutation': True, 'mutation': {'operation': 'update_attributes',
+                'item_name': 'Meter', 'attributes': attributes}}
+    validator.validate(decision({'color': 'blue', 'quantity': 2}))
+    assert list(validator.iter_errors(decision({'mode': 'commit'})))
+    assert list(validator.iter_errors(decision({'quantity': 'two'})))
+    assert list(validator.iter_errors(decision({})))
+
+
+@pytest.mark.asyncio
+async def test_attribute_update_cannot_resolve_outside_household(writing_service):
+    service, database, registry, _ = writing_service
+    await database.client.query("CREATE item:foreign SET name = {en: 'Foreign item'}, item_type = 'tool';")
+    dispatcher = ToolDispatcher(RetrievalService(database, edge_registry=registry), ['write_item'],
+                                writing=service, household_id='address:test_house')
+    result = await dispatcher.dispatch('write_item', {'operation': 'update_attributes',
+        'item_name': 'Foreign item', 'attributes': {'color': 'red'}})
+    assert result['result']['status'] == 'NOT_FOUND'
+    assert 'color' not in (await service._record('item:foreign'))
