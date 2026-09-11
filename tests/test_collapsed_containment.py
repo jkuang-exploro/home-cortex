@@ -273,3 +273,41 @@ async def test_collapsed_contents_group_by_authoritative_space(tmp_path):
     assert {group.space['id'] for group in filtered_result.content_groups} == {'space:upper', 'space:drawer'}
     assert {item['id'] for group in filtered_result.content_groups for item in group.entities} == {
         item['id'] for item in filtered_result.value}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('collapse', [True, False, None])
+async def test_hosted_spaces_include_empty_spaces_and_compose(tmp_path, collapse):
+    from home_cortex.semantic_facts import FactRenderer
+
+    engine, dispatcher = graph(tmp_path, collapse)
+    # The lower compartment is empty, but still hosts a nested drawer.
+    dispatcher.edges['located_in'] = [
+        edge for edge in dispatcher.edges['located_in']
+        if edge['from'] != 'item:plate'
+    ]
+    context = AgentRequestContext(caller_entity_id=None, household_id=None,
+        assistant_id='steward', assistant_display_name='Steward',
+        current_time=datetime(2026, 9, 1), locale='zh')
+
+    async def execute(name, concepts, operation='select'):
+        payload = {'request': {
+            'subject': {'kind': 'named_entity', 'value': name,
+                        'path': [{'concept': concept} for concept in concepts]},
+            'operation': operation,
+        }}
+        request = SemanticFactRequest.model_validate(
+            engine.schema.expand_planner_concepts(payload)['request'])
+        result = (await engine.execute(request, context))[0]
+        assert result.status == 'found'
+        return request, result
+
+    request, result = await execute('Cabinet', ['hosted_space'])
+    assert {entity['id'] for entity in result.value} == {'space:upper', 'space:lower'}
+    rendered = FactRenderer(engine.schema.ontology).render(request, result, context)
+    assert 'upper' in rendered and 'lower' in rendered
+    assert 'cup' not in rendered and 'bowl' not in rendered
+    assert (await execute('Cabinet', ['hosted_space'], 'count'))[1].value == 2
+    assert {entity['id'] for entity in (await execute('lower', ['hosted_space']))[1].value} == {'space:drawer'}
+    assert {entity['id'] for entity in (await execute('lower', ['host']))[1].value} == {'item:cabinet'}
+    assert {entity['id'] for entity in (await execute('Cabinet', ['hosted_space', 'contents']))[1].value} == {'item:cup'}

@@ -47,6 +47,7 @@ Composition and discourse:
 - If the latest sentence is itself a complete fact question (count, list, extremum, gender, birth year, age threshold, kinship, same-entity, lives-here), request.filters and path contain only that sentence's conditions and concepts. Do not copy adult, minor, gender, date_range, or identity resolve_reference from the previous question.
 
 References:
+- Spatial structure and inventory are different collections: use concept hosted_space for the spaces/areas/compartments a named entity hosts, concept host for what hosts a named space, and concept contents for the items it holds. Hosted spaces exist independently of whether they contain any items. Do not append contents when the requested result is spaces; use an additional contents hop only when the user explicitly asks for their items.
 - self is the authenticated speaker; assistant is this helper; both entity_type=person, value=null. Second-person identity about the assistant is still a fact request with subject=assistant. current_household is the configured home, entity_type=address, value=null.
 - named_entity.value copies the user's literal person name, item name, or space name. Do not guess IDs, treat kinship phrases as names, or translate/normalize names because surrounding language changed (林青 stays 林青).
 - named_entity also covers explicitly named items and spaces. Keep the complete compound name in subject.value, including container/subspace qualifiers; never shorten it to the containing object. entity_type is a semantic constraint, not a guess at how a named object is stored. For a named container or storage subspace whose item/space type is not explicit, use entity_type=null so exact-name resolution determines the type. Preserve an explicitly stated type; never replace the named subject with another entity. 花瓶在哪里 / where is the kettle: named item as subject, entity_type=item, path concept location, resolve_reference, property=null. 在哪里/where is attaches to that named object; it is not a household concept, not adult/minor, and the object is not a person. A named room/area such as 厨房, 车库, kitchen, or garage is named_entity entity_type=space; to list its items, use only path concept contents and select. The room concept is only for an unqualified household room collection. current_household is context, not a substitute for a named subject. Do not drop explicit item or space names. Emit full_address only for an explicit street-address request. Obey relation_signatures: location accepts items, not spaces; do not replace a missing path with a different executable question.
@@ -125,12 +126,12 @@ def _example_text() -> tuple[tuple[str, str], ...]:
         ("住进现居所至今有多少天？", "date_difference", reference("self", "residence"), "start_date", "relationship", {"mode": "days"}),
         ("Between me and my mother, who was born earlier?", "argmin", reference("self"), "birth_date", "entity", {"other": reference("self", "mother")}),
         ("花瓶在哪里？", "resolve_reference", named("花瓶", "item", "location"), None, "entity", {}),
-        ("Where is the kettle?", "resolve_reference", named("kettle", "item", "location"), None, "entity", {}),
         ("工作间里还有哪些工具？", "select", named("工作间", "space", "contents"), None, "entity", {"filters": [{"property": "item_type", "value": "tool"}], "exclude": [{"kind": "discourse", "entity_type": "item", "turn_offset": 1, "cardinality": "single"}]}),
-        ("List the items inside 展示区.", "select", named("展示区", "space", "contents"), None, "entity", {}),
         ("旅行箱里有哪些东西？", "select", named("旅行箱", None, "contents"), None, "entity", {}),
         ("What does the workbench cubby hold?", "select", named("workbench cubby", None, "contents"), None, "entity", {}),
-        ("阅览室中放着哪些东西？", "select", named("阅览室", "space", "contents"), None, "entity", {}),
+        ("展示柜有哪些分区？", "select", named("展示柜", None, "hosted_space"), None, "entity", {}),
+        ("How many spaces does 写字台 host?", "count", named("写字台", None, "hosted_space"), None, "entity", {}),
+        ("Where is the kettle?", "resolve_reference", named("kettle", "item", "location"), None, "entity", {}),
         ("How many days until 林青's next birthday?", "annual_occurrence", named("林青", "person"), "birth_date", "entity", {"mode": "days"}),
     )
     messages: list[dict[str, str]] = []

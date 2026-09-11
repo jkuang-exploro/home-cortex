@@ -148,6 +148,17 @@ reference_concepts:
     aliases: [所含物品, 里面的物品, contained item, contents]
     path:
       - relation: contents
+  hosted_space:
+    label: {en: hosted space, zh: 区域}
+    count_label: {en: space, zh: 区域}
+    aliases: [区域, 内部空间, 分区, 承载的空间, hosted space, spaces, compartments, sections]
+    path:
+      - relation: hosted_space
+  host:
+    label: {en: host, zh: 承载物}
+    aliases: [承载物, 由谁承载, 所属容器, host, hosted by, host_by]
+    path:
+      - relation: host
   room:
     label: {en: room, zh: 房间}
     count_label: {en: room, zh: 房间}
