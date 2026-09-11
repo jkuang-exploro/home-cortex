@@ -10,6 +10,7 @@ from surrealdb import AsyncSurreal, RecordID
 from home_cortex.edge_schema import EdgeSchemaRegistry
 from home_cortex.ingestion import ingest_directory
 from home_cortex.record_ids import canonical_record_id
+from home_cortex.retrieval import RetrievalService
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
 from home_cortex.tools import ToolDispatcher, get_tool_definitions
 from home_cortex.writing import ItemWritingService, MutationResult
@@ -438,15 +439,18 @@ def test_tool_contract_is_closed_and_has_exactly_three_intents():
 
 @pytest.mark.asyncio
 async def test_tool_adapter_uses_canonical_writing_service(writing_service):
-    service, *_ = writing_service
+    service, database, registry, _ = writing_service
     dispatcher = ToolDispatcher(
-        DummyRetrieval(), ["write_item"], writing=service  # type: ignore[arg-type]
+        RetrievalService(database, edge_registry=registry), ["write_item"], writing=service,
     )
-    response = await dispatcher.dispatch("write_item", create_request("preview"))
+    response = await dispatcher.dispatch("write_item", {
+        "operation": "create", "item_name": "Test screwdriver",
+        "location_name": "Kitchen", "mode": "preview",
+    })
     assert response["ok"] is True
-    assert MutationResult.model_validate_json(
-        json.dumps(response["result"])
-    ).status == "PROPOSED"
+    assert response["result"]["status"] == "PROPOSED"
+    assert "item:" not in json.dumps(response["result"])
+    assert "space:" not in json.dumps(response["result"])
 
 
 def test_write_tool_must_be_explicitly_allowlisted_and_configured():
@@ -471,3 +475,61 @@ async def test_result_shape_is_stable_across_all_operations(writing_service):
     for request in requests:
         result = await service.mutate(request)
         assert set(result.model_dump(mode="json")) == expected_keys
+
+
+@pytest.mark.asyncio
+async def test_named_tool_resolves_and_mutates_without_model_ids(writing_service):
+    service, database, registry, _ = writing_service
+    retrieval = RetrievalService(database, edge_registry=registry)
+    dispatcher = ToolDispatcher(retrieval, ['write_item'], writing=service)
+    create = {'operation': 'create', 'item_name': 'Invented compass', 'location_name': 'Drawer interior'}
+    preview = await dispatcher.dispatch('write_item', {**create, 'mode': 'preview'})
+    assert preview['result']['status'] == 'PROPOSED'
+    assert await retrieval.resolve_entity_alias('Invented compass') == []
+    applied = await dispatcher.dispatch('write_item', create)
+    assert applied['result']['status'] == 'APPLIED'
+    item = (await retrieval.resolve_entity_alias('Invented compass'))[0]
+    assert await locations(database, item['id'].split(':', 1)[1]) == ['space:drawer_1:interior']
+    assert (await dispatcher.dispatch('write_item', create))['result']['status'] == 'NO_CHANGE'
+    conflict = await dispatcher.dispatch('write_item', {**create, 'location_name': 'Kitchen'})
+    assert conflict['result']['status'] == 'CONFLICT'
+    assert await locations(database, item['id'].split(':', 1)[1]) == ['space:drawer_1:interior']
+    moved = await dispatcher.dispatch('write_item', {**create, 'operation': 'update_location', 'location_name': 'Kitchen'})
+    assert moved['result']['status'] == 'APPLIED'
+    assert await locations(database, item['id'].split(':', 1)[1]) == ['space:kitchen']
+    deleted = await dispatcher.dispatch('write_item', {'operation': 'delete', 'item_name': 'Invented compass'})
+    assert deleted['result']['status'] == 'APPLIED'
+    assert await retrieval.resolve_entity_alias('Invented compass') == []
+    assert 'item:' not in json.dumps(applied)
+    assert 'location_id' not in json.dumps(applied)
+
+
+@pytest.mark.asyncio
+async def test_named_tool_ambiguity_missing_and_container_do_not_write(writing_service):
+    service, database, registry, _ = writing_service
+    retrieval = RetrievalService(database, edge_registry=registry)
+    dispatcher = ToolDispatcher(retrieval, ['write_item'], writing=service)
+    await database.client.query("CREATE space:duplicate SET name = {en: 'Kitchen'};")
+    before = transaction_count(database)
+    for destination, status in [('Kitchen', 'CONFLICT'), ('Absent room', 'NOT_FOUND'), ('Refrigerator', 'REJECTED')]:
+        response = await dispatcher.dispatch('write_item', {
+            'operation': 'create', 'item_name': 'Invented compass', 'location_name': destination,
+        })
+        assert response['result']['status'] == status
+    assert transaction_count(database) == before
+    assert await retrieval.resolve_entity_alias('Invented compass') == []
+    response = await dispatcher.dispatch('write_item', create_request())
+    assert response['ok'] is False  # physical IDs are not a model-facing contract
+
+
+@pytest.mark.asyncio
+async def test_named_tool_destination_is_scoped_to_configured_household(writing_service):
+    service, database, registry, _ = writing_service
+    await database.client.query("CREATE space:foreign SET name = {en: 'Outside shelf'};")
+    dispatcher = ToolDispatcher(RetrievalService(database, edge_registry=registry),
+        ['write_item'], writing=service, household_id='address:test_house')
+    response = await dispatcher.dispatch('write_item', {
+        'operation': 'create', 'item_name': 'Invented compass', 'location_name': 'Outside shelf',
+    })
+    assert response['result']['status'] == 'NOT_FOUND'
+    assert response['result']['reason'] == 'LOCATION_ENTITY_NOT_FOUND'

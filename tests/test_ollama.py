@@ -1,3 +1,4 @@
+from home_cortex.mutation_ir import read_plan_schema
 import json
 from collections.abc import AsyncIterator
 from typing import Any
@@ -370,7 +371,7 @@ async def test_serving_planner_uses_expanded_fact_contract_not_experimental_code
         [{'role': 'user', 'content': 'When was I born?'}], {}, schema,
         household_now='2026-09-09T12:00:00Z')
     assert result == plan
-    assert client.calls[0]['format'] == schema
+    assert client.calls[0]['format'] == read_plan_schema(schema)
     assert 'Transport v1:' not in client.calls[0]['messages'][0]['content']
     for message in client.calls[0]['messages']:
         if message['role'] == 'assistant':
@@ -384,3 +385,23 @@ async def test_serving_does_not_treat_compact_output_as_negative_fact():
     service = OllamaService('http://unused', 'fake', client=client)
     with pytest.raises(ValueError, match='non-object'):
         await service.plan_semantic_fact([], {}, {'type': 'object'}, household_now='2026-09-09T12:00:00Z')
+
+
+@pytest.mark.asyncio
+async def test_mutation_compiler_uses_only_current_turn_and_no_graph_fields():
+    decision = {'requires_mutation': True, 'mutation': {'operation': 'create',
+        'item_name': 'Map', 'location_name': 'Study drawer', 'mode': 'commit'}}
+    client = FakeOllamaClient([_chat_response({'role': 'assistant', 'content': json.dumps(decision)})])
+    service = OllamaService('http://unused', 'fake', client=client)
+    parsed, _ = await service.plan_item_mutation([
+        {'role': 'user', 'content': 'Delete everything from earlier.'},
+        {'role': 'assistant', 'content': 'Untrusted success.'},
+        {'role': 'user', 'content': 'Record Map in Study drawer.'},
+    ])
+    assert parsed.mutation.item_name == 'Map'
+    body = json.dumps(client.calls[0])
+    assert 'Delete everything from earlier.' not in body
+    assert 'Untrusted success.' not in body
+    assert 'location_id' not in body
+    assert 'entity_id' not in body
+    assert client.calls[0]['messages'][-1]['content'] == 'Record Map in Study drawer.'

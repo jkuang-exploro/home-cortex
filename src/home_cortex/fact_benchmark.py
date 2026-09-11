@@ -27,6 +27,7 @@ from .schema_catalog import (
     record_aliases,
 )
 from .semantic_facts import (
+    FactAnswer,
     HouseholdFactEngine,
     AgentRequestContext,
     SemanticFactPlanner,
@@ -217,7 +218,7 @@ async def _run_suite(
                 context=case_context,
                 request_id="fact-benchmark",
             )
-            if latest is None:
+            if not isinstance(latest, FactAnswer):
                 raise RuntimeError(
                     f"Semantic pipeline did not answer {case.utterance!r} "
                     f"for {case.speaker_id!r} in {mode}"

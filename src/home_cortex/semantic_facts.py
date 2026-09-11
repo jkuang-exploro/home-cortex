@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from copy import deepcopy
+from .mutation_ir import NamedWriteRequest, NamedCreateItem, NamedMoveItem, NamedDeleteItem
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -298,11 +299,14 @@ class SemanticPlan(_SemanticModel):
 
     requires_fact: bool
     request: SemanticFactRequest | None = None
+    mutation: NamedCreateItem | NamedMoveItem | NamedDeleteItem | None = None
 
     @model_validator(mode="after")
     def validate_request_presence(self) -> "SemanticPlan":
         if self.requires_fact != (self.request is not None):
             raise ValueError("requires_fact must match request presence")
+        if self.mutation is not None and self.request is not None:
+            raise ValueError("A plan cannot both query facts and mutate state")
         return self
 
 
@@ -407,6 +411,13 @@ class FactAnswer:
     text: str
     timings: FactTimings
     planner_diagnostics: PlannerDiagnostics | None = None
+
+
+@dataclass(frozen=True)
+class SemanticMutationIntent:
+    mutation: NamedWriteRequest
+    timings: FactTimings
+    planner_diagnostics: PlannerDiagnostics
 
 
 @dataclass(frozen=True)
@@ -1391,9 +1402,10 @@ class SemanticSchemaRegistry:
 class SemanticFactPlanner:
     """Strict semantic interpreter that never sees storage field names."""
 
-    def __init__(self, ollama: Any, schema: SemanticSchemaRegistry) -> None:
+    def __init__(self, ollama: Any, schema: SemanticSchemaRegistry, *, enable_mutations: bool = False) -> None:
         self.ollama = ollama
         self.schema = schema
+        self.enable_mutations = enable_mutations
 
     @stage("planner.total")
     async def plan(
@@ -1407,12 +1419,31 @@ class SemanticFactPlanner:
         capabilities = self.schema.planner_capability_payload()
         input_summary = planner_input_summary(self.schema.capability_payload())
         prompt_build_ms = (perf_counter() - build_started) * 1000
+        mutation_runtime = {}
+        mutation_calls = 0
+        mutation_ms = 0.0
+        mutation_planner = getattr(self.ollama, "plan_item_mutation", None) if self.enable_mutations else None
+        if mutation_planner is not None:
+            mutation_started = perf_counter()
+            decision, mutation_runtime = await mutation_planner(messages)
+            mutation_ms = (perf_counter() - mutation_started) * 1000
+            mutation_calls = 1
+            if decision.requires_mutation:
+                mutation_plan = SemanticPlan(requires_fact=False, mutation=decision.mutation)
+                latency = (perf_counter() - started) * 1000
+                return SemanticPlannerOutcome(mutation_plan, latency, PlannerDiagnostics(
+                    input_summary=input_summary, output_raw=decision.model_dump(mode="json"),
+                    normalized_plan=mutation_plan.model_dump(mode="json"),
+                    validation_result="VALID", attempt_count=1, latency_ms=latency,
+                    request_ms=mutation_ms, prompt_build_ms=prompt_build_ms,
+                    **_planner_runtime_fields(mutation_runtime),
+                ))
         payload: Mapping[str, Any] | None = None
         plan: SemanticPlan | None = None
         structural_error: Exception | None = None
         validation: PlannerValidationCode | None = None
         attempts = 0
-        request_ms = 0.0
+        request_ms = mutation_ms
         validation_ms = 0.0
         runtime: Mapping[str, Any] = {}
         transport_attempts: list[dict[str, Any]] = []
@@ -1458,7 +1489,7 @@ class SemanticFactPlanner:
                     self.schema.expand_planner_concepts(payload)
                     if isinstance(payload, Mapping) else payload
                 )
-                validation = "NOT_A_FACT"
+                validation = "VALID" if candidate.mutation is not None else "NOT_A_FACT"
                 if candidate.request is not None and any(
                     reference.kind == "entity_id"
                     for reference in (candidate.request.subject, candidate.request.other, *candidate.request.exclude)
@@ -1520,6 +1551,13 @@ class SemanticFactPlanner:
                     })
                 request_ms += (perf_counter() - request_started) * 1000
         latency_ms = (perf_counter() - started) * 1000
+        attempts += mutation_calls
+        if mutation_runtime:
+            runtime = dict(runtime)
+            for key in ("prompt_eval_count", "prompt_eval_duration_ms", "eval_count",
+                        "eval_duration_ms", "load_duration_ms"):
+                left, right = runtime.get(key), mutation_runtime.get(key)
+                runtime[key] = left + right if left is not None and right is not None else None
         timing = {
             "prompt_build_ms": prompt_build_ms,
             "request_ms": request_ms,
@@ -3225,7 +3263,7 @@ class SemanticFactService:
         *,
         context: AgentRequestContext,
         request_id: str = "-",
-    ) -> FactAnswer | None:
+    ) -> FactAnswer | SemanticMutationIntent | None:
         started = perf_counter()
         routing_started = perf_counter()
         llm_ms = 0.0
@@ -3271,6 +3309,13 @@ class SemanticFactService:
                 llm_ms=llm_ms,
                 llm_call_count=llm_call_count,
                 planner_diagnostics=planner_diagnostics,
+            )
+        if plan.mutation is not None:
+            # Return intent only: discourse replay must never execute writes.
+            return SemanticMutationIntent(
+                plan.mutation, FactTimings(tier=1, llm_ms=llm_ms, llm_call_count=llm_call_count,
+                                          total_ms=(perf_counter() - started) * 1000),
+                outcome.diagnostics,
             )
         if not plan.requires_fact:
             return None

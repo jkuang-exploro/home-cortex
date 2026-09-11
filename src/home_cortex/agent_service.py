@@ -35,7 +35,9 @@ from .semantic_facts import (
     SemanticFactPlanner,
     SemanticFactService,
     SemanticSchemaRegistry,
+    SemanticMutationIntent,
 )
+from .semantic_writing import render_mutation_result
 from .tools import ToolDispatcher
 from .semantic_conversation import SemanticConversationService
 
@@ -47,6 +49,7 @@ class _PreparedRequest:
     fact_answer: FactAnswer | None
     trusted: list[dict[str, Any]]
     expose_internal_ids: bool
+    mutation_text: str | None = None
 
 
 class AgentService:
@@ -76,7 +79,9 @@ class AgentService:
             ollama,
             dispatcher,
             system_prompt=system_prompt,
-            tools=tools,
+            # Mutations require a typed current-turn intent, never a native
+            # tool call inferred from arbitrary conversation history.
+            tools=[tool for tool in tools if tool["function"]["name"] != "write_item"],
             max_steps=max_steps,
             max_tool_calls_per_step=max_tool_calls_per_step,
             max_tool_records=max_tool_records,
@@ -89,6 +94,7 @@ class AgentService:
         self.assistant_display_name = assistant_display_name
         self.home_entity_id = home_entity_id
         self._clock = clock
+        self._mutation_enabled = any(tool["function"]["name"] == "write_item" for tool in tools)
         semantic_schema = SemanticSchemaRegistry(schema_catalog)
         self.semantic_facts = SemanticFactService(
             HouseholdFactEngine(
@@ -96,7 +102,7 @@ class AgentService:
                 semantic_schema,
                 max_records=self.model_loop.max_tool_records,
             ),
-            planner=SemanticFactPlanner(ollama, semantic_schema),
+            planner=SemanticFactPlanner(ollama, semantic_schema, enable_mutations=self._mutation_enabled),
         )
 
         self.semantic_conversations = SemanticConversationService(self.semantic_facts)
@@ -138,6 +144,9 @@ class AgentService:
             user_entity=user_entity,
             conversation_id=conversation_id,
         )
+        if prepared.mutation_text is not None:
+            return AgentResult(answer=prepared.mutation_text, steps=1, tool_calls=1,
+                               stop_reason="answer", messages=tuple(prepared.trusted))
         if prepared.fact_answer is not None:
             return AgentResult(
                 answer=prepared.fact_answer.text,
@@ -174,6 +183,9 @@ class AgentService:
             user_entity=user_entity,
             conversation_id=conversation_id,
         )
+        if prepared.mutation_text is not None:
+            yield prepared.mutation_text
+            return
         if prepared.fact_answer is not None:
             yield prepared.fact_answer.text
             return
@@ -223,6 +235,15 @@ class AgentService:
             context=context,
             request_id=request_id,
         )
+        mutation_text = None
+        if isinstance(semantic_answer, SemanticMutationIntent):
+            response = await self.model_loop._dispatch(
+                "write_item", semantic_answer.mutation.model_dump(mode="json"),
+                caller_entity_id=context.caller_entity_id,
+                planned_mutation=True,
+            ) if self._mutation_enabled else {"ok": False}
+            mutation_text = render_mutation_result(semantic_answer.mutation, response, language)
+            semantic_answer = None
         trusted = self._trusted_conversation(
             safe_messages,
             identity,
@@ -234,6 +255,7 @@ class AgentService:
             fact_answer=semantic_answer,
             trusted=trusted,
             expose_internal_ids=internal_ids_requested(safe_messages),
+            mutation_text=mutation_text,
         )
 
     @stage("context.trusted")

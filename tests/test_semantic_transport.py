@@ -175,7 +175,7 @@ def test_transport_dictionary_version_snapshot():
     from home_cortex.semantic_transport import fingerprint
     codec = SemanticTransport(SemanticPlan.model_json_schema())
     # Changing field allocation requires an intentional codec version change.
-    assert (codec.version, fingerprint(codec.aliases)[:8]) == (1, '5ae1d749')
+    assert (codec.version, fingerprint(codec.aliases)[:8]) == (2, 'daee38b4')
 
 
 @pytest.mark.parametrize(('filter_wire', 'expected_validation'), [
@@ -188,7 +188,18 @@ def test_production_identity_counterexamples_are_not_repaired(household, filter_
     schema = household[0].schema
     codec = SemanticTransport(schema.planner_output_schema())
     wire = '[1,[true,{"s":["resolve_reference",null,"entity",["assistant",{"d":"person","z":null}],{"f":[' + filter_wire + ']}]}]]'
-    plan = codec.decode_plan(wire, schema)
+    with pytest.raises(ValueError, match='Unsupported semantic transport version'):
+        codec.decode_plan(wire, schema)
+    # Preserve the captured V1 meaning when exercising the new V2 dictionary;
+    # old bytes must not silently acquire different field meanings.
+    operator, prop, value, extra = json.loads(filter_wire)
+    payload = {'requires_fact': True, 'request': {
+        'operation': 'resolve_reference', 'property': None, 'property_source': 'entity',
+        'subject': {'kind': 'assistant', 'entity_type': 'person', 'value': None},
+        'filters': [{'operator': operator, 'property': prop, 'value': value,
+                     'source': extra.get('u', 'entity')}],
+    }}
+    plan = codec.decode_plan(codec.encode(payload), schema)
     assert plan.requires_fact is True
     assert plan.request.subject.kind == 'assistant'
     assert len(plan.request.filters) == 1

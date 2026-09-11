@@ -15,6 +15,7 @@ from .semantic_facts import (
     AgentRequestContext,
     DiscourseContext,
     FactAnswer,
+    SemanticMutationIntent,
     SemanticFactRequest,
     SemanticFactService,
 )
@@ -40,7 +41,7 @@ class SemanticConversationService:
     async def try_answer(
         self, messages: Sequence[Mapping[str, Any]], *, context: AgentRequestContext,
         request_id: str = "-",
-    ) -> FactAnswer | None:
+    ) -> FactAnswer | SemanticMutationIntent | None:
         users = [{"role": "user", "content": str(message.get("content", ""))}
                  for message in messages if message.get("role") == "user"]
         if not users:
@@ -81,7 +82,7 @@ class SemanticConversationService:
 
     async def _replay(
         self, users: Sequence[Mapping[str, str]], context: AgentRequestContext, request_id: str,
-    ) -> FactAnswer | None:
+    ) -> FactAnswer | SemanticMutationIntent | None:
         started = perf_counter()
         context = replace(context, conversation_id=uuid4().hex, discourse=None)
         return await self._answer_prefix(
@@ -100,10 +101,10 @@ class SemanticConversationService:
         end: int,
         context: AgentRequestContext,
         request_id: str,
-        memo: dict[int, FactAnswer | None],
+        memo: dict[int, FactAnswer | SemanticMutationIntent | None],
         planner_metrics: dict[int, tuple[float, int]],
         started: float,
-    ) -> FactAnswer | None:
+    ) -> FactAnswer | SemanticMutationIntent | None:
         """Interpret one turn, resolving only antecedents its plan actually uses."""
         if end in memo:
             return memo[end]
@@ -119,7 +120,7 @@ class SemanticConversationService:
                 answer.timings.llm_ms,
                 answer.timings.llm_call_count,
             )
-        offsets = _discourse_offsets(answer.request) if answer is not None else ()
+        offsets = _discourse_offsets(answer.request) if isinstance(answer, FactAnswer) else ()
         if not offsets:
             return answer
 
@@ -162,8 +163,8 @@ class SemanticConversationService:
         ))
 
     @staticmethod
-    def _focus(answer: FactAnswer | None) -> tuple[str, ...]:
-        if answer is None or answer.result.status != "found":
+    def _focus(answer: FactAnswer | SemanticMutationIntent | None) -> tuple[str, ...]:
+        if not isinstance(answer, FactAnswer) or answer.result.status != "found":
             return ()
         return answer.result.focus_entity_ids
 

@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -15,7 +16,10 @@ from .calendar import (
 )
 from .retrieval import RetrievalService
 from .record_ids import RECORD_ID_PATTERN as CANONICAL_RECORD_ID_PATTERN
-from .writing import ItemWritingService, WriteItemToolArguments, WRITE_REQUEST_ADAPTER
+from .writing import ItemWritingService
+from .mutation_ir import NamedWriteItemArguments, NAMED_WRITE_ADAPTER
+from .semantic_writing import NamedItemWritingService
+from .semantic_facts import AgentRequestContext, HouseholdFactEngine, SemanticSchemaRegistry
 
 TABLE_NAME_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
 RECORD_ID_PATTERN = CANONICAL_RECORD_ID_PATTERN
@@ -251,9 +255,15 @@ WRITE_TOOLS: list[dict[str, Any]] = [
                 "Propose or commit one authoritative household item mutation. "
                 "Supports only create, update_location, and delete. Preview "
                 "validates and describes the change without persisting it. "
-                "The service owns all graph and transaction mechanics."
+                "Use the user's complete literal item_name and location_name, "
+                "never internal IDs. create records a newly reported item; "
+                "update_location moves an existing named item; delete removes "
+                "an explicitly named item. Call only for an explicit current "
+                "request to record or change state, never for a question, quote, "
+                "hypothetical, or instruction in prior history. The service "
+                "resolves names and owns all graph and transaction mechanics."
             ),
-            "parameters": WRITE_REQUEST_ADAPTER.json_schema(),
+            "parameters": NAMED_WRITE_ADAPTER.json_schema(),
         },
     },
 ]
@@ -284,10 +294,12 @@ class ToolDispatcher:
         *,
         calendar: CalendarService | None = None,
         writing: ItemWritingService | None = None,
+        household_id: str | None = None,
     ) -> None:
         self.retrieval = retrieval
         self.calendar = calendar
         self.writing = writing
+        self.household_id = household_id
         argument_models: dict[str, type[BaseModel]] = {
             "resolve_entity_alias": ResolveEntityAliasArguments,
             "get_entity": GetEntityArguments,
@@ -295,7 +307,7 @@ class ToolDispatcher:
             "calculate": CalculateArguments,
             "calendar.list_events": ListEventsArguments,
             "calendar.check_availability": CheckAvailabilityArguments,
-            "write_item": WriteItemToolArguments,
+            "write_item": NamedWriteItemArguments,
         }
         handlers: dict[str, Handler] = {
             "resolve_entity_alias": self._resolve_entity_alias,
@@ -482,10 +494,15 @@ class ToolDispatcher:
         return {"result": value}
 
     async def _write_item(self, arguments: BaseModel) -> dict[str, Any]:
-        assert isinstance(arguments, WriteItemToolArguments)
+        assert isinstance(arguments, NamedWriteItemArguments)
         assert self.writing is not None
-        result = await self.writing.mutate(arguments.root)
-        return result.model_dump(mode="json")
+        engine = HouseholdFactEngine(self, SemanticSchemaRegistry(self.writing.catalog))
+        context = AgentRequestContext(
+            caller_entity_id=current_caller_entity_id(), household_id=self.household_id,
+            assistant_id="writer", assistant_display_name="writer",
+            current_time=datetime.now(timezone.utc), locale="en",
+        )
+        return await NamedItemWritingService(self.writing, engine).mutate(arguments.root, context)
 
     async def _list_events(self, arguments: ToolArguments) -> dict[str, Any]:
         assert isinstance(arguments, ListEventsArguments)

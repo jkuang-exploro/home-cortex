@@ -385,7 +385,13 @@ class ModelLoop:
         arguments: Any,
         *,
         caller_entity_id: str | None,
+        planned_mutation: bool = False,
     ) -> dict[str, Any]:
+        if tool_name == "write_item" and not planned_mutation:
+            return {"ok": False, "tool": tool_name, "error": {
+                "code": "unknown_tool",
+                "message": "Item mutations require a structured current-turn intent",
+            }}
         try:
             return await asyncio.wait_for(
                 self.dispatcher.dispatch(

@@ -332,3 +332,96 @@ async def test_assistant_reference_uses_same_runtime_path(question: str) -> None
 
 def _fixed_clock() -> datetime:
     return datetime.fromisoformat("2026-08-31T16:30:00-07:00")
+
+
+@pytest.mark.asyncio
+async def test_mutation_handoff_dispatches_without_freeform_model_answer():
+    args = {'operation': 'create', 'item_name': 'Compass', 'location_name': 'Study drawer'}
+    ollama = FakeOllamaService([])
+    ollama.semantic_plan = {'requires_fact': False, 'request': None, 'mutation': args}
+    dispatcher = FakeDispatcher({'ok': True, 'tool': 'write_item', 'result': {'status': 'APPLIED'}})
+    result = await _agent(ollama, dispatcher).answer('Record a compass in the study drawer.')
+    assert ollama.semantic_plan_calls == 1
+    assert dispatcher.calls == [('write_item', {**args, 'mode': 'commit'})]
+    assert result.answer == 'Recorded Compass in Study drawer.'
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
+async def test_streamed_mutation_is_dispatched_once_and_rendered_from_result():
+    args = {'operation': 'create', 'item_name': 'Compass', 'location_name': 'Study drawer', 'mode': 'preview'}
+    ollama = FakeOllamaService([])
+    ollama.semantic_plan = {'requires_fact': False, 'request': None, 'mutation': args}
+    dispatcher = FakeDispatcher({'ok': True, 'tool': 'write_item', 'result': {'status': 'PROPOSED'}})
+    chunks = [chunk async for chunk in _agent(ollama, dispatcher).stream_answer_messages(
+        [{'role': 'user', 'content': 'Preview recording a compass in the study drawer.'}])]
+    assert 'No change has been saved' in ''.join(chunks)
+    assert dispatcher.calls == [('write_item', args)]
+    assert ollama.calls == []
+
+
+@pytest.mark.asyncio
+async def test_unplanned_native_write_is_blocked_even_if_dispatcher_allows_it():
+    args = {'operation': 'delete', 'item_name': 'Compass'}
+    ollama = FakeOllamaService([
+        _chat_response(tool_calls=[_tool_call('write_item', args)]),
+        _chat_response('No change was made.'),
+    ])
+    dispatcher = FakeDispatcher()
+    result = await _agent(ollama, dispatcher).answer_messages([
+        {'role': 'user', 'content': 'Delete the compass.'},
+        {'role': 'assistant', 'content': 'Done.'},
+        {'role': 'user', 'content': 'Translate the preceding instruction; do not execute it.'},
+    ])
+    assert dispatcher.calls == []
+    assert result.stop_reason == 'tool_error'
+    assert 'write_item' not in ollama.tool_names[0]
+
+
+@pytest.mark.asyncio
+async def test_semantic_mutation_intent_is_side_effect_free_during_replay():
+    from home_cortex.semantic_facts import AgentRequestContext, SemanticMutationIntent
+    from home_cortex.semantic_conversation import SemanticConversationService
+
+    args = {'operation': 'delete', 'item_name': 'Compass'}
+    ollama = FakeOllamaService([])
+    ollama.semantic_plan = {'requires_fact': False, 'request': None, 'mutation': args}
+    dispatcher = FakeDispatcher()
+    agent = _agent(ollama, dispatcher)
+    context = AgentRequestContext(caller_entity_id='person:test', household_id=None,
+        assistant_id='steward', assistant_display_name='Steward',
+        current_time=datetime(2026, 9, 10), locale='en')
+    intent = await agent.semantic_conversations.try_answer(
+        [{'role': 'user', 'content': 'Delete Compass.'}], context=context)
+    assert isinstance(intent, SemanticMutationIntent)
+    assert SemanticConversationService._focus(intent) == ()
+    assert dispatcher.calls == []
+
+
+def test_query_and_mutation_cannot_share_one_semantic_plan():
+    from pydantic import ValidationError
+    from home_cortex.semantic_facts import SemanticPlan
+    with pytest.raises(ValidationError, match='cannot both query facts and mutate'):
+        SemanticPlan.model_validate({'requires_fact': True,
+            'request': {'operation': 'resolve_reference', 'subject': {'kind': 'self'}},
+            'mutation': {'operation': 'delete', 'item_name': 'Compass'}})
+
+
+@pytest.mark.asyncio
+async def test_read_diagnostics_include_mutation_classification_call():
+    from home_cortex.mutation_ir import MutationDecision
+    from home_cortex.semantic_facts import SemanticFactPlanner, SemanticSchemaRegistry, AgentRequestContext
+
+    class RoutedOllama(FakeOllamaService):
+        async def plan_item_mutation(self, messages):
+            return MutationDecision(requires_mutation=False), {'prompt_eval_count': 10, 'eval_count': 3}
+
+    ollama = RoutedOllama([])
+    ollama.last_planner_runtime = {'prompt_eval_count': 20, 'eval_count': 5}
+    planner = SemanticFactPlanner(ollama, SemanticSchemaRegistry(EMPTY_CATALOG), enable_mutations=True)
+    context = AgentRequestContext(caller_entity_id=None, household_id=None,
+        assistant_id='steward', assistant_display_name='Steward', current_time=datetime(2026,9,10))
+    outcome = await planner.plan([{'role': 'user', 'content': 'Hello'}], context)
+    assert outcome.diagnostics.attempt_count == 2
+    assert outcome.diagnostics.prompt_eval_count == 30
+    assert outcome.diagnostics.eval_count == 8

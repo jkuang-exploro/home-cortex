@@ -11,6 +11,7 @@ from ollama import ChatResponse
 
 from .profiling import model_call, observe_usage, stream_model_call
 from .ollama import PLANNER_NUM_PREDICT, PLANNER_SEED, planner_chat_messages
+from .mutation_ir import MutationDecision, mutation_messages, read_plan_schema
 
 DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1"
 _CHAT_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
@@ -55,6 +56,19 @@ class OpenRouterService:
     ) -> ChatResponse:
         return await self._complete(messages, tools=tools, stream=False)
 
+    async def plan_item_mutation(self, messages):
+        payload = await self._post({
+            "model": self.model, "messages": mutation_messages(messages),
+            "temperature": 0, "max_tokens": PLANNER_NUM_PREDICT, "seed": PLANNER_SEED,
+            "response_format": {"type": "json_schema", "json_schema": {
+                "name": "MutationDecision", "strict": False,
+                "schema": MutationDecision.model_json_schema(),
+            }},
+            "provider": {"require_parameters": True},
+        })
+        return (MutationDecision.model_validate(_parse_json_object(_message_content(payload))),
+                _openrouter_runtime_metrics(payload))
+
     async def plan_semantic_fact(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -83,7 +97,7 @@ class OpenRouterService:
                             "identity uses kind=self; second-person identity "
                             "uses kind=assistant."
                         ),
-                        "schema": dict(output_schema),
+                        "schema": read_plan_schema(output_schema),
                     },
                 },
                 "provider": {"require_parameters": True},

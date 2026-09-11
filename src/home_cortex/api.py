@@ -172,6 +172,7 @@ async def lifespan(app: FastAPI):
                 definition.allowed_tools,
                 calendar=calendar,
                 writing=writing,
+                household_id=definition.settings.get("home_entity_id"),
             ),
             system_prompt=definition.prompt,
             tools=definition.tool_definitions,

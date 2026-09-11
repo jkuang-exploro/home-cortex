@@ -382,8 +382,33 @@ Runtime callers create, move, or delete authoritative Items through
 `ItemWritingService`. Its closed request union exposes only `create`,
 `update_location`, and `delete`, with `preview` and `commit` modes. The service
 validates runtime schema ownership and executes each compound change as one
-SurrealDB transaction. `write_item` is an opt-in LLM tool adapter and is not in
-the steward's default allowlist. See
+SurrealDB transaction. The steward enables `write_item` through a structured
+current-turn mutation intent. The interpreter emits `requires_fact: false`,
+`request: null`, and a `mutation` containing `operation`, the literal `item_name`,
+the full `location_name` (except deletion), and `mode`. Read requests and mutations
+are mutually exclusive. The agent invokes the tool after interpretation, including
+for streaming responses. Discourse replay returns mutation intents without running
+them; the ordinary conversation loop cannot invoke `write_item`.
+
+Mutation-enabled agents first run a small structured intent compiler with only
+the current user turn. Non-mutations continue through the unchanged read prompt,
+examples, and read-only output schema. This adds one model call to ordinary reads
+for those agents; planner diagnostics include both calls. Read-only agents and
+the fact benchmark do not run the mutation classifier.
+
+The model-facing adapter resolves names within the configured household, generates
+new IDs server-side, and calls the canonical writer. It does not expose physical
+IDs, properties, or raw graph state to the model. Repeating a creation already
+recorded at the same location is a no-op. An existing item at another location
+requires an explicit move; an ambiguous or missing destination does not write.
+A container name never implies a particular internal space. Confirmation text is
+rendered from the actual mutation status, and preview is explicitly marked unsaved.
+
+The direct Python `ItemWritingService` ID-based request contract is unchanged.
+The `write_item` tool now takes names instead of that low-level contract. The
+offline compact codec is version 2 because the plan schema gained mutation fields;
+old version 1 payloads are rejected rather than reinterpreted. Production continues
+using expanded JSON. See
 [`docs/design/item-writing-api.md`](../docs/design/item-writing-api.md) for the
 request/result contract, transaction boundaries, and ingestion constraint.
 

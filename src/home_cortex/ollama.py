@@ -7,6 +7,7 @@ from ollama import AsyncClient, ChatResponse
 
 from .profiling import model_call, stage
 from .semantic_transport import transport_for, pack_capabilities, canonical_json
+from .mutation_ir import MutationDecision, mutation_messages, read_plan_schema
 
 
 # Keep the same resident runner configuration across ordinary chat and planning.
@@ -377,6 +378,17 @@ class OllamaService:
             options={"num_ctx": OLLAMA_NUM_CTX},
         )
 
+    async def plan_item_mutation(self, messages):
+        response = await self._chat(
+            model=self.model, messages=mutation_messages(messages),
+            stream=False, think=False, keep_alive=PLANNER_KEEP_ALIVE,
+            format=MutationDecision.model_json_schema(),
+            options={"temperature": 0, "num_ctx": PLANNER_NUM_CTX,
+                     "num_predict": PLANNER_NUM_PREDICT, "seed": PLANNER_SEED},
+        )
+        return (MutationDecision.model_validate_json(response.message.content or ""),
+                _ollama_runtime_metrics(response))
+
     async def plan_semantic_fact(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -398,7 +410,7 @@ class OllamaService:
             stream=False,
             think=False,
             keep_alive=PLANNER_KEEP_ALIVE,
-            format=dict(output_schema),
+            format=read_plan_schema(output_schema),
             options={
                 "temperature": 0,
                 "num_ctx": PLANNER_NUM_CTX,

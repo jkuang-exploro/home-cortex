@@ -1,3 +1,4 @@
+from home_cortex.mutation_ir import read_plan_schema
 import json
 from typing import Any
 
@@ -246,7 +247,7 @@ async def test_openrouter_serving_fact_contract_is_expanded():
         [{'role': 'user', 'content': 'How many members are in this home?'}], {}, schema,
         household_now='2026-09-09T12:00:00Z')
     assert result == plan
-    assert captured['response_format']['json_schema']['schema'] == schema
+    assert captured['response_format']['json_schema']['schema'] == read_plan_schema(schema)
     assert 'Transport v1:' not in captured['messages'][0]['content']
     for message in captured['messages']:
         if message['role'] == 'assistant':
