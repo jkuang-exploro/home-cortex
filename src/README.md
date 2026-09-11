@@ -41,6 +41,11 @@ for validation and presentation limitations.
   all input before writing, then makes each table authoritative, including
   pruning records removed from that table's source files. When `CORTEX_API_KEY`
   is set, this route requires that key.
+- `POST /admin/export` writes the current SurrealDB graph to an explicit
+  `target_dir` as canonical `nodes/` and `edges/` JSON. It does not default to
+  `/app/data`. The same snapshot is available from the CLI as
+  `home-cortex-db-export ./tmp/db-export`. When `CORTEX_API_KEY` is set, this
+  route requires that key.
 - `POST /v1/chat` runs the default steward agent for backward compatibility.
 - `POST /agent/steward/chat` invokes the named household steward directly.
 - `POST /agent/steward/conversations` initializes a conversation and returns
@@ -358,7 +363,11 @@ non-temporal edges, reverse duplicates of a symmetric fact, and a registered
 relationship without a corresponding JSON source file. An empty relationship
 must be represented by `[]` so re-ingestion can prune previously stored facts.
 Ingestion also clears records from explicitly retired relationship and node
-tables during ontology migrations.
+tables during ontology migrations. Export is the deterministic inverse: it
+reads SurrealDB and writes canonical `nodes/<table>.json` and
+`edges/<relationship>.json` files. Empty node tables are omitted; registered
+relationships with no facts are written as `[]`. Item shard directories are an
+ingest-only layout and collapse to a single `item.json` on export.
 
 This version renames the former `resides_in` relationship to `lives_in`. Since
 the repository intentionally does not track private household data, rename the

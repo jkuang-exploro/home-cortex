@@ -8,6 +8,7 @@ from collections import OrderedDict
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -34,6 +35,7 @@ from .schema_catalog import RuntimeSchemaCatalog
 from .display import conversation_language
 from .text import latest_user_message
 from .greetings import GreetingService
+from .export import export_directory
 from .ingestion import ingest_directory
 from .identity import resolve_user_entity_id
 from .ollama import language_model_from_settings
@@ -324,6 +326,12 @@ async def health(request: Request) -> dict[str, Any]:
         ) from error
 
 
+class ExportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_dir: Path
+
+
 @app.post("/admin/ingest")
 async def ingest(request: Request) -> dict[str, Any]:
     _authenticate_request(request)
@@ -337,6 +345,20 @@ async def ingest(request: Request) -> dict[str, Any]:
         return {"status": "ok", **asdict(result)}
     except (FileNotFoundError, ValueError) as error:
         raise APIError(400, "ingestion_failed", str(error)) from error
+
+
+@app.post("/admin/export")
+async def export(body: ExportRequest, request: Request) -> dict[str, Any]:
+    _authenticate_request(request)
+    try:
+        result = await export_directory(
+            request.app.state.database,
+            body.target_dir,
+            getattr(request.app.state, "edge_registry", None),
+        )
+        return {"status": "ok", **asdict(result)}
+    except (FileNotFoundError, ValueError, OSError) as error:
+        raise APIError(400, "export_failed", str(error)) from error
 
 
 @app.post("/v1/chat")

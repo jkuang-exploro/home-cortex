@@ -3,6 +3,7 @@ import json
 import logging
 import re
 from collections.abc import Iterator
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -18,6 +19,7 @@ from home_cortex.api import (
     app,
 )
 from home_cortex.greetings import GreetingService
+from home_cortex.export import ExportResult
 from home_cortex.ingestion import IngestionResult
 
 
@@ -870,6 +872,7 @@ def test_legacy_retrieve_route_is_removed(
     ("method", "path", "json_body"),
     [
         ("POST", "/admin/ingest", None),
+        ("POST", "/admin/export", {"target_dir": "/tmp/db-export"}),
         ("POST", "/v1/chat", {"message": "Who lives here?"}),
         (
             "POST",
@@ -930,6 +933,42 @@ def test_admin_ingest_accepts_household_api_key(
     assert response.json()["status"] == "ok"
     assert response.json()["nodes_upserted"] == 2
     ingest.assert_awaited_once()
+
+
+def test_admin_export_requires_explicit_target_and_accepts_household_api_key(
+    api_client: tuple[TestClient, FakeAgent],
+    tmp_path: Path,
+) -> None:
+    client, _ = api_client
+    _protect_api()
+    exported = ExportResult(
+        node_files=2,
+        edge_files=5,
+        nodes_exported=4,
+        edges_exported=3,
+    )
+
+    with patch(
+        "home_cortex.api.export_directory",
+        new_callable=AsyncMock,
+        return_value=exported,
+    ) as export:
+        missing = client.post(
+            "/admin/export",
+            headers={"Authorization": "Bearer test-cortex-key"},
+            json={},
+        )
+        response = client.post(
+            "/admin/export",
+            headers={"Authorization": "Bearer test-cortex-key"},
+            json={"target_dir": str(tmp_path / "db-export")},
+        )
+
+    assert missing.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["nodes_exported"] == 4
+    export.assert_awaited_once()
 
 
 def test_chat_accepts_mapped_identity(

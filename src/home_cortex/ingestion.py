@@ -140,6 +140,18 @@ def implicit_edge_component(record_id: RecordID) -> str:
     return f"b64_{encoded}"
 
 
+def implicit_edge_record_id(
+    relation: str,
+    source: RecordID,
+    target: RecordID,
+) -> RecordID:
+    """Return the ingest-generated identity for a relationship without an explicit id."""
+    identifier = (
+        f"{implicit_edge_component(source)}__{implicit_edge_component(target)}"
+    )
+    return RecordID(relation, identifier)
+
+
 def _edge_record_id(
     relation: str,
     record: dict[str, Any],
@@ -158,10 +170,7 @@ def _edge_record_id(
             )
         return edge_id
 
-    identifier = (
-        f"{implicit_edge_component(source)}__{implicit_edge_component(target)}"
-    )
-    return RecordID(relation, identifier)
+    return implicit_edge_record_id(relation, source, target)
 
 
 async def ingest_directory(
