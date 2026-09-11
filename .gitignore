@@ -1,5 +1,4 @@
-data/nodes/*
-data/edges/*
+data/*
 .env
 *.secret
 .venv/
