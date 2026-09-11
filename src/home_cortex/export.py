@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import errno
 import json
 import os
 import shutil
@@ -122,7 +123,6 @@ async def export_directory(
             _write_json(nodes_dir / f"{table}.json", records)
         for relation, records in payload.edges.items():
             _write_json(edges_dir / f"{relation}.json", records)
-        target.mkdir(parents=True, exist_ok=True)
         _replace_export_tree(target, staging)
     finally:
         if staging.exists():
@@ -369,9 +369,20 @@ def _explicit_target_dir(target_dir: Path) -> Path:
 
 
 def _staging_directory(target: Path) -> Path:
-    parent = target.parent if target.parent != Path("") else Path(".")
-    parent.mkdir(parents=True, exist_ok=True)
-    return parent / f".{target.name}.export-tmp-{os.getpid()}-{uuid4().hex}"
+    # Stage on the same filesystem as the target so rename works when the
+    # destination is a Docker bind mount (EXDEV across /app vs /app/export).
+    target.mkdir(parents=True, exist_ok=True)
+    return target / f".export-tmp-{os.getpid()}-{uuid4().hex}"
+
+
+def _move_directory(source: Path, destination: Path) -> None:
+    try:
+        source.rename(destination)
+    except OSError as error:
+        if error.errno != errno.EXDEV:
+            raise
+        shutil.copytree(source, destination)
+        shutil.rmtree(source)
 
 
 def _replace_export_tree(target: Path, staged: Path) -> None:
@@ -383,15 +394,15 @@ def _replace_export_tree(target: Path, staged: Path) -> None:
             staged_dir = staged / name
             if destination.exists():
                 backup = target / f".{name}.export-backup-{unique}"
-                destination.rename(backup)
+                _move_directory(destination, backup)
                 backups[name] = backup
-            staged_dir.rename(destination)
+            _move_directory(staged_dir, destination)
     except BaseException:
         for name, backup in backups.items():
             destination = target / name
             if destination.exists():
                 shutil.rmtree(destination)
-            backup.rename(destination)
+            _move_directory(backup, destination)
         raise
     for backup in backups.values():
         shutil.rmtree(backup)

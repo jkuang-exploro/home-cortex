@@ -1,3 +1,4 @@
+import errno
 import json
 from datetime import date, datetime
 from pathlib import Path
@@ -8,6 +9,7 @@ import pytest
 from surrealdb import AsyncSurreal, RecordID
 
 from home_cortex.export import (
+    _move_directory,
     canonical_json_value,
     export_directory,
 )
@@ -345,7 +347,7 @@ async def test_failed_export_does_not_clobber_existing_target(tmp_path: Path) ->
         await database.close()
 
     assert original.read_text(encoding="utf-8") == '[{"id":"person:kept"}]\n'
-    assert not list(target.glob(".*.export-tmp-*"))
+    assert not list(target.glob(".export-tmp-*"))
     assert not list(target.glob(".*.export-backup-*"))
 
 
@@ -379,6 +381,25 @@ async def test_retired_tables_are_omitted_and_reported(tmp_path: Path) -> None:
         "person:alex_example",
         "person:blair_example",
     }
+
+
+def test_move_directory_copies_when_rename_crosses_devices(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "src"
+    destination = tmp_path / "dest"
+    source.mkdir()
+    (source / "person.json").write_text("[]\n", encoding="utf-8")
+
+    def refuse_rename(self: Path, target: Path) -> Path:
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(Path, "rename", refuse_rename)
+    _move_directory(source, destination)
+
+    assert (destination / "person.json").read_text(encoding="utf-8") == "[]\n"
+    assert not source.exists()
 
 
 @pytest.mark.asyncio
