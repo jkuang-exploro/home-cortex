@@ -400,7 +400,9 @@ validates runtime schema ownership and executes each compound change as one
 SurrealDB transaction. The steward enables `write_item` through a structured
 current-turn mutation intent. The interpreter emits `requires_fact: false`,
 `request: null`, and a `mutation` containing `operation`, the literal `item_name`,
-the full `location_name` for creation/movement, and `mode`. Creation and attribute
+the full `location_name` for creation/movement, and `mode`. Create also carries
+bilingual display names (`name_en`, `name_zh`) and a readable `item_key` used as
+`item:<item_key>`. Creation and attribute
 updates carry `attributes` keyed by semantic property names. Read requests and mutations
 are mutually exclusive. The agent invokes the tool after interpretation, including
 for streaming responses. Discourse replay returns mutation intents without running
@@ -412,9 +414,11 @@ examples, and read-only output schema. This adds one model call to ordinary read
 for those agents; planner diagnostics include both calls. Read-only agents and
 the fact benchmark do not run the mutation classifier.
 
-The model-facing adapter resolves names within the configured household, generates
-new IDs server-side, and calls the canonical writer. It does not expose physical
-IDs, properties, or raw graph state to the model. Repeating a creation already
+The model-facing adapter resolves names within the configured household and
+stores create names as `{en, zh}` using the interpreter translations. New
+items use the interpreter `item_key` as `item:<item_key>` rather than a hash.
+It does not expose physical IDs, properties, or raw graph state to the model.
+Repeating a creation already
 recorded at the same location with matching explicit attributes is a no-op.
 Conflicting attributes require an explicit update. An existing item at another location
 requires an explicit move; an ambiguous or missing destination does not write.
@@ -442,8 +446,8 @@ entity and marks missing values as unrecorded; single-attribute reads remain
 The direct Python `ItemWritingService` contract also adds `update_attributes`,
 using item_id and properties; the name adapter owns semantic-to-storage mapping.
 The `write_item` tool now takes names instead of that low-level contract. The
-offline compact codec is version 3 because the plan schema gained attribute intents;
-old version 1 and 2 payloads are rejected rather than reinterpreted. Production continues
+offline compact codec is version 4 because create now carries bilingual names and a readable item_key;
+old version 1, 2, and 3 payloads are rejected rather than reinterpreted. Production continues
 using expanded JSON. See
 [`docs/design/item-writing-api.md`](../docs/design/item-writing-api.md) for the
 request/result contract, transaction boundaries, and ingestion constraint.

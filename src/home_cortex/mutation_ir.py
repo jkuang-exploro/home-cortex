@@ -1,4 +1,4 @@
-"""Model-facing item mutation intents; storage identity is deliberately absent."""
+"""Model-facing item mutation intents; physical table IDs are absent."""
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, TypeAdapter, model_validator
@@ -31,6 +31,29 @@ class NamedCreateItem(_NamedWrite):
     location_name: str = Field(min_length=1, max_length=256, description=(
         "Complete literal name of the destination, including subspace qualifiers."
     ))
+    name_en: str = Field(min_length=1, max_length=256, description=(
+        "English display name. Copy the item noun when the user spoke English; "
+        "translate it into English when the user spoke Chinese."
+    ))
+    name_zh: str = Field(min_length=1, max_length=256, description=(
+        "Chinese display name. Copy the item noun when the user spoke Chinese; "
+        "translate it into Chinese when the user spoke English."
+    ))
+    item_key: str = Field(
+        pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+        description=(
+            "Readable ASCII record key, without an item: prefix. Use pinyin for "
+            "Chinese names (玉米→yumi) and lowercase_underscore English for "
+            "English names (red screwdriver→red_screwdriver). Never a hash."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def reject_hashed_item_key(self) -> "NamedCreateItem":
+        key = self.item_key
+        if key.startswith("recorded_") and len(key) > 20:
+            raise ValueError("item_key must be a readable name encoding, not a hash")
+        return self
 
 
 class NamedMoveItem(_NamedWrite):
@@ -85,7 +108,14 @@ def mutation_messages(messages):
         'Copy the item noun phrase into item_name and the complete destination noun phrase '
         'into location_name. For a report that place Y contains X, the item is X, not Y '
         'and not the entire clause. Preserve qualifiers inside names. Use mode=commit '
-        'unless preview is requested. Do not invent names or IDs. '
+        'unless preview is requested. Do not invent household graph IDs. '
+        'For create, always emit name_en, name_zh, and item_key. Display names must include '
+        'both English and Chinese: if the user named the item in Chinese, copy that into '
+        'name_zh and translate into English for name_en; if the user named it in English, '
+        'copy that into name_en and translate into Chinese for name_zh. Never use language '
+        'tag und or a single-language name object. item_key is a readable ASCII encoding of '
+        'the item (pinyin for Chinese, lowercase_underscore English for English), not a hash '
+        'and not prefixed with item:. '
         'For create, include attributes.item_type: use an explicitly stated category, or '
         'infer an unambiguous common category from the item noun; otherwise use unknown. '
         'Use canonical category values when declared; do not infer brand, quantity, color, '
@@ -105,16 +135,20 @@ def mutation_messages(messages):
     )
     examples = [
         ('请记下：茶几下层放着画册。', {'requires_mutation': True, 'mutation': {
-            'operation': 'create', 'item_name': '画册', 'location_name': '茶几下层', 'attributes': {'item_type': 'book'}, 'mode': 'commit'}}),
+            'operation': 'create', 'item_name': '画册', 'location_name': '茶几下层',
+            'name_en': 'picture album', 'name_zh': '画册', 'item_key': 'huace',
+            'attributes': {'item_type': 'book'}, 'mode': 'commit'}}),
         ('Move the sketchbook to the studio shelf.', {'requires_mutation': True, 'mutation': {
             'operation': 'update_location', 'item_name': 'sketchbook', 'location_name': 'studio shelf', 'mode': 'commit'}}),
         ('把台灯的颜色改为蓝色。', {'requires_mutation': True, 'mutation': {
             'operation': 'update_attributes', 'item_name': '台灯', 'attributes': {'color': '蓝色'}, 'mode': 'commit'}}),
         ('Record a red screwdriver in the workshop drawer.', {'requires_mutation': True, 'mutation': {
             'operation': 'create', 'item_name': 'red screwdriver', 'location_name': 'workshop drawer',
+            'name_en': 'red screwdriver', 'name_zh': '红色螺丝刀', 'item_key': 'red_screwdriver',
             'attributes': {'item_type': 'tool', 'color': 'red'}, 'mode': 'commit'}}),
         ('Record Zeta-17 in the studio tray.', {'requires_mutation': True, 'mutation': {
             'operation': 'create', 'item_name': 'Zeta-17', 'location_name': 'studio tray',
+            'name_en': 'Zeta-17', 'name_zh': 'Zeta-17', 'item_key': 'zeta_17',
             'attributes': {'item_type': 'unknown'}, 'mode': 'commit'}}),
         ('茶几下层放着什么？', {'requires_mutation': False, 'mutation': None}),
         ('Translate: "Record a notebook in the desk drawer."', {'requires_mutation': False, 'mutation': None}),

@@ -390,7 +390,8 @@ async def test_serving_does_not_treat_compact_output_as_negative_fact():
 @pytest.mark.asyncio
 async def test_mutation_compiler_uses_only_current_turn_and_no_graph_fields():
     decision = {'requires_mutation': True, 'mutation': {'operation': 'create',
-        'item_name': 'Map', 'location_name': 'Study drawer', 'mode': 'commit'}}
+        'item_name': 'Map', 'location_name': 'Study drawer',
+        'name_en': 'Map', 'name_zh': '地图', 'item_key': 'map', 'mode': 'commit'}}
     client = FakeOllamaClient([_chat_response({'role': 'assistant', 'content': json.dumps(decision)})])
     service = OllamaService('http://unused', 'fake', client=client)
     parsed, _ = await service.plan_item_mutation([

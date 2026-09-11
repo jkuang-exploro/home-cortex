@@ -1,10 +1,8 @@
 """Resolve model-facing item names before invoking canonical mutations."""
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
-from .schema_catalog import normalize_entity_alias
 from .semantic_facts import AgentRequestContext, HouseholdFactEngine, SemanticFactRequest, FactResult
 from .writing import ItemWritingService
 from .mutation_ir import NamedCreateItem, NamedMoveItem, NamedUpdateAttributes, NamedWriteRequest
@@ -79,14 +77,15 @@ class NamedItemWritingService:
                         return reply("CONFLICT", "ITEM_ALREADY_EXISTS")
                     return reply("NO_CHANGE", "ITEM_ALREADY_RECORDED_AT_LOCATION")
                 return reply("CONFLICT", "ITEM_ALREADY_EXISTS")
-            key = hashlib.sha256((str(context.household_id) + "\0" + normalize_entity_alias(request.item_name)).encode()).hexdigest()
-            kind = self.writing.catalog.entities["item"].property_types.get("name")
-            name = [request.item_name] if kind == "collection" else request.item_name if kind == "string" else {"und": request.item_name}
+            record_id = f"item:{request.item_key}"
+            name = {"en": request.name_en, "zh": request.name_zh}
             result = await self.writing.mutate({
-                "operation": "create", "item": {"id": "item:recorded_" + key,
+                "operation": "create", "item": {"id": record_id,
                     "type": "item", "properties": {"name": name, **properties}},
                 "location_id": location_id, **common,
             })
+            if result.reason == "ENTITY_ALREADY_EXISTS":
+                return reply("CONFLICT", "ITEM_ALREADY_EXISTS")
         else:
             result = await self.writing.mutate({
                 "operation": request.operation, "item_id": item.value["id"],

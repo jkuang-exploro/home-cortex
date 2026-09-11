@@ -83,6 +83,27 @@ async def writing_service():
         await database.close()
 
 
+def named_create(
+    item_name: str,
+    location_name: str,
+    *,
+    name_en: str | None = None,
+    name_zh: str | None = None,
+    item_key: str | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    payload = {
+        "operation": "create",
+        "item_name": item_name,
+        "location_name": location_name,
+        "name_en": name_en or item_name,
+        "name_zh": name_zh or item_name,
+        "item_key": item_key or item_name.casefold().replace(" ", "_"),
+    }
+    payload.update(extra)
+    return payload
+
+
 def create_request(mode="commit"):
     return {
         "operation": "create",
@@ -443,10 +464,10 @@ async def test_tool_adapter_uses_canonical_writing_service(writing_service):
     dispatcher = ToolDispatcher(
         RetrievalService(database, edge_registry=registry), ["write_item"], writing=service,
     )
-    response = await dispatcher.dispatch("write_item", {
-        "operation": "create", "item_name": "Test screwdriver",
-        "location_name": "Kitchen", "mode": "preview",
-    })
+    response = await dispatcher.dispatch("write_item", named_create(
+        "Test screwdriver", "Kitchen", name_zh="测试螺丝刀",
+        item_key="test_screwdriver", mode="preview",
+    ))
     assert response["ok"] is True
     assert response["result"]["status"] == "PROPOSED"
     assert "item:" not in json.dumps(response["result"])
@@ -482,19 +503,30 @@ async def test_named_tool_resolves_and_mutates_without_model_ids(writing_service
     service, database, registry, _ = writing_service
     retrieval = RetrievalService(database, edge_registry=registry)
     dispatcher = ToolDispatcher(retrieval, ['write_item'], writing=service)
-    create = {'operation': 'create', 'item_name': 'Invented compass', 'location_name': 'Drawer interior'}
+    create = named_create(
+        'Invented compass', 'Drawer interior',
+        name_zh='发明指南针', item_key='invented_compass',
+    )
     preview = await dispatcher.dispatch('write_item', {**create, 'mode': 'preview'})
     assert preview['result']['status'] == 'PROPOSED'
     assert await retrieval.resolve_entity_alias('Invented compass') == []
     applied = await dispatcher.dispatch('write_item', create)
     assert applied['result']['status'] == 'APPLIED'
     item = (await retrieval.resolve_entity_alias('Invented compass'))[0]
+    assert item['id'] == 'item:invented_compass'
+    stored = await retrieval.get_entity(item['id'])
+    assert stored['name'] == {'en': 'Invented compass', 'zh': '发明指南针'}
+    assert 'und' not in stored['name']
     assert await locations(database, item['id'].split(':', 1)[1]) == ['space:drawer_1:interior']
     assert (await dispatcher.dispatch('write_item', create))['result']['status'] == 'NO_CHANGE'
     conflict = await dispatcher.dispatch('write_item', {**create, 'location_name': 'Kitchen'})
     assert conflict['result']['status'] == 'CONFLICT'
     assert await locations(database, item['id'].split(':', 1)[1]) == ['space:drawer_1:interior']
-    moved = await dispatcher.dispatch('write_item', {**create, 'operation': 'update_location', 'location_name': 'Kitchen'})
+    moved = await dispatcher.dispatch('write_item', {
+        'operation': 'update_location',
+        'item_name': 'Invented compass',
+        'location_name': 'Kitchen',
+    })
     assert moved['result']['status'] == 'APPLIED'
     assert await locations(database, item['id'].split(':', 1)[1]) == ['space:kitchen']
     deleted = await dispatcher.dispatch('write_item', {'operation': 'delete', 'item_name': 'Invented compass'})
@@ -512,9 +544,10 @@ async def test_named_tool_ambiguity_missing_and_container_do_not_write(writing_s
     await database.client.query("CREATE space:duplicate SET name = {en: 'Kitchen'};")
     before = transaction_count(database)
     for destination, status in [('Kitchen', 'CONFLICT'), ('Absent room', 'NOT_FOUND'), ('Refrigerator', 'REJECTED')]:
-        response = await dispatcher.dispatch('write_item', {
-            'operation': 'create', 'item_name': 'Invented compass', 'location_name': destination,
-        })
+        response = await dispatcher.dispatch('write_item', named_create(
+            'Invented compass', destination,
+            name_zh='发明指南针', item_key='invented_compass',
+        ))
         assert response['result']['status'] == status
     assert transaction_count(database) == before
     assert await retrieval.resolve_entity_alias('Invented compass') == []
@@ -528,9 +561,10 @@ async def test_named_tool_destination_is_scoped_to_configured_household(writing_
     await database.client.query("CREATE space:foreign SET name = {en: 'Outside shelf'};")
     dispatcher = ToolDispatcher(RetrievalService(database, edge_registry=registry),
         ['write_item'], writing=service, household_id='address:test_house')
-    response = await dispatcher.dispatch('write_item', {
-        'operation': 'create', 'item_name': 'Invented compass', 'location_name': 'Outside shelf',
-    })
+    response = await dispatcher.dispatch('write_item', named_create(
+        'Invented compass', 'Outside shelf',
+        name_zh='发明指南针', item_key='invented_compass',
+    ))
     assert response['result']['status'] == 'NOT_FOUND'
     assert response['result']['reason'] == 'LOCATION_ENTITY_NOT_FOUND'
 
@@ -540,8 +574,10 @@ async def test_named_attributes_create_patch_preview_and_read(writing_service):
     service, database, registry, catalog = writing_service
     retrieval = RetrievalService(database, edge_registry=registry)
     dispatcher = ToolDispatcher(retrieval, ['write_item'], writing=service)
-    create = {'operation': 'create', 'item_name': 'Invented meter', 'location_name': 'Kitchen',
-              'attributes': {'item_type': 'tool', 'color': 'red', 'brand': 'Invented brand', 'quantity': 2}}
+    create = named_create(
+        'Invented meter', 'Kitchen', name_zh='发明仪表', item_key='invented_meter',
+        attributes={'item_type': 'tool', 'color': 'red', 'brand': 'Invented brand', 'quantity': 2},
+    )
     result = await dispatcher.dispatch('write_item', create)
     assert result['result']['status'] == 'APPLIED'
     item = (await retrieval.resolve_entity_alias('Invented meter'))[0]
@@ -600,7 +636,9 @@ async def test_attribute_update_rejects_invalid_fields_without_changes(writing_s
 async def test_uncategorized_create_gets_unknown_and_existing_item_can_be_backfilled(writing_service):
     service, database, registry, _ = writing_service
     dispatcher = ToolDispatcher(RetrievalService(database, edge_registry=registry), ['write_item'], writing=service)
-    result = await dispatcher.dispatch('write_item', {'operation': 'create', 'item_name': 'Unidentified object', 'location_name': 'Kitchen'})
+    result = await dispatcher.dispatch('write_item', named_create(
+        'Unidentified object', 'Kitchen', name_zh='不明物体', item_key='unidentified_object',
+    ))
     assert result['result']['status'] == 'APPLIED'
     item = (await dispatcher.retrieval.resolve_entity_alias('Unidentified object'))[0]
     assert item['item_type'] == 'unknown'
@@ -608,6 +646,45 @@ async def test_uncategorized_create_gets_unknown_and_existing_item_can_be_backfi
     result = await dispatcher.dispatch('write_item', {'operation': 'update_attributes', 'item_name': 'Milk', 'attributes': {'item_type': 'food'}})
     assert result['result']['status'] == 'APPLIED'
     assert (await service._record('item:milk'))['item_type'] == 'food'
+
+
+@pytest.mark.asyncio
+async def test_named_create_stores_bilingual_names_and_readable_key(writing_service):
+    service, database, registry, _ = writing_service
+    dispatcher = ToolDispatcher(RetrievalService(database, edge_registry=registry), ['write_item'], writing=service)
+    result = await dispatcher.dispatch('write_item', named_create(
+        '玉米', 'Kitchen', name_en='corn', name_zh='玉米', item_key='yumi',
+        attributes={'item_type': 'food'},
+    ))
+    assert result['result']['status'] == 'APPLIED'
+    item = (await dispatcher.retrieval.resolve_entity_alias('玉米'))[0]
+    assert item['id'] == 'item:yumi'
+    stored = await dispatcher.retrieval.get_entity(item['id'])
+    assert stored['name'] == {'en': 'corn', 'zh': '玉米'}
+    assert 'und' not in stored['name']
+    assert stored['item_type'] == 'food'
+    english = await dispatcher.retrieval.resolve_entity_alias('corn')
+    assert english[0]['id'] == 'item:yumi'
+
+
+def test_create_requires_bilingual_names_and_rejects_hashed_keys():
+    from pydantic import ValidationError
+    from home_cortex.mutation_ir import NamedCreateItem
+
+    NamedCreateItem.model_validate({
+        'operation': 'create', 'item_name': '香肠', 'location_name': '冰箱',
+        'name_en': 'sausage', 'name_zh': '香肠', 'item_key': 'xiangchang',
+    })
+    with pytest.raises(ValidationError):
+        NamedCreateItem.model_validate({
+            'operation': 'create', 'item_name': '香肠', 'location_name': '冰箱',
+        })
+    with pytest.raises(ValidationError, match='readable name encoding'):
+        NamedCreateItem.model_validate({
+            'operation': 'create', 'item_name': '香肠', 'location_name': '冰箱',
+            'name_en': 'sausage', 'name_zh': '香肠',
+            'item_key': 'recorded_' + 'a' * 16,
+        })
 
 
 @pytest.mark.asyncio

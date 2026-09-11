@@ -336,7 +336,10 @@ def _fixed_clock() -> datetime:
 
 @pytest.mark.asyncio
 async def test_mutation_handoff_dispatches_without_freeform_model_answer():
-    args = {'operation': 'create', 'item_name': 'Compass', 'location_name': 'Study drawer'}
+    args = {
+        'operation': 'create', 'item_name': 'Compass', 'location_name': 'Study drawer',
+        'name_en': 'Compass', 'name_zh': '指南针', 'item_key': 'compass',
+    }
     ollama = FakeOllamaService([])
     ollama.semantic_plan = {'requires_fact': False, 'request': None, 'mutation': args}
     dispatcher = FakeDispatcher({'ok': True, 'tool': 'write_item', 'result': {'status': 'APPLIED'}})
@@ -349,7 +352,10 @@ async def test_mutation_handoff_dispatches_without_freeform_model_answer():
 
 @pytest.mark.asyncio
 async def test_streamed_mutation_is_dispatched_once_and_rendered_from_result():
-    args = {'operation': 'create', 'item_name': 'Compass', 'location_name': 'Study drawer', 'mode': 'preview'}
+    args = {
+        'operation': 'create', 'item_name': 'Compass', 'location_name': 'Study drawer',
+        'name_en': 'Compass', 'name_zh': '指南针', 'item_key': 'compass', 'mode': 'preview',
+    }
     ollama = FakeOllamaService([])
     ollama.semantic_plan = {'requires_fact': False, 'request': None, 'mutation': args}
     dispatcher = FakeDispatcher({'ok': True, 'tool': 'write_item', 'result': {'status': 'PROPOSED'}})
