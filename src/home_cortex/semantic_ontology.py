@@ -407,7 +407,7 @@ def _parse_collection_predicates(
             raise ValueError(f"{label}.fallback require_past must be boolean")
         if mode is not None and mode not in {"years", "months", "days", "seconds"}:
             raise ValueError(f"{label}.fallback mode is not supported")
-        if transform in {"date_difference", "duration"} and mode is None:
+        if transform == "date_difference" and mode is None:
             raise ValueError(f"{label}.fallback interval requires mode")
         if operator not in PREDICATE_OPERATORS:
             raise ValueError(f"{label}.fallback operator is not allowlisted")

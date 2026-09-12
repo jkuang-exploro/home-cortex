@@ -1,4 +1,9 @@
-"""Versioned, schema-derived serialization at the interpreter boundary only."""
+"""Offline codec used to profile an experimental compact planner transport.
+
+The serving path deliberately uses the canonical semantic JSON schema directly.
+Keeping this experiment beside its profiler prevents an inactive wire format from
+appearing to be part of the production architecture.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -54,7 +59,7 @@ def _symbol(index: int) -> str:
 
 class SemanticTransport:
     def __init__(self, schema: Mapping[str, Any]):
-        from .semantic_ir import SemanticPlan, SemanticConceptUse
+        from home_cortex.semantic_ir import SemanticConceptUse, SemanticPlan
         self.expanded_schema = deepcopy(dict(schema))
         fields = _fields(SemanticPlan.model_json_schema()) | _fields(SemanticConceptUse.model_json_schema())
         self.aliases = {name: _symbol(i) for i, name in enumerate(sorted(fields))}
@@ -177,7 +182,7 @@ class SemanticTransport:
         return result
 
     def decode_plan(self, text: str, registry=None):
-        from .semantic_ir import SemanticPlan
+        from home_cortex.semantic_ir import SemanticPlan
         payload = self.decode(text)
         if registry is not None:
             payload = registry.expand_planner_concepts(payload)

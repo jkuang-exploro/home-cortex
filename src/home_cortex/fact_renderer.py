@@ -324,8 +324,8 @@ class FactRenderer:
             if request.property == "full_address":
                 return f"具体住址是{_format_address(result.value)}。"
             return f"查询到的值是{result.value}。"
-        if request.operation in {"date_difference", "duration", "completed_years"}:
-            unit = result.unit or ("years" if request.operation == "completed_years" else request.mode)
+        if request.operation == "date_difference":
+            unit = result.unit or request.mode
             if unit == "years" and request.property == "birth_date" and request.property_source == "entity":
                 return f"{_subject_nominative(request.subject)}今年{result.value}岁。"
             label = {"years": "年", "months": "个月", "days": "天", "seconds": "秒"}[unit]
@@ -417,8 +417,8 @@ class FactRenderer:
             if request.property == "full_address":
                 return f"The street address is {_format_address(result.value)}."
             return f"The requested value is {result.value}."
-        if request.operation in {"date_difference", "duration", "completed_years"}:
-            unit = result.unit or ("years" if request.operation == "completed_years" else request.mode)
+        if request.operation == "date_difference":
+            unit = result.unit or request.mode
             if unit == "years" and request.property == "birth_date" and request.property_source == "entity":
                 return f"The age is {result.value} years."
             return f"The interval from the recorded date to now is {result.value} {unit}."

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from home_cortex.operator_registry import (
     OPERATORS,
-    TRANSFORM_OPERATORS,
     OperatorExecutionError,
     OperatorInput,
+    OperatorValidationError,
+    evaluate_predicate,
     execute_operator,
 )
 
@@ -15,7 +17,6 @@ from home_cortex.operator_registry import (
 def test_registry_is_explicit_generic_and_bounded() -> None:
     assert {
         "select",
-        "traverse",
         "resolve_reference",
         "same_entity",
         "eq",
@@ -26,12 +27,7 @@ def test_registry_is_explicit_generic_and_bounded() -> None:
         "average",
         "argmin",
         "argmax",
-        "sort",
-        "subtract",
-        "divide",
         "date_difference",
-        "completed_years",
-        "duration",
         "annual_occurrence",
         "unit_conversion",
     }.issubset(OPERATORS)
@@ -41,21 +37,12 @@ def test_registry_is_explicit_generic_and_bounded() -> None:
         "oldest_member",
         "monthly_spending",
     }.isdisjoint(OPERATORS)
-    assert TRANSFORM_OPERATORS == {
-        name
-        for name, definition in OPERATORS.items()
-        if definition.implementation is not None
-    }
 
 
 def test_operator_contracts_are_machine_readable() -> None:
     assert OPERATORS["count"].input_shape == "collection"
-    assert OPERATORS["count"].output_kind == "integer"
     assert OPERATORS["average"].field_kinds == {"integer", "number"}
-    assert OPERATORS["argmin"].output_kind == "record"
-    assert OPERATORS["same_entity"].output_kind == "boolean"
     assert OPERATORS["same_entity"].input_shape == "plan"
-    assert OPERATORS["completed_years"].output_kind == "integer"
     assert OPERATORS["annual_occurrence"].field_kinds == {"date", "datetime"}
 
 
@@ -160,3 +147,117 @@ def test_argmin_is_generic_over_new_type_compatible_fields() -> None:
     )
 
     assert result == {"id": "person:b", "new_numeric_field": 4}
+
+
+@pytest.mark.parametrize(
+    ("operator", "options"),
+    (
+        ("sum", {}),
+        ("count", {"field": "value"}),
+        ("latest", {"field": "when", "field_kind": "date"}),
+        ("count", {"order_by": "when", "order_by_kind": "date"}),
+        ("sum", {"field": "value", "field_kind": "string"}),
+        ("date_difference", {"field": "when", "field_kind": "date"}),
+        ("date_add", {"field": "when", "field_kind": "date", "parameters": {"amount": True, "mode": "days"}}),
+        ("annual_occurrence", {"field": "when", "field_kind": "date", "parameters": {"reference": "household_now", "mode": "years"}}),
+    ),
+)
+def test_operator_contracts_reject_invalid_shapes(operator, options) -> None:
+    with pytest.raises(OperatorValidationError):
+        OPERATORS[operator].validate(**options)
+
+
+@pytest.mark.parametrize("operator", ["sum", "average", "min", "max"])
+def test_numeric_reductions_reject_partial_or_nonnumeric_collections(operator) -> None:
+    with pytest.raises(OperatorExecutionError):
+        execute_operator(
+            operator,
+            OperatorInput(records=({"value": 1}, {"value": None}), field="value"),
+        )
+    with pytest.raises(OperatorExecutionError):
+        execute_operator(
+            operator,
+            OperatorInput(records=({"value": "one"},), field="value"),
+        )
+
+
+def test_selection_and_extrema_fail_closed_on_incomplete_inputs() -> None:
+    for operator in ("first", "last"):
+        with pytest.raises(OperatorExecutionError):
+            execute_operator(operator, OperatorInput(records=()))
+    with pytest.raises(OperatorExecutionError):
+        execute_operator("argmin", OperatorInput(records=({"value": 1},)))
+    with pytest.raises(OperatorExecutionError):
+        execute_operator(
+            "argmax", OperatorInput(records=({"other": 1},), field="value")
+        )
+    with pytest.raises(OperatorExecutionError):
+        execute_operator(
+            "argmin",
+            OperatorInput(
+                records=({"value": 1}, {"value": "two"}), field="value"
+            ),
+        )
+
+
+@pytest.mark.parametrize(
+    ("name", "left", "right", "expected"),
+    (
+        ("eq", 2, 2, True),
+        ("ne", 2, 3, True),
+        ("lt", 2, 3, True),
+        ("lte", 2, 2, True),
+        ("gt", 3, 2, True),
+        ("gte", 3, 3, True),
+        ("in", "a", ("a", "b"), True),
+        ("exists", None, False, True),
+        ("date_range", "2026-06-01", ("2026-01-01", "2027-01-01"), True),
+        ("date_range", "2026-06-01", "invalid", False),
+        ("lt", None, 3, False),
+    ),
+)
+def test_predicate_execution_is_bounded(name, left, right, expected) -> None:
+    assert evaluate_predicate(name, left, right) is expected
+
+
+def test_unknown_operator_and_predicate_are_rejected() -> None:
+    with pytest.raises(OperatorValidationError):
+        execute_operator("invented", OperatorInput(records=()))
+    with pytest.raises(OperatorValidationError):
+        evaluate_predicate("invented", 1, 1)
+
+
+def test_unit_conversion_accepts_supported_pairs_and_rejects_bad_inputs() -> None:
+    assert execute_operator(
+        "unit_conversion",
+        OperatorInput(records=({"value": 10},), field="value", from_unit="c", to_unit="f"),
+    ) == 50
+    assert execute_operator(
+        "unit_conversion",
+        OperatorInput(records=({"value": 10},), field="value", from_unit="kg", to_unit="kg"),
+    ) == 10.0
+    for value, source, target in (("ten", "kg", "lb"), (10, "kg", "m")):
+        with pytest.raises(OperatorExecutionError):
+            execute_operator(
+                "unit_conversion",
+                OperatorInput(
+                    records=({"value": value},),
+                    field="value",
+                    from_unit=source,
+                    to_unit=target,
+                ),
+            )
+
+
+def test_date_add_rejects_ambiguous_household_wall_time() -> None:
+    with pytest.raises(OperatorExecutionError, match="ambiguous"):
+        execute_operator(
+            "date_add",
+            OperatorInput(
+                records=({"value": "2026-10-01T01:30:00-07:00"},),
+                field="value",
+                amount=1,
+                mode="months",
+                now=datetime(2026, 9, 1, tzinfo=ZoneInfo("America/Los_Angeles")),
+            ),
+        )

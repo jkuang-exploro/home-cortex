@@ -13,7 +13,11 @@ import time
 
 from home_cortex.ollama import planner_chat_messages, _semantic_planner_examples, _PLANNER_INSTRUCTIONS
 from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
-from home_cortex.semantic_transport import canonical_json, pack_capabilities, transport_for
+from scripts.profiling.semantic_transport import (
+    canonical_json,
+    pack_capabilities,
+    transport_for,
+)
 
 
 def main():

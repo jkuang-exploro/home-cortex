@@ -68,7 +68,7 @@ QUESTIONS = (
 )
 
 TEMPORAL_OPERATIONS = frozenset(
-    {"date_difference", "completed_years", "duration", "annual_occurrence"}
+    {"date_difference", "annual_occurrence"}
 )
 
 BenchmarkMode = Literal["semantic"]

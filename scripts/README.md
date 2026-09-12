@@ -34,3 +34,5 @@ inputs; those are not embedded in the wheel. Explicit path flags remain supporte
 `home_cortex.request_tracing` stays in production: it supplies request-scoped
 instrumentation to the API, DB, and model clients, not a profiling CLI.
 Historical artifact reports retain the paths used for their original runs.
+The withdrawn compact semantic codec lives beside its offline profiler; it is
+not an alternate runtime transport in `home_cortex`.

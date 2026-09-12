@@ -346,8 +346,8 @@ class OllamaService:
     ) -> Mapping[str, Any]:
         """Interpret using the expanded contract validated by the serving path.
 
-        Compact transport is offline-only until real-model acceptance passes.
-        Never infer a negative fact or switch formats from a decoding failure.
+        The canonical expanded semantic schema is the only serving format.
+        Never infer a negative fact from a decoding failure.
         """
         response = await self._chat(
             model=self.model,

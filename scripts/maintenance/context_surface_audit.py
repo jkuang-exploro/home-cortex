@@ -12,11 +12,24 @@ from pathlib import Path
 from scripts import PROJECT_ROOT
 
 TASKS = {
-    "complete_factual_query": ["semantic_facts"],
-    "entity_resolution": ["entity_resolver"],
-    "speaker_behavior": ["semantic_conversation", "entity_resolver"],
-    "containment": ["entity_resolver"],
-    "factual_property": ["semantic_schema"],
+    "speaker_relative_resolution": [
+        "agent_service",
+        "semantic_conversation",
+        "entity_resolver",
+    ],
+    "factual_property": [
+        "semantic_ontology",
+        "semantic_schema",
+        "household_fact_engine",
+    ],
+    "nested_containment": ["entity_resolver", "semantic_ontology"],
+    "relationship_operation": [
+        "operator_registry",
+        "semantic_schema",
+        "household_fact_engine",
+    ],
+    "database_fact_retrieval": ["db", "retrieval", "household_fact_engine"],
+    "planner_interpretation": ["ollama", "semantic_planner"],
 }
 
 

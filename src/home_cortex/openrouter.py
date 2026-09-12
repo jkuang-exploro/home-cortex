@@ -77,7 +77,7 @@ class OpenRouterService:
         *,
         household_now: str,
     ) -> Mapping[str, Any]:
-        # Keep serving on the expanded contract; compact transport is offline-only.
+        # Both providers serve the same canonical expanded semantic contract.
         payload = await self._post(
             {
                 "model": self.model,

@@ -5,17 +5,38 @@ from __future__ import annotations
 import math
 from calendar import monthrange
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import Any, Literal, get_args
+
+FactOperation = Literal[
+    "inspect",
+    "resolve_reference",
+    "same_entity",
+    "select",
+    "count",
+    "first",
+    "last",
+    "latest",
+    "earliest",
+    "sum",
+    "average",
+    "min",
+    "max",
+    "argmin",
+    "argmax",
+    "date_add",
+    "date_difference",
+    "annual_occurrence",
+    "unit_conversion",
+]
 
 OperatorFamily = Literal[
     "retrieval",
     "predicate",
     "collection",
     "aggregation",
-    "ordering",
     "transform",
 ]
 ValueKind = Literal[
@@ -50,7 +71,6 @@ class OperatorExecutionError(RuntimeError):
 class OperatorInput:
     records: Sequence[Mapping[str, Any]]
     field: str | None = None
-    other_field: str | None = None
     order_by: str | None = None
     mode: str | None = None
     reference: str | None = None
@@ -68,11 +88,8 @@ class OperatorDefinition:
     name: str
     family: OperatorFamily
     input_shape: Literal["plan", "scalar", "collection"]
-    output_kind: ValueKind
     field_requirement: Literal["none", "optional", "required"] = "none"
     field_kinds: frozenset[ValueKind] = frozenset({"any"})
-    other_field_required: bool = False
-    other_field_kinds: frozenset[ValueKind] = frozenset({"any"})
     order_by_required: bool = False
     order_by_kinds: frozenset[ValueKind] = frozenset({"any"})
     required_parameters: frozenset[str] = frozenset()
@@ -83,8 +100,6 @@ class OperatorDefinition:
         *,
         field: str | None = None,
         field_kind: ValueKind = "unknown",
-        other_field: str | None = None,
-        other_field_kind: ValueKind = "unknown",
         order_by: str | None = None,
         order_by_kind: ValueKind = "unknown",
         parameters: Mapping[str, Any] | None = None,
@@ -95,18 +110,6 @@ class OperatorDefinition:
         if self.field_requirement == "none" and field is not None:
             raise OperatorValidationError(f"{self.name} does not accept field")
         _validate_kind(self.name, "field", field_kind, self.field_kinds)
-        if self.other_field_required and other_field is None:
-            raise OperatorValidationError(f"{self.name} requires other_field")
-        if not self.other_field_required and other_field is not None:
-            raise OperatorValidationError(
-                f"{self.name} does not accept other_field"
-            )
-        _validate_kind(
-            self.name,
-            "other_field",
-            other_field_kind,
-            self.other_field_kinds,
-        )
         if self.order_by_required and order_by is None:
             raise OperatorValidationError(f"{self.name} requires order_by")
         if not self.order_by_required and order_by is not None:
@@ -126,7 +129,7 @@ class OperatorDefinition:
             raise OperatorValidationError(
                 f"{self.name} requires {', '.join(missing)}"
             )
-        if self.name in {"date_difference", "duration"} and parameters.get("mode") not in {"years", "months", "days", "seconds"}:
+        if self.name == "date_difference" and parameters.get("mode") not in {"years", "months", "days", "seconds"}:
             raise OperatorValidationError("date interval requires a supported unit")
         if self.name == "date_add" and (
             type(parameters.get("amount")) is not int
@@ -313,28 +316,6 @@ def _arg_extreme(values: OperatorInput, *, minimum: bool) -> dict[str, Any]:
     return dict(selected)
 
 
-def _subtract(values: OperatorInput) -> float | int:
-    left, right = _binary_numbers(values)
-    return left - right
-
-
-def _divide(values: OperatorInput) -> float:
-    left, right = _binary_numbers(values)
-    if right == 0:
-        raise OperatorExecutionError("divide denominator cannot be zero")
-    return left / right
-
-
-def _binary_numbers(values: OperatorInput) -> tuple[float | int, float | int]:
-    if not values.records or values.field is None or values.other_field is None:
-        raise OperatorExecutionError("binary numeric operator requires one record")
-    left = values.records[0].get(values.field)
-    right = values.records[0].get(values.other_field)
-    if not _is_number(left) or not _is_number(right):
-        raise OperatorExecutionError("binary operator requires numeric fields")
-    return left, right
-
-
 def _date_difference(values: OperatorInput) -> int | float:
     value = _only_value(values)
     now = _required_now(values)
@@ -406,22 +387,6 @@ def _date_add(values: OperatorInput) -> str:
         return target.isoformat()
     except (ValueError, OverflowError) as error:
         raise OperatorExecutionError("calendar offset is out of range") from error
-
-
-def _completed_years(values: OperatorInput) -> int:
-    value = _only_value(values)
-    now = _required_now(values)
-    parsed_date, parsed_datetime = _temporal_value(value)
-    start = parsed_date or (parsed_datetime.date() if parsed_datetime else None)
-    if start is None or start > now.date():
-        raise OperatorExecutionError("completed_years requires a past date")
-    # Compatibility for structured callers. The interpreter uses the generic
-    # interval operation; preserve the old past-date and date-only contract.
-    return int(_date_difference(replace(values, records=[{"value": start.isoformat()}], field="value", mode="years")))
-
-
-def _duration(values: OperatorInput) -> int | float:
-    return _date_difference(values)
 
 
 def _annual_occurrence(values: OperatorInput) -> str | int:
@@ -523,28 +488,24 @@ def _definition(
     name: str,
     family: OperatorFamily,
     input_shape: Literal["plan", "scalar", "collection"],
-    output_kind: ValueKind,
     **kwargs: Any,
 ) -> OperatorDefinition:
-    return OperatorDefinition(name, family, input_shape, output_kind, **kwargs)
+    return OperatorDefinition(name, family, input_shape, **kwargs)
 
 
 _DEFINITIONS = (
-    _definition("date_add", "transform", "scalar", "any",
+    _definition("date_add", "transform", "scalar",
                 field_requirement="required", field_kinds=TEMPORAL_KINDS,
                 required_parameters=frozenset({"amount", "mode"}), implementation=_date_add),
-    _definition("select", "retrieval", "plan", "collection"),
-    _definition("traverse", "retrieval", "plan", "collection"),
-    _definition("resolve_reference", "retrieval", "plan", "record"),
-    _definition("inspect", "retrieval", "plan", "record"),
-    _definition("same_entity", "retrieval", "plan", "boolean"),
-    _definition("filter", "collection", "collection", "collection"),
+    _definition("select", "retrieval", "plan"),
+    _definition("resolve_reference", "retrieval", "plan"),
+    _definition("inspect", "retrieval", "plan"),
+    _definition("same_entity", "retrieval", "plan"),
     *(
         _definition(
             name,
             "predicate",
             "scalar",
-            "boolean",
             field_requirement="required",
             field_kinds=field_kinds,
         )
@@ -563,7 +524,6 @@ _DEFINITIONS = (
         "date_range",
         "predicate",
         "scalar",
-        "boolean",
         field_requirement="required",
         field_kinds=TEMPORAL_KINDS,
     ),
@@ -571,14 +531,12 @@ _DEFINITIONS = (
         "count",
         "collection",
         "collection",
-        "integer",
         implementation=_count,
     ),
     _definition(
         "first",
         "collection",
         "collection",
-        "any",
         field_requirement="optional",
         implementation=_first,
     ),
@@ -586,7 +544,6 @@ _DEFINITIONS = (
         "last",
         "collection",
         "collection",
-        "any",
         field_requirement="optional",
         implementation=_last,
     ),
@@ -594,7 +551,6 @@ _DEFINITIONS = (
         "latest",
         "collection",
         "collection",
-        "any",
         field_requirement="required",
         order_by_required=True,
         order_by_kinds=TEMPORAL_KINDS,
@@ -604,7 +560,6 @@ _DEFINITIONS = (
         "earliest",
         "collection",
         "collection",
-        "any",
         field_requirement="required",
         order_by_required=True,
         order_by_kinds=TEMPORAL_KINDS,
@@ -615,7 +570,6 @@ _DEFINITIONS = (
             name,
             "aggregation",
             "collection",
-            "number",
             field_requirement="required",
             field_kinds=NUMERIC_KINDS,
             implementation=implementation,
@@ -632,7 +586,6 @@ _DEFINITIONS = (
             name,
             "aggregation",
             "collection",
-            "record",
             field_requirement="required",
             field_kinds=EXTREME_KINDS,
             implementation=implementation,
@@ -640,62 +593,18 @@ _DEFINITIONS = (
         for name, implementation in (("argmin", _argmin), ("argmax", _argmax))
     ),
     _definition(
-        "sort",
-        "ordering",
-        "collection",
-        "collection",
-        field_requirement="required",
-        field_kinds=ORDERED_KINDS,
-    ),
-    *(
-        _definition(
-            name,
-            "transform",
-            "scalar",
-            "number",
-            field_requirement="required",
-            field_kinds=NUMERIC_KINDS,
-            other_field_required=True,
-            other_field_kinds=NUMERIC_KINDS,
-            implementation=implementation,
-        )
-        for name, implementation in (("subtract", _subtract), ("divide", _divide))
-    ),
-    _definition(
         "date_difference",
         "transform",
         "scalar",
-        "number",
         field_requirement="required",
         field_kinds=TEMPORAL_KINDS,
         required_parameters=frozenset({"mode", "reference"}),
         implementation=_date_difference,
     ),
     _definition(
-        "completed_years",
-        "transform",
-        "scalar",
-        "integer",
-        field_requirement="required",
-        field_kinds=TEMPORAL_KINDS,
-        required_parameters=frozenset({"reference"}),
-        implementation=_completed_years,
-    ),
-    _definition(
-        "duration",
-        "transform",
-        "scalar",
-        "number",
-        field_requirement="required",
-        field_kinds=TEMPORAL_KINDS,
-        required_parameters=frozenset({"mode", "reference"}),
-        implementation=_duration,
-    ),
-    _definition(
         "annual_occurrence",
         "transform",
         "scalar",
-        "any",
         field_requirement="required",
         field_kinds=TEMPORAL_KINDS,
         required_parameters=frozenset({"reference"}),
@@ -705,7 +614,6 @@ _DEFINITIONS = (
         "unit_conversion",
         "transform",
         "scalar",
-        "number",
         field_requirement="required",
         field_kinds=NUMERIC_KINDS,
         required_parameters=frozenset({"from_unit", "to_unit"}),
@@ -716,9 +624,15 @@ _DEFINITIONS = (
 OPERATORS: Mapping[str, OperatorDefinition] = MappingProxyType(
     {definition.name: definition for definition in _DEFINITIONS}
 )
-TRANSFORM_OPERATORS = frozenset(
-    name for name, definition in OPERATORS.items() if definition.implementation
-)
 PREDICATE_OPERATORS = frozenset(
     name for name, definition in OPERATORS.items() if definition.family == "predicate"
 )
+FACT_OPERATORS: Mapping[str, OperatorDefinition] = MappingProxyType(
+    {
+        name: definition
+        for name, definition in OPERATORS.items()
+        if definition.family != "predicate"
+    }
+)
+if set(FACT_OPERATORS) != set(get_args(FactOperation)):
+    raise RuntimeError("FactOperation and its registry definitions must match")

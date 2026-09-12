@@ -8,7 +8,7 @@ from typing import Any
 
 from .request_tracing import stage
 from .operator_registry import (
-    OPERATORS,
+    FACT_OPERATORS,
     OperatorExecutionError,
     OperatorInput,
     OperatorValidationError,
@@ -62,7 +62,7 @@ class HouseholdFactEngine:
         execution = _FactExecution(self.dispatcher, context.caller_entity_id)
         resolution_started = perf_counter()
         allow_empty_collection = request.operation in {"count", "select"} or request.projection == "each"
-        operation = OPERATORS[request.operation]
+        operation = FACT_OPERATORS[request.operation]
         expect_many = request.other is None and (
             request.projection == "each" or operation.input_shape == "collection"
             or (request.operation == "select" and request.property is None)
@@ -312,7 +312,7 @@ class HouseholdFactEngine:
             if isinstance(property_result, FactResult):
                 return property_result
             return FactResult("found", property_result, evidence)
-        definition = OPERATORS[request.operation]
+        definition = FACT_OPERATORS[request.operation]
         records = (
             list(relationship_records)
             if request.property_source == "relationship"
@@ -734,9 +734,7 @@ class HouseholdFactEngine:
 
 
 def _result_unit(request: SemanticFactRequest) -> str | None:
-    if request.operation == "completed_years":
-        return "years"
-    if request.operation in {"date_difference", "duration", "annual_occurrence"}:
+    if request.operation in {"date_difference", "annual_occurrence"}:
         return request.mode
     if request.operation == "unit_conversion":
         return request.to_unit

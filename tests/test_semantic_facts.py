@@ -1212,14 +1212,12 @@ def test_semantic_ir_rejects_non_allowlisted_operation() -> None:
         )
 
 
-def test_completed_years_does_not_inject_an_age_specific_property() -> None:
-    request = SemanticFactRequest(
-        operation="completed_years",
-        subject=_self(),
+def test_semantic_schema_rejects_an_unvalidated_operation_copy() -> None:
+    request = _select(_self(), "display_name").model_copy(
+        update={"operation": "invented_operation"}
     )
 
-    assert request.property is None
-    assert _schema(DATA_DIR).validates(request) is False
+    assert _schema(DATA_DIR).validation_code(request) == "UNSUPPORTED_OPERATION"
 
 
 def test_semantic_validator_rejects_type_incompatible_extreme() -> None:
@@ -1460,12 +1458,14 @@ async def test_status_predicate_prefers_authoritative_role_then_falls_back_to_ag
 
 
 @pytest.mark.asyncio
-async def test_relationship_properties_and_duration_use_the_spouse_edge(
+async def test_relationship_properties_and_date_interval_use_the_spouse_edge(
     service: SemanticFactService,
     context: AgentRequestContext,
 ) -> None:
     marriage_date = _select(_spouse(), "start_date", property_source="relationship")
-    duration = marriage_date.model_copy(update={"operation": "duration", "mode": "days"})
+    duration = marriage_date.model_copy(
+        update={"operation": "date_difference", "mode": "days"}
+    )
     date_result, _ = await _execute(service, marriage_date, context)
     duration_result, _ = await _execute(service, duration, context)
 

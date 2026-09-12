@@ -7,12 +7,11 @@ from typing import Any, get_args
 
 from .request_tracing import stage
 from .edge_schema import EdgeSchemaRegistry, UnknownEdgeSchemaError
-from .operator_registry import OPERATORS, OperatorValidationError
+from .operator_registry import FACT_OPERATORS, OPERATORS, OperatorValidationError
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_ontology import SemanticOntology
 from .semantic_contracts import ResolvedSemanticContract
 from .semantic_ir import (
-    FactOperation,
     PlannerValidationCode,
     ReferenceKind,
     SemanticConceptUse,
@@ -246,7 +245,7 @@ class SemanticSchemaRegistry:
                 relation: sorted(self.semantic_relation_properties(relation))
                 for relation in sorted(relations)
             },
-            "operations": sorted(get_args(FactOperation)),
+            "operations": sorted(FACT_OPERATORS),
             "operation_requirements": {
                 "select": "property=null returns all matching entities, including zero or many; property set returns a single stored property value. Filter properties are not output projections.",
                 "inspect": "property=null; returns all declared semantic attributes of one entity, marking missing values null; no storage IDs or metadata",
@@ -254,8 +253,6 @@ class SemanticSchemaRegistry:
                 "same_entity": "property=null; two resolved references subject and other; returns whether they are the same entity; not identity introduction and not a stored property",
                 "argmin": "ordered property required; collection subject OR two references subject and other; returns entity",
                 "argmax": "ordered property required; collection subject OR two references subject and other; returns entity",
-                "completed_years": "legacy structured-call alias; interpreter uses date_difference with mode=years",
-                "duration": "date property + mode days|seconds",
                 "annual_occurrence": "date property; mode=days only for countdown",
                 "date_add": "date property + strict integer amount + mode years|months|days; invalid target day becomes the following month's first day, return specified date even in past",
                 "date_difference": "one entity OR relationship date to household_now; mode explicitly chooses years|months|days|seconds. Calendar years/months count full anniversaries, signed toward zero; never divide days by a fixed ratio. Age, tenure and elapsed relationship time use this same operation.",
@@ -290,8 +287,8 @@ class SemanticSchemaRegistry:
                     "discourse": "turn_offset 1..8 selects that prior user turn's trusted resolved focus; cardinality single or collection; entity_type required; never supply IDs",
                 },
                 "entity_types": full["entity_types"],
-                "operations": [name for name in full["operations"] if name not in {"duration", "completed_years"}],
-                "operation_requirements": {name: value for name, value in full["operation_requirements"].items() if name not in {"duration", "completed_years"}},
+                "operations": full["operations"],
+                "operation_requirements": full["operation_requirements"],
                 "filter_requirements": {
                     "composition": "request.filters restricts the resolved collection before select/count/aggregation; all conditions are AND. The outer property selects the output, not the field used by a filter.",
                     "date_range": "date/datetime property with value=[inclusive_start, exclusive_end]; use ISO dates. A calendar year Y is [Y-01-01, (Y+1)-01-01).",
@@ -596,6 +593,9 @@ class SemanticSchemaRegistry:
 
     def validation_code(self, request: SemanticFactRequest) -> PlannerValidationCode:
         """Return a stable, non-sensitive reason for semantic-plan rejection."""
+        operation = FACT_OPERATORS.get(request.operation)
+        if operation is None:
+            return "UNSUPPORTED_OPERATION"
         references = (request.subject,) + ((request.other,) if request.other else ()) + request.exclude
         if self.contract_error(request) is not None:
             return 'INVALID_PLAN'
@@ -736,7 +736,6 @@ class SemanticSchemaRegistry:
             ):
                 return "INVALID_PLAN"
 
-        operation = OPERATORS[request.operation]
         collection_input = bool(request.subject.path or request.other is not None
                                 or request.subject.cardinality == "collection")
         if request.amount is not None and request.operation != "date_add":

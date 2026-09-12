@@ -9,7 +9,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal, get_args
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -20,7 +20,7 @@ from .mutation_ir import (
     NamedDeleteItem,
     NamedUpdateAttributes,
 )
-from .operator_registry import OPERATORS
+from .operator_registry import FactOperation
 
 FactStatus = Literal[
     "found",
@@ -38,29 +38,6 @@ FactStatus = Literal[
     "computation_input_missing",
     "computation_impossible",
     "collection_incomplete",
-]
-FactOperation = Literal[
-    "inspect",
-    "resolve_reference",
-    "same_entity",
-    "select",
-    "count",
-    "first",
-    "last",
-    "latest",
-    "earliest",
-    "sum",
-    "average",
-    "min",
-    "max",
-    "argmin",
-    "argmax",
-    "date_add",
-    "date_difference",
-    "completed_years",
-    "duration",
-    "annual_occurrence",
-    "unit_conversion",
 ]
 ReferenceKind = Literal[
     "self",
@@ -257,17 +234,6 @@ class SemanticFactRequest(_SemanticModel):
     mode: Literal["years", "months", "days", "seconds"] | None = None
     from_unit: str | None = Field(default=None, max_length=16)
     to_unit: str | None = Field(default=None, max_length=16)
-
-    @model_validator(mode="after")
-    def validate_operation(self) -> "SemanticFactRequest":
-        if self.operation not in OPERATORS:
-            raise ValueError("operation is not in the generic operator registry")
-        return self
-
-
-if not set(get_args(FactOperation)).issubset(OPERATORS):
-    raise RuntimeError("FactOperation must be backed by the generic operator registry")
-
 
 class SemanticPlan(_SemanticModel):
     """The only structured output accepted from the Tier-1 interpreter."""

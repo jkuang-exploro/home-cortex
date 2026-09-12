@@ -9,7 +9,7 @@ import pytest
 
 from home_cortex.semantic_ir import SemanticPlan
 from home_cortex.semantic_schema import SemanticSchemaRegistry
-from home_cortex.semantic_transport import (
+from scripts.profiling.semantic_transport import (
     SemanticTransport, canonical_json, pack_capabilities, unpack_capabilities,
 )
 from test_semantic_contract import household
@@ -104,7 +104,7 @@ def test_capability_tables_preserve_order_and_reserved_literals():
 
 def test_cross_process_determinism():
     script = '''
-from home_cortex.semantic_transport import *
+from scripts.profiling.semantic_transport import *
 from home_cortex.semantic_ir import SemanticPlan
 c=SemanticTransport(SemanticPlan.model_json_schema())
 v={k: {'ordered': [3,1,2], 'set': {'b','a'}} for k in {'beta','alpha'}}
@@ -136,7 +136,7 @@ async def test_retry_diagnostics_preserve_each_transport_attempt(household):
             return ChatResponse(message={'role': 'assistant', 'content': self.responses.pop(0)}, prompt_eval_count=111, eval_count=22)
     client = Client()
     # Explicit offline adapter: the serving client must not require this codec.
-    from home_cortex.semantic_transport import decode_response
+    from scripts.profiling.semantic_transport import decode_response
     class OfflineCompactInterpreter:
         last_planner_runtime = {}
         async def plan_semantic_fact(self, messages, capabilities, output_schema, **kwargs):
@@ -173,7 +173,7 @@ def test_optional_tail_and_slot_order_cannot_be_confused(household):
 
 
 def test_transport_dictionary_version_snapshot():
-    from home_cortex.semantic_transport import fingerprint
+    from scripts.profiling.semantic_transport import fingerprint
     codec = SemanticTransport(SemanticPlan.model_json_schema())
     # Changing field allocation requires an intentional codec version change.
     assert (codec.version, fingerprint(codec.aliases)[:8]) == (4, 'd429a8f4')

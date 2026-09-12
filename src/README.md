@@ -305,10 +305,9 @@ local time of day. Days/seconds retain the existing interval semantics.
 The adulthood ontology explicitly requires a past input date, so a future
 date cannot silently classify a person as a minor.
 
-`duration` and `completed_years` remain compatibility entry points for existing
-structured callers; they delegate to the generic implementation and are absent
-from the model-facing operation vocabulary. Existing benchmark expectations
-use the canonical syntax; historical result artifacts are not rescored.
+Structured callers and the interpreter use this same canonical operation;
+historical aliases are not part of the execution vocabulary. Existing benchmark
+expectations use the canonical syntax; historical result artifacts are not rescored.
 
 
 ## Collection projections, calendar offsets, and discourse
@@ -727,6 +726,56 @@ compiles model output through ontology expansion and validation into
 and returns `FactResult` for deterministic rendering. Invalid location plans
 are never rewritten into a different request.
 
+The request path has one representation at each semantic boundary:
+
+| Stage | Owner | Authoritative value | Input → output |
+|---|---|---|---|
+| HTTP and identity | `api.py`, `agent_service.py` | `AgentRequestContext` | authenticated headers and messages → trusted context |
+| Conversation focus | `semantic_conversation.py` | `DiscourseContext` | prior resolved focus → scoped context extension |
+| Interpretation | `semantic_planner.py` | `SemanticPlan` | utterance plus capabilities → validated request or mutation |
+| Read request | `semantic_ir.py` | `SemanticFactRequest` | semantic plan → unchanged executor input |
+| Grounding | `entity_resolver.py` | `ResolvedEntities` | semantic references plus context → graph entities and edges |
+| Computation | `household_fact_engine.py` | `FactResult` | grounded request → deterministic value and evidence |
+| Persistence | `retrieval.py`, `db.py` | graph records | bounded internal graph calls → storage records |
+| Presentation | `fact_renderer.py` | answer text | request plus `FactResult` → localized answer |
+
+`SemanticFactService` coordinates these stages and records diagnostics; it does
+not introduce another request or result DTO. `model_loop.py` handles ordinary
+conversation, calculation, and calendar tools. It cannot route household graph
+questions around semantic planning. The two provider adapters share planner
+messages and schemas, while retaining their small protocol-specific request,
+streaming, and error code because those wire contracts differ.
+
+The schema-named modules own different facts:
+
+| Module | Owns | Does not own |
+|---|---|---|
+| `semantic_ontology.py` | parsing and validating reusable property, concept, predicate, and relation declarations | deployed storage fields |
+| `edge_schema.py` | physical relationship tables, directions, endpoints, temporal fields, and inverses | natural-language concepts |
+| `schema_catalog.py` | deployed node/edge fields and types, plus shared name/appellation matching | planner grammar |
+| `semantic_schema.py` | binding ontology vocabulary to the catalog, plan validation, and derived planner capabilities | a second ontology |
+| `semantic_contracts.py` | opt-in V2 typed property constraints | the default V1 vocabulary or execution flow |
+| `operator_registry.py` | the public operation type, predicate allowlist, validation contracts, and deterministic implementations | entity resolution or rendering |
+
+`semantic_ir.py` is the canonical read IR. `mutation_ir.py` remains separate
+because writes add preview/apply modes, update constraints, and confirmation
+semantics that no factual request carries. `semantic_contracts.py` remains only
+for the explicitly loaded V2 candidate; default V1 execution does not convert
+through it.
+
+Speaker identity is established once by `AgentService` from the authenticated
+identity mapping. The same `AgentRequestContext` reaches discourse resolution,
+the fact engine, and named mutations. Internal graph calls may carry its caller
+and household IDs as scoped lookup parameters, but they never reconstruct them
+from model arguments. `EntityResolver` alone interprets self, names, discourse,
+kinship paths, and household-relative references.
+
+Rendering boundaries are similarly explicit. `FactRenderer` interprets only the
+canonical request/result pair. `semantic_display.py` describes semantic scopes
+and filters; `display.py` sanitizes generic model tool records; `greetings.py`
+selects deterministic reception text; and `text.py` contains small shared text
+normalization helpers. None of them reads graph facts or changes computed values.
+
 Storage adapters share `schema_catalog.matching_named_entities` for normalized
 aliases, scoped appellations, ordering, and limits. Authentication remains an
 exact-ID lookup. Alias SQL projects identity metadata rather than full profiles.
@@ -734,3 +783,5 @@ Mutation resolution and rendering use the active ontology.
 
 See [the convergence report](../artifacts/architectural-convergence/REPORT.md)
 for ownership decisions, measured local results, and outstanding GPU acceptance.
+The [context-surface cleanup report](../artifacts/context-surface-cleanup/REPORT.md)
+records the operation/IR audit, branch coverage, and final sizing.

@@ -66,7 +66,7 @@ def ref(*steps):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('day,expected', [('2026-05-31',43), ('2026-06-01',44), ('2026-06-02',44)])
-async def test_age_is_completed_years_not_birth_date(household, day, expected):
+async def test_age_is_full_calendar_years_not_birth_date(household, day, expected):
     engine,ctx,_=household
     ctx=replace(ctx,current_time=datetime.fromisoformat(day+'T12:00:00-07:00'),locale='zh')
     age=SemanticFactRequest(operation='date_difference',mode='years',subject=ref(step('spouse','female')),property='birth_date')
@@ -109,7 +109,6 @@ def test_interpreter_exposes_one_interval_operation(household):
     engine,ctx,_=household
     operations=engine.schema.planner_capability_payload()['operations']
     assert 'date_difference' in operations
-    assert not set(operations).intersection({'duration','completed_years'})
     assert engine.schema.planner_output_schema()['$defs']['SemanticFactRequest']['properties']['operation']['enum']==operations
 
 
@@ -195,8 +194,8 @@ async def test_relationship_ownership_across_relations_and_speakers(household,sp
     request=SemanticFactRequest(operation='select',subject=ref(step(relation)),property='start_date',property_source='relationship')
     result,*_=await engine.execute(request,ctx)
     assert result.status=='found' and result.value==expected
-    duration=request.model_copy(update={'operation':'duration','mode':'days'})
-    result,*_=await engine.execute(duration,ctx)
+    interval=request.model_copy(update={'operation':'date_difference','mode':'days'})
+    result,*_=await engine.execute(interval,ctx)
     assert result.value==(ctx.current_time.date()-datetime.fromisoformat(expected).date()).days
     assert not engine.schema.validates(request.model_copy(update={'property_source':'entity'}))
     if relation=='spouse':
@@ -292,7 +291,7 @@ async def test_declared_predicates_and_invalid_filters_are_not_repaired(househol
     result,*_=await engine.execute(minor,ctx)
     assert result.value==3
     invalids=[
-        adult.model_copy(update={'filters':(*adult.filters,SemanticFilter(predicate='completed_years'))}),
+        adult.model_copy(update={'filters':(*adult.filters,SemanticFilter(predicate='invented_predicate'))}),
         adult.model_copy(update={'filters':(SemanticFilter(property='adult'),)}),
         adult.model_copy(update={'subject':members.model_copy(update={'path':(SemanticRelationStep(relation='child'),)})}),
         adult.model_copy(update={'subject':members.model_copy(update={'entity_type':'person'})}),
