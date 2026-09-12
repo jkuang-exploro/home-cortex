@@ -29,3 +29,11 @@ def canonical_record_id(value: Any) -> str:
     if table is None or record_id is None:
         return str(value)
     return f"{table}:{record_id}"
+
+
+def as_record_id(value: str):
+    """Build a SurrealDB RecordID from a canonical table:key string."""
+    from surrealdb import RecordID
+
+    table, record_id = split_record_id(value)
+    return RecordID(table, record_id)

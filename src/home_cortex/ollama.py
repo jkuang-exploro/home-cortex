@@ -243,7 +243,7 @@ def planner_chat_messages(
             "role": "user",
             "content": str(message.get("content", "")),
         })
-    from .semantic_facts import _identity_person_hint, _object_location_hint
+    from .semantic_planner import _identity_person_hint, _object_location_hint
 
     notes = [
         str(message.get("content", "")) for message in messages

@@ -12,8 +12,8 @@ from .db import Database
 from .edge_schema import EdgeSchema, EdgeSchemaRegistry, UnknownEdgeSchemaError
 from .record_ids import (
     TABLE_NAME_RE,
+    as_record_id,
     canonical_record_id,
-    split_record_id,
 )
 from .schema_catalog import node_table_sources
 
@@ -124,12 +124,11 @@ def _is_localized_text(value: Any) -> bool:
 
 def parse_record_id(value: str, *, source: Path) -> RecordID:
     try:
-        table, record_id = split_record_id(value)
+        return as_record_id(value)
     except ValueError as error:
         raise ValueError(
             f"Invalid record ID {value!r} in {source}; expected table:record_id"
         ) from error
-    return RecordID(table, record_id)
 
 
 def implicit_edge_component(record_id: RecordID) -> str:

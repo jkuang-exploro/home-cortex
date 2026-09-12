@@ -2,8 +2,6 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from surrealdb import RecordID
-
 from .db import Database
 from .edge_schema import (
     EdgeSchema,
@@ -11,7 +9,7 @@ from .edge_schema import (
     ResolvedEdgeSchema,
     UnknownEdgeSchemaError,
 )
-from .record_ids import canonical_record_id, split_record_id
+from .record_ids import as_record_id, canonical_record_id
 from .schema_catalog import (
     matching_named_entities,
     node_table_sources,
@@ -60,7 +58,7 @@ class RetrievalService:
 
         This is a point-get, not named-entity resolution.
         """
-        entity = _parse_record_id(record_id)
+        entity = as_record_id(record_id)
         if entity.table_name not in self.node_tables:
             raise ValueError(
                 f"Unknown entity type {entity.table_name!r}; expected one of "
@@ -118,7 +116,7 @@ class RetrievalService:
         *,
         include_ended: bool = False,
     ) -> list[dict[str, Any]]:
-        entity = _parse_record_id(entity_id)
+        entity = as_record_id(entity_id)
         result_limit = self._validated_limit(limit)
 
         if relation is not None:
@@ -250,13 +248,6 @@ def _query_records(value: Any) -> list[dict[str, Any]]:
     ):
         return normalized
     raise RuntimeError("SurrealDB returned an unexpected query result")
-
-
-def _parse_record_id(value: str) -> RecordID:
-    if not isinstance(value, str):
-        raise ValueError("Entity ID must use the table:record_id format")
-    table, record_id = split_record_id(value)
-    return RecordID(table, record_id)
 
 
 def _relationship_direction(edge: dict[str, Any], entity_id: str) -> str:

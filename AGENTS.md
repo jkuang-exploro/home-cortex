@@ -14,8 +14,14 @@ reasoning*, not a catalog of expected questions.
 ## Active source (edit these)
 
 - `src/home_cortex/` — the Python package. Main pieces:
-  - `semantic_facts.py` — semantic IR, schema registry, planner, deterministic
-    executor, renderer, and the regression-locked invariants.
+  - `semantic_facts.py` — import index for the fact pipeline (re-exports).
+    Implementations:
+    - `semantic_ir.py` — request/result types (`SemanticFactRequest`, `FactResult`)
+    - `semantic_schema.py` — `SemanticSchemaRegistry` (vocabulary → catalog)
+    - `semantic_planner.py` — LLM interpreter (`SemanticFactPlanner`)
+    - `entity_resolver.py` — `EntityResolver` (self/name/path grounding)
+    - `household_fact_engine.py` — deterministic executor + `SemanticFactService`
+    - `fact_renderer.py` — answer text (`FactRenderer`)
   - `semantic_ontology.py` — declarative ontology model + validation.
   - `ollama.py` — LLM client, interpreter system prompt, and reusable examples.
   - `operator_registry.py` — deterministic operator/predicate registry.

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from .semantic_ontology import SemanticOntology
 
 if TYPE_CHECKING:
-    from .semantic_facts import SemanticFactRequest, SemanticFilter, SemanticReference
+    from .semantic_ir import SemanticFactRequest, SemanticFilter, SemanticReference
 
 
 def _text(value: str) -> str:

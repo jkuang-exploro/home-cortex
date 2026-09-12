@@ -38,8 +38,6 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from surrealdb import RecordID
-
 from .config import get_settings
 from .db import Database
 from .edge_schema import EdgeSchema, EdgeSchemaRegistry
@@ -48,7 +46,7 @@ from .ingestion import (
     _RETIRED_NODE_TABLES,
     implicit_edge_record_id,
 )
-from .record_ids import TABLE_NAME_RE, canonical_record_id, split_record_id
+from .record_ids import TABLE_NAME_RE, as_record_id, canonical_record_id, split_record_id
 
 _SURREAL_EDGE_IDENTITY_FIELDS = frozenset({"id", "in", "out"})
 _NODE_LEADING_FIELDS = ("id",)
@@ -247,8 +245,8 @@ def _canonical_edges(
             raise ValueError(
                 f"Edge in {relation!r} is missing SurrealDB in/out endpoints"
             )
-        source = _record_id(raw_from)
-        target = _record_id(raw_to)
+        source = as_record_id(raw_from)
+        target = as_record_id(raw_to)
         stored_id = converted.get("id")
         if not isinstance(stored_id, str):
             raise ValueError(f"Edge in {relation!r} is missing a canonical string id")
@@ -281,11 +279,6 @@ def _canonical_edges(
 
 def _looks_like_relationship(records: list[dict[str, Any]]) -> bool:
     return any("in" in record and "out" in record for record in records)
-
-
-def _record_id(value: str) -> RecordID:
-    table, record_id = split_record_id(value)
-    return RecordID(table, record_id)
 
 
 def _ordered_record(record: dict[str, Any], leading: tuple[str, ...]) -> dict[str, Any]:

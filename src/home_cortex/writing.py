@@ -32,6 +32,7 @@ from .ingestion import implicit_edge_component
 from .record_ids import (
     RECORD_ID_PATTERN,
     RECORD_ID_RE,
+    as_record_id,
     canonical_record_id,
     split_record_id,
 )
@@ -269,8 +270,8 @@ class ItemWritingService:
             await self.database.query(
                 _CREATE_TRANSACTION,
                 {
-                    "item": self._record_id(entity_id),
-                    "location": self._record_id(request.location_id),
+                    "item": as_record_id(entity_id),
+                    "location": as_record_id(request.location_id),
                     "edge": self._location_edge_id(entity_id, request.location_id),
                     "properties": dict(properties),
                 },
@@ -324,8 +325,8 @@ class ItemWritingService:
                     else _SET_INITIAL_LOCATION_TRANSACTION
                 ),
                 {
-                    "item": self._record_id(entity_id),
-                    "location": self._record_id(request.location_id),
+                    "item": as_record_id(entity_id),
+                    "location": as_record_id(request.location_id),
                     "edge": self._location_edge_id(entity_id, request.location_id),
                     "relation": self.location_relation,
                 },
@@ -370,7 +371,7 @@ IF $existing = NONE { THROW "WRITE_ITEM_MISSING"; };
 IF $existing != $expected { THROW "WRITE_CONFLICT"; };
 UPDATE $item MERGE $properties;
 COMMIT TRANSACTION;
-""", {"item": self._record_id(entity_id), "expected": {**entity, "id": self._record_id(entity_id)},
+""", {"item": as_record_id(entity_id), "expected": {**entity, "id": as_record_id(entity_id)},
        "properties": dict(request.properties)})
         except Exception:
             return self._database_rejected(request, entity_id, previous_state=previous)
@@ -463,7 +464,7 @@ COMMIT TRANSACTION;
 
     async def _record(self, entity_id: str) -> dict[str, Any] | None:
         value = await self.database.query(
-            "SELECT * FROM ONLY $record;", {"record": self._record_id(entity_id)}
+            "SELECT * FROM ONLY $record;", {"record": as_record_id(entity_id)}
         )
         if value is None:
             return None
@@ -479,7 +480,7 @@ COMMIT TRANSACTION;
                 "SELECT VALUE out FROM type::table($relation) WHERE in = $item;",
                 {
                     "relation": self.location_relation,
-                    "item": self._record_id(entity_id),
+                    "item": as_record_id(entity_id),
                 },
             )
         except NotFoundError:
@@ -497,7 +498,7 @@ COMMIT TRANSACTION;
                 value = await self.database.query(
                     "SELECT count() AS count FROM type::table($relation) "
                     "WHERE in = $item OR out = $item GROUP ALL;",
-                    {"relation": relation, "item": self._record_id(entity_id)},
+                    {"relation": relation, "item": as_record_id(entity_id)},
                 )
             except NotFoundError:
                 continue
@@ -515,7 +516,7 @@ COMMIT TRANSACTION;
             "LET $existing = SELECT VALUE id FROM ONLY $item;",
             'IF $existing = NONE { THROW "WRITE_ITEM_MISSING"; };',
         ]
-        variables: dict[str, Any] = {"item": self._record_id(entity_id)}
+        variables: dict[str, Any] = {"item": as_record_id(entity_id)}
         for index, relation in enumerate(incident_relations):
             name = f"relation_{index}"
             variables[name] = relation
@@ -534,17 +535,12 @@ COMMIT TRANSACTION;
         )
 
     def _location_edge_id(self, item_id: str, location_id: str) -> RecordID:
-        item = self._record_id(item_id)
-        location = self._record_id(location_id)
+        item = as_record_id(item_id)
+        location = as_record_id(location_id)
         identifier = (
             f"{implicit_edge_component(item)}__{implicit_edge_component(location)}"
         )
         return RecordID(self.location_relation, identifier)
-
-    @staticmethod
-    def _record_id(value: str) -> RecordID:
-        table, record_id = split_record_id(value)
-        return RecordID(table, record_id)
 
     @staticmethod
     def _valid_name(value: Any) -> bool:
