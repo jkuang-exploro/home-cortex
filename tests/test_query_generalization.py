@@ -556,3 +556,25 @@ async def test_derived_age_threshold_is_computed_not_a_guessed_date_range(househ
     younger_result, *_ = await engine.execute(younger, context)
     assert older_result.value == 4 and younger_result.value == 4
     assert older_result.value + younger_result.value == 8
+    hop = SemanticFactRequest(
+        operation="select",
+        subject=SemanticReference(
+            kind="current_household",
+            path=(
+                SemanticRelationStep(
+                    relation="member",
+                    filters=(
+                        SemanticFilter(
+                            property="birth_date",
+                            transform="date_difference",
+                            mode="years",
+                            operator="gte",
+                            value=35,
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+    hop_result, *_ = await engine.execute(hop, context)
+    assert {item["id"] for item in hop_result.value} == ids

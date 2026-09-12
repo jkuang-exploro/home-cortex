@@ -10,7 +10,7 @@ import statistics
 import subprocess
 import time
 
-from home_cortex.ollama import planner_chat_messages, _semantic_planner_examples
+from home_cortex.ollama import planner_chat_messages, _semantic_planner_examples, _PLANNER_INSTRUCTIONS
 from home_cortex.semantic_planner_benchmark import build_json_fact_service
 from home_cortex.semantic_transport import canonical_json, pack_capabilities, transport_for
 
@@ -47,7 +47,16 @@ def main():
         now = '2026-09-09T12:00:00Z'
         baseline_label = 'Pre-change frozen synthetic capture at ' + snapshot['revision']
     codec = transport_for(output_schema)
-    compact = planner_chat_messages(users, capabilities, household_now=now, output_schema=output_schema)
+    compact = [dict(message) for message in planner_chat_messages(users, capabilities, household_now=now)]
+    compact[0]['content'] = (
+        _PLANNER_INSTRUCTIONS + codec.instructions() + '\nCapabilities:\n'
+        + canonical_json(pack_capabilities(capabilities))
+    )
+    for index, message in enumerate(examples):
+        if message['role'] == 'assistant':
+            compact[1 + index]['content'] = codec.encode(
+                json.loads(message['content']), validate=False
+            )
 
     def sizes(text):
         return {'bytes': len(text.encode()), 'tokens': tokens(text), 'sha256': hashlib.sha256(text.encode()).hexdigest()}

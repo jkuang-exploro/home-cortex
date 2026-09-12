@@ -176,36 +176,12 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
     assert "Household now:" not in prompt
     assert clock == [
         "Household now: 2026-09-03T12:00:00-07:00\n"
-        "Person deixis: first person 我/I/me/my → kind=self; "
-        "second person 你/您/you/your addressing this helper → kind=assistant. "
-        "Chinese, English, and mixed utterances compile to the same IR; "
-        "do not translate first. "
-        "Do not add path, filters, or amount unless the latest "
-        "utterance requires them. Do not copy filters from earlier turns. "
-        "Age-at-least N is birth_date transform=date_difference mode=years operator=gte value=N. "
-        "以上/满/at least=gte; 以下/未满/under=lt; do not invert. "
-        "我家/我家里/my household/our household people lists use current_household then member, "
-        "never self then member or self then residence. "
-        "Household rooms use path concept room from current_household. "
-        "An explicit room name (厨房/kitchen, 车库/garage) is named_entity "
-        "entity_type=space then contents, never current_household then room. "
-        "Follow-up 还有哪些/what other excludes the prior typed discourse "
-        "entity while keeping an explicit named collection root as subject. "
-        "Item classes use the stored item_type field. "
-        "Named object 在哪里/where is X: named_entity value=X entity_type=item "
-        "path location, resolve_reference; not a person, not adult/minor, "
-        "not current_household. "
-        "Entity identity is same_entity with two references subject and other, property=null. "
-        "Residence-here compares that person's residence with current_household; "
-        "do not reuse a prior resolve_reference identity plan. "
-        "named_entity.value keeps the user's literal (林青 stays 林青). "
-        "Listing contents of a named room, container, or subspace uses that "
-        "complete latest name as named_entity, path contents, select. "
-        "current_household then room is only an unqualified household room "
-        "collection, never a replacement for a named room."
+        "Compile only the latest user message. Do not add path, filters, or "
+        "amount unless that utterance requires them. Do not copy filters from "
+        "earlier turns."
     ]
     assert sum(m["role"] == "system" for m in call["messages"]) == 2
-    assert "addressing this helper" in json.dumps(call["messages"])
+    assert "addressing this assistant" in json.dumps(call["messages"])
     assert "self is the authenticated speaker" in prompt
     assert "kind=assistant" in prompt
     assert "请介绍一下你自己。" in json.dumps(call["messages"], ensure_ascii=False)

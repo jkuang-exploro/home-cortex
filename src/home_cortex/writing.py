@@ -17,7 +17,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    RootModel,
     TypeAdapter,
     ValidationError,
     JsonValue,
@@ -138,12 +137,6 @@ WriteRequest = Annotated[
     Field(discriminator="operation"),
 ]
 WRITE_REQUEST_ADAPTER = TypeAdapter(WriteRequest)
-
-
-class WriteItemToolArguments(RootModel[WriteRequest]):
-    """Root wrapper used by the generic model-tool dispatcher."""
-
-    model_config = ConfigDict(strict=True)
 
 
 class MutationError(_WriteModel):

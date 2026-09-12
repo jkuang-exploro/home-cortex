@@ -754,9 +754,6 @@ class SemanticSchemaRegistry:
                 for values in group.values()
                 for prop in values
             })
-            definitions["SemanticRelationStep"]["properties"]["relation"] = {
-                "type": "string", "enum": full["semantic_relations"]
-            }
             definitions["SemanticReference"]["properties"]["path"]["items"] = {
                 "type": "object", "additionalProperties": False,
                 "properties": {
@@ -793,10 +790,6 @@ class SemanticSchemaRegistry:
             derived_age = {
                 "type": "object",
                 "additionalProperties": False,
-                "description": (
-                    "Compare completed calendar units of a date property "
-                    "against Household now. Age thresholds use this form."
-                ),
                 "properties": {
                     "property": {"type": "string", "enum": date_properties or properties},
                     "transform": {"type": "string", "const": "date_difference"},
@@ -838,21 +831,10 @@ class SemanticSchemaRegistry:
                 {
                     "type": "object",
                     "additionalProperties": False,
-                    "description": (
-                        "Contextual reference. kind=self is the authenticated "
-                        "speaker (first person). kind=assistant is this helper "
-                        "when the user addresses it (second person). "
-                        "kind=current_household is the configured home."
-                    ),
                     "properties": {
                         "kind": {
                             "type": "string",
                             "enum": ["self", "assistant", "current_household"],
-                            "description": (
-                                "self: first-person speaker. assistant: this "
-                                "helper under second-person address. "
-                                "current_household: configured home."
-                            ),
                         },
                         "value": {"type": "null"},
                         "entity_type": {
@@ -871,13 +853,6 @@ class SemanticSchemaRegistry:
                 {
                     "type": "object",
                     "additionalProperties": False,
-                    "description": (
-                        "A name copied verbatim from the user utterance; never "
-                        "a pronoun. entity_type=item for objects, space for "
-                        "named rooms/areas, person for people. Object "
-                        "在哪里/where is uses entity_type=item and path "
-                        "concept location."
-                    ),
                     "properties": {
                         "kind": {"type": "string", "const": "named_entity"},
                         "value": {"type": "string", "maxLength": 256},
@@ -894,7 +869,6 @@ class SemanticSchemaRegistry:
                 {
                     "type": "object",
                     "additionalProperties": False,
-                    "description": "Focus of a prior user turn. Not a substitute for first- or second-person identity.",
                     "properties": {
                         "kind": {"type": "string", "const": "discourse"},
                         "entity_type": {"type": "string", "enum": entity_types},
@@ -914,7 +888,6 @@ class SemanticSchemaRegistry:
                 {
                     "type": "object",
                     "additionalProperties": False,
-                    "description": "A referring expression that cannot be grounded.",
                     "properties": {
                         "kind": {"type": "string", "const": "unresolved"},
                         "entity_type": {
@@ -2015,7 +1988,16 @@ class EntityResolver:
                 self.schema.validate_filter_value(item.property, record.get(physical))
                 if item.transform:
                     predicates.append(
-                        self._date_transform_matches(item, record.get(physical), context)
+                        _derived_date_matches(
+                            record.get(physical),
+                            context.current_time,
+                            transform=item.transform,
+                            mode=item.mode,
+                            operator=item.operator,
+                            compare_value=item.value,
+                            require_past=True,
+                            missing=(item.property,),
+                        )
                     )
                     continue
                 expected = item.value
@@ -2585,49 +2567,17 @@ class HouseholdFactEngine:
             raise _FactFailure("filter_input_missing", missing=(item.property,))
         self.schema.validate_filter_value(item.property, record.get(physical))
         if item.transform:
-            return self._date_transform_matches(item, record.get(physical), context)
-        return evaluate_predicate(item.operator, record.get(physical), item.value)
-
-    def _date_transform_matches(
-        self,
-        item: SemanticFilter,
-        raw_value: Any,
-        context: AgentRequestContext,
-    ) -> bool:
-        normalized = {"value": raw_value}
-        try:
-            if execute_operator(
-                "date_difference",
-                OperatorInput(
-                    records=[normalized],
-                    field="value",
-                    mode="seconds",
-                    now=context.current_time,
-                ),
-            ) < 0:
-                raise OperatorExecutionError("derived date filter requires a past date")
-            transform = OPERATORS[item.transform or "date_difference"]
-            transform.validate(
-                field="value",
-                field_kind=infer_field_kind([raw_value]),
-                parameters={"reference": "household_now", "mode": item.mode},
-            )
-            derived = execute_operator(
-                item.transform or "date_difference",
-                OperatorInput(
-                    records=[normalized],
-                    field="value",
-                    reference="household_now",
-                    now=context.current_time,
-                    mode=item.mode,
-                ),
-            )
-        except (OperatorValidationError, OperatorExecutionError, TypeError, ValueError):
-            raise _FactFailure(
-                "filter_input_missing",
+            return _derived_date_matches(
+                record.get(physical),
+                context.current_time,
+                transform=item.transform,
+                mode=item.mode,
+                operator=item.operator,
+                compare_value=item.value,
+                require_past=True,
                 missing=(item.property,),
-            ) from None
-        return evaluate_predicate(item.operator, derived, item.value)
+            )
+        return evaluate_predicate(item.operator, record.get(physical), item.value)
 
     def _relation_filter_matches(
         self,
@@ -2709,38 +2659,16 @@ class HouseholdFactEngine:
                 missing=(predicate, fallback.property),
             )
         self.schema.validate_filter_value(fallback.property, raw_value)
-        normalized = {"value": raw_value}
-        try:
-            if fallback.require_past and execute_operator(
-                "date_difference",
-                OperatorInput(records=[normalized],field="value",mode="seconds",now=context.current_time),
-            ) < 0:
-                raise OperatorExecutionError("predicate requires a past date")
-            transform = OPERATORS[fallback.transform]
-            transform.validate(
-                field="value",
-                field_kind=infer_field_kind([raw_value]),
-                parameters={"reference": "household_now", "mode": fallback.mode},
-            )
-            derived = execute_operator(
-                fallback.transform,
-                OperatorInput(
-                    records=[normalized],
-                    field="value",
-                    reference="household_now",
-                    now=context.current_time,
-                    mode=fallback.mode,
-                ),
-            )
-        except (OperatorValidationError, OperatorExecutionError, TypeError, ValueError):
-            raise _FactFailure(
-                "filter_input_missing",
-                missing=(predicate, fallback.property),
-            ) from None
-        threshold = self.schema.ontology.policy_values[
-            fallback.value_from_policy
-        ]
-        return evaluate_predicate(fallback.operator, derived, threshold)
+        return _derived_date_matches(
+            raw_value,
+            context.current_time,
+            transform=fallback.transform,
+            mode=fallback.mode,
+            operator=fallback.operator,
+            compare_value=self.schema.ontology.policy_values[fallback.value_from_policy],
+            require_past=fallback.require_past,
+            missing=(predicate, fallback.property),
+        )
 
     @staticmethod
     def _singular_relationship(
@@ -3566,6 +3494,50 @@ def planner_input_summary(capabilities: Mapping[str, Any]) -> dict[str, Any]:
             capabilities.get("collection_predicates", ())
         ),
     }
+
+
+def _derived_date_matches(
+    raw_value: Any,
+    now: datetime,
+    *,
+    transform: str,
+    mode: str | None,
+    operator: str,
+    compare_value: Any,
+    require_past: bool,
+    missing: tuple[str, ...],
+) -> bool:
+    """Compare a date property after a declared transform against Household now."""
+    normalized = {"value": raw_value}
+    try:
+        if require_past and execute_operator(
+            "date_difference",
+            OperatorInput(
+                records=[normalized],
+                field="value",
+                mode="seconds",
+                now=now,
+            ),
+        ) < 0:
+            raise OperatorExecutionError("derived date filter requires a past date")
+        OPERATORS[transform].validate(
+            field="value",
+            field_kind=infer_field_kind([raw_value]),
+            parameters={"reference": "household_now", "mode": mode},
+        )
+        derived = execute_operator(
+            transform,
+            OperatorInput(
+                records=[normalized],
+                field="value",
+                reference="household_now",
+                now=now,
+                mode=mode,
+            ),
+        )
+    except (OperatorValidationError, OperatorExecutionError, TypeError, ValueError, KeyError):
+        raise _FactFailure("filter_input_missing", missing=missing) from None
+    return evaluate_predicate(operator, derived, compare_value)
 
 
 _SECOND_PERSON_IDENTITY = re.compile(

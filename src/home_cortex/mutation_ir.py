@@ -1,9 +1,16 @@
 """Model-facing item mutation intents; physical table IDs are absent."""
+import json
+from functools import lru_cache
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, TypeAdapter, model_validator
 
+from .text import latest_user_message
 from .writing import WriteMode
+
+
+def _compact_json(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
 class _NamedWrite(BaseModel):
@@ -91,11 +98,9 @@ class MutationDecision(BaseModel):
         return self
 
 
-def mutation_messages(messages):
-    """Interpret the current speech act without household facts or storage fields."""
-    import json
-    latest = next(str(message.get('content', '')) for message in reversed(messages)
-                  if message.get('role') == 'user')
+@lru_cache(maxsize=1)
+def _mutation_prefix() -> tuple[tuple[str, str], ...]:
+    """Static mutation compiler prefix; ontology load is cached with the text."""
     from .semantic_ontology import SemanticOntology
     attributes = {name: {"type": prop.item_writable, "aliases": prop.aliases,
                          "value_labels": dict(prop.value_labels), "write_hint": prop.write_hint}
@@ -131,7 +136,7 @@ def mutation_messages(messages):
         'writes require requires_mutation=false and mutation=null. An explicit write '
         'requires requires_mutation=true; if the needed names are missing, mutation=null '
         'so the assistant can ask for clarification. Return JSON only.\n'
-        + json.dumps(attributes, ensure_ascii=False)
+        + _compact_json(attributes)
     )
     examples = [
         ('请记下：茶几下层放着画册。', {'requires_mutation': True, 'mutation': {
@@ -153,12 +158,18 @@ def mutation_messages(messages):
         ('茶几下层放着什么？', {'requires_mutation': False, 'mutation': None}),
         ('Translate: "Record a notebook in the desk drawer."', {'requires_mutation': False, 'mutation': None}),
     ]
-    result = [{'role': 'system', 'content': instructions}]
+    messages = [("system", instructions)]
     for utterance, decision in examples:
-        result.extend([{'role': 'user', 'content': utterance},
-                       {'role': 'assistant', 'content': json.dumps(decision, ensure_ascii=False)}])
-    result.append({'role': 'user', 'content': latest})
-    return result
+        messages.extend((("user", utterance), ("assistant", _compact_json(decision))))
+    return tuple(messages)
+
+
+def mutation_messages(messages):
+    """Interpret the current speech act without household facts or storage fields."""
+    return [
+        {"role": role, "content": content}
+        for role, content in _mutation_prefix()
+    ] + [{"role": "user", "content": latest_user_message(messages)}]
 
 
 def read_plan_schema(schema):

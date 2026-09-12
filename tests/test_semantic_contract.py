@@ -422,7 +422,7 @@ def test_wire_grammar_requires_ownership_and_runtime_types_context(household):
     assert 'turn_offset' not in ordinary['properties']
     assert 'cardinality' not in ordinary['properties']
     assert ordinary['required']==['kind']
-    assert 'second person' in ordinary['description'].casefold()
+    assert 'description' not in ordinary
     assert ordinary['properties']['kind']['enum']==['self','assistant','current_household']
     assert defs['SemanticFactRequest']['properties']['property']['anyOf'][0]=={'type':'null'}
     assert defs['SemanticFactRequest']['properties']['amount']['anyOf'][0]=={'type':'null'}

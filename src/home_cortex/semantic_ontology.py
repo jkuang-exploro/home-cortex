@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping
@@ -224,6 +225,7 @@ class SemanticOntology:
         )
 
     @classmethod
+    @lru_cache(maxsize=1)
     def load_default(cls) -> "SemanticOntology":
         candidates = (
             Path(__file__).resolve().parents[2] / "schemas" / "semantic" / "ontology.yaml",

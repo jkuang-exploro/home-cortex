@@ -6,7 +6,6 @@ from typing import Any, cast
 from ollama import AsyncClient, ChatResponse
 
 from .profiling import model_call, stage
-from .semantic_transport import transport_for, pack_capabilities, canonical_json
 from .mutation_ir import MutationDecision, mutation_messages, read_plan_schema, attribute_output_schema
 
 
@@ -106,8 +105,8 @@ def _example_text() -> tuple[tuple[str, str], ...]:
         ("Who here was born most recently?", "argmax", reference("current_household", "member"), "birth_date", "entity", {}),
         ("本户符合成年条件的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"predicate": "adult"}]}),
         ("How many household minors are there?", "count", reference("current_household", "member"), None, "entity", {"filters": [{"predicate": "minor"}]}),
-        ("本户男性成员人数是多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "gender", "value": "male"}]}),
-        ("How many female members here?", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "gender", "value": "female"}]}),
+        ("本户男性成员人数是多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "gender", "operator": "eq", "value": "male"}]}),
+        ("How many female members here?", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "gender", "operator": "eq", "value": "female"}]}),
         ("本户出生于1991年的成员有几位？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "operator": "date_range", "value": ["1991-01-01", "1992-01-01"]}]}),
         ("List members aged 40 or older.", "select", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "transform": "date_difference", "mode": "years", "operator": "gte", "value": 40}]}),
         ("本户未满三十周岁的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "transform": "date_difference", "mode": "years", "operator": "lt", "value": 30}]}),
@@ -127,7 +126,7 @@ def _example_text() -> tuple[tuple[str, str], ...]:
         ("住进现居所至今有多少天？", "date_difference", reference("self", "residence"), "start_date", "relationship", {"mode": "days"}),
         ("Between me and my mother, who was born earlier?", "argmin", reference("self"), "birth_date", "entity", {"other": reference("self", "mother")}),
         ("花瓶在哪里？", "resolve_reference", named("花瓶", "item", "location"), None, "entity", {}),
-        ("工作间里还有哪些工具？", "select", named("工作间", "space", "contents"), None, "entity", {"filters": [{"property": "item_type", "value": "tool"}], "exclude": [{"kind": "discourse", "entity_type": "item", "turn_offset": 1, "cardinality": "single"}]}),
+        ("工作间里还有哪些工具？", "select", named("工作间", "space", "contents"), None, "entity", {"filters": [{"property": "item_type", "operator": "eq", "value": "tool"}], "exclude": [{"kind": "discourse", "entity_type": "item", "turn_offset": 1, "cardinality": "single"}]}),
         ("旅行箱里有哪些东西？", "select", named("旅行箱", None, "contents"), None, "entity", {}),
         ("What does the workbench cubby hold?", "select", named("workbench cubby", None, "contents"), None, "entity", {}),
         ("展示柜有哪些分区？", "select", named("展示柜", None, "hosted_space"), None, "entity", {}),
@@ -210,25 +209,7 @@ def _example_text() -> tuple[tuple[str, str], ...]:
         {"role": "user", "content": "Just chatting, no household question."},
         {"role": "assistant", "content": dump({"requires_fact": False, "request": None})},
     ))
-    for message in messages:
-        if message['role'] == 'assistant':
-            payload = json.loads(message['content'])
-            request = payload.get('request') or {}
-            for condition in request.get('filters', []):
-                if 'property' in condition:
-                    condition.setdefault('operator', 'eq')
-            message['content'] = dump(payload)
     return tuple((message["role"], message["content"]) for message in messages)
-
-
-@lru_cache(maxsize=16)
-def _compact_example_text(schema_text: str) -> tuple[tuple[str, str], ...]:
-    codec = transport_for(json.loads(schema_text))
-    return tuple(
-        (message['role'], codec.encode(json.loads(message['content']), validate=False)
-         if message['role'] == 'assistant' else message['content'])
-        for message in _semantic_planner_examples()
-    )
 
 
 def planner_system_prompt(capabilities: Mapping[str, Any]) -> str:
@@ -247,7 +228,6 @@ def planner_chat_messages(
     capabilities: Mapping[str, Any],
     *,
     household_now: str,
-    output_schema: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Build planner messages: examples plus user turns, no assistant answers."""
     forwarded: list[dict[str, Any]] = []
@@ -281,33 +261,9 @@ def planner_chat_messages(
         notes.append(location)
     reminder = (
         f"Household now: {household_now}\n"
-        "Person deixis: first person 我/I/me/my → kind=self; "
-        "second person 你/您/you/your addressing this helper → kind=assistant. "
-        "Chinese, English, and mixed utterances compile to the same IR; "
-        "do not translate first. "
-        "Do not add path, filters, or amount unless the latest "
-        "utterance requires them. Do not copy filters from earlier turns. "
-        "Age-at-least N is birth_date transform=date_difference mode=years operator=gte value=N. "
-        "以上/满/at least=gte; 以下/未满/under=lt; do not invert. "
-        "我家/我家里/my household/our household people lists use current_household then member, "
-        "never self then member or self then residence. "
-        "Household rooms use path concept room from current_household. "
-        "An explicit room name (厨房/kitchen, 车库/garage) is named_entity "
-        "entity_type=space then contents, never current_household then room. "
-        "Follow-up 还有哪些/what other excludes the prior typed discourse "
-        "entity while keeping an explicit named collection root as subject. "
-        "Item classes use the stored item_type field. "
-        "Named object 在哪里/where is X: named_entity value=X entity_type=item "
-        "path location, resolve_reference; not a person, not adult/minor, "
-        "not current_household. "
-        "Entity identity is same_entity with two references subject and other, property=null. "
-        "Residence-here compares that person's residence with current_household; "
-        "do not reuse a prior resolve_reference identity plan. "
-        "named_entity.value keeps the user's literal (林青 stays 林青). "
-        "Listing contents of a named room, container, or subspace uses that "
-        "complete latest name as named_entity, path contents, select. "
-        "current_household then room is only an unqualified household room "
-        "collection, never a replacement for a named room."
+        "Compile only the latest user message. Do not add path, filters, or "
+        "amount unless that utterance requires them. Do not copy filters from "
+        "earlier turns."
     )
     built = [
         {"role": "system", "content": planner_system_prompt(capabilities)},
@@ -315,17 +271,6 @@ def planner_chat_messages(
         {"role": "system", "content": reminder},
         *forwarded,
     ]
-    if output_schema is not None:
-        codec = transport_for(output_schema)
-        built[0]['content'] = (
-            _PLANNER_INSTRUCTIONS + codec.instructions() + '\nCapabilities:\n'
-            + canonical_json(pack_capabilities(capabilities))
-        )
-        # Cache schema-only demonstrations; never cache user turns or identities.
-        built[1:1 + len(_semantic_planner_examples())] = [
-            {'role': role, 'content': content}
-            for role, content in _compact_example_text(canonical_json(output_schema))
-        ]
     if notes:
         built.append({"role": "system", "content": "\n".join(notes)})
     return built
