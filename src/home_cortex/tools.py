@@ -19,7 +19,9 @@ from .record_ids import RECORD_ID_PATTERN as CANONICAL_RECORD_ID_PATTERN
 from .writing import ItemWritingService
 from .mutation_ir import attribute_output_schema, NamedWriteItemArguments, NAMED_WRITE_ADAPTER
 from .semantic_writing import NamedItemWritingService
-from .semantic_facts import AgentRequestContext, HouseholdFactEngine, SemanticSchemaRegistry
+from .semantic_ir import AgentRequestContext
+from .household_fact_engine import HouseholdFactEngine
+from .semantic_schema import SemanticSchemaRegistry
 
 TABLE_NAME_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
 RECORD_ID_PATTERN = CANONICAL_RECORD_ID_PATTERN

@@ -386,7 +386,7 @@ async def test_unplanned_native_write_is_blocked_even_if_dispatcher_allows_it():
 
 @pytest.mark.asyncio
 async def test_semantic_mutation_intent_is_side_effect_free_during_replay():
-    from home_cortex.semantic_facts import AgentRequestContext, SemanticMutationIntent
+    from home_cortex.semantic_ir import AgentRequestContext, SemanticMutationIntent
     from home_cortex.semantic_conversation import SemanticConversationService
 
     args = {'operation': 'delete', 'item_name': 'Compass'}
@@ -406,7 +406,7 @@ async def test_semantic_mutation_intent_is_side_effect_free_during_replay():
 
 def test_query_and_mutation_cannot_share_one_semantic_plan():
     from pydantic import ValidationError
-    from home_cortex.semantic_facts import SemanticPlan
+    from home_cortex.semantic_ir import SemanticPlan
     with pytest.raises(ValidationError, match='cannot both query facts and mutate'):
         SemanticPlan.model_validate({'requires_fact': True,
             'request': {'operation': 'resolve_reference', 'subject': {'kind': 'self'}},
@@ -416,7 +416,9 @@ def test_query_and_mutation_cannot_share_one_semantic_plan():
 @pytest.mark.asyncio
 async def test_read_diagnostics_include_mutation_classification_call():
     from home_cortex.mutation_ir import MutationDecision
-    from home_cortex.semantic_facts import SemanticFactPlanner, SemanticSchemaRegistry, AgentRequestContext
+    from home_cortex.semantic_planner import SemanticFactPlanner
+    from home_cortex.semantic_schema import SemanticSchemaRegistry
+    from home_cortex.semantic_ir import AgentRequestContext
 
     class RoutedOllama(FakeOllamaService):
         async def plan_item_mutation(self, messages):

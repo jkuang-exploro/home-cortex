@@ -13,7 +13,13 @@ from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .mutation_ir import NamedWriteRequest, NamedCreateItem, NamedMoveItem, NamedDeleteItem, NamedUpdateAttributes
+from .mutation_ir import (
+    NamedWriteRequest,
+    NamedCreateItem,
+    NamedMoveItem,
+    NamedDeleteItem,
+    NamedUpdateAttributes,
+)
 from .operator_registry import OPERATORS
 
 FactStatus = Literal[
@@ -64,18 +70,6 @@ ReferenceKind = Literal[
     "discourse",
     "unresolved",
     "entity_id",
-]
-ResolutionStatus = Literal[
-    "resolved",
-    "not_found",
-    "ambiguous",
-    "invalid_reference",
-    "missing_context",
-    "relationship_not_found",
-    "property_unavailable",
-    "filter_input_missing",
-    "filter_unsupported",
-    "collection_incomplete",
 ]
 PlannerValidationCode = Literal[
     "VALID",
@@ -399,18 +393,6 @@ class SemanticMutationIntent:
     mutation: NamedWriteRequest
     timings: FactTimings
     planner_diagnostics: PlannerDiagnostics
-
-
-@dataclass(frozen=True)
-class ResolutionResult:
-    status: ResolutionStatus
-    entities: tuple[Mapping[str, Any], ...] = ()
-    entity_ids: tuple[str, ...] = ()
-    evidence: FactEvidence = FactEvidence()
-    candidates: tuple[Mapping[str, Any], ...] = ()
-    missing_requirements: tuple[str, ...] = ()
-    relationship_records: tuple[Mapping[str, Any], ...] = ()
-    content_groups: tuple[FactContentGroup, ...] = ()
 
 
 class _FactFailure(RuntimeError):

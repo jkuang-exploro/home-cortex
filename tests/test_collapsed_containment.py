@@ -8,10 +8,9 @@ import pytest
 from home_cortex.edge_schema import EdgeSchemaRegistry
 from home_cortex.fact_benchmark import _JsonGraphDispatcher
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_facts import (
-    AgentRequestContext, HouseholdFactEngine, SemanticFactRequest,
-    SemanticSchemaRegistry,
-)
+from home_cortex.semantic_ir import AgentRequestContext, SemanticFactRequest
+from home_cortex.household_fact_engine import HouseholdFactEngine
+from home_cortex.semantic_schema import SemanticSchemaRegistry
 
 
 def graph(tmp_path, collapse=True):
@@ -127,7 +126,7 @@ async def test_collapsed_result_composes_with_location_traversal(tmp_path):
 
 @pytest.mark.asyncio
 async def test_household_containment_regression_sequence(tmp_path):
-    from home_cortex.semantic_facts import FactRenderer
+    from home_cortex.fact_renderer import FactRenderer
 
     engine, dispatcher = graph(tmp_path)
     dispatcher.entities['item:cabinet']['name'] = ['冰箱']
@@ -239,7 +238,7 @@ async def test_containment_through_ingestion_and_real_dispatcher(tmp_path):
 
 @pytest.mark.asyncio
 async def test_collapsed_contents_group_by_authoritative_space(tmp_path):
-    from home_cortex.semantic_facts import FactRenderer
+    from home_cortex.fact_renderer import FactRenderer
 
     engine, _ = graph(tmp_path)
     result = await contents(engine)
@@ -278,7 +277,7 @@ async def test_collapsed_contents_group_by_authoritative_space(tmp_path):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('collapse', [True, False, None])
 async def test_hosted_spaces_include_empty_spaces_and_compose(tmp_path, collapse):
-    from home_cortex.semantic_facts import FactRenderer
+    from home_cortex.fact_renderer import FactRenderer
 
     engine, dispatcher = graph(tmp_path, collapse)
     # The lower compartment is empty, but still hosts a nested drawer.

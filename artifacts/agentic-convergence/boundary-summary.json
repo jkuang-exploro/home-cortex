@@ -1,0 +1,18 @@
+{
+  "method": "SHA-256 of sort_keys=True, ensure_ascii=False JSON; synthetic semantic-contract fixture; isolated baseline package at 379f1e7 versus candidate",
+  "before": {
+    "capabilities": "c5f21c9975ed653919f3836e001644df0387e4ea620f87c3d2e4a442a51f8755",
+    "output_schema": "04098db13f1b5cb09c42c5b700466068fcc50ad16488393a9b0caf9f4ed02bb2",
+    "semantic_plan_schema": "b6684df5006aac540b468d19a978fdfe2e22a39a05350a6a10c6e358026a3608",
+    "instructions": "d3e0086fef1723771e360500e6215656ab1e5981ade3463cecfe1abc028da372",
+    "examples": "96573903ec8f0e225667795b24e44a677505f1b6727b292f50831fed2722dab4"
+  },
+  "after": {
+    "capabilities": "c5f21c9975ed653919f3836e001644df0387e4ea620f87c3d2e4a442a51f8755",
+    "output_schema": "04098db13f1b5cb09c42c5b700466068fcc50ad16488393a9b0caf9f4ed02bb2",
+    "semantic_plan_schema": "b6684df5006aac540b468d19a978fdfe2e22a39a05350a6a10c6e358026a3608",
+    "instructions": "d3e0086fef1723771e360500e6215656ab1e5981ade3463cecfe1abc028da372",
+    "examples": "96573903ec8f0e225667795b24e44a677505f1b6727b292f50831fed2722dab4"
+  },
+  "identical": true
+}

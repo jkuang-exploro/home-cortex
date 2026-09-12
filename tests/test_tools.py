@@ -361,7 +361,7 @@ async def test_mutations_preserve_trusted_context_across_concurrent_dispatches(m
     from datetime import datetime, timezone
     from pathlib import Path
     from types import SimpleNamespace
-    from home_cortex.semantic_facts import AgentRequestContext
+    from home_cortex.semantic_ir import AgentRequestContext
     from home_cortex.semantic_ontology import SemanticOntology
     from home_cortex.edge_schema import EdgeSchemaRegistry
     from home_cortex.schema_catalog import RuntimeSchemaCatalog

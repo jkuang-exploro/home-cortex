@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .semantic_facts import AgentRequestContext, HouseholdFactEngine, SemanticFactRequest, FactResult
+from .semantic_ir import AgentRequestContext, SemanticFactRequest, FactResult
+from .household_fact_engine import HouseholdFactEngine
 from .writing import ItemWritingService
 from .semantic_ontology import SemanticOntology
 from .mutation_ir import NamedCreateItem, NamedMoveItem, NamedUpdateAttributes, NamedWriteRequest

@@ -335,7 +335,7 @@ def test_static_prefix_survives_clock_history_and_identity_notes() -> None:
 
 @pytest.mark.asyncio
 async def test_serving_planner_uses_expanded_fact_contract_not_experimental_codec():
-    from home_cortex.semantic_facts import SemanticPlan
+    from home_cortex.semantic_ir import SemanticPlan
     plan = {'requires_fact': True, 'request': {
         'operation': 'select', 'subject': {'kind': 'self'},
         'property': 'birth_date', 'property_source': 'entity',

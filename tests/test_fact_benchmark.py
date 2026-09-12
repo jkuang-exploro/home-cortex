@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from home_cortex.fact_benchmark import _run_suite, benchmark_json
-from home_cortex.semantic_facts import (
+from home_cortex.semantic_ir import (
     AgentRequestContext,
     FactAnswer,
     FactEvidence,

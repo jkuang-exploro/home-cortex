@@ -11,14 +11,14 @@ from typing import Any
 from uuid import uuid4
 
 from .profiling import stage
-from .semantic_facts import (
+from .semantic_ir import (
     AgentRequestContext,
     DiscourseContext,
     FactAnswer,
     SemanticMutationIntent,
     SemanticFactRequest,
-    SemanticFactService,
 )
+from .semantic_facts import SemanticFactService
 
 MAX_DISCOURSE_TURNS = 8
 

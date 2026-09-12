@@ -39,8 +39,8 @@ from .record_ids import (
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_ontology import SemanticOntology
 
+from .mutation_ir import WriteMode
 
-WriteMode = Literal["preview", "commit"]
 MutationStatus = Literal[
     "APPLIED", "PROPOSED", "NO_CHANGE", "REJECTED", "NOT_FOUND", "CONFLICT"
 ]

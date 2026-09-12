@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
+from dataclasses import dataclass
 from typing import Any
 
 from .profiling import stage
@@ -20,16 +21,28 @@ from .semantic_ir import (
     FactContentGroup,
     FactEvidence,
     FactRelationshipEvidence,
-    ResolutionResult,
+    FactResult,
     SemanticFilter,
     SemanticReference,
     _FactFailure,
     _entity_type,
-    _related_entity_id,
     _string_or_none,
     _unique_entities,
 )
 from .semantic_schema import SemanticSchemaRegistry
+
+@dataclass(frozen=True)
+class ResolvedEntities:
+    """Successful grounding, including the edges required for later computation.
+
+    Failures use FactResult directly, just like execution failures.
+    """
+    entities: tuple[Mapping[str, Any], ...] = ()
+    entity_ids: tuple[str, ...] = ()
+    evidence: FactEvidence = FactEvidence()
+    relationship_records: tuple[Mapping[str, Any], ...] = ()
+    content_groups: tuple[FactContentGroup, ...] = ()
+
 
 class EntityResolver:
     """Authoritative resolver from semantic references to canonical entities."""
@@ -52,7 +65,7 @@ class EntityResolver:
         *,
         allow_empty_collection: bool = False,
         expect_many: bool = False,
-    ) -> ResolutionResult:
+    ) -> ResolvedEntities | FactResult:
         try:
             entities, relationship_records, content_groups = await self._resolve(
                 reference,
@@ -64,14 +77,13 @@ class EntityResolver:
                 candidates = tuple(
                     [await execution.load_if_unnamed(item) for item in entities]
                 )
-                return ResolutionResult("ambiguous", candidates=candidates)
+                return FactResult("ambiguous", candidates=candidates)
             entity_ids = tuple(
                 str(item["id"])
                 for item in entities
                 if isinstance(item.get("id"), str)
             )
-            return ResolutionResult(
-                "resolved",
+            return ResolvedEntities(
                 tuple(entities),
                 entity_ids,
                 FactEvidence(
@@ -85,20 +97,8 @@ class EntityResolver:
                 content_groups=tuple(content_groups),
             )
         except _FactFailure as error:
-            status: ResolutionStatus = {
-                "caller_context_missing": "missing_context",
-                "entity_not_found": "not_found",
-                "relationship_not_found": "relationship_not_found",
-                "property_unavailable": "property_unavailable",
-                "filter_input_missing": "filter_input_missing",
-                "filter_unsupported": "filter_unsupported",
-                "collection_incomplete": "collection_incomplete",
-                "ambiguous": "ambiguous",
-                "computation_input_missing": "invalid_reference",
-                "computation_impossible": "invalid_reference",
-            }[error.status]
-            return ResolutionResult(
-                status,
+            return FactResult(
+                error.status,
                 evidence=error.evidence,
                 candidates=error.candidates,
                 missing_requirements=error.missing,
@@ -121,7 +121,7 @@ class EntityResolver:
                 != (context.conversation_id, context.caller_entity_id, context.household_id, context.assistant_id)
                 or reference.turn_offset is None or reference.turn_offset > len(discourse.turns)
                 or not discourse.turns[-reference.turn_offset]):
-                raise _FactFailure("caller_context_missing", missing=("discourse_antecedent",))
+                raise _FactFailure("discourse_context_missing", missing=("discourse_antecedent",))
             ids = discourse.turns[-reference.turn_offset]
             entities = [await execution.load({"id": entity_id}) for entity_id in ids]
             entities = [
@@ -131,7 +131,7 @@ class EntityResolver:
             ]
             if not entities:
                 raise _FactFailure(
-                    "caller_context_missing", missing=("discourse_antecedent",)
+                    "discourse_context_missing", missing=("discourse_antecedent",)
                 )
             if reference.cardinality == "single" and len(entities) != 1:
                 raise _FactFailure("ambiguous", candidates=tuple(entities), missing=("discourse_antecedent",))

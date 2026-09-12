@@ -7,7 +7,8 @@ import sys
 
 import pytest
 
-from home_cortex.semantic_facts import SemanticPlan, SemanticSchemaRegistry
+from home_cortex.semantic_ir import SemanticPlan
+from home_cortex.semantic_schema import SemanticSchemaRegistry
 from home_cortex.semantic_transport import (
     SemanticTransport, canonical_json, pack_capabilities, unpack_capabilities,
 )
@@ -104,7 +105,7 @@ def test_capability_tables_preserve_order_and_reserved_literals():
 def test_cross_process_determinism():
     script = '''
 from home_cortex.semantic_transport import *
-from home_cortex.semantic_facts import SemanticPlan
+from home_cortex.semantic_ir import SemanticPlan
 c=SemanticTransport(SemanticPlan.model_json_schema())
 v={k: {'ordered': [3,1,2], 'set': {'b','a'}} for k in {'beta','alpha'}}
 print(canonical_json(c.schema))
@@ -119,7 +120,7 @@ print(c.encode(SemanticPlan(requires_fact=False)))
 async def test_retry_diagnostics_preserve_each_transport_attempt(household):
     from ollama import ChatResponse
     from home_cortex.ollama import OllamaService
-    from home_cortex.semantic_facts import SemanticFactPlanner
+    from home_cortex.semantic_planner import SemanticFactPlanner
     engine, context, _ = household
     codec = SemanticTransport(engine.schema.planner_output_schema())
     payload = {'requires_fact': True, 'request': {

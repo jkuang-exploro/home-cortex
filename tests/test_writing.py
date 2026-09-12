@@ -599,7 +599,9 @@ async def test_named_attributes_create_patch_preview_and_read(writing_service):
     assert 'item:' not in json.dumps(result)
     # Updated attributes are available through the existing semantic read executor.
     from datetime import datetime
-    from home_cortex.semantic_facts import HouseholdFactEngine, SemanticSchemaRegistry, SemanticFactRequest, AgentRequestContext
+    from home_cortex.household_fact_engine import HouseholdFactEngine
+    from home_cortex.semantic_schema import SemanticSchemaRegistry
+    from home_cortex.semantic_ir import SemanticFactRequest, AgentRequestContext
     engine = HouseholdFactEngine(dispatcher, SemanticSchemaRegistry(catalog))
     request = SemanticFactRequest.model_validate({'operation': 'select', 'property': 'color',
         'subject': {'kind': 'named_entity', 'value': 'Invented meter', 'entity_type': 'item'}})
@@ -607,7 +609,7 @@ async def test_named_attributes_create_patch_preview_and_read(writing_service):
         assistant_display_name='Test', current_time=datetime(2026, 9, 10), locale='en')
     result = (await engine.execute(request, context))[0]
     assert result.status == 'found' and result.value == 'blue'
-    from home_cortex.semantic_facts import FactRenderer
+    from home_cortex.fact_renderer import FactRenderer
     inspection = request.model_copy(update={'operation': 'inspect', 'property': None})
     assert engine.schema.validates(inspection)
     result = (await engine.execute(inspection, context))[0]

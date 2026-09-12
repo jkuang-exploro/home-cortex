@@ -24,15 +24,11 @@ from .schema_catalog import (
     matching_named_entities,
     node_table_sources,
 )
-from .semantic_facts import (
-    FactAnswer,
-    HouseholdFactEngine,
-    AgentRequestContext,
-    SemanticFactPlanner,
-    SemanticFactService,
-    SemanticSchemaRegistry,
-    _failure_stage,
-)
+from .semantic_ir import FactAnswer, AgentRequestContext
+from .household_fact_engine import HouseholdFactEngine
+from .semantic_planner import SemanticFactPlanner
+from .semantic_facts import SemanticFactService, _failure_stage
+from .semantic_schema import SemanticSchemaRegistry
 from .tools import ToolDispatcher
 
 QUESTIONS = (

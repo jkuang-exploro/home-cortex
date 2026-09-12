@@ -17,18 +17,18 @@ from home_cortex.ingestion import ingest_directory
 from home_cortex.operator_registry import OPERATORS
 from home_cortex.retrieval import RetrievalService
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_facts import (
+from home_cortex.semantic_ir import (
     AgentRequestContext,
-    HouseholdFactEngine,
-    SemanticFactPlanner,
     SemanticFactRequest,
-    SemanticFactService,
     SemanticFilter,
     SemanticPlannerFailure,
     SemanticReference,
     SemanticRelationStep,
-    SemanticSchemaRegistry,
 )
+from home_cortex.household_fact_engine import HouseholdFactEngine
+from home_cortex.semantic_planner import SemanticFactPlanner
+from home_cortex.semantic_facts import SemanticFactService
+from home_cortex.semantic_schema import SemanticSchemaRegistry
 from home_cortex.tools import ToolDispatcher, get_tool_definitions
 
 ROOT = Path(__file__).parents[1]

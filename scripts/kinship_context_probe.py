@@ -67,7 +67,7 @@ def score(results_path, output):
     import json
     import statistics
     from pathlib import Path
-    from home_cortex.semantic_facts import SemanticFactRequest, SemanticReference
+    from home_cortex.semantic_ir import SemanticFactRequest, SemanticReference
     from home_cortex.semantic_planner_benchmark import build_json_fact_service
 
     root = Path.cwd()

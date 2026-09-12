@@ -10,22 +10,24 @@ import pytest
 from home_cortex.edge_schema import EdgeSchemaRegistry
 from home_cortex.fact_benchmark import _JsonGraphDispatcher
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_facts import (
+from home_cortex.semantic_ir import (
     AgentRequestContext,
     DiscourseContext,
-    FactRenderer,
-    HouseholdFactEngine,
-    SemanticFactPlanner,
     SemanticPlannerFailure,
     SemanticFactRequest,
     SemanticFilter,
     SemanticReference,
     SemanticRelationStep,
-    SemanticSchemaRegistry,
+)
+from home_cortex.fact_renderer import FactRenderer
+from home_cortex.household_fact_engine import HouseholdFactEngine
+from home_cortex.semantic_planner import (
+    SemanticFactPlanner,
     _invalid_plan_retry_hint,
     _object_location_hint,
     _object_location_mismatch,
 )
+from home_cortex.semantic_schema import SemanticSchemaRegistry
 from home_cortex.semantic_ontology import SemanticOntology
 from test_semantic_contract import household
 

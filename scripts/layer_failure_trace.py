@@ -26,11 +26,8 @@ from home_cortex.ollama import (
     planner_chat_messages,
 )
 from home_cortex.semantic_conversation import SemanticConversationService
-from home_cortex.semantic_facts import (
-    FactRenderer,
-    SemanticFactRequest,
-    SemanticPlannerFailure,
-)
+from home_cortex.fact_renderer import FactRenderer
+from home_cortex.semantic_ir import SemanticFactRequest, SemanticPlannerFailure
 from home_cortex.semantic_planner_benchmark import (
     build_json_fact_service,
     normalize_semantic_request,

@@ -14,13 +14,9 @@ import yaml
 from .edge_schema import EdgeSchemaRegistry
 from .fact_benchmark import _JsonGraphDispatcher
 from .schema_catalog import RuntimeSchemaCatalog
-from .semantic_facts import (
-    AgentRequestContext,
-    DiscourseContext,
-    HouseholdFactEngine,
-    SemanticFactRequest,
-    SemanticSchemaRegistry,
-)
+from .semantic_ir import AgentRequestContext, DiscourseContext, SemanticFactRequest
+from .household_fact_engine import HouseholdFactEngine
+from .semantic_schema import SemanticSchemaRegistry
 from .semantic_planner_benchmark import (
     FROZEN_EVAL_TIME,
     SCORING_REVISION,

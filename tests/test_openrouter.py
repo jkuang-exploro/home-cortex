@@ -232,7 +232,7 @@ async def test_openrouter_http_error_does_not_include_the_api_key() -> None:
 
 @pytest.mark.asyncio
 async def test_openrouter_serving_fact_contract_is_expanded():
-    from home_cortex.semantic_facts import SemanticPlan
+    from home_cortex.semantic_ir import SemanticPlan
     plan = {'requires_fact': True, 'request': {
         'operation': 'count', 'subject': {'kind': 'current_household'},
         'property': None, 'property_source': 'entity',

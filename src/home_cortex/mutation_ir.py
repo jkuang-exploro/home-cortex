@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, RootModel, TypeAdapter, model_validator
 
 from .text import latest_user_message
-from .writing import WriteMode
+WriteMode = Literal["preview", "commit"]
 
 
 def _compact_json(value: object) -> str:

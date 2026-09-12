@@ -10,12 +10,22 @@ from home_cortex.edge_schema import EdgeSchemaRegistry
 from home_cortex.fact_benchmark import _JsonGraphDispatcher
 from home_cortex.ollama import _semantic_planner_examples
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_facts import (
-    AgentRequestContext, HouseholdFactEngine, FactRenderer, SemanticFactPlanner,
-    SemanticFactRequest, SemanticReference, SemanticRelationStep, SemanticFilter,
-    SemanticSchemaRegistry, SemanticPlannerFailure,
+from home_cortex.semantic_ir import (
+    AgentRequestContext,
+    SemanticFactRequest,
+    SemanticReference,
+    SemanticRelationStep,
+    SemanticFilter,
+    SemanticPlannerFailure,
 )
-from home_cortex.semantic_planner_benchmark import load_semantic_eval_cases, normalize_semantic_request
+from home_cortex.household_fact_engine import HouseholdFactEngine
+from home_cortex.fact_renderer import FactRenderer
+from home_cortex.semantic_planner import SemanticFactPlanner
+from home_cortex.semantic_schema import SemanticSchemaRegistry
+from home_cortex.semantic_planner_benchmark import (
+    load_semantic_eval_cases,
+    normalize_semantic_request,
+)
 
 
 @pytest.fixture
@@ -72,7 +82,12 @@ async def test_age_is_completed_years_not_birth_date(household, day, expected):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('relation,unit,expected', [('spouse','years',21),('spouse','months',255),('residence','years',8)])
 async def test_one_date_interval_contract_for_relationships_and_units(household,relation,unit,expected):
-    from home_cortex.semantic_planner_benchmark import serialize_fact_result, fact_result_from_serialized, SemanticEvalCase, score_structured_result
+    from home_cortex.semantic_planner_benchmark import (
+        serialize_fact_result,
+        fact_result_from_serialized,
+        SemanticEvalCase,
+        score_structured_result,
+    )
     engine,ctx,_=household
     query=SemanticFactRequest(operation='date_difference',subject=ref(step(relation)),property='start_date',property_source='relationship',mode=unit)
     result,*_=await engine.execute(query,ctx)
@@ -386,7 +401,7 @@ def test_evaluation_alternative_is_limited_to_final_child_list():
 ])
 def test_wife_father_accepted_name_representation_still_requires_correct_person(entity,names,correct):
     from home_cortex.semantic_planner_benchmark import load_probe_dataset, score_structured_result
-    from home_cortex.semantic_facts import FactResult,FactEvidence
+    from home_cortex.semantic_ir import FactResult, FactEvidence
     case=next(c for c in load_probe_dataset().cases if c.case_id=='wife_father_given_name')
     result=FactResult('found',names,FactEvidence(entity_ids=(entity,)))
     assert score_structured_result(result,case) is correct

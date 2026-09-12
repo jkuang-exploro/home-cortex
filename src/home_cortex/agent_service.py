@@ -28,15 +28,11 @@ from .model_loop import (
 )
 from .ollama import OllamaService
 from .schema_catalog import RuntimeSchemaCatalog
-from .semantic_facts import (
-    FactAnswer,
-    AgentRequestContext,
-    HouseholdFactEngine,
-    SemanticFactPlanner,
-    SemanticFactService,
-    SemanticSchemaRegistry,
-    SemanticMutationIntent,
-)
+from .semantic_ir import FactAnswer, AgentRequestContext, SemanticMutationIntent
+from .household_fact_engine import HouseholdFactEngine
+from .semantic_planner import SemanticFactPlanner
+from .semantic_facts import SemanticFactService
+from .semantic_schema import SemanticSchemaRegistry
 from .semantic_writing import render_mutation_result
 from .tools import ToolDispatcher
 from .semantic_conversation import SemanticConversationService

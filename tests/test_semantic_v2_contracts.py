@@ -16,11 +16,17 @@ from home_cortex.composition_eval import (
 )
 from home_cortex.semantic_contracts import PropertyContract, SemanticType
 from home_cortex.semantic_ontology import SemanticOntology
-from home_cortex.semantic_facts import (
-    DiscourseContext, HouseholdFactEngine, SemanticSchemaRegistry,
-    SemanticFactRequest, SemanticReference, SemanticRelationStep, SemanticFilter,
-    SemanticFactService, SemanticFactPlanner,
+from home_cortex.semantic_ir import (
+    DiscourseContext,
+    SemanticFactRequest,
+    SemanticReference,
+    SemanticRelationStep,
+    SemanticFilter,
 )
+from home_cortex.household_fact_engine import HouseholdFactEngine
+from home_cortex.semantic_schema import SemanticSchemaRegistry
+from home_cortex.semantic_facts import SemanticFactService
+from home_cortex.semantic_planner import SemanticFactPlanner
 from home_cortex.schema_catalog import EntityTypeSchema
 from test_semantic_contract import household
 
@@ -247,7 +253,7 @@ def test_absent_bindings_disable_complete_concepts_and_bad_kinds_fail(household)
 
 
 def test_fingerprint_is_stable_across_processes():
-    program = "from pathlib import Path; from home_cortex.composition_eval import household_engine; from home_cortex.semantic_facts import SemanticSchemaRegistry; from home_cortex.semantic_ontology import SemanticOntology; print(SemanticSchemaRegistry(household_engine('alpha')[0].schema.catalog, SemanticOntology.from_file(Path('schemas/semantic/ontology-v2.yaml'))).contracts.fingerprint)"
+    program = "from pathlib import Path; from home_cortex.composition_eval import household_engine; from home_cortex.semantic_schema import SemanticSchemaRegistry; from home_cortex.semantic_ontology import SemanticOntology; print(SemanticSchemaRegistry(household_engine('alpha')[0].schema.catalog, SemanticOntology.from_file(Path('schemas/semantic/ontology-v2.yaml'))).contracts.fingerprint)"
     outputs = [subprocess.check_output([sys.executable, '-c', program], env={**os.environ, 'PYTHONHASHSEED': seed}, text=True) for seed in ('1', '77')]
     assert outputs[0] == outputs[1]
 

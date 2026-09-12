@@ -1,0 +1,271 @@
+{
+  "method": "Estimate development context from static package import reachability.\n\nIncludes deferred and type-only imports: this is a conservative navigation\nsurface, not runtime module loading or a claim about actual agent token usage.\n",
+  "before": {
+    "production_files": 45,
+    "production_loc": 17228,
+    "tasks": {
+      "complete_factual_query": {
+        "entry_modules": [
+          "semantic_facts"
+        ],
+        "files": 22,
+        "loc": 8826,
+        "modules": [
+          "home_cortex.config",
+          "home_cortex.db",
+          "home_cortex.display",
+          "home_cortex.edge_schema",
+          "home_cortex.entity_resolver",
+          "home_cortex.fact_renderer",
+          "home_cortex.household_fact_engine",
+          "home_cortex.ingestion",
+          "home_cortex.mutation_ir",
+          "home_cortex.operator_registry",
+          "home_cortex.profiling",
+          "home_cortex.record_ids",
+          "home_cortex.schema_catalog",
+          "home_cortex.semantic_contracts",
+          "home_cortex.semantic_display",
+          "home_cortex.semantic_facts",
+          "home_cortex.semantic_ir",
+          "home_cortex.semantic_ontology",
+          "home_cortex.semantic_planner",
+          "home_cortex.semantic_schema",
+          "home_cortex.text",
+          "home_cortex.writing"
+        ]
+      },
+      "entity_resolution": {
+        "entry_modules": [
+          "entity_resolver"
+        ],
+        "files": 16,
+        "loc": 6169,
+        "modules": [
+          "home_cortex.config",
+          "home_cortex.db",
+          "home_cortex.edge_schema",
+          "home_cortex.entity_resolver",
+          "home_cortex.ingestion",
+          "home_cortex.mutation_ir",
+          "home_cortex.operator_registry",
+          "home_cortex.profiling",
+          "home_cortex.record_ids",
+          "home_cortex.schema_catalog",
+          "home_cortex.semantic_contracts",
+          "home_cortex.semantic_ir",
+          "home_cortex.semantic_ontology",
+          "home_cortex.semantic_schema",
+          "home_cortex.text",
+          "home_cortex.writing"
+        ]
+      },
+      "speaker_behavior": {
+        "entry_modules": [
+          "semantic_conversation",
+          "entity_resolver"
+        ],
+        "files": 23,
+        "loc": 9006,
+        "modules": [
+          "home_cortex.config",
+          "home_cortex.db",
+          "home_cortex.display",
+          "home_cortex.edge_schema",
+          "home_cortex.entity_resolver",
+          "home_cortex.fact_renderer",
+          "home_cortex.household_fact_engine",
+          "home_cortex.ingestion",
+          "home_cortex.mutation_ir",
+          "home_cortex.operator_registry",
+          "home_cortex.profiling",
+          "home_cortex.record_ids",
+          "home_cortex.schema_catalog",
+          "home_cortex.semantic_contracts",
+          "home_cortex.semantic_conversation",
+          "home_cortex.semantic_display",
+          "home_cortex.semantic_facts",
+          "home_cortex.semantic_ir",
+          "home_cortex.semantic_ontology",
+          "home_cortex.semantic_planner",
+          "home_cortex.semantic_schema",
+          "home_cortex.text",
+          "home_cortex.writing"
+        ]
+      },
+      "containment": {
+        "entry_modules": [
+          "entity_resolver"
+        ],
+        "files": 16,
+        "loc": 6169,
+        "modules": [
+          "home_cortex.config",
+          "home_cortex.db",
+          "home_cortex.edge_schema",
+          "home_cortex.entity_resolver",
+          "home_cortex.ingestion",
+          "home_cortex.mutation_ir",
+          "home_cortex.operator_registry",
+          "home_cortex.profiling",
+          "home_cortex.record_ids",
+          "home_cortex.schema_catalog",
+          "home_cortex.semantic_contracts",
+          "home_cortex.semantic_ir",
+          "home_cortex.semantic_ontology",
+          "home_cortex.semantic_schema",
+          "home_cortex.text",
+          "home_cortex.writing"
+        ]
+      },
+      "factual_property": {
+        "entry_modules": [
+          "semantic_schema"
+        ],
+        "files": 15,
+        "loc": 5560,
+        "modules": [
+          "home_cortex.config",
+          "home_cortex.db",
+          "home_cortex.edge_schema",
+          "home_cortex.ingestion",
+          "home_cortex.mutation_ir",
+          "home_cortex.operator_registry",
+          "home_cortex.profiling",
+          "home_cortex.record_ids",
+          "home_cortex.schema_catalog",
+          "home_cortex.semantic_contracts",
+          "home_cortex.semantic_ir",
+          "home_cortex.semantic_ontology",
+          "home_cortex.semantic_schema",
+          "home_cortex.text",
+          "home_cortex.writing"
+        ]
+      }
+    }
+  },
+  "after": {
+    "production_files": 45,
+    "production_loc": 17113,
+    "tasks": {
+      "complete_factual_query": {
+        "entry_modules": [
+          "semantic_facts"
+        ],
+        "files": 18,
+        "loc": 7385,
+        "modules": [
+          "home_cortex.display",
+          "home_cortex.edge_schema",
+          "home_cortex.entity_resolver",
+          "home_cortex.fact_renderer",
+          "home_cortex.household_fact_engine",
+          "home_cortex.mutation_ir",
+          "home_cortex.operator_registry",
+          "home_cortex.profiling",
+          "home_cortex.record_ids",
+          "home_cortex.schema_catalog",
+          "home_cortex.semantic_contracts",
+          "home_cortex.semantic_display",
+          "home_cortex.semantic_facts",
+          "home_cortex.semantic_ir",
+          "home_cortex.semantic_ontology",
+          "home_cortex.semantic_planner",
+          "home_cortex.semantic_schema",
+          "home_cortex.text"
+        ]
+      },
+      "entity_resolution": {
+        "entry_modules": [
+          "entity_resolver"
+        ],
+        "files": 12,
+        "loc": 4815,
+        "modules": [
+          "home_cortex.edge_schema",
+          "home_cortex.entity_resolver",
+          "home_cortex.mutation_ir",
+          "home_cortex.operator_registry",
+          "home_cortex.profiling",
+          "home_cortex.record_ids",
+          "home_cortex.schema_catalog",
+          "home_cortex.semantic_contracts",
+          "home_cortex.semantic_ir",
+          "home_cortex.semantic_ontology",
+          "home_cortex.semantic_schema",
+          "home_cortex.text"
+        ]
+      },
+      "speaker_behavior": {
+        "entry_modules": [
+          "semantic_conversation",
+          "entity_resolver"
+        ],
+        "files": 19,
+        "loc": 7565,
+        "modules": [
+          "home_cortex.display",
+          "home_cortex.edge_schema",
+          "home_cortex.entity_resolver",
+          "home_cortex.fact_renderer",
+          "home_cortex.household_fact_engine",
+          "home_cortex.mutation_ir",
+          "home_cortex.operator_registry",
+          "home_cortex.profiling",
+          "home_cortex.record_ids",
+          "home_cortex.schema_catalog",
+          "home_cortex.semantic_contracts",
+          "home_cortex.semantic_conversation",
+          "home_cortex.semantic_display",
+          "home_cortex.semantic_facts",
+          "home_cortex.semantic_ir",
+          "home_cortex.semantic_ontology",
+          "home_cortex.semantic_planner",
+          "home_cortex.semantic_schema",
+          "home_cortex.text"
+        ]
+      },
+      "containment": {
+        "entry_modules": [
+          "entity_resolver"
+        ],
+        "files": 12,
+        "loc": 4815,
+        "modules": [
+          "home_cortex.edge_schema",
+          "home_cortex.entity_resolver",
+          "home_cortex.mutation_ir",
+          "home_cortex.operator_registry",
+          "home_cortex.profiling",
+          "home_cortex.record_ids",
+          "home_cortex.schema_catalog",
+          "home_cortex.semantic_contracts",
+          "home_cortex.semantic_ir",
+          "home_cortex.semantic_ontology",
+          "home_cortex.semantic_schema",
+          "home_cortex.text"
+        ]
+      },
+      "factual_property": {
+        "entry_modules": [
+          "semantic_schema"
+        ],
+        "files": 11,
+        "loc": 4206,
+        "modules": [
+          "home_cortex.edge_schema",
+          "home_cortex.mutation_ir",
+          "home_cortex.operator_registry",
+          "home_cortex.profiling",
+          "home_cortex.record_ids",
+          "home_cortex.schema_catalog",
+          "home_cortex.semantic_contracts",
+          "home_cortex.semantic_ir",
+          "home_cortex.semantic_ontology",
+          "home_cortex.semantic_schema",
+          "home_cortex.text"
+        ]
+      }
+    }
+  }
+}

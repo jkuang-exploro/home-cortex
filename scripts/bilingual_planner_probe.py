@@ -23,7 +23,7 @@ from home_cortex.ollama import (
     _semantic_planner_examples,
     planner_chat_messages,
 )
-from home_cortex.semantic_facts import SemanticFactRequest, SemanticPlannerFailure
+from home_cortex.semantic_ir import SemanticFactRequest, SemanticPlannerFailure
 from home_cortex.semantic_planner_benchmark import (
     build_json_fact_service,
     collect_provenance,

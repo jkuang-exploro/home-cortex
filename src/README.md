@@ -546,11 +546,12 @@ The runtime is intentionally split into focused layers:
   relationship semantics from the deployed data and edge registry. Adding a
   field to a node JSON file makes it available to planning without changing
   factual-grounding code.
-- `semantic_facts.py` owns trusted request context, strict semantic plans, and
-  bounded entity resolution, traversal, filtering, sorting, aggregation,
-  date/duration, unit conversion, and freshness operations. Its shared evidence
-  gate validates every required field and relation before the deterministic
-  renderer sees a value.
+- `semantic_facts.py` coordinates interpretation, execution, rendering, and
+  diagnostics. Canonical request/context/result types live in `semantic_ir.py`.
+  `semantic_planner.py` interprets language; `entity_resolver.py` grounds references
+  and containment paths; `household_fact_engine.py` computes and validates evidence;
+  `fact_renderer.py` formats the result. Import these owners directly. The engine
+  does not import the planner or renderer.
 - `model_loop.py` owns the bounded Ollama loop, tool limits, display-name repair,
   and streaming for ordinary conversation and non-graph tools. Graph tools are
   deliberately not exposed through this path, so household facts cannot bypass

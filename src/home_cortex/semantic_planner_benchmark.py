@@ -34,20 +34,19 @@ from .ollama import (
     OllamaService,
 )
 from .schema_catalog import RuntimeSchemaCatalog
-from .semantic_facts import (
+from .semantic_ir import (
     AgentRequestContext,
     FactEvidence,
     FactResult,
     FactRow,
     FactRelationshipEvidence,
-    HouseholdFactEngine,
-    SemanticFactPlanner,
     SemanticFactRequest,
-    SemanticFactService,
     SemanticPlannerFailure,
-    SemanticSchemaRegistry,
-    planner_input_summary,
 )
+from .household_fact_engine import HouseholdFactEngine
+from .semantic_planner import SemanticFactPlanner, planner_input_summary
+from .semantic_facts import SemanticFactService
+from .semantic_schema import SemanticSchemaRegistry
 
 FROZEN_EVAL_TIME = "2026-09-03T12:00:00-07:00"
 SCORING_REVISION = "2026-09-07.2-composition-shapes"

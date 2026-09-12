@@ -26,7 +26,7 @@ def sha(data):
 
 def freeze(output: Path):
     from home_cortex.composition_eval import household_engine, composition_fingerprint_payload
-    from home_cortex.semantic_facts import SemanticSchemaRegistry
+    from home_cortex.semantic_schema import SemanticSchemaRegistry
     from home_cortex.semantic_ontology import SemanticOntology
 
     payload = {}

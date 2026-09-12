@@ -10,11 +10,18 @@ import yaml
 
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
 from home_cortex.semantic_display import SemanticDisplay
-from home_cortex.semantic_facts import (
-    FactRenderer, FactResult, HouseholdFactEngine, SemanticFactPlanner,
-    SemanticFactRequest, SemanticFactService, SemanticFilter,
-    SemanticReference, SemanticRelationStep, SemanticSchemaRegistry,
+from home_cortex.fact_renderer import FactRenderer
+from home_cortex.semantic_ir import (
+    FactResult,
+    SemanticFactRequest,
+    SemanticFilter,
+    SemanticReference,
+    SemanticRelationStep,
 )
+from home_cortex.household_fact_engine import HouseholdFactEngine
+from home_cortex.semantic_planner import SemanticFactPlanner
+from home_cortex.semantic_facts import SemanticFactService
+from home_cortex.semantic_schema import SemanticSchemaRegistry
 from home_cortex.semantic_ontology import SemanticOntology
 from test_semantic_contract import household, ref, step
 

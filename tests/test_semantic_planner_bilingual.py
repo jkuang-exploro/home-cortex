@@ -8,7 +8,8 @@ from pathlib import Path
 from home_cortex.edge_schema import EdgeSchemaRegistry
 from home_cortex.ollama import _PLANNER_INSTRUCTIONS, _semantic_planner_examples
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_facts import SemanticFactRequest, SemanticSchemaRegistry
+from home_cortex.semantic_ir import SemanticFactRequest
+from home_cortex.semantic_schema import SemanticSchemaRegistry
 from home_cortex.semantic_planner_benchmark import (
     load_bilingual_dataset,
     load_probe_dataset,

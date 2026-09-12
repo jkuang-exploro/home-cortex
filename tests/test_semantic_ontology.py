@@ -5,7 +5,7 @@ import yaml
 
 from home_cortex.edge_schema import EdgeSchemaRegistry
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_facts import SemanticSchemaRegistry
+from home_cortex.semantic_schema import SemanticSchemaRegistry
 from home_cortex.semantic_ontology import SemanticOntology
 
 ROOT = Path(__file__).parents[1]

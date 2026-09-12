@@ -13,10 +13,15 @@ from home_cortex.agent_service import AgentService
 from home_cortex.tools import get_tool_definitions
 from home_cortex.ollama import OllamaService
 from home_cortex.operator_registry import OperatorInput, OperatorExecutionError, execute_operator
-from home_cortex.semantic_facts import (
-    DiscourseContext, FactRenderer, SemanticFactRequest, SemanticReference,
-    SemanticRelationStep, SemanticFilter, SemanticPlannerFailure,
+from home_cortex.semantic_ir import (
+    DiscourseContext,
+    SemanticFactRequest,
+    SemanticReference,
+    SemanticRelationStep,
+    SemanticFilter,
+    SemanticPlannerFailure,
 )
+from home_cortex.fact_renderer import FactRenderer
 from test_semantic_contract import household, ref, step
 
 
@@ -317,7 +322,11 @@ async def test_model_cannot_insert_ids_in_exclusion(household):
 
 @pytest.mark.asyncio
 async def test_projection_property_selection_and_serialization(household):
-    from home_cortex.semantic_planner_benchmark import serialize_fact_result, fact_result_from_serialized, normalize_semantic_request
+    from home_cortex.semantic_planner_benchmark import (
+        serialize_fact_result,
+        fact_result_from_serialized,
+        normalize_semantic_request,
+    )
     engine,context,dispatcher=household
     dispatcher.entities['person:son1'].pop('dob')
     query=ages().model_copy(update={'operation':'select','mode':None})
