@@ -241,8 +241,12 @@ class AgentService:
                 "write_item", semantic_answer.mutation.model_dump(mode="json"),
                 caller_entity_id=context.caller_entity_id,
                 planned_mutation=True,
+                request_context=context,
             ) if self._mutation_enabled else {"ok": False}
-            mutation_text = render_mutation_result(semantic_answer.mutation, response, language)
+            mutation_text = render_mutation_result(
+                semantic_answer.mutation, response, language,
+                self.semantic_facts.engine.schema.ontology,
+            )
             semantic_answer = None
         trusted = self._trusted_conversation(
             safe_messages,

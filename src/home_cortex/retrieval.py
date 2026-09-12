@@ -13,10 +13,8 @@ from .edge_schema import (
 )
 from .record_ids import canonical_record_id, split_record_id
 from .schema_catalog import (
-    matches_scoped_appellation,
+    matching_named_entities,
     node_table_sources,
-    normalize_entity_alias,
-    record_aliases,
 )
 
 ENTITY_SUMMARY_FIELDS = frozenset(
@@ -87,9 +85,6 @@ class RetrievalService:
         household_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Resolve stored aliases, then scoped appellations, from runtime data."""
-        normalized = normalize_entity_alias(text)
-        if not normalized:
-            raise ValueError("Entity alias cannot be empty")
         result_limit = self._validated_limit(limit)
         if entity_type is not None:
             if entity_type not in self.node_tables:
@@ -101,40 +96,18 @@ class RetrievalService:
         else:
             tables = self.node_tables
 
-        statement = """
-            SELECT * FROM type::table($table)
-            ORDER BY id;
-        """
-        alias_matches: list[dict[str, Any]] = []
-        appellation_matches: list[dict[str, Any]] = []
+        # Name matching needs identity metadata, never complete private profiles.
+        fields = ", ".join(sorted(ENTITY_SUMMARY_FIELDS | {"aliases", "appellations"}))
+        statement = f"SELECT {fields} FROM type::table($table) ORDER BY id;"
+        records: list[dict[str, Any]] = []
         for table in tables:
-            records = _query_records(
-                await self.database.query(
-                    statement,
-                    {"table": table},
-                )
-            )
-            alias_matches.extend(
-                _entity_summary(record)
-                for record in records
-                if any(
-                    normalize_entity_alias(alias) == normalized
-                    for alias in record_aliases(record)
-                )
-            )
-            appellation_matches.extend(
-                _entity_summary(record)
-                for record in records
-                if matches_scoped_appellation(
-                    record,
-                    text,
-                    speaker_id=speaker_id,
-                    household_id=household_id,
-                )
-            )
-        matches = alias_matches or appellation_matches
-        matches.sort(key=lambda record: str(record.get("id", "")))
-        return matches[:result_limit]
+            records.extend(_query_records(await self.database.query(
+                statement, {"table": table},
+            )))
+        return [_entity_summary(record) for record in matching_named_entities(
+            records, text, limit=result_limit,
+            speaker_id=speaker_id, household_id=household_id,
+        )]
 
     async def get_relationships(
         self,

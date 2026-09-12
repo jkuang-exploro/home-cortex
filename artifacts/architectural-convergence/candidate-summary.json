@@ -1,0 +1,196 @@
+{
+  "mode": "replay",
+  "scope": "semantic conversation pipeline; excludes HTTP/auth and production SurrealDB",
+  "sample_count": 105,
+  "repeat": 3,
+  "warmup": "one full suite pass excluded",
+  "latency_ms": {
+    "n": 105,
+    "p50": 1.115,
+    "p95": 1.491
+  },
+  "mean_exclusive_ms": {
+    "planner.total": 0.37056100014264565,
+    "llm.ollama": 0.35093810479988213,
+    "schema.output": 0.13511158088346878,
+    "schema.capabilities": 0.10512070472205301,
+    "planner.messages": 0.07632855233082193,
+    "conversation.total": 0.0649530951964802,
+    "executor.total": 0.03111549513483797,
+    "resolver.total": 0.014847590570016542,
+    "graph.records": 0.009261933293947507,
+    "renderer": 0.008115495317421543
+  },
+  "semantic_matches": 105,
+  "structured_correct": 105,
+  "structured_unscored": 0,
+  "llm_calls": 0,
+  "prompt_components": [
+    {
+      "message_content": {
+        "instructions": {
+          "utf8_bytes": 11313,
+          "approx_tokens_utf8_div_4": 2828.25,
+          "content_byte_percent": 35.75763322586763
+        },
+        "capabilities": {
+          "utf8_bytes": 9130,
+          "approx_tokens_utf8_div_4": 2282.5,
+          "content_byte_percent": 28.85770276250079
+        },
+        "examples": {
+          "utf8_bytes": 10935,
+          "approx_tokens_utf8_div_4": 2733.75,
+          "content_byte_percent": 34.56286743789114
+        },
+        "reminder_history_query_notes": {
+          "utf8_bytes": 245,
+          "approx_tokens_utf8_div_4": 61.25,
+          "content_byte_percent": 0.7743852329477211
+        },
+        "system_separator": {
+          "utf8_bytes": 15,
+          "approx_tokens_utf8_div_4": 3.75,
+          "content_byte_percent": 0.04741134079271762
+        }
+      },
+      "output_schema_bytes_separate": 9111,
+      "wire_messages_bytes": 37209,
+      "example_pairs": 42,
+      "content_sha256": "999a690c9bd6661be4abd1c62334153df0b8d08f6a3716a6c94d403ea81ab323"
+    }
+  ],
+  "provenance": {
+    "git_commit": "3150aa5a422eed13416344e9b3fc9abf57c5b5ea",
+    "git_dirty": true,
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/Users/jiankuang/Workspace/home-cortex/benchmarks/semantic_planner_synthetic.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "4c6bc495af10e6b434120ac0f4ca05964f824679fe36733993783e4a764a7835",
+    "data_tree_sha256": "94d2e554023019f0c53bcaa4cbbd06d06caace6612bef34e93f7ff545f18fd48",
+    "schema_tree_sha256": "1226a94d859a0a1e067f8f4b923937b63ffa40ebfd47afd6706fc9d02b0ea109",
+    "imported_package_path": "/Users/jiankuang/Workspace/home-cortex/src/home_cortex/semantic_planner_benchmark.py",
+    "copied_package_sha256": "dca0d9548d3f960d5accc3d4a16b4e8c13dbedc7618f374be8d6ff30ba52a54a",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "unavailable",
+    "ollama_version": "unavailable",
+    "hardware": {
+      "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+      "machine": "arm64",
+      "processor": "arm",
+      "ollama_processor": "unavailable"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 8192,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 3,
+    "verified_cold": false
+  },
+  "python_hash_seed": "0",
+  "frozen_clocks": {
+    "semantic_planner_synthetic.yaml": "2026-09-03T12:00:00-07:00",
+    "semantic_planner_age_filters.yaml": "2026-09-07T12:00:00-07:00",
+    "semantic_planner_date_intervals.yaml": "2026-09-07T12:00:00-07:00"
+  },
+  "ontology_sha256": "b39a576ab6e7ceabb4a744e4b9912cd4c2e8cc5805d6d5ba3f8d6fa8a24a6482",
+  "harness_sha256": "6c7c68f2b869eeb5389b0bc1fa53a2d73bdcaafb68e9fbbc2777d8ca1b672338",
+  "datasets_sha256": {
+    "semantic_planner_synthetic.yaml": "4c6bc495af10e6b434120ac0f4ca05964f824679fe36733993783e4a764a7835",
+    "semantic_planner_age_filters.yaml": "7557e7b13a396666a2bcd4bdd6c70bc3dd18215f9e223c5deeaf7b9b492dbc0b",
+    "semantic_planner_date_intervals.yaml": "152c64430e093d58840a309e59f3bf1e11131a9b5f54962e4c55055e52d6b752"
+  },
+  "model_metrics": {
+    "input_tokens": {
+      "observed_calls": 0,
+      "total": null,
+      "mean_per_call": null,
+      "mean_per_request": null
+    },
+    "output_tokens": {
+      "observed_calls": 0,
+      "total": null,
+      "mean_per_call": null,
+      "mean_per_request": null
+    },
+    "ttft_ms": {
+      "observed_calls": 0,
+      "total": null,
+      "mean_per_call": null,
+      "mean_per_request": null
+    },
+    "prefill_ms": {
+      "observed_calls": 0,
+      "total": null,
+      "mean_per_call": null,
+      "mean_per_request": null
+    },
+    "generation_ms": {
+      "observed_calls": 0,
+      "total": null,
+      "mean_per_call": null,
+      "mean_per_request": null
+    },
+    "load_ms": {
+      "observed_calls": 0,
+      "total": null,
+      "mean_per_call": null,
+      "mean_per_request": null
+    },
+    "duration_ms": {
+      "observed_calls": 108,
+      "total": 36.84850100398762,
+      "mean_per_call": 0.3411898241109965,
+      "mean_per_request": 0.35093810479988213
+    }
+  },
+  "followups": [
+    {
+      "case_id": "followup-stateless",
+      "total_ms": 2.333499998712796,
+      "llm_calls": 0,
+      "structured_correct": true
+    },
+    {
+      "case_id": "followup-persistent",
+      "total_ms": 1.3309160003700526,
+      "llm_calls": 0,
+      "structured_correct": true
+    },
+    {
+      "case_id": "followup-stateless",
+      "total_ms": 2.2656250002910383,
+      "llm_calls": 0,
+      "structured_correct": true
+    },
+    {
+      "case_id": "followup-persistent",
+      "total_ms": 1.1475829996925313,
+      "llm_calls": 0,
+      "structured_correct": true
+    },
+    {
+      "case_id": "followup-stateless",
+      "total_ms": 2.1607079997920664,
+      "llm_calls": 0,
+      "structured_correct": true
+    },
+    {
+      "case_id": "followup-persistent",
+      "total_ms": 0.9922499993990641,
+      "llm_calls": 0,
+      "structured_correct": true
+    }
+  ],
+  "failures": []
+}

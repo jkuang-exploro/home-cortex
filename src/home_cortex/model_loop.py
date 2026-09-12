@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Literal
 
+from .semantic_facts import AgentRequestContext
 from .display import (
     DisplayNameResolver,
     DisplayTextStream,
@@ -386,6 +387,7 @@ class ModelLoop:
         *,
         caller_entity_id: str | None,
         planned_mutation: bool = False,
+        request_context: AgentRequestContext | None = None,
     ) -> dict[str, Any]:
         if tool_name == "write_item" and not planned_mutation:
             return {"ok": False, "tool": tool_name, "error": {
@@ -398,6 +400,7 @@ class ModelLoop:
                     tool_name,
                     arguments,
                     caller_entity_id=caller_entity_id,
+                    **({"request_context": request_context} if request_context is not None else {}),
                 ),
                 timeout=self.tool_timeout_seconds,
             )

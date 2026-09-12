@@ -21,10 +21,8 @@ from .ollama import language_model_from_settings
 from .retrieval import ENTITY_SUMMARY_FIELDS, RetrievalService
 from .schema_catalog import (
     RuntimeSchemaCatalog,
-    matches_scoped_appellation,
+    matching_named_entities,
     node_table_sources,
-    normalize_entity_alias,
-    record_aliases,
 )
 from .semantic_facts import (
     FactAnswer,
@@ -413,32 +411,17 @@ class _JsonGraphDispatcher:
             entity = self.entities.get(arguments["entity_id"])
             records = [entity] if entity is not None else []
         elif tool_name == "resolve_entity_alias":
-            query = normalize_entity_alias(arguments["text"])
             expected = arguments.get("entity_type")
             candidates = [
                 entity
                 for entity in self.entities.values()
                 if expected is None or entity["id"].startswith(f"{expected}:")
             ]
-            aliases = [
-                _summary(entity)
-                for entity in candidates
-                if any(
-                    query == normalize_entity_alias(alias)
-                    for alias in record_aliases(entity)
-                )
-            ]
-            appellations = [
-                _summary(entity)
-                for entity in candidates
-                if matches_scoped_appellation(
-                    entity,
-                    arguments["text"],
-                    speaker_id=arguments.get("speaker_id"),
-                    household_id=arguments.get("household_id"),
-                )
-            ]
-            records = (aliases or appellations)[: arguments.get("limit", 25)]
+            records = [_summary(entity) for entity in matching_named_entities(
+                candidates, arguments["text"], limit=arguments.get("limit", 25),
+                speaker_id=arguments.get("speaker_id"),
+                household_id=arguments.get("household_id"),
+            )]
         elif tool_name == "get_relationships":
             records = self._relationships(arguments)
         else:

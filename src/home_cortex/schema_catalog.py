@@ -342,3 +342,28 @@ def matches_scoped_appellation(
         )
         for item in record_appellations(record)
     )
+
+
+def matching_named_entities(
+    records: Sequence[Mapping[str, Any]],
+    text: str,
+    *,
+    limit: int,
+    speaker_id: str | None = None,
+    household_id: str | None = None,
+) -> list[Mapping[str, Any]]:
+    """Canonical name matching for storage adapters; preserve all ambiguity.
+
+    Direct aliases take precedence across the entire candidate set, never per
+    table. Scope applies only to appellations. Limit after stable ID ordering.
+    """
+    normalized = normalize_entity_alias(text)
+    if not normalized:
+        raise ValueError("Entity alias cannot be empty")
+    aliases = [record for record in records if any(
+        normalize_entity_alias(alias) == normalized for alias in record_aliases(record)
+    )]
+    matches = aliases or [record for record in records if matches_scoped_appellation(
+        record, text, speaker_id=speaker_id, household_id=household_id,
+    )]
+    return sorted(matches, key=lambda record: str(record.get("id", "")))[:limit]

@@ -34,6 +34,11 @@ _caller_entity_id: ContextVar[str | None] = ContextVar(
 )
 
 
+_request_context: ContextVar[AgentRequestContext | None] = ContextVar(
+    "home_cortex_request_context", default=None,
+)
+
+
 @contextmanager
 def tool_caller_scope(entity_id: str | None):
     """Bind the authenticated person ID for the current tool dispatch."""
@@ -339,13 +344,18 @@ class ToolDispatcher:
         arguments: Any,
         *,
         caller_entity_id: str | None = None,
+        request_context: AgentRequestContext | None = None,
     ) -> dict[str, Any]:
-        return await self._dispatch(
-            tool_name,
-            arguments,
-            caller_entity_id=caller_entity_id,
-            allow_internal=False,
-        )
+        token = _request_context.set(request_context)
+        try:
+            return await self._dispatch(
+                tool_name, arguments,
+                caller_entity_id=(request_context.caller_entity_id
+                                  if request_context else caller_entity_id),
+                allow_internal=False,
+            )
+        finally:
+            _request_context.reset(token)
 
     async def dispatch_internal(
         self,
@@ -497,8 +507,8 @@ class ToolDispatcher:
     async def _write_item(self, arguments: BaseModel) -> dict[str, Any]:
         assert isinstance(arguments, NamedWriteItemArguments)
         assert self.writing is not None
-        engine = HouseholdFactEngine(self, SemanticSchemaRegistry(self.writing.catalog))
-        context = AgentRequestContext(
+        engine = HouseholdFactEngine(self, SemanticSchemaRegistry(self.writing.catalog, self.writing.ontology))
+        context = _request_context.get() or AgentRequestContext(
             caller_entity_id=current_caller_entity_id(), household_id=self.household_id,
             assistant_id="writer", assistant_display_name="writer",
             current_time=datetime.now(timezone.utc), locale="en",

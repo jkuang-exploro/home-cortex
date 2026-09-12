@@ -5,6 +5,7 @@ from typing import Any
 
 from .semantic_facts import AgentRequestContext, HouseholdFactEngine, SemanticFactRequest, FactResult
 from .writing import ItemWritingService
+from .semantic_ontology import SemanticOntology
 from .mutation_ir import NamedCreateItem, NamedMoveItem, NamedUpdateAttributes, NamedWriteRequest
 
 
@@ -98,7 +99,10 @@ class NamedItemWritingService:
         return response
 
 
-def render_mutation_result(request: NamedWriteRequest, response: dict[str, Any], language: str) -> str:
+def render_mutation_result(
+    request: NamedWriteRequest, response: dict[str, Any], language: str,
+    ontology: SemanticOntology,
+) -> str:
     """Acknowledge only tool-confirmed outcomes, without another model turn."""
     zh = language.startswith('zh')
     result = response.get('result', {}) if response.get('ok') is True else {}
@@ -107,8 +111,7 @@ def render_mutation_result(request: NamedWriteRequest, response: dict[str, Any],
     location = getattr(request, 'location_name', '')
     if request.operation == 'update_attributes' and status in {'APPLIED', 'NO_CHANGE', 'PROPOSED'}:
         from .semantic_display import SemanticDisplay
-        from .semantic_ontology import SemanticOntology
-        display = SemanticDisplay(SemanticOntology.load_default(), language)
+        display = SemanticDisplay(ontology, language)
         details = '；'.join(f'{display.property(key)}：{display.literal(key, value)}'
                            for key, value in result.get('attributes', {}).items())
         if status == 'PROPOSED':

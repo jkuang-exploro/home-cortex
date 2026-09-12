@@ -193,3 +193,24 @@ async def test_retrieval_service_full_name_and_alias_agree() -> None:
         "person:dylan_kuang"
     ]
     assert unknown == []
+
+
+@pytest.mark.asyncio
+async def test_storage_adapters_share_alias_precedence_order_and_limit(tmp_path):
+    people = [
+        {"id": "person:z", "aliases": ["Compass"]},
+        {"id": "person:a", "aliases": ["compass"]},
+        {"id": "person:scoped", "appellations": [
+            {"value": "Compass", "speaker_ids": ["person:child"]},
+        ]},
+    ]
+    dispatcher = _people_dispatcher(tmp_path, people)
+    retrieval = RetrievalService(FakeDatabase({"person": people}))
+    for limit in (1, 3):
+        arguments = {"text": "ＣＯＭＰＡＳＳ!", "entity_type": "person",
+                     "speaker_id": "person:child", "limit": limit}
+        expected = ["person:a", "person:z"][:limit]
+        actual = await retrieval.resolve_entity_alias(**arguments)
+        replay = await dispatcher.dispatch_internal("resolve_entity_alias", arguments)
+        assert [record["id"] for record in actual] == expected
+        assert [record["id"] for record in replay["result"]] == expected

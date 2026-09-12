@@ -653,7 +653,7 @@ class SemanticSchemaRegistry:
             "semantic_relations": sorted(relations),
             "semantic_relation_properties": {
                 relation: sorted(self.semantic_relation_properties(relation))
-                for relation in relations
+                for relation in sorted(relations)
             },
             "operations": sorted(get_args(FactOperation)),
             "operation_requirements": {
@@ -685,7 +685,6 @@ class SemanticSchemaRegistry:
             full = self.capability_payload()
             ontology = full["reference_ontology"]
             self._planner_capability_cache = {
-                "references": full["references"],
                 "reference_kinds": {
                     "self": "authenticated speaker; first-person I/me/我 only",
                     "assistant": "this household assistant; second-person you/你/您 addressing the agent",
@@ -1483,27 +1482,7 @@ class SemanticFactPlanner:
                         if person_error:
                             validation = "INVALID_PLAN"
                         elif location_error:
-                            completed = _complete_named_object_location(
-                                candidate.request
-                            )
-                            if completed is None:
-                                validation = "INVALID_PLAN"
-                            else:
-                                candidate = SemanticPlan(
-                                    requires_fact=True, request=completed
-                                )
-                                validation = self.schema.validation_code(
-                                    completed
-                                )
-                    elif _object_location_mismatch(utterance, candidate.request):
-                        completed = _complete_named_object_location(
-                            candidate.request
-                        )
-                        if completed is not None:
-                            candidate = SemanticPlan(
-                                requires_fact=True, request=completed
-                            )
-                            validation = self.schema.validation_code(completed)
+                            validation = "INVALID_PLAN"
                     if validation != "VALID":
                         last_invalid_request = candidate.request
                 validation_ms += (perf_counter() - validate_started) * 1000
@@ -3682,23 +3661,6 @@ def _object_location_mismatch(
     ):
         return None
     return hint
-
-
-def _complete_named_object_location(
-    request: SemanticFactRequest,
-) -> SemanticFactRequest | None:
-    """Fill item+location around a name the interpreter already extracted."""
-    if request.subject.kind != "named_entity" or not request.subject.value:
-        return None
-    return SemanticFactRequest(
-        operation="resolve_reference",
-        subject=SemanticReference(
-            kind="named_entity",
-            value=request.subject.value,
-            entity_type="item",
-            path=(SemanticRelationStep(relation="location"),),
-        ),
-    )
 
 
 def _identity_person_mismatch(

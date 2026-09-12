@@ -77,7 +77,11 @@ async def test_resolve_entity_alias_is_exact_normalized_and_database_backed() ->
 
     assert [record["id"] for record in result] == ["person:dylan"]
     assert len(database.queries) == 1
-    assert "SELECT * FROM type::table($table)" in database.queries[0][0]
+    statement = database.queries[0][0]
+    assert "FROM type::table($table)" in statement
+    assert "SELECT *" not in statement
+    assert "aliases" in statement and "appellations" in statement
+    assert "dob" not in statement
     assert "LIMIT $limit" not in database.queries[0][0]
     assert "limit" not in database.queries[0][1]
     assert normalize_entity_alias(" ＤＹＬＡＮ!!! ") == "dylan"

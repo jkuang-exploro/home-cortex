@@ -719,3 +719,20 @@ and removes that namespace in `finally`. Run only in an isolated process;
 it replaces that process's FastAPI runtime state. It never selects the configured
 production namespace. ASGI timings exclude browser, reverse-proxy and TCP ingress.
 See [the audit report](../artifacts/token-latency-audit/REPORT.md) for results and limits.
+
+## Semantic ownership and convergence
+
+`AgentService` constructs the trusted `AgentRequestContext`; conversation focus
+extends it and named mutations receive that same context. `SemanticFactPlanner`
+compiles model output through ontology expansion and validation into
+`SemanticFactRequest`. `HouseholdFactEngine` executes it using `EntityResolver`
+and returns `FactResult` for deterministic rendering. Invalid location plans
+are never rewritten into a different request.
+
+Storage adapters share `schema_catalog.matching_named_entities` for normalized
+aliases, scoped appellations, ordering, and limits. Authentication remains an
+exact-ID lookup. Alias SQL projects identity metadata rather than full profiles.
+Mutation resolution and rendering use the active ontology.
+
+See [the convergence report](../artifacts/architectural-convergence/REPORT.md)
+for ownership decisions, measured local results, and outstanding GPU acceptance.

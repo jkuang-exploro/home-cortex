@@ -16,6 +16,7 @@ from home_cortex.semantic_facts import (
     FactRenderer,
     HouseholdFactEngine,
     SemanticFactPlanner,
+    SemanticPlannerFailure,
     SemanticFactRequest,
     SemanticFilter,
     SemanticReference,
@@ -395,7 +396,7 @@ def test_object_location_hint_ignores_residence_and_identity(utterance):
 
 
 @pytest.mark.asyncio
-async def test_object_where_question_completes_extracted_name_to_item_location(tmp_path):
+async def test_object_where_question_never_repairs_interpreter_semantics(tmp_path):
     _contained_households(tmp_path)
     engine, context = _engine(tmp_path)
 
@@ -416,20 +417,10 @@ async def test_object_where_question_completes_extracted_name_to_item_location(t
                 },
             }
 
-    outcome = await SemanticFactPlanner(Interpreter(), engine.schema).plan(
-        [{"role": "user", "content": "冰箱在哪里"}],
-        context,
-    )
-    request = outcome.plan.request
-    assert request is not None
-    assert request.operation == "resolve_reference"
-    assert request.subject.kind == "named_entity"
-    assert request.subject.value == "冰箱"
-    assert request.subject.entity_type == "item"
-    assert [step.relation for step in request.subject.path] == ["location"]
-    result, *_ = await engine.execute(request, context)
-    assert result.status == "found"
-    assert result.value["id"] == "space:kitchen_a"
+    with pytest.raises(SemanticPlannerFailure):
+        await SemanticFactPlanner(Interpreter(), engine.schema).plan(
+            [{"role": "user", "content": "冰箱在哪里"}], context,
+        )
 
 
 @pytest.mark.asyncio

@@ -353,3 +353,45 @@ async def test_calculate_rejects_arbitrary_code() -> None:
     assert response["ok"] is False
     assert response["error"]["code"] == "invalid_arguments"
     assert retrieval.calls == []
+
+
+@pytest.mark.asyncio
+async def test_mutations_preserve_trusted_context_across_concurrent_dispatches(monkeypatch):
+    import asyncio
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from types import SimpleNamespace
+    from home_cortex.semantic_facts import AgentRequestContext
+    from home_cortex.semantic_ontology import SemanticOntology
+    from home_cortex.edge_schema import EdgeSchemaRegistry
+    from home_cortex.schema_catalog import RuntimeSchemaCatalog
+    from home_cortex.semantic_writing import NamedItemWritingService
+    from home_cortex.tools import current_caller_entity_id
+
+    ontology = SemanticOntology.load_default()
+    writer = SimpleNamespace(ontology=ontology, catalog=RuntimeSchemaCatalog.from_data_dir(
+        Path(__file__).parents[1] / "benchmarks/fixtures/semantic-contract",
+        EdgeSchemaRegistry.load_default(),
+    ))
+    dispatcher = ToolDispatcher(FakeRetrievalService(), allowed_tools=["write_item"], writing=writer)
+    seen = []
+
+    async def capture(service, request, context):
+        await asyncio.sleep(0)
+        assert service.engine.schema.ontology is ontology
+        assert current_caller_entity_id() == context.caller_entity_id
+        seen.append(context)
+        return {"status": "PROPOSED"}
+
+    monkeypatch.setattr(NamedItemWritingService, "mutate", capture)
+    contexts = [AgentRequestContext(
+        f"person:{name}", "helper", "Helper", f"address:{name}",
+        datetime(2020, 1, 1, tzinfo=timezone.utc), "zh", f"conversation-{name}",
+    ) for name in ("alpha", "beta")]
+    results = await asyncio.gather(*(dispatcher.dispatch(
+        "write_item", {"operation": "delete", "item_name": "Compass", "mode": "preview"},
+        request_context=context,
+    ) for context in contexts))
+    assert all(result["ok"] for result in results)
+    assert all(any(actual is expected for actual in seen) for expected in contexts)
+    assert current_caller_entity_id() is None

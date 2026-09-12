@@ -1,0 +1,113 @@
+{
+  "method": "Actual message content bytes, frozen clock, no history, synthetic schema; baseline differs only by removed 94-byte references field. Byte/4 is a rough non-model token estimate. Last question is a property-request shape, not a measured missing-data execution.",
+  "rows": [
+    {
+      "question": "我是谁",
+      "before_content_bytes": 31795,
+      "after_content_bytes": 31701,
+      "after_estimated_tokens_utf8_div_4": 7925.25,
+      "actual_input_tokens": null,
+      "actual_output_tokens": null,
+      "live_latency_ms": null
+    },
+    {
+      "question": "你是谁",
+      "before_content_bytes": 31818,
+      "after_content_bytes": 31724,
+      "after_estimated_tokens_utf8_div_4": 7931.0,
+      "actual_input_tokens": null,
+      "actual_output_tokens": null,
+      "live_latency_ms": null
+    },
+    {
+      "question": "我岳父是谁",
+      "before_content_bytes": 31693,
+      "after_content_bytes": 31599,
+      "after_estimated_tokens_utf8_div_4": 7899.75,
+      "actual_input_tokens": null,
+      "actual_output_tokens": null,
+      "live_latency_ms": null
+    },
+    {
+      "question": "Who is my son?",
+      "before_content_bytes": 31692,
+      "after_content_bytes": 31598,
+      "after_estimated_tokens_utf8_div_4": 7899.5,
+      "actual_input_tokens": null,
+      "actual_output_tokens": null,
+      "live_latency_ms": null
+    },
+    {
+      "question": "家里都有谁",
+      "before_content_bytes": 31693,
+      "after_content_bytes": 31599,
+      "after_estimated_tokens_utf8_div_4": 7899.75,
+      "actual_input_tokens": null,
+      "actual_output_tokens": null,
+      "live_latency_ms": null
+    },
+    {
+      "question": "How many people are in my household?",
+      "before_content_bytes": 31714,
+      "after_content_bytes": 31620,
+      "after_estimated_tokens_utf8_div_4": 7905.0,
+      "actual_input_tokens": null,
+      "actual_output_tokens": null,
+      "live_latency_ms": null
+    },
+    {
+      "question": "谁最年长",
+      "before_content_bytes": 31690,
+      "after_content_bytes": 31596,
+      "after_estimated_tokens_utf8_div_4": 7899.0,
+      "actual_input_tokens": null,
+      "actual_output_tokens": null,
+      "live_latency_ms": null
+    },
+    {
+      "question": "How old is my son?",
+      "before_content_bytes": 31696,
+      "after_content_bytes": 31602,
+      "after_estimated_tokens_utf8_div_4": 7900.5,
+      "actual_input_tokens": null,
+      "actual_output_tokens": null,
+      "live_latency_ms": null
+    },
+    {
+      "question": "厨房里有什么",
+      "before_content_bytes": 31696,
+      "after_content_bytes": 31602,
+      "after_estimated_tokens_utf8_div_4": 7900.5,
+      "actual_input_tokens": null,
+      "actual_output_tokens": null,
+      "live_latency_ms": null
+    },
+    {
+      "question": "冰箱里有什么",
+      "before_content_bytes": 31696,
+      "after_content_bytes": 31602,
+      "after_estimated_tokens_utf8_div_4": 7900.5,
+      "actual_input_tokens": null,
+      "actual_output_tokens": null,
+      "live_latency_ms": null
+    },
+    {
+      "question": "冰箱门架上有什么",
+      "before_content_bytes": 31702,
+      "after_content_bytes": 31608,
+      "after_estimated_tokens_utf8_div_4": 7902.0,
+      "actual_input_tokens": null,
+      "actual_output_tokens": null,
+      "live_latency_ms": null
+    },
+    {
+      "question": "What is my birth date?",
+      "before_content_bytes": 31700,
+      "after_content_bytes": 31606,
+      "after_estimated_tokens_utf8_div_4": 7901.5,
+      "actual_input_tokens": null,
+      "actual_output_tokens": null,
+      "live_latency_ms": null
+    }
+  ]
+}
