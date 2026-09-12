@@ -15,7 +15,7 @@ than memorizing known questions. It does not replace
 | `frozen/MANIFEST.yaml` | Frozen case list |
 | `fingerprints.json` | Dataset / ontology / test hashes |
 
-Load with `home_cortex.composition_eval`. Sequence files have no `probe` block
+Load with `scripts.benchmarks.composition_eval`. Sequence files have no `probe` block
 so `load_probe_dataset` will not silently drop `history`. Ticket 6 consumes the
 frozen set; this ticket does not claim GPU accuracy.
 

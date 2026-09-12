@@ -2,7 +2,7 @@ from typing import Any
 
 from surrealdb import AsyncSurreal
 
-from .profiling import stage
+from .request_tracing import stage
 from .config import Settings
 
 

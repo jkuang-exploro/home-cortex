@@ -12,8 +12,9 @@ import platform
 import subprocess
 import tarfile
 from pathlib import Path
+from scripts import PROJECT_ROOT
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = PROJECT_ROOT
 
 
 def encoded(value):
@@ -25,18 +26,18 @@ def sha(data):
 
 
 def freeze(output: Path):
-    from home_cortex.composition_eval import household_engine, composition_fingerprint_payload
+    from scripts.benchmarks.composition_eval import household_engine, composition_fingerprint_payload
     from home_cortex.semantic_schema import SemanticSchemaRegistry
     from home_cortex.semantic_ontology import SemanticOntology
 
     payload = {}
     # Deliberate allowlist. In particular, exclude data/, docker envs, .git,
     # generated production probes, local configuration and credentials.
-    for directory in ('src/home_cortex', 'schemas', 'benchmarks', 'tests'):
+    for directory in ('src/home_cortex', 'scripts', 'schemas', 'benchmarks', 'tests'):
         for path in sorted((ROOT / directory).rglob('*')):
-            if path.is_file() and not path.is_symlink() and '__pycache__' not in path.parts and path.suffix in {'.py', '.yaml', '.json', '.md'}:
+            if path.is_file() and not path.is_symlink() and '__pycache__' not in path.parts and path.suffix in {'.py', '.sh', '.yaml', '.json', '.md'}:
                 payload[str(path.relative_to(ROOT))] = path.read_bytes()
-    for name in ('pyproject.toml', 'AGENTS.md', 'scripts/freeze_contract_candidate.py',
+    for name in ('pyproject.toml', 'AGENTS.md', 'scripts/maintenance/freeze_contract_candidate.py',
                  'artifacts/generic-contracts/REPORT.md'):
         payload[name] = (ROOT / name).read_bytes()
     views = {}

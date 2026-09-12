@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from home_cortex.composition_eval import (
+from scripts.benchmarks.composition_eval import (
     COMPOSITION_ROOT,
     HOUSEHOLD_IDS,
     composition_fingerprint_payload,
@@ -22,7 +22,7 @@ from home_cortex.composition_eval import (
 )
 from home_cortex.ollama import _PLANNER_INSTRUCTIONS, _semantic_planner_examples
 from home_cortex.semantic_ir import DiscourseContext, SemanticFactRequest
-from home_cortex.semantic_planner_benchmark import (
+from scripts.benchmarks.semantic_planner_benchmark import (
     DEFAULT_EVAL_PATH,
     SCORING_REVISION,
     load_probe_dataset,

@@ -11,9 +11,10 @@ import sys
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from scripts import PROJECT_ROOT
 
 from home_cortex.ollama import OllamaService, _semantic_planner_examples
-from home_cortex.semantic_planner_benchmark import (
+from scripts.benchmarks.semantic_planner_benchmark import (
     DEFAULT_EVAL_PATH,
     build_json_fact_service,
     collect_provenance,
@@ -22,7 +23,7 @@ from home_cortex.semantic_planner_benchmark import (
     run_tier1_probe,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = PROJECT_ROOT
 
 
 async def run(args: argparse.Namespace) -> dict:

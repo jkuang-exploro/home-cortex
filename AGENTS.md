@@ -25,10 +25,13 @@ reasoning*, not a catalog of expected questions.
   - `semantic_ontology.py` — declarative ontology model + validation.
   - `ollama.py` — LLM client, interpreter system prompt, and reusable examples.
   - `operator_registry.py` — deterministic operator/predicate registry.
-  - `semantic_planner_benchmark.py` / `fact_benchmark.py` — benchmark harness.
+  - `request_tracing.py` — reusable, opt-in runtime request/LLM timing.
   - `api.py`, `agent_service.py`, `agents/` — HTTP and agent layer.
 - `schemas/` — declarative ontology (`semantic/ontology.yaml`) and edge schemas
   (`edge/*.yaml`). Reusable domain concepts belong here, not in prompts.
+- `scripts/` — importable engineering utilities grouped as `benchmarks/`,
+  `profiling/`, `probes/`, and `maintenance/`; see `scripts/README.md`. Runtime
+  modules must not import scripts. Benchmark inputs remain in `benchmarks/`.
 - `tests/` — pytest suite. Run with `python -m pytest -q`.
 - `pyproject.toml` — package metadata and dependencies.
 

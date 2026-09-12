@@ -6,12 +6,13 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from scripts import PROJECT_ROOT
 import statistics
 import subprocess
 import time
 
 from home_cortex.ollama import planner_chat_messages, _semantic_planner_examples, _PLANNER_INSTRUCTIONS
-from home_cortex.semantic_planner_benchmark import build_json_fact_service
+from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
 from home_cortex.semantic_transport import canonical_json, pack_capabilities, transport_for
 
 
@@ -21,7 +22,7 @@ def main():
     parser.add_argument('--tokenizer-json', type=Path, help='Optional deployed tokenizer.json (requires tokenizers package)')
     parser.add_argument('--baseline-snapshot', type=Path, help='Optional frozen, synthetic-only pre-change capture')
     args = parser.parse_args()
-    root = Path(__file__).resolve().parents[1]
+    root = PROJECT_ROOT
     if args.tokenizer_json:
         from tokenizers import Tokenizer
         tokenizer = Tokenizer.from_file(str(args.tokenizer_json))

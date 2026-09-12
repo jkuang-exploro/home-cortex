@@ -13,6 +13,7 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
+from scripts import PROJECT_ROOT
 from time import perf_counter
 from typing import Any
 from uuid import uuid4
@@ -28,14 +29,14 @@ from home_cortex.ollama import (
 from home_cortex.semantic_conversation import SemanticConversationService
 from home_cortex.fact_renderer import FactRenderer
 from home_cortex.semantic_ir import SemanticFactRequest, SemanticPlannerFailure
-from home_cortex.semantic_planner_benchmark import (
+from scripts.benchmarks.semantic_planner_benchmark import (
     build_json_fact_service,
     normalize_semantic_request,
     primary_entity_ids,
     semantic_mismatch_reason,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = PROJECT_ROOT
 FIXTURE = ROOT / "benchmarks/fixtures/semantic-contract"
 SCHEMA = ROOT / "schemas/edge"
 MODEL = "qwen3.5:9b"

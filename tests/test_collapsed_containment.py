@@ -6,7 +6,7 @@ from datetime import datetime
 import pytest
 
 from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.fact_benchmark import _JsonGraphDispatcher
+from scripts.benchmarks.json_graph import JsonGraphDispatcher
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
 from home_cortex.semantic_ir import AgentRequestContext, SemanticFactRequest
 from home_cortex.household_fact_engine import HouseholdFactEngine
@@ -33,7 +33,7 @@ def graph(tmp_path, collapse=True):
         for table, records in tables.items():
             (tmp_path / folder / f'{table}.json').write_text(json.dumps(records))
     registry = EdgeSchemaRegistry.load_default(tmp_path)
-    dispatcher = _JsonGraphDispatcher(tmp_path, registry)
+    dispatcher = JsonGraphDispatcher(tmp_path, registry)
     schema = SemanticSchemaRegistry(RuntimeSchemaCatalog.from_data_dir(tmp_path, registry))
     return HouseholdFactEngine(dispatcher, schema), dispatcher
 

@@ -16,25 +16,28 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
+from scripts import PROJECT_ROOT
 from time import perf_counter
 from typing import Any, Callable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 import yaml
+import home_cortex
 
-from .agents import get_agent
-from .config import get_settings
-from .edge_schema import EdgeSchemaRegistry
-from .fact_benchmark import _JsonGraphDispatcher, _percentile
-from .ollama import (
+from home_cortex.agents import get_agent
+from home_cortex.config import get_settings
+from home_cortex.edge_schema import EdgeSchemaRegistry
+from scripts.benchmarks.fact_benchmark import _percentile
+from scripts.benchmarks.json_graph import JsonGraphDispatcher
+from home_cortex.ollama import (
     PLANNER_KEEP_ALIVE,
     PLANNER_NUM_CTX,
     PLANNER_NUM_PREDICT,
     PLANNER_SEED,
     OllamaService,
 )
-from .schema_catalog import RuntimeSchemaCatalog
-from .semantic_ir import (
+from home_cortex.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.semantic_ir import (
     AgentRequestContext,
     FactEvidence,
     FactResult,
@@ -43,17 +46,17 @@ from .semantic_ir import (
     SemanticFactRequest,
     SemanticPlannerFailure,
 )
-from .household_fact_engine import HouseholdFactEngine
-from .semantic_planner import SemanticFactPlanner, planner_input_summary
-from .semantic_facts import SemanticFactService
-from .semantic_schema import SemanticSchemaRegistry
+from home_cortex.household_fact_engine import HouseholdFactEngine
+from home_cortex.semantic_planner import SemanticFactPlanner, planner_input_summary
+from home_cortex.semantic_facts import SemanticFactService
+from home_cortex.semantic_schema import SemanticSchemaRegistry
 
 FROZEN_EVAL_TIME = "2026-09-03T12:00:00-07:00"
 SCORING_REVISION = "2026-09-07.2-composition-shapes"
 
 def _default_eval_path() -> Path:
     candidates = (
-        Path(__file__).resolve().parents[2]
+        PROJECT_ROOT
         / "benchmarks"
         / "semantic_planner_eval.yaml",
         Path("/app/benchmarks/semantic_planner_eval.yaml"),
@@ -161,7 +164,7 @@ def load_bilingual_dataset(
 ) -> Mapping[str, Any]:
     """Load Chinese/English/mixed parity cases. Not a serving phrase table."""
     target = path or (
-        Path(__file__).resolve().parents[2]
+        PROJECT_ROOT
         / "benchmarks"
         / "semantic_planner_bilingual.yaml"
     )
@@ -752,7 +755,7 @@ def collect_provenance(
 ) -> dict[str, Any]:
     git = _git_provenance(root)
     ollama = _ollama_provenance(ollama_url, ollama_model)
-    package_path = Path(__file__).resolve()
+    package_path = Path(home_cortex.__file__).resolve()
     return {
         "git_commit": git.get("commit", "unavailable"),
         "git_dirty": git.get("dirty", "unavailable"),
@@ -767,6 +770,7 @@ def collect_provenance(
         "copied_package_sha256": os.environ.get(
             "COPIED_PACKAGE_SHA256", _sha256_tree(package_path.parent)
         ),
+        "harness_tree_sha256": _sha256_tree(Path(__file__).resolve().parent),
         "scoring_revision": SCORING_REVISION,
         "model_name": ollama_model,
         "model_digest": ollama.get("digest", "unavailable"),
@@ -1188,7 +1192,7 @@ def build_json_fact_service(
     catalog = RuntimeSchemaCatalog.from_data_dir(data_dir, registry)
     schema = SemanticSchemaRegistry(catalog)
     service = SemanticFactService(
-        HouseholdFactEngine(_JsonGraphDispatcher(data_dir, registry), schema),
+        HouseholdFactEngine(JsonGraphDispatcher(data_dir, registry), schema),
         planner=SemanticFactPlanner(ollama, schema),
     )
     steward = get_agent("steward")
@@ -1222,7 +1226,7 @@ async def _benchmark_cases(
             cases,
         )
         report["provenance"] = collect_provenance(
-            root=Path(__file__).resolve().parents[2],
+            root=PROJECT_ROOT,
             eval_path=eval_path,
             ollama_url=ollama_url,
             ollama_model=ollama_model,
@@ -1241,13 +1245,12 @@ async def _benchmark_cases(
 
 
 def main() -> None:
-    settings = get_settings()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-dir", type=Path, default=settings.data_dir)
-    parser.add_argument("--schema-dir", type=Path, default=settings.edge_schema_dir)
+    parser.add_argument("--data-dir", type=Path)
+    parser.add_argument("--schema-dir", type=Path)
     parser.add_argument("--eval", type=Path, default=DEFAULT_EVAL_PATH)
-    parser.add_argument("--ollama-url", default=settings.ollama_url)
-    parser.add_argument("--model", default=settings.ollama_model)
+    parser.add_argument("--ollama-url")
+    parser.add_argument("--model")
     parser.add_argument("--category", action="append", default=[])
     parser.add_argument(
         "--utterance",
@@ -1264,6 +1267,16 @@ def main() -> None:
         help="Write the full JSON report to this path.",
     )
     args = parser.parse_args()
+    # Help must work without a configured model or access to deployment secrets.
+    settings = get_settings()
+    if args.data_dir is None:
+        args.data_dir = settings.data_dir
+    if args.schema_dir is None:
+        args.schema_dir = settings.edge_schema_dir
+    if args.ollama_url is None:
+        args.ollama_url = settings.ollama_url
+    if args.model is None:
+        args.model = settings.ollama_model
     cases = load_semantic_eval_cases(args.eval)
     if args.category:
         cases = tuple(case for case in cases if case.category in args.category)

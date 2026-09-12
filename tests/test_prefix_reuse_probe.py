@@ -12,10 +12,10 @@ def test_probe_prefixes_are_stable_across_hash_seeds(tmp_path):
     for seed in ('0', '1'):
         output = tmp_path / f'{seed}.json'
         subprocess.run([
-            sys.executable, str(root / 'scripts/ollama_prefix_reuse_probe.py'),
+            sys.executable, '-m', 'scripts.probes.ollama_prefix_reuse_probe',
             '--root', str(root), '--output', str(output), '--dry-run',
         ], env={**os.environ, 'PYTHONHASHSEED': seed, 'PYTHONPATH': str(root / 'src')},
-           check=True, capture_output=True, text=True)
+           check=True, capture_output=True, text=True, cwd=root)
         reports.append(json.loads(output.read_text()))
     canonical = [[row for row in report['experiments'] if row['ordering'] == 'canonical'] for report in reports]
     assert canonical[0] == canonical[1]

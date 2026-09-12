@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from home_cortex.composition_eval import (
+from scripts.benchmarks.composition_eval import (
     household_engine, load_standalone_cases, load_all_composition_datasets,
     request_context, gold_matches, HOUSEHOLD_IDS,
 )
@@ -253,7 +253,7 @@ def test_absent_bindings_disable_complete_concepts_and_bad_kinds_fail(household)
 
 
 def test_fingerprint_is_stable_across_processes():
-    program = "from pathlib import Path; from home_cortex.composition_eval import household_engine; from home_cortex.semantic_schema import SemanticSchemaRegistry; from home_cortex.semantic_ontology import SemanticOntology; print(SemanticSchemaRegistry(household_engine('alpha')[0].schema.catalog, SemanticOntology.from_file(Path('schemas/semantic/ontology-v2.yaml'))).contracts.fingerprint)"
+    program = "from pathlib import Path; from scripts.benchmarks.composition_eval import household_engine; from home_cortex.semantic_schema import SemanticSchemaRegistry; from home_cortex.semantic_ontology import SemanticOntology; print(SemanticSchemaRegistry(household_engine('alpha')[0].schema.catalog, SemanticOntology.from_file(Path('schemas/semantic/ontology-v2.yaml'))).contracts.fingerprint)"
     outputs = [subprocess.check_output([sys.executable, '-c', program], env={**os.environ, 'PYTHONHASHSEED': seed}, text=True) for seed in ('1', '77')]
     assert outputs[0] == outputs[1]
 

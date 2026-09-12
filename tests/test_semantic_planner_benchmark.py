@@ -5,14 +5,14 @@ from typing import Any
 import pytest
 
 from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.fact_benchmark import _JsonGraphDispatcher
+from scripts.benchmarks.json_graph import JsonGraphDispatcher
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
 from home_cortex.semantic_ir import AgentRequestContext, FactEvidence, FactResult
 from home_cortex.household_fact_engine import HouseholdFactEngine
 from home_cortex.semantic_planner import SemanticFactPlanner
 from home_cortex.semantic_facts import SemanticFactService
 from home_cortex.semantic_schema import SemanticSchemaRegistry
-from home_cortex.semantic_planner_benchmark import (
+from scripts.benchmarks.semantic_planner_benchmark import (
     DEFAULT_EVAL_PATH,
     SCORING_REVISION,
     classify_failure_stage,
@@ -94,7 +94,7 @@ async def test_planner_only_oracle_executes_full_eval() -> None:
     catalog = RuntimeSchemaCatalog.from_data_dir(ROOT / "data", registry)
     schema = SemanticSchemaRegistry(catalog)
     service = SemanticFactService(
-        HouseholdFactEngine(_JsonGraphDispatcher(ROOT / "data", registry), schema),
+        HouseholdFactEngine(JsonGraphDispatcher(ROOT / "data", registry), schema),
         planner=SemanticFactPlanner(OracleInterpreter(), schema),
     )
     report = await run_semantic_planner_benchmark(
@@ -386,7 +386,7 @@ async def test_evaluate_records_semantic_retry_without_aborting() -> None:
     catalog = RuntimeSchemaCatalog.from_data_dir(ROOT / "data", registry)
     schema = SemanticSchemaRegistry(catalog)
     service = SemanticFactService(
-        HouseholdFactEngine(_JsonGraphDispatcher(ROOT / "data", registry), schema),
+        HouseholdFactEngine(JsonGraphDispatcher(ROOT / "data", registry), schema),
         planner=SemanticFactPlanner(FailingThenOracle(), schema),
     )
     context = AgentRequestContext(
@@ -428,7 +428,7 @@ async def test_probe_warmup_and_repeats_are_counted_separately() -> None:
     catalog = RuntimeSchemaCatalog.from_data_dir(ROOT / "data", registry)
     schema = SemanticSchemaRegistry(catalog)
     service = SemanticFactService(
-        HouseholdFactEngine(_JsonGraphDispatcher(ROOT / "data", registry), schema),
+        HouseholdFactEngine(JsonGraphDispatcher(ROOT / "data", registry), schema),
         planner=SemanticFactPlanner(Oracle(), schema),
     )
     context = AgentRequestContext(
@@ -485,7 +485,7 @@ async def test_synthetic_probe_contrasting_concepts_execute() -> None:
     catalog = RuntimeSchemaCatalog.from_data_dir(fixture, registry)
     schema = SemanticSchemaRegistry(catalog)
     service = SemanticFactService(
-        HouseholdFactEngine(_JsonGraphDispatcher(fixture, registry), schema),
+        HouseholdFactEngine(JsonGraphDispatcher(fixture, registry), schema),
         planner=SemanticFactPlanner(Oracle(), schema),
     )
     context = AgentRequestContext(

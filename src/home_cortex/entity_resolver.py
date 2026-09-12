@@ -6,7 +6,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import Any
 
-from .profiling import stage
+from .request_tracing import stage
 from .operator_registry import (
     OPERATORS,
     OperatorExecutionError,

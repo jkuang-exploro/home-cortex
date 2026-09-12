@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from home_cortex.composition_eval import (
+from scripts.benchmarks.composition_eval import (
     COMPOSITION_ROOT,
     HOUSEHOLD_IDS,
     HOUSEHOLD_ROOT,
@@ -19,8 +19,8 @@ from home_cortex.composition_eval import (
     household_engine,
     request_context,
 )
-from home_cortex.semantic_facts import DiscourseContext, SemanticFactRequest
-from home_cortex.semantic_planner_benchmark import FROZEN_EVAL_TIME, primary_entity_ids
+from home_cortex.semantic_ir import DiscourseContext, SemanticFactRequest
+from scripts.benchmarks.semantic_planner_benchmark import FROZEN_EVAL_TIME, primary_entity_ids
 
 ROOT = Path(__file__).resolve().parents[2]
 

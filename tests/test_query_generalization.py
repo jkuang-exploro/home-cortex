@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.fact_benchmark import _JsonGraphDispatcher
+from scripts.benchmarks.json_graph import JsonGraphDispatcher
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
 from home_cortex.semantic_ir import (
     AgentRequestContext,
@@ -44,7 +44,7 @@ def _engine(root, *, max_records: int = 25):
     registry = EdgeSchemaRegistry.load_default()
     schema = SemanticSchemaRegistry(RuntimeSchemaCatalog.from_data_dir(root, registry))
     engine = HouseholdFactEngine(
-        _JsonGraphDispatcher(root, registry), schema, max_records=max_records
+        JsonGraphDispatcher(root, registry), schema, max_records=max_records
     )
     context = AgentRequestContext(
         "person:alpha",

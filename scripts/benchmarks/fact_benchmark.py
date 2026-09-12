@@ -10,26 +10,26 @@ import statistics
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
+from scripts import PROJECT_ROOT
 from typing import Any, Literal, Sequence
 from zoneinfo import ZoneInfo
 
-from .agents import get_agent
-from .config import get_settings
-from .db import Database
-from .edge_schema import EdgeSchemaRegistry
-from .ollama import language_model_from_settings
-from .retrieval import ENTITY_SUMMARY_FIELDS, RetrievalService
-from .schema_catalog import (
+from home_cortex.agents import get_agent
+from home_cortex.config import get_settings
+from home_cortex.db import Database
+from home_cortex.edge_schema import EdgeSchemaRegistry
+from home_cortex.ollama import language_model_from_settings
+from home_cortex.retrieval import RetrievalService
+from home_cortex.schema_catalog import (
     RuntimeSchemaCatalog,
-    matching_named_entities,
-    node_table_sources,
 )
-from .semantic_ir import FactAnswer, AgentRequestContext
-from .household_fact_engine import HouseholdFactEngine
-from .semantic_planner import SemanticFactPlanner
-from .semantic_facts import SemanticFactService, _failure_stage
-from .semantic_schema import SemanticSchemaRegistry
-from .tools import ToolDispatcher
+from home_cortex.semantic_ir import FactAnswer, AgentRequestContext
+from home_cortex.household_fact_engine import HouseholdFactEngine
+from home_cortex.semantic_planner import SemanticFactPlanner
+from home_cortex.semantic_facts import SemanticFactService, _failure_stage
+from home_cortex.semantic_schema import SemanticSchemaRegistry
+from home_cortex.tools import ToolDispatcher
+from scripts.benchmarks.json_graph import JsonGraphDispatcher
 
 QUESTIONS = (
     "我是谁",
@@ -155,7 +155,7 @@ async def benchmark_json(
     steward = get_agent("steward")
     edge_registry = EdgeSchemaRegistry.from_directory(schema_dir)
     catalog = RuntimeSchemaCatalog.from_data_dir(data_dir, edge_registry)
-    dispatcher = _JsonGraphDispatcher(data_dir, edge_registry)
+    dispatcher = JsonGraphDispatcher(data_dir, edge_registry)
     schema = SemanticSchemaRegistry(catalog)
     settings = get_settings()
     llm = language_model_from_settings(settings)
@@ -379,88 +379,6 @@ async def _run_suite(
     }
 
 
-class _JsonGraphDispatcher:
-    """Read-only debug adapter over the same node/edge source documents."""
-
-    def __init__(self, data_dir: Path, registry: EdgeSchemaRegistry) -> None:
-        self.registry = registry
-        self.entities = {
-            record["id"]: record
-            for paths in node_table_sources(data_dir / "nodes").values()
-            for path in paths
-            for record in json.loads(path.read_text(encoding="utf-8"))
-        }
-        self.edges = {
-            path.stem: json.loads(path.read_text(encoding="utf-8"))
-            for path in (data_dir / "edges").glob("*.json")
-        }
-        self.calls: list[tuple[str, dict[str, Any]]] = []
-
-    async def dispatch_internal(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        **_: Any,
-    ) -> dict[str, Any]:
-        self.calls.append((tool_name, arguments))
-        if tool_name == "get_entity":
-            entity = self.entities.get(arguments["entity_id"])
-            records = [entity] if entity is not None else []
-        elif tool_name == "resolve_entity_alias":
-            expected = arguments.get("entity_type")
-            candidates = [
-                entity
-                for entity in self.entities.values()
-                if expected is None or entity["id"].startswith(f"{expected}:")
-            ]
-            records = [_summary(entity) for entity in matching_named_entities(
-                candidates, arguments["text"], limit=arguments.get("limit", 25),
-                speaker_id=arguments.get("speaker_id"),
-                household_id=arguments.get("household_id"),
-            )]
-        elif tool_name == "get_relationships":
-            records = self._relationships(arguments)
-        else:
-            records = []
-        return {"ok": True, "tool": tool_name, "result": records}
-
-    def _relationships(self, arguments: dict[str, Any]) -> list[dict[str, Any]]:
-        entity_id = arguments["entity_id"]
-        resolved = self.registry.resolve(arguments["relation"])
-        requested = arguments.get("direction")
-        if resolved.inverse and requested in {"in", "out"}:
-            requested = "out" if requested == "in" else "in"
-        records: list[dict[str, Any]] = []
-        for raw in self.edges.get(resolved.schema.id, []):
-            if not arguments.get("include_ended") and raw.get("end") is not None:
-                continue
-            is_out = raw.get("from") == entity_id
-            is_in = raw.get("to") == entity_id
-            matches = (
-                is_out or is_in
-                if resolved.schema.symmetric or requested not in {"in", "out"}
-                else is_out
-                if requested == "out"
-                else is_in
-            )
-            if not matches:
-                continue
-            related_id = raw["to"] if is_out else raw["from"]
-            edge = dict(raw)
-            edge["relation"] = resolved.schema.id
-            edge["related_entity"] = _summary(self.entities[related_id])
-            records.append(edge)
-        return records[: arguments.get("limit", 25)]
-
-
-def _summary(entity: dict[str, Any]) -> dict[str, Any]:
-    return {
-        field: value
-        for field, value in entity.items()
-        if field in ENTITY_SUMMARY_FIELDS
-    }
-
-
 def _percentile(values: Sequence[float], percentile: float) -> float:
     ordered = sorted(values)
     if not ordered:
@@ -488,8 +406,8 @@ def main() -> None:
         default="json",
         help="Use source JSON for offline timing or the configured runtime database.",
     )
-    parser.add_argument("--data-dir", type=Path, default=Path("data"))
-    parser.add_argument("--schema-dir", type=Path, default=Path("schemas/edge"))
+    parser.add_argument("--data-dir", type=Path, default=PROJECT_ROOT / "data")
+    parser.add_argument("--schema-dir", type=Path, default=PROJECT_ROOT / "schemas/edge")
     parser.add_argument(
         "--question",
         action="append",

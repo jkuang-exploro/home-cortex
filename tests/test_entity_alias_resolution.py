@@ -11,7 +11,7 @@ import pytest
 from surrealdb import RecordID
 
 from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.fact_benchmark import _JsonGraphDispatcher
+from scripts.benchmarks.json_graph import JsonGraphDispatcher
 from home_cortex.retrieval import RetrievalService
 from home_cortex.schema_catalog import record_aliases
 from test_retrieval import FakeDatabase
@@ -28,7 +28,7 @@ DYLAN = {
 }
 
 
-def _people_dispatcher(tmp_path: Path, people: list[dict[str, Any]]) -> _JsonGraphDispatcher:
+def _people_dispatcher(tmp_path: Path, people: list[dict[str, Any]]) -> JsonGraphDispatcher:
     nodes = tmp_path / "nodes"
     edges = tmp_path / "edges"
     nodes.mkdir()
@@ -37,11 +37,11 @@ def _people_dispatcher(tmp_path: Path, people: list[dict[str, Any]]) -> _JsonGra
         json.dumps(people, ensure_ascii=False),
         encoding="utf-8",
     )
-    return _JsonGraphDispatcher(tmp_path, EdgeSchemaRegistry.from_directory(SCHEMA_DIR))
+    return JsonGraphDispatcher(tmp_path, EdgeSchemaRegistry.from_directory(SCHEMA_DIR))
 
 
 async def _resolve(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
     text: str,
     *,
     speaker_id: str | None = None,

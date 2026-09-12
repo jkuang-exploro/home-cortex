@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from .profiling import stage
+from .request_tracing import stage
 from .semantic_ir import (
     AgentRequestContext,
     PlannerDiagnostics,

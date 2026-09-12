@@ -322,7 +322,7 @@ async def test_model_cannot_insert_ids_in_exclusion(household):
 
 @pytest.mark.asyncio
 async def test_projection_property_selection_and_serialization(household):
-    from home_cortex.semantic_planner_benchmark import (
+    from scripts.benchmarks.semantic_planner_benchmark import (
         serialize_fact_result,
         fact_result_from_serialized,
         normalize_semantic_request,
@@ -523,7 +523,7 @@ from test_api import api_client
 
 @pytest.mark.asyncio
 async def test_row_scoring_requires_associations_values_units_and_status(household):
-    from home_cortex.semantic_planner_benchmark import SemanticEvalCase, score_structured_result
+    from scripts.benchmarks.semantic_planner_benchmark import SemanticEvalCase, score_structured_result
     engine,context,dispatcher=household
     dispatcher.entities['person:son2'].pop('dob')
     query=ages()

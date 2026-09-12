@@ -12,7 +12,7 @@ from surrealdb import AsyncSurreal
 from home_cortex.agent_service import AgentService
 from home_cortex.agents import get_agent
 from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.fact_benchmark import _JsonGraphDispatcher
+from scripts.benchmarks.json_graph import JsonGraphDispatcher
 from home_cortex.ingestion import ingest_directory
 from home_cortex.operator_registry import OPERATORS
 from home_cortex.retrieval import RetrievalService
@@ -306,12 +306,12 @@ def _agent(
 
 
 @pytest.fixture
-def dispatcher() -> _JsonGraphDispatcher:
-    return _JsonGraphDispatcher(DATA_DIR, EdgeSchemaRegistry.load_default(DATA_DIR))
+def dispatcher() -> JsonGraphDispatcher:
+    return JsonGraphDispatcher(DATA_DIR, EdgeSchemaRegistry.load_default(DATA_DIR))
 
 
 @pytest.fixture
-def service(dispatcher: _JsonGraphDispatcher) -> SemanticFactService:
+def service(dispatcher: JsonGraphDispatcher) -> SemanticFactService:
     return _service(dispatcher)
 
 
@@ -394,7 +394,7 @@ async def test_graph_dispatcher_failure_does_not_fall_through_to_chat(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("payload", ("not-a-plan", None, []))
 async def test_exhausted_malformed_planner_output_fails_closed(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
     payload: Any,
 ) -> None:
     interpreter = _Interpreter(payload)
@@ -413,7 +413,7 @@ async def test_exhausted_malformed_planner_output_fails_closed(
 
 @pytest.mark.asyncio
 async def test_malformed_planner_output_is_unsupported_and_skips_graph_and_chat(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     service = _service(dispatcher, "not-a-plan")
     answer = await _ask(service, _context(), "今天天气怎么样")
@@ -440,7 +440,7 @@ async def test_malformed_planner_output_is_unsupported_and_skips_graph_and_chat(
 
 @pytest.mark.asyncio
 async def test_planner_retries_invalid_plan_without_querying_graph(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     request = SemanticFactRequest(
         operation="argmin",
@@ -474,7 +474,7 @@ async def test_planner_retries_invalid_plan_without_querying_graph(
 
 @pytest.mark.asyncio
 async def test_not_a_fact_is_the_conversation_fallback(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     payload = {"requires_fact": False, "request": None}
     schema = _schema(DATA_DIR)
@@ -514,7 +514,7 @@ async def test_not_a_fact_is_the_conversation_fallback(
 async def test_speaker_relative_self_uses_canonical_ids(
     speaker_id: str,
 ) -> None:
-    dispatcher = _JsonGraphDispatcher(
+    dispatcher = JsonGraphDispatcher(
         STATIC_TEST_DATA, EdgeSchemaRegistry.load_default(STATIC_TEST_DATA)
     )
     service = _service(
@@ -531,7 +531,7 @@ async def test_speaker_relative_self_uses_canonical_ids(
 
 @pytest.mark.asyncio
 async def test_missing_caller_context_is_reported_by_the_engine() -> None:
-    dispatcher = _JsonGraphDispatcher(
+    dispatcher = JsonGraphDispatcher(
         STATIC_TEST_DATA, EdgeSchemaRegistry.load_default(STATIC_TEST_DATA)
     )
     service = _service(dispatcher, data_dir=STATIC_TEST_DATA)
@@ -586,7 +586,7 @@ async def test_semantic_facts_use_retrieval_service_for_alias_and_kinship() -> N
 
 @pytest.mark.asyncio
 async def test_ended_spouse_is_invisible_to_current_fact_queries() -> None:
-    dispatcher = _JsonGraphDispatcher(
+    dispatcher = JsonGraphDispatcher(
         STATIC_TEST_DATA, EdgeSchemaRegistry.load_default(STATIC_TEST_DATA)
     )
     dispatcher.edges["spouse_of"][0]["end"] = "2020-01-01"
@@ -605,7 +605,7 @@ async def test_ended_spouse_is_invisible_to_current_fact_queries() -> None:
 
 @pytest.mark.asyncio
 async def test_planner_transport_failure_is_unsupported_without_graph_or_chat(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     service = _service(
         dispatcher,
@@ -636,7 +636,7 @@ async def test_planner_transport_failure_is_unsupported_without_graph_or_chat(
 async def test_household_list_is_current_and_uses_one_graph_query(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     result, queries = await _execute(
         service,
@@ -727,7 +727,7 @@ async def test_speaker_relative_kinship_converges_on_dylan(
 async def test_same_self_relation_resolves_from_each_active_speaker(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities.update(
         {
@@ -765,7 +765,7 @@ async def test_same_self_relation_resolves_from_each_active_speaker(
 async def test_multi_match_grandson_is_ambiguous(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:second_grandson"] = {
         "id": "person:second_grandson",
@@ -797,7 +797,7 @@ async def test_multi_match_grandson_is_ambiguous(
 async def test_scoped_appellation_is_grounded_by_resolver_context(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:dylan_kuang"]["appellations"] = [
         {
@@ -823,7 +823,7 @@ async def test_scoped_appellation_is_grounded_by_resolver_context(
 async def test_德伦_is_unresolved_without_a_stored_alias(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:dylan_kuang"].pop("aliases", None)
     dispatcher.entities["person:dylan_kuang"].pop("appellations", None)
@@ -840,7 +840,7 @@ async def test_德伦_is_unresolved_without_a_stored_alias(
 async def test_duplicate_stored_alias_stays_ambiguous(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:evelyn_kuang"]["aliases"] = ["德伦"]
 
@@ -857,7 +857,7 @@ async def test_duplicate_stored_alias_stays_ambiguous(
 async def test_empty_household_list_has_a_clear_response(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.edges["lives_in"] = []
     request = SemanticFactRequest(operation="select", subject=_members())
@@ -869,7 +869,7 @@ async def test_empty_household_list_has_a_clear_response(
 
 @pytest.mark.asyncio
 async def test_birth_date_resolves_when_storage_uses_birthday(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
     context: AgentRequestContext,
 ) -> None:
     person = dispatcher.entities["person:jian_kuang"]
@@ -901,7 +901,7 @@ async def test_birth_date_resolves_when_storage_uses_birthday(
 async def test_missing_birth_date_is_semantic_and_does_not_hallucinate(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:jian_kuang"].pop("dob")
     result, _ = await _execute(service, _select(_self(), "birth_date"), context)
@@ -917,7 +917,7 @@ async def test_missing_birth_date_is_semantic_and_does_not_hallucinate(
 async def test_missing_birth_date_is_computation_input_missing_for_transform(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:dylan_kuang"].pop("dob")
     request = SemanticFactRequest(
@@ -936,7 +936,7 @@ async def test_missing_birth_date_is_computation_input_missing_for_transform(
 async def test_named_person_missing_birth_date_is_property_unavailable_not_computation(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:dylan_kuang"].pop("dob")
     result, _ = await _execute(service, _select(_named("匡德伦"), "birth_date"), context)
@@ -950,7 +950,7 @@ async def test_named_person_missing_birth_date_is_property_unavailable_not_compu
 async def test_invalid_birth_date_is_computation_impossible(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:dylan_kuang"]["dob"] = "not-a-date"
     request = SemanticFactRequest(
@@ -980,7 +980,7 @@ async def test_missing_named_person_is_entity_not_found(
 async def test_duplicate_exact_name_is_ambiguous(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:other_dylan"] = {
         "id": "person:other_dylan",
@@ -998,7 +998,7 @@ async def test_duplicate_exact_name_is_ambiguous(
 async def test_absent_relationship_is_not_reported_as_missing_entity(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.edges["spouse_of"] = []
     result, _ = await _execute(
@@ -1021,7 +1021,7 @@ async def test_absent_relationship_is_not_reported_as_missing_entity(
 async def test_absent_in_law_path_is_relationship_not_found(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.edges["spouse_of"] = []
     result, _ = await _execute(
@@ -1038,7 +1038,7 @@ async def test_absent_in_law_path_is_relationship_not_found(
 async def test_named_entity_with_absent_spouse_preserves_relationship_status(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.edges["spouse_of"] = []
     result, _ = await _execute(
@@ -1063,7 +1063,7 @@ async def test_named_entity_with_absent_spouse_preserves_relationship_status(
 async def test_multiple_matching_children_are_ambiguous(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:second_son"] = {
         "id": "person:second_son",
@@ -1084,7 +1084,7 @@ async def test_multiple_matching_children_are_ambiguous(
 async def test_assistant_identity_never_queries_household_graph(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     service = _service(dispatcher, _resolve(SemanticReference(kind="assistant")))
     answer = await _ask(service, context, "你是谁")
@@ -1123,7 +1123,7 @@ async def test_relationship_evidence_preserves_temporal_metadata(
 
 
 def test_capabilities_are_semantic_and_allowlisted(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     schema = _schema(DATA_DIR)
     catalog = RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
@@ -1173,7 +1173,7 @@ def test_capabilities_are_semantic_and_allowlisted(
 
 @pytest.mark.asyncio
 async def test_tier_one_can_select_a_new_schema_field_without_a_fact_handler(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
     context: AgentRequestContext,
 ) -> None:
     dispatcher.entities["person:jian_kuang"]["favorite_color"] = "green"
@@ -1284,7 +1284,7 @@ def test_semantic_validator_rejects_context_reference_type_spoofing() -> None:
 async def test_empty_child_collection_counts_as_zero_not_missing_person(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.edges["parent_of"] = [
         edge
@@ -1361,7 +1361,7 @@ async def test_argmin_and_argmax_share_the_household_extrema_path(
 async def test_youngest_reports_partial_birth_date_evidence(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:evelyn_kuang"].pop("dob")
     result, _ = await _execute(
@@ -1433,7 +1433,7 @@ async def test_minor_status_is_distinct_from_a_persons_child_relation(
 async def test_status_predicate_prefers_authoritative_role_then_falls_back_to_age(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     request = SemanticFactRequest(
         operation="count",
@@ -1480,7 +1480,7 @@ async def test_relationship_properties_and_duration_use_the_spouse_edge(
 async def test_missing_relationship_start_has_specific_failure(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.edges["spouse_of"][0].pop("start")
     request = _select(_spouse(), "start_date", property_source="relationship")
@@ -1495,7 +1495,7 @@ async def test_missing_relationship_start_has_specific_failure(
 async def test_relationship_property_resolution_is_speaker_relative(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities.update(
         {
@@ -1597,7 +1597,7 @@ async def test_planner_classifies_unsupported_operation_after_one_retry(
 
 @pytest.mark.asyncio
 async def test_semantic_validation_failure_is_classified_after_retry(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
     context: AgentRequestContext,
 ) -> None:
     service = _service(
@@ -1662,7 +1662,7 @@ async def test_planner_rejects_wrong_scope_and_predicate_shape_without_repair(
 
 @pytest.mark.asyncio
 async def test_new_numeric_field_immediately_supports_generic_argmax(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
     context: AgentRequestContext,
 ) -> None:
     household_ids = {
@@ -1703,7 +1703,7 @@ async def test_new_numeric_field_immediately_supports_generic_argmax(
 
 @pytest.mark.asyncio
 async def test_tier_one_uses_one_semantic_call_then_deterministic_execution(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
     context: AgentRequestContext,
 ) -> None:
     request = SemanticFactRequest(
@@ -1730,7 +1730,7 @@ async def test_tier_one_uses_one_semantic_call_then_deterministic_execution(
 
 @pytest.mark.asyncio
 async def test_tier_one_rejects_unadvertised_semantic_property(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
     context: AgentRequestContext,
 ) -> None:
     service = _service(
@@ -1746,7 +1746,7 @@ async def test_tier_one_rejects_unadvertised_semantic_property(
 
 @pytest.mark.asyncio
 async def test_all_core_plans_require_interpretation(
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
     context: AgentRequestContext,
 ) -> None:
     plans = {
@@ -1808,7 +1808,7 @@ async def test_semantic_planner_rejects_model_originated_entity_id(
 async def test_equal_age_comparison_reports_equality(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:pu_ba"]["dob"] = dispatcher.entities["person:jian_kuang"][
         "dob"
@@ -1861,7 +1861,7 @@ async def test_birthday_today_is_zero_days(
 async def test_english_success_and_missing_property_use_english_copy(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     english = replace(context, locale="en")
     found, _ = await _execute(service, _resolve(_self()), english)
@@ -1897,7 +1897,7 @@ async def test_missing_household_id_does_not_fabricate_members(
 async def test_older_sibling_without_anchor_birth_date_fails_closed(
     service: SemanticFactService,
     context: AgentRequestContext,
-    dispatcher: _JsonGraphDispatcher,
+    dispatcher: JsonGraphDispatcher,
 ) -> None:
     dispatcher.entities["person:evelyn_kuang"].pop("dob")
     result, _ = await _execute(

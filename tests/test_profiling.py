@@ -5,7 +5,7 @@ import pytest
 from ollama import ChatResponse
 
 from home_cortex.ollama import OllamaService, _semantic_planner_examples
-from home_cortex.profiling import model_call, stage, trace_request
+from home_cortex.request_tracing import model_call, stage, trace_request
 
 
 def test_example_cache_does_not_expose_mutable_messages():
@@ -110,7 +110,7 @@ async def test_stream_cancellation_closes_underlying_stream():
 
 @pytest.mark.asyncio
 async def test_http_trace_includes_stream_completion_and_omits_request_data(caplog):
-    from home_cortex.profiling import RequestTraceMiddleware
+    from home_cortex.request_tracing import RequestTraceMiddleware
 
     @stage('stream.work')
     async def produce():
@@ -128,7 +128,7 @@ async def test_http_trace_includes_stream_completion_and_omits_request_data(capl
     async def receive():
         return {'type':'http.request','body':b'private query'}
 
-    with caplog.at_level('INFO', logger='uvicorn.error.home_cortex.profiling'):
+    with caplog.at_level('INFO', logger='uvicorn.error.home_cortex.request_tracing'):
         await RequestTraceMiddleware(application, enabled=True)(
             {'type':'http','state':{},'path':'/private-path'}, receive, send)
     payload = json.loads(caplog.records[-1].message.removeprefix('request_profile '))

@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from .profiling import stage
+from .request_tracing import stage
 from .display import resolve_display_name
 from .semantic_display import SemanticDisplay
 from .semantic_ir import (

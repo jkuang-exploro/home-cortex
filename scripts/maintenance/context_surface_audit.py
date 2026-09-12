@@ -9,6 +9,7 @@ import ast
 import importlib.util
 import json
 from pathlib import Path
+from scripts import PROJECT_ROOT
 
 TASKS = {
     "complete_factual_query": ["semantic_facts"],
@@ -62,7 +63,7 @@ def measure(root):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--before", type=Path, required=True, help="Baseline home_cortex package directory")
-    parser.add_argument("--after", type=Path, default=Path("src/home_cortex"))
+    parser.add_argument("--after", type=Path, default=PROJECT_ROOT / "src/home_cortex")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     result = {"method": __doc__, "before": measure(args.before), "after": measure(args.after)}

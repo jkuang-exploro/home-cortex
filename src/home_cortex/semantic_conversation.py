@@ -10,7 +10,7 @@ from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
-from .profiling import stage
+from .request_tracing import stage
 from .semantic_ir import (
     AgentRequestContext,
     DiscourseContext,

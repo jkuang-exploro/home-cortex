@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from .profiling import stage
+from .request_tracing import stage
 from .display import (
     conversation_language,
     internal_ids_requested,

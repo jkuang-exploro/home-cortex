@@ -7,24 +7,25 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from scripts import PROJECT_ROOT
 from typing import Any, Mapping
 
 import yaml
 
-from .edge_schema import EdgeSchemaRegistry
-from .fact_benchmark import _JsonGraphDispatcher
-from .schema_catalog import RuntimeSchemaCatalog
-from .semantic_ir import AgentRequestContext, DiscourseContext, SemanticFactRequest
-from .household_fact_engine import HouseholdFactEngine
-from .semantic_schema import SemanticSchemaRegistry
-from .semantic_planner_benchmark import (
+from home_cortex.edge_schema import EdgeSchemaRegistry
+from scripts.benchmarks.json_graph import JsonGraphDispatcher
+from home_cortex.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.semantic_ir import AgentRequestContext, DiscourseContext, SemanticFactRequest
+from home_cortex.household_fact_engine import HouseholdFactEngine
+from home_cortex.semantic_schema import SemanticSchemaRegistry
+from scripts.benchmarks.semantic_planner_benchmark import (
     FROZEN_EVAL_TIME,
     SCORING_REVISION,
     SemanticEvalCase,
     score_structured_result,
 )
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = PROJECT_ROOT
 COMPOSITION_ROOT = ROOT / "benchmarks" / "composition"
 HOUSEHOLD_ROOT = COMPOSITION_ROOT / "households"
 SCHEMA_DIR = ROOT / "schemas" / "edge"
@@ -337,7 +338,7 @@ def household_engine(household: str) -> tuple[HouseholdFactEngine, Path]:
     data_dir = HOUSEHOLD_ROOT / household
     registry = EdgeSchemaRegistry.from_directory(SCHEMA_DIR)
     schema = SemanticSchemaRegistry(RuntimeSchemaCatalog.from_data_dir(data_dir, registry))
-    engine = HouseholdFactEngine(_JsonGraphDispatcher(data_dir, registry), schema)
+    engine = HouseholdFactEngine(JsonGraphDispatcher(data_dir, registry), schema)
     return engine, data_dir
 
 

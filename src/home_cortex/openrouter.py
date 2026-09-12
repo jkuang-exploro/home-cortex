@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 from ollama import ChatResponse
 
-from .profiling import model_call, observe_usage, stream_model_call
+from .request_tracing import model_call, observe_usage, stream_model_call
 from .ollama import PLANNER_NUM_PREDICT, PLANNER_SEED, planner_chat_messages
 from .mutation_ir import MutationDecision, mutation_messages, read_plan_schema, attribute_output_schema
 

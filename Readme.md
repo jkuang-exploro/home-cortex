@@ -66,7 +66,7 @@ Run the semantic fact suite against the source JSON. All questions pass
 through the interpreter:
 
 ```bash
-python -m home_cortex.fact_benchmark --backend json --repeat 20
+python -m scripts.benchmarks.fact_benchmark --backend json --repeat 20
 ```
 
 To include the configured SurrealDB runtime latency, use

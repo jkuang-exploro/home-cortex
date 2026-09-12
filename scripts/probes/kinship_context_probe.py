@@ -11,7 +11,7 @@ def prepare(output, model):
     import json, sys, hashlib
     from pathlib import Path
     from home_cortex.ollama import planner_chat_messages
-    from home_cortex.semantic_planner_benchmark import build_json_fact_service
+    from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
     root = Path.cwd()
     service, ctx = build_json_fact_service(root / 'benchmarks/fixtures/semantic-contract', root / 'schemas/edge', None)
     schema = service.engine.schema
@@ -68,7 +68,7 @@ def score(results_path, output):
     import statistics
     from pathlib import Path
     from home_cortex.semantic_ir import SemanticFactRequest, SemanticReference
-    from home_cortex.semantic_planner_benchmark import build_json_fact_service
+    from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
 
     root = Path.cwd()
     service, _ = build_json_fact_service(root / 'benchmarks/fixtures/semantic-contract', root / 'schemas/edge', None)

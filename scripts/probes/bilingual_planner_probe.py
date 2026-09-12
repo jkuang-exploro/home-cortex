@@ -12,6 +12,7 @@ import json
 import statistics
 from collections import defaultdict
 from pathlib import Path
+from scripts import PROJECT_ROOT
 from time import perf_counter
 from typing import Any
 
@@ -24,7 +25,7 @@ from home_cortex.ollama import (
     planner_chat_messages,
 )
 from home_cortex.semantic_ir import SemanticFactRequest, SemanticPlannerFailure
-from home_cortex.semantic_planner_benchmark import (
+from scripts.benchmarks.semantic_planner_benchmark import (
     build_json_fact_service,
     collect_provenance,
     load_bilingual_dataset,
@@ -32,7 +33,7 @@ from home_cortex.semantic_planner_benchmark import (
     summarize_latencies,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = PROJECT_ROOT
 FIXTURE = ROOT / "benchmarks/fixtures/semantic-contract"
 SCHEMA = ROOT / "schemas/edge"
 DATASET = ROOT / "benchmarks/semantic_planner_bilingual.yaml"

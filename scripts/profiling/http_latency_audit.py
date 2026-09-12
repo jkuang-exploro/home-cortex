@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
+from scripts import PROJECT_ROOT
 from time import perf_counter
 from types import SimpleNamespace
 from uuid import uuid4
@@ -19,13 +20,13 @@ from home_cortex.api import app
 from home_cortex.config import Settings
 from home_cortex.db import Database
 from home_cortex.ollama import OllamaService
-from home_cortex.profiling import trace_request
+from home_cortex.request_tracing import trace_request
 from home_cortex.retrieval import RetrievalService
 from home_cortex.tools import ToolDispatcher, get_tool_definitions
-from home_cortex.semantic_planner_benchmark import build_json_fact_service, load_probe_dataset, summarize_latencies
-from token_latency_audit import exclusive
+from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service, load_probe_dataset, summarize_latencies
+from scripts.profiling.token_latency_audit import exclusive
 
-ROOT=Path(__file__).resolve().parents[1]
+ROOT=PROJECT_ROOT
 
 
 def rid(value):

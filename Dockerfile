@@ -7,6 +7,7 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY src ./src
+COPY scripts ./scripts
 COPY schemas ./schemas
 COPY benchmarks ./benchmarks
 RUN pip install --no-cache-dir .

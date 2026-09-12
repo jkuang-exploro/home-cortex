@@ -252,7 +252,6 @@ def generate_body(prompt: str, num_predict: int) -> dict[str, Any]:
 
 
 def dump_planner_payload(root: Path, utterance: str) -> dict[str, Any]:
-    sys.path.insert(0, str(root / "src"))
     from home_cortex.ollama import (  # type: ignore
         PLANNER_KEEP_ALIVE,
         PLANNER_NUM_CTX,
@@ -260,7 +259,7 @@ def dump_planner_payload(root: Path, utterance: str) -> dict[str, Any]:
         PLANNER_SEED,
         planner_chat_messages,
     )
-    from home_cortex.semantic_planner_benchmark import build_json_fact_service  # type: ignore
+    from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service  # type: ignore
 
     service, context = build_json_fact_service(
         root / "benchmarks/fixtures/semantic-contract",
@@ -304,11 +303,10 @@ def dump_planner_payload(root: Path, utterance: str) -> dict[str, Any]:
 
 
 async def run_cortex_planner(root: Path, url: str, utterance: str, warmup: int, repeat: int) -> dict[str, Any]:
-    sys.path.insert(0, str(root / "src"))
     from home_cortex.ollama import OllamaService, PLANNER_NUM_CTX  # type: ignore
-    from home_cortex.profiling import trace_request  # type: ignore
+    from home_cortex.request_tracing import trace_request  # type: ignore
     from home_cortex.semantic_conversation import SemanticConversationService  # type: ignore
-    from home_cortex.semantic_planner_benchmark import build_json_fact_service  # type: ignore
+    from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service  # type: ignore
 
     if PLANNER_NUM_CTX != NUM_CTX:
         raise RuntimeError(f"planner num_ctx {PLANNER_NUM_CTX} != probe {NUM_CTX}")

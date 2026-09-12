@@ -29,7 +29,7 @@ from .agents import (
 )
 from .config import Settings, get_settings
 from .db import Database
-from .profiling import RequestTraceMiddleware
+from .request_tracing import RequestTraceMiddleware
 from .edge_schema import EdgeSchemaRegistry
 from .schema_catalog import RuntimeSchemaCatalog
 from .display import conversation_language

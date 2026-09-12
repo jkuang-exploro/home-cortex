@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.fact_benchmark import _JsonGraphDispatcher
+from scripts.benchmarks.json_graph import JsonGraphDispatcher
 from home_cortex.ollama import _semantic_planner_examples
 from home_cortex.schema_catalog import RuntimeSchemaCatalog
 from home_cortex.semantic_ir import (
@@ -22,7 +22,7 @@ from home_cortex.household_fact_engine import HouseholdFactEngine
 from home_cortex.fact_renderer import FactRenderer
 from home_cortex.semantic_planner import SemanticFactPlanner
 from home_cortex.semantic_schema import SemanticSchemaRegistry
-from home_cortex.semantic_planner_benchmark import (
+from scripts.benchmarks.semantic_planner_benchmark import (
     load_semantic_eval_cases,
     normalize_semantic_request,
 )
@@ -54,7 +54,7 @@ def household(tmp_path):
     write('edges', 'hosted_by', [{'from':'space:room','to':'item:house'}])
     registry = EdgeSchemaRegistry.load_default()
     schema = SemanticSchemaRegistry(RuntimeSchemaCatalog.from_data_dir(tmp_path, registry))
-    dispatcher = _JsonGraphDispatcher(tmp_path, registry)
+    dispatcher = JsonGraphDispatcher(tmp_path, registry)
     engine = HouseholdFactEngine(dispatcher, schema)
     context = AgentRequestContext('person:a','assistant','Helper','address:fictional',datetime.fromisoformat('2026-09-03T12:00:00-07:00'),'en')
     return engine, context, dispatcher
@@ -82,7 +82,7 @@ async def test_age_is_completed_years_not_birth_date(household, day, expected):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('relation,unit,expected', [('spouse','years',21),('spouse','months',255),('residence','years',8)])
 async def test_one_date_interval_contract_for_relationships_and_units(household,relation,unit,expected):
-    from home_cortex.semantic_planner_benchmark import (
+    from scripts.benchmarks.semantic_planner_benchmark import (
         serialize_fact_result,
         fact_result_from_serialized,
         SemanticEvalCase,
@@ -144,7 +144,7 @@ async def test_date_filtered_set_preserves_bounds_scope_and_cardinality(househol
 @pytest.mark.asyncio
 @pytest.mark.parametrize('filename', ['semantic_planner_age_filters.yaml','semantic_planner_date_intervals.yaml'])
 async def test_age_and_date_filter_eval_expectations_on_invented_household(household,filename):
-    from home_cortex.semantic_planner_benchmark import load_probe_dataset, score_structured_result
+    from scripts.benchmarks.semantic_planner_benchmark import load_probe_dataset, score_structured_result
     engine,ctx,_=household
     dataset=load_probe_dataset(Path(__file__).parents[1]/'benchmarks'/filename)
     ctx=replace(ctx,current_time=dataset.frozen_time)
@@ -361,7 +361,7 @@ def test_concepts_cannot_override_meaning_and_base_paths_are_not_repaired(househ
 
 
 def test_heldout_phrasing_is_not_used_by_interpreter():
-    from home_cortex.semantic_planner_benchmark import load_probe_dataset
+    from scripts.benchmarks.semantic_planner_benchmark import load_probe_dataset
     from home_cortex.ollama import _PLANNER_INSTRUCTIONS
     root=Path(__file__).parents[1]/'benchmarks'
     resources=_PLANNER_INSTRUCTIONS+json.dumps(_semantic_planner_examples(),ensure_ascii=False)
@@ -400,7 +400,7 @@ def test_evaluation_alternative_is_limited_to_final_child_list():
     ('person:someone_else',['Zhigang Ba'],False),
 ])
 def test_wife_father_accepted_name_representation_still_requires_correct_person(entity,names,correct):
-    from home_cortex.semantic_planner_benchmark import load_probe_dataset, score_structured_result
+    from scripts.benchmarks.semantic_planner_benchmark import load_probe_dataset, score_structured_result
     from home_cortex.semantic_ir import FactResult, FactEvidence
     case=next(c for c in load_probe_dataset().cases if c.case_id=='wife_father_given_name')
     result=FactResult('found',names,FactEvidence(entity_ids=(entity,)))

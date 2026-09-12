@@ -10,20 +10,21 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from scripts import PROJECT_ROOT
 from time import perf_counter
 
 from ollama import ChatResponse
 from home_cortex import ollama as prompts
 from home_cortex.ollama import OllamaService
-from home_cortex.profiling import trace_request
+from home_cortex.request_tracing import trace_request
 from home_cortex.semantic_conversation import SemanticConversationService
 from home_cortex.semantic_ir import SemanticFactRequest
-from home_cortex.semantic_planner_benchmark import (
+from scripts.benchmarks.semantic_planner_benchmark import (
     build_json_fact_service, collect_provenance, load_probe_dataset, SemanticEvalCase,
     score_structured_result, normalize_semantic_request, summarize_latencies,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = PROJECT_ROOT
 
 
 def compact(value):

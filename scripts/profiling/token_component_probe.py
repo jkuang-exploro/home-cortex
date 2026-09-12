@@ -9,12 +9,13 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
+from scripts import PROJECT_ROOT
 
 from ollama import AsyncClient
 from home_cortex.ollama import _PLANNER_INSTRUCTIONS, _semantic_planner_examples
-from home_cortex.semantic_planner_benchmark import build_json_fact_service
+from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = PROJECT_ROOT
 
 
 def compact(value):

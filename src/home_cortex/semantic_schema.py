@@ -5,7 +5,7 @@ from copy import deepcopy
 from collections.abc import Mapping
 from typing import Any, get_args
 
-from .profiling import stage
+from .request_tracing import stage
 from .edge_schema import EdgeSchemaRegistry, UnknownEdgeSchemaError
 from .operator_registry import OPERATORS, OperatorValidationError
 from .schema_catalog import RuntimeSchemaCatalog

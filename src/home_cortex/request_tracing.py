@@ -217,7 +217,7 @@ class RequestTraceMiddleware:
                 raise
             finally:
                 trace.end(event)
-                logging.getLogger('uvicorn.error.home_cortex.profiling').info('request_profile %s', json.dumps({
+                logging.getLogger('uvicorn.error.home_cortex.request_tracing').info('request_profile %s', json.dumps({
                     'request_id': scope.get('state', {}).get('request_id'),
                     'events': trace.events, 'dropped': trace.dropped,
                 }, separators=(',', ':')))

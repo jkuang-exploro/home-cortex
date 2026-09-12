@@ -1,0 +1,19 @@
+{
+  "focused_tests": 69,
+  "full_tests": 730,
+  "wheel_console_help": [
+    "home-cortex-db-export",
+    "home-cortex-fact-benchmark",
+    "home-cortex-semantic-planner-benchmark"
+  ],
+  "installed_wheel_replay": {
+    "sample_count": 35,
+    "semantic_matches": 35,
+    "structured_correct": 35,
+    "llm_calls": 0
+  },
+  "frozen_archive_contains_scripts": true,
+  "extracted_archive_cli_help": true,
+  "shell_syntax": "passed",
+  "all_script_ast_parse": "passed"
+}

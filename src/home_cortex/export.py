@@ -26,19 +26,16 @@ nulls cannot be reconstructed and are documented as an ingest-time asymmetry.
 
 from __future__ import annotations
 
-import argparse
-import asyncio
 import errno
 import json
 import os
 import shutil
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .config import get_settings
 from .db import Database
 from .edge_schema import EdgeSchema, EdgeSchemaRegistry
 from .ingestion import (
@@ -399,34 +396,3 @@ def _replace_export_tree(target: Path, staged: Path) -> None:
         raise
     for backup in backups.values():
         shutil.rmtree(backup)
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Export the connected SurrealDB household graph to canonical "
-            "nodes/ and edges/ JSON files."
-        )
-    )
-    parser.add_argument(
-        "target_dir",
-        type=Path,
-        help="Directory that will receive nodes/ and edges/. Not assumed to be data/.",
-    )
-    arguments = parser.parse_args()
-    result = asyncio.run(_export_connected_database(arguments.target_dir))
-    print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
-
-
-async def _export_connected_database(target_dir: Path) -> ExportResult:
-    settings = get_settings()
-    database = Database(settings)
-    await database.connect()
-    try:
-        return await export_directory(database, target_dir)
-    finally:
-        await database.close()
-
-
-if __name__ == "__main__":
-    main()

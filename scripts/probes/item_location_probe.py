@@ -6,15 +6,16 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
+from scripts import PROJECT_ROOT
 
 from home_cortex.ollama import OllamaService
 from home_cortex.semantic_ir import SemanticFactRequest, SemanticPlannerFailure
-from home_cortex.semantic_planner_benchmark import (
+from scripts.benchmarks.semantic_planner_benchmark import (
     build_json_fact_service,
     normalize_semantic_request,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = PROJECT_ROOT
 CASES = (
     ("fridge", "冰箱在哪里", "冰箱"),
     ("milk", "牛奶在哪里", "牛奶"),

@@ -664,12 +664,9 @@ docker compose logs -f cortex-api
 ```
 
 ```sh
-docker cp   ~/Workspace/home-cortex/scripts/tier1_latency_bench.py   "$(docker compose ps -q cortex-api)":/tmp/tier1_latency_bench.py
-
-docker compose exec cortex-api \
-  python /tmp/tier1_latency_bench.py \
-  --ollama-url http://ollama:11434 \
-  --model qwen3.5:9b
+# From the repository root; this copies both runtime and engineering packages.
+./scripts/maintenance/copy_tier1_bench_into_api.sh
+# Follow the isolated invocation printed by the helper.
 ```
 
 ### Opt-in latency and token audit
@@ -683,7 +680,7 @@ any dropped intervals. They contain numeric usage/timing and exception types;
 prompts, model output, SQL, identities, and graph values are omitted.
 
 For an isolated Python invocation, use
-`with home_cortex.profiling.trace_request() as trace:` around the awaited request
+`with home_cortex.request_tracing.trace_request() as trace:` around the awaited request
 and inspect `trace.events`. Tracing is disabled by default. Each event has a
 start offset and elapsed duration; nested intervals must not be added together.
 The audit harness calculates exclusive contributions for its sequential requests.
@@ -699,9 +696,9 @@ not be used to total retries or concurrent requests. Use the request trace inste
 Reproduce the synthetic audit from an isolated package on the GPU host:
 
 ```sh
-PYTHONHASHSEED=0 PYTHONPATH=src python scripts/token_latency_audit.py \
+PYTHONHASHSEED=0 PYTHONPATH=src python -m scripts.profiling.token_latency_audit \
   --mode ollama --repeat 1 --output /tmp/probe-audit.json
-PYTHONHASHSEED=0 PYTHONPATH=src python scripts/token_component_probe.py \
+PYTHONHASHSEED=0 PYTHONPATH=src python -m scripts.profiling.token_component_probe \
   --output /tmp/component-summary.json
 ```
 
@@ -713,7 +710,7 @@ currently inherit set iteration order. The separate raw-generation component
 probe consumes one output token per component and does not measure chat framing.
 Run it outside timed benchmark passes.
 
-`scripts/http_latency_audit.py --output /tmp/http-audit.json` supplements this with
+`python -m scripts.profiling.http_latency_audit --output /tmp/http-audit.json` supplements this with
 the full ASGI route and real SurrealDB queries. It uses existing DB credentials,
 creates a UUID-named `hc_latency_audit_*` namespace with the invented fixture,
 and removes that namespace in `finally`. Run only in an isolated process;

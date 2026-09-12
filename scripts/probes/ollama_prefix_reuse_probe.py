@@ -14,7 +14,7 @@ import json
 import os
 from pathlib import Path
 
-from ollama_warm_load_probe import (
+from scripts.probes.ollama_warm_load_probe import (
     OllamaHttp, snapshot, assert_safe_resident, metrics, summarize, compact,
     MODEL, NUM_CTX, KEEP_ALIVE,
 )
@@ -33,7 +33,7 @@ def prefix_info(previous, current):
 
 async def build_traffic(root, ordering):
     import home_cortex.ollama as module
-    from home_cortex.semantic_planner_benchmark import build_json_fact_service
+    from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
     service, context = build_json_fact_service(
         root / 'benchmarks/fixtures/semantic-contract', root / 'schemas/edge', None,
     )

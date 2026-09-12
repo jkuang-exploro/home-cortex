@@ -5,7 +5,7 @@ from typing import Any, cast
 
 from ollama import AsyncClient, ChatResponse
 
-from .profiling import model_call, stage
+from .request_tracing import model_call, stage
 from .mutation_ir import MutationDecision, mutation_messages, read_plan_schema, attribute_output_schema
 
 
