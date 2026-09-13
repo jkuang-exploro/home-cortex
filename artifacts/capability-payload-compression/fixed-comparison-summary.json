@@ -1,0 +1,43 @@
+{
+  "plan_match": {
+    "regressions": [],
+    "improvements": []
+  },
+  "answer_correct": {
+    "regressions": [],
+    "improvements": []
+  },
+  "metrics": {
+    "prompt_tokens": {
+      "before_p50": 8243.5,
+      "after_p50": 8000.5,
+      "delta": -243.0,
+      "change_percent": -2.95
+    },
+    "output_tokens": {
+      "before_p50": 47.0,
+      "after_p50": 47.0,
+      "delta": 0.0,
+      "change_percent": 0.0
+    },
+    "attempts": {
+      "before_p50": 1.0,
+      "after_p50": 1.0,
+      "delta": 0.0,
+      "change_percent": 0.0
+    },
+    "planner_ms": {
+      "before_p50": 1468.317,
+      "after_p50": 1449.617,
+      "delta": -18.7,
+      "change_percent": -1.27
+    },
+    "total_ms": {
+      "before_p50": 1469.036,
+      "after_p50": 1450.197,
+      "delta": -18.839,
+      "change_percent": -1.28
+    }
+  },
+  "semantic_regression": false
+}

@@ -47,6 +47,39 @@ def fixed_cases(path, schema):
         expected=SemanticFactRequest.model_validate(schema.expand_planner_concepts({'requires_fact': True, 'request': row['request']})['request'])) for row in payload['cases']]
 
 
+def regression_cases(service, context):
+    """Return the shared fixed/probe/generalization/bilingual read evaluation."""
+    cases = fixed_cases(
+        PROJECT_ROOT / 'benchmarks/planner_prompt_compression.yaml',
+        service.engine.schema,
+    )
+    cases += list(load_probe_dataset().cases)
+    cases += list(load_semantic_eval_cases())
+    dataset = load_bilingual_dataset()
+    for pair in dataset['pairs']:
+        for language in ('zh', 'en'):
+            payload = json.loads(json.dumps(pair['expected']))
+            if language == 'en' and pair.get('ignore_named_value'):
+                payload['subject']['value'] = 'storage box'
+            expected = SemanticFactRequest.model_validate(
+                service.engine.schema.expand_planner_concepts(
+                    {'request': payload}
+                )['request']
+            )
+            cases.append(SemanticEvalCase(
+                utterance=pair[language],
+                speaker_id=context.caller_entity_id,
+                category=pair['category'],
+                plan_id=pair['id'],
+                case_id=f"{pair['id']}:{language}",
+                expected=expected,
+            ))
+    return [
+        replace(case, case_id=f'{index}:{case.case_id or case.plan_id}')
+        for index, case in enumerate(cases)
+    ]
+
+
 def budget_checks(rows, normal_token_budget):
     """Measured calls only; this does not bound arbitrary future user input."""
     calls = [call for row in rows for call in row.get('model_calls', [])]
@@ -84,18 +117,7 @@ async def run(args):
     service, context = build_json_fact_service(args.data_dir, PROJECT_ROOT / 'schemas/edge', client)
     cases = fixed_cases(args.eval, service.engine.schema)
     if args.regression:
-        cases += list(load_probe_dataset().cases)
-        cases += list(load_semantic_eval_cases())
-        dataset = load_bilingual_dataset()
-        for pair in dataset['pairs']:
-            for language in ('zh', 'en'):
-                payload = json.loads(json.dumps(pair['expected']))
-                if language == 'en' and pair.get('ignore_named_value'):
-                    payload['subject']['value'] = 'storage box'
-                expected = SemanticFactRequest.model_validate(service.engine.schema.expand_planner_concepts({'request': payload})['request'])
-                cases.append(SemanticEvalCase(utterance=pair[language], speaker_id=context.caller_entity_id,
-                    category=pair['category'], plan_id=pair['id'], case_id=f"{pair['id']}:{language}", expected=expected))
-        cases = [replace(c, case_id=f'{i}:{c.case_id or c.plan_id}') for i, c in enumerate(cases)]
+        cases = regression_cases(service, context)
     if args.utterance:
         missing = set(args.utterance) - {case.utterance for case in cases}
         if missing:

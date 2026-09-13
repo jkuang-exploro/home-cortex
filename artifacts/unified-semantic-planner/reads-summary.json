@@ -1,0 +1,600 @@
+{
+  "mode": "shadow_only_no_dispatch",
+  "group": "reads",
+  "repeat": 1,
+  "summary": {
+    "existing": {
+      "requests": 171,
+      "llm_calls": {
+        "n": 171,
+        "p50": 2.0,
+        "p95": 2.0
+      },
+      "input_tokens": {
+        "n": 171,
+        "p50": 9453.0,
+        "p95": 9478.5
+      },
+      "output_tokens": {
+        "n": 171,
+        "p50": 59.0,
+        "p95": 70.5
+      },
+      "latency_ms": {
+        "n": 171,
+        "p50": 2598.098,
+        "p95": 2881.128
+      },
+      "validation_failures": 2,
+      "length_stops": 0,
+      "plan_correct": 155,
+      "answer_correct": 151,
+      "classification_correct": 0,
+      "payload_correct": 0,
+      "mutation_as_nonmutation": 0,
+      "read_as_mutation": 0
+    },
+    "unified": {
+      "requests": 171,
+      "llm_calls": {
+        "n": 171,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "input_tokens": {
+        "n": 171,
+        "p50": 9579.0,
+        "p95": 9624.0
+      },
+      "output_tokens": {
+        "n": 171,
+        "p50": 47.0,
+        "p95": 73.0
+      },
+      "latency_ms": {
+        "n": 171,
+        "p50": 1499.721,
+        "p95": 2336.175
+      },
+      "validation_failures": 7,
+      "length_stops": 0,
+      "plan_correct": 147,
+      "answer_correct": 149,
+      "classification_correct": 0,
+      "payload_correct": 0,
+      "mutation_as_nonmutation": 0,
+      "read_as_mutation": 0
+    }
+  },
+  "unified_contract": {
+    "type": "SemanticPlan",
+    "branches": [
+      "fact",
+      "mutation",
+      "none"
+    ],
+    "schema_bytes": 38794,
+    "message_content_bytes": 41166,
+    "messages_sha256": "38c13239b8494183bde76cc44ec7091a96e6227f2ce79ebb7aad86b22d3e4c09"
+  },
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/hc-unified-49619433/benchmarks/planner_prompt_compression.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "fd497c103bb2b1b62b1e360659722cf99e67392c3a84826b8d8be7122926c9ed",
+    "data_tree_sha256": "a6ab9fa06584cc0a369d4e7501252c4f2402f36ec700cc68e4126d1e360150ef",
+    "schema_tree_sha256": "e192342e0df849ea589a023775ef116c4b029d2fdb8454b37b7c807c4661c156",
+    "imported_package_path": "/tmp/hc-unified-49619433/src/home_cortex/__init__.py",
+    "copied_package_sha256": "4828afc7e1423fe8f904a9a424ff4753152ff58416cd5397bddcf2cf18e2b273",
+    "harness_tree_sha256": "cebbe12a2e9f836134d5faf27797a57517bc3442e3b52628d5013efb45786ef4",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.15",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 16384,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "unified-shadow-frozen-json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 2,
+    "repeat": 1,
+    "verified_cold": false
+  },
+  "cases": [
+    {
+      "case_id": "20:minor_count",
+      "category": "read",
+      "utterance": "有几个孩子",
+      "existing": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "operations": {
+          "count": 1
+        }
+      },
+      "unified": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "operations": {
+          "count": 1
+        }
+      }
+    },
+    {
+      "case_id": "25:daughter_given_name_jian",
+      "category": "read",
+      "utterance": "我的女儿叫什么",
+      "existing": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "operations": {
+          "resolve_reference": 1
+        }
+      },
+      "unified": {
+        "samples": 1,
+        "decision_kinds": {
+          "invalid": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 1,
+        "plan_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "operations": {
+          "None": 1
+        }
+      }
+    },
+    {
+      "case_id": "30:wife_father_given_name",
+      "category": "read",
+      "utterance": "我妻子的父亲叫什么",
+      "existing": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "operations": {
+          "resolve_reference": 1
+        }
+      },
+      "unified": {
+        "samples": 1,
+        "decision_kinds": {
+          "invalid": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 1,
+        "plan_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "operations": {
+          "None": 1
+        }
+      }
+    },
+    {
+      "case_id": "38:self_identity::What is my name?",
+      "category": "read",
+      "utterance": "What is my name?",
+      "existing": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          3
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "operations": {
+          "resolve_reference": 1
+        }
+      },
+      "unified": {
+        "samples": 1,
+        "decision_kinds": {
+          "invalid": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 1,
+        "plan_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "operations": {
+          "None": 1
+        }
+      }
+    },
+    {
+      "case_id": "47:daughter_given_name::我的女儿叫什么",
+      "category": "read",
+      "utterance": "我的女儿叫什么",
+      "existing": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "operations": {
+          "resolve_reference": 1
+        }
+      },
+      "unified": {
+        "samples": 1,
+        "decision_kinds": {
+          "invalid": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 1,
+        "plan_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "operations": {
+          "None": 1
+        }
+      }
+    },
+    {
+      "case_id": "80:adult_count::咱家满十八岁的有几人",
+      "category": "read",
+      "utterance": "咱家满十八岁的有几人",
+      "existing": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "operations": {
+          "count": 1
+        }
+      },
+      "unified": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "operations": {
+          "count": 1
+        }
+      }
+    },
+    {
+      "case_id": "82:minor_count::有几个孩子",
+      "category": "read",
+      "utterance": "有几个孩子",
+      "existing": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "operations": {
+          "count": 1
+        }
+      },
+      "unified": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "operations": {
+          "count": 1
+        }
+      }
+    },
+    {
+      "case_id": "111:marriage_duration::我们成为夫妻多长时间了",
+      "category": "read",
+      "utterance": "我们成为夫妻多长时间了",
+      "existing": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "operations": {
+          "date_difference": 1
+        }
+      },
+      "unified": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "operations": {
+          "date_difference": 1
+        }
+      }
+    },
+    {
+      "case_id": "120:male_children::请找出我的男性子女",
+      "category": "read",
+      "utterance": "请找出我的男性子女",
+      "existing": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "operations": {
+          "select": 1
+        }
+      },
+      "unified": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "operations": {
+          "select": 1
+        }
+      }
+    },
+    {
+      "case_id": "141:wife_father_given_name::我妻子的父亲叫什么",
+      "category": "read",
+      "utterance": "我妻子的父亲叫什么",
+      "existing": {
+        "samples": 1,
+        "decision_kinds": {
+          "fact": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 1,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "operations": {
+          "resolve_reference": 1
+        }
+      },
+      "unified": {
+        "samples": 1,
+        "decision_kinds": {
+          "invalid": 1
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 1,
+        "plan_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "answer_correct": {
+          "correct": 0,
+          "scored": 1
+        },
+        "operations": {
+          "None": 1
+        }
+      }
+    }
+  ],
+  "paired_deltas": {
+    "plan_correct": {
+      "regressions": 9,
+      "improvements": 1
+    },
+    "answer_correct": {
+      "regressions": 2,
+      "improvements": 0
+    }
+  }
+}

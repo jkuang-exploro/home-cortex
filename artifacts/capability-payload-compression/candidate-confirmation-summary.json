@@ -1,0 +1,251 @@
+{
+  "drop_indices": [],
+  "cases": 6,
+  "repeat": 3,
+  "prompt": {
+    "messages_sha256": "7ffc8c98b86e83782c4a8926269047923e012a7874b56f86d3dddc6da1726ce7",
+    "example_pairs": 42,
+    "component_bytes": {
+      "instructions": 11313,
+      "capabilities": 11575,
+      "few_shot_examples": 10935,
+      "context_reminder": 191,
+      "history": 0,
+      "user_input": 15,
+      "supplemental_notes_including_retry": 0
+    }
+  },
+  "scores": {
+    "plan_accuracy": {
+      "correct": 3,
+      "scored": 18,
+      "unscored": 0,
+      "rate": 0.1667
+    },
+    "answer_correctness": {
+      "correct": 12,
+      "scored": 18,
+      "unscored": 0,
+      "rate": 0.6667
+    },
+    "executor_status": {
+      "found": 18
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "metrics": {
+    "prompt_tokens": {
+      "n": 18,
+      "p50": 8000.5,
+      "p95": 8002.0
+    },
+    "output_tokens": {
+      "n": 18,
+      "p50": 45.0,
+      "p95": 52.0
+    },
+    "attempts": {
+      "n": 18,
+      "p50": 1.0,
+      "p95": 1.0
+    },
+    "planner_ms": {
+      "n": 18,
+      "p50": 1419.713,
+      "p95": 1530.675
+    },
+    "total_ms": {
+      "n": 18,
+      "p50": 1420.309,
+      "p95": 1531.621
+    }
+  },
+  "retries": 0,
+  "budgets": {
+    "normal_token_budget": 8500,
+    "all_counts_available": true,
+    "normal_exceeded": 0,
+    "context_exceeded": 0,
+    "length_stops": 0
+  },
+  "failures": [
+    {
+      "case_id": "20:minor_count",
+      "utterance": "有几个孩子",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "82:minor_count::有几个孩子",
+      "utterance": "有几个孩子",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "116:son_identity::哪个男孩是我儿子",
+      "utterance": "哪个男孩是我儿子",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "124:son_birth_date::我的男性子女何时出生",
+      "utterance": "我的男性子女何时出生",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "144:residence_address::告诉我家庭地址",
+      "utterance": "告诉我家庭地址",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "20:minor_count",
+      "utterance": "有几个孩子",
+      "sample_index": 1,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "82:minor_count::有几个孩子",
+      "utterance": "有几个孩子",
+      "sample_index": 1,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "116:son_identity::哪个男孩是我儿子",
+      "utterance": "哪个男孩是我儿子",
+      "sample_index": 1,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "124:son_birth_date::我的男性子女何时出生",
+      "utterance": "我的男性子女何时出生",
+      "sample_index": 1,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "144:residence_address::告诉我家庭地址",
+      "utterance": "告诉我家庭地址",
+      "sample_index": 1,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "20:minor_count",
+      "utterance": "有几个孩子",
+      "sample_index": 2,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "82:minor_count::有几个孩子",
+      "utterance": "有几个孩子",
+      "sample_index": 2,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "116:son_identity::哪个男孩是我儿子",
+      "utterance": "哪个男孩是我儿子",
+      "sample_index": 2,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "124:son_birth_date::我的男性子女何时出生",
+      "utterance": "我的男性子女何时出生",
+      "sample_index": 2,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "144:residence_address::告诉我家庭地址",
+      "utterance": "告诉我家庭地址",
+      "sample_index": 2,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    }
+  ],
+  "evaluation_cases_sha256": "175e06974a96b2a14195b9ddca83b2bf5e8fad8784a54cce794345b4f365518c",
+  "frozen_manifest_sha256": "3277d5a978363fea2b96fdf3f311426f552ed12bd7a4444a0262934e450c3ee9",
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/hc-cap-c1/pkg/benchmarks/planner_prompt_compression.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "fd497c103bb2b1b62b1e360659722cf99e67392c3a84826b8d8be7122926c9ed",
+    "data_tree_sha256": "a6ab9fa06584cc0a369d4e7501252c4f2402f36ec700cc68e4126d1e360150ef",
+    "schema_tree_sha256": "e192342e0df849ea589a023775ef116c4b029d2fdb8454b37b7c807c4661c156",
+    "imported_package_path": "/tmp/hc-cap-c1/pkg/src/home_cortex/__init__.py",
+    "copied_package_sha256": "843ae936aee6bc1baf842b704b9781d4a74bfceb5fb1f8eec2e7194fdd88ac5a",
+    "harness_tree_sha256": "198e1af9000e406c482aed141650116fc9a5a2a4b4e01ab9987806633915d8bb",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.15",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 16384,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "frozen-json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 3,
+    "verified_cold": false
+  }
+}

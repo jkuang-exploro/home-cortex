@@ -1,0 +1,767 @@
+{
+  "scope": "Planner only; no executor, write dispatch, HTTP or live DB I/O",
+  "repeat": 3,
+  "by_category": {
+    "read": {
+      "requests": 27,
+      "llm_calls": {
+        "n": 27,
+        "p50": 2.0,
+        "p95": 2.0
+      },
+      "latency_ms": {
+        "n": 27,
+        "p50": 2536.426,
+        "p95": 2629.88
+      }
+    },
+    "write": {
+      "requests": 24,
+      "llm_calls": {
+        "n": 24,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "latency_ms": {
+        "n": 24,
+        "p50": 1069.961,
+        "p95": 2198.912
+      }
+    },
+    "ambiguous": {
+      "requests": 24,
+      "llm_calls": {
+        "n": 24,
+        "p50": 1.5,
+        "p95": 3.0
+      },
+      "latency_ms": {
+        "n": 24,
+        "p50": 2178.811,
+        "p95": 4146.504
+      }
+    }
+  },
+  "manifest_sha256": "ddaefc0f36395d4d74fabd6d333ca287c3384c96f5f954079e854574e35aeabc",
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/hc-routing-ddaefc0f/benchmarks/mutation_routing.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "937d870ce0a9f5cc7e104866a05943dd50792bca36768fa9a7044052724927a4",
+    "data_tree_sha256": "a6ab9fa06584cc0a369d4e7501252c4f2402f36ec700cc68e4126d1e360150ef",
+    "schema_tree_sha256": "e192342e0df849ea589a023775ef116c4b029d2fdb8454b37b7c807c4661c156",
+    "imported_package_path": "/tmp/hc-routing-ddaefc0f/src/home_cortex/__init__.py",
+    "copied_package_sha256": "4828afc7e1423fe8f904a9a424ff4753152ff58416cd5397bddcf2cf18e2b273",
+    "harness_tree_sha256": "198e1af9000e406c482aed141650116fc9a5a2a4b4e01ab9987806633915d8bb",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.15",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 16384,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "planning-only-frozen-json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 3,
+    "verified_cold": false
+  },
+  "queries": [
+    {
+      "category": "read",
+      "utterance": "我是谁",
+      "samples": 3,
+      "llm_calls": [
+        2
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        1
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2384.963,
+        "p95": 2392.181
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "resolve_reference",
+          "subject_kind": "self",
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "read",
+      "utterance": "你是谁",
+      "samples": 3,
+      "llm_calls": [
+        2
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        1
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2422.813,
+        "p95": 2436.455
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "resolve_reference",
+          "subject_kind": "assistant",
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "read",
+      "utterance": "家里都有谁",
+      "samples": 3,
+      "llm_calls": [
+        2
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        1
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2547.192,
+        "p95": 2621.162
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "select",
+          "subject_kind": "current_household",
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "read",
+      "utterance": "家里有几个人",
+      "samples": 3,
+      "llm_calls": [
+        2
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        1
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2536.426,
+        "p95": 2590.979
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "count",
+          "subject_kind": "current_household",
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "read",
+      "utterance": "家里有几个房间",
+      "samples": 3,
+      "llm_calls": [
+        2
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        1
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2517.567,
+        "p95": 2541.115
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "count",
+          "subject_kind": "current_household",
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "read",
+      "utterance": "厨房里有什么",
+      "samples": 3,
+      "llm_calls": [
+        2
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        1
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2597.783,
+        "p95": 2626.863
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "select",
+          "subject_kind": "current_household",
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "read",
+      "utterance": "冰箱里有什么",
+      "samples": 3,
+      "llm_calls": [
+        2
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        1
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2513.019,
+        "p95": 2581.407
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "select",
+          "subject_kind": "named_entity",
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "read",
+      "utterance": "我岳父是谁",
+      "samples": 3,
+      "llm_calls": [
+        2
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        1
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2623.724,
+        "p95": 2661.768
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "resolve_reference",
+          "subject_kind": "self",
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "read",
+      "utterance": "Who is my son?",
+      "samples": 3,
+      "llm_calls": [
+        2
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        1
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2517.984,
+        "p95": 2591.447
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "resolve_reference",
+          "subject_kind": "self",
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "write",
+      "utterance": "记住牛奶在冰箱里",
+      "samples": 3,
+      "llm_calls": [
+        1
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        0
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 1783.773,
+        "p95": 1814.42
+      },
+      "results": [
+        {
+          "requires_mutation": true,
+          "operation": "create",
+          "subject_kind": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "write",
+      "utterance": "Record a red screwdriver in the workshop drawer.",
+      "samples": 3,
+      "llm_calls": [
+        1
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        0
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2200.904,
+        "p95": 2212.374
+      },
+      "results": [
+        {
+          "requires_mutation": true,
+          "operation": "create",
+          "subject_kind": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "write",
+      "utterance": "把牛奶的位置改成冰箱",
+      "samples": 3,
+      "llm_calls": [
+        1
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        0
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 1054.523,
+        "p95": 1055.761
+      },
+      "results": [
+        {
+          "requires_mutation": true,
+          "operation": "update_location",
+          "subject_kind": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "write",
+      "utterance": "Move the sketchbook to the studio shelf.",
+      "samples": 3,
+      "llm_calls": [
+        1
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        0
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 1103.12,
+        "p95": 1111.585
+      },
+      "results": [
+        {
+          "requires_mutation": true,
+          "operation": "update_location",
+          "subject_kind": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "write",
+      "utterance": "把台灯的颜色改为蓝色。",
+      "samples": 3,
+      "llm_calls": [
+        1
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        0
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 1071.843,
+        "p95": 1073.359
+      },
+      "results": [
+        {
+          "requires_mutation": true,
+          "operation": "update_attributes",
+          "subject_kind": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "write",
+      "utterance": "Change the lamp color to blue.",
+      "samples": 3,
+      "llm_calls": [
+        1
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        0
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 1068.079,
+        "p95": 1080.081
+      },
+      "results": [
+        {
+          "requires_mutation": true,
+          "operation": "update_attributes",
+          "subject_kind": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "write",
+      "utterance": "删除台灯的记录",
+      "samples": 3,
+      "llm_calls": [
+        1
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        0
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 910.544,
+        "p95": 923.63
+      },
+      "results": [
+        {
+          "requires_mutation": true,
+          "operation": "delete",
+          "subject_kind": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "write",
+      "utterance": "Delete the sketchbook record.",
+      "samples": 3,
+      "llm_calls": [
+        1
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        0
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 945.724,
+        "p95": 950.408
+      },
+      "results": [
+        {
+          "requires_mutation": true,
+          "operation": "delete",
+          "subject_kind": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "ambiguous",
+      "utterance": "冰箱里现在有牛奶",
+      "samples": 3,
+      "llm_calls": [
+        1
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        0
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 1776.268,
+        "p95": 1783.655
+      },
+      "results": [
+        {
+          "requires_mutation": true,
+          "operation": "create",
+          "subject_kind": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "ambiguous",
+      "utterance": "牛奶在冰箱里",
+      "samples": 3,
+      "llm_calls": [
+        1
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        0
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 1513.63,
+        "p95": 1530.712
+      },
+      "results": [
+        {
+          "requires_mutation": true,
+          "operation": "create",
+          "subject_kind": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "ambiguous",
+      "utterance": "牛奶是不是在冰箱里",
+      "samples": 3,
+      "llm_calls": [
+        2
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        1
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2295.026,
+        "p95": 2308.604
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "resolve_reference",
+          "subject_kind": "named_entity",
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "ambiguous",
+      "utterance": "There is milk in the fridge now.",
+      "samples": 3,
+      "llm_calls": [
+        1
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        0
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2068.432,
+        "p95": 2072.485
+      },
+      "results": [
+        {
+          "requires_mutation": true,
+          "operation": "create",
+          "subject_kind": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "ambiguous",
+      "utterance": "The milk is in the fridge.",
+      "samples": 3,
+      "llm_calls": [
+        3
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        2
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 4154.677,
+        "p95": 4193.237
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "resolve_reference",
+          "subject_kind": "named_entity",
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "ambiguous",
+      "utterance": "Is the milk in the fridge?",
+      "samples": 3,
+      "llm_calls": [
+        2
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        1
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2598.62,
+        "p95": 2634.982
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "resolve_reference",
+          "subject_kind": "named_entity",
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "ambiguous",
+      "utterance": "不对，牛奶在冰箱里",
+      "samples": 3,
+      "llm_calls": [
+        1
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        0
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 1345.762,
+        "p95": 1364.476
+      },
+      "results": [
+        {
+          "requires_mutation": true,
+          "operation": "update_location",
+          "subject_kind": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "category": "ambiguous",
+      "utterance": "No, the milk is in the fridge.",
+      "samples": 3,
+      "llm_calls": [
+        2
+      ],
+      "mutation_calls": [
+        1
+      ],
+      "semantic_calls": [
+        1
+      ],
+      "latency_ms": {
+        "n": 3,
+        "p50": 2327.43,
+        "p95": 2355.95
+      },
+      "results": [
+        {
+          "requires_mutation": false,
+          "operation": "resolve_reference",
+          "subject_kind": "named_entity",
+          "error": null
+        }
+      ]
+    }
+  ],
+  "read_mutation_latency_ms": {
+    "n": 27,
+    "p50": 933.233,
+    "p95": 960.44
+  },
+  "errors": 0
+}

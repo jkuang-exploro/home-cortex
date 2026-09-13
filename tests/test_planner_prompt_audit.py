@@ -54,6 +54,43 @@ def test_performance_budget_is_distinct_from_context_safety():
     assert not budget_checks([], 8500)['all_counts_available']
 
 
+def test_property_ownership_inverts_contract_applies_to():
+    from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
+    from scripts import PROJECT_ROOT
+    service, _ = build_json_fact_service(
+        PROJECT_ROOT / 'benchmarks/fixtures/semantic-contract',
+        PROJECT_ROOT / 'schemas/edge',
+        None,
+    )
+    schema = service.engine.schema
+    planner = schema.planner_capability_payload()
+    canonical = schema.contracts.payload()
+    assert canonical and planner['property_contracts']
+    assert set(planner['property_contracts']) == set(canonical)
+    owned_entity = {
+        (entity_type, name)
+        for entity_type, names in planner['property_ownership']['entity'].items()
+        for name in names
+    }
+    owned_relationship = {
+        (relation, name)
+        for relation, names in planner['property_ownership']['relationship'].items()
+        for name in names
+    }
+    declared_entity = {
+        (entity_type, name)
+        for name, contract in canonical.items()
+        for entity_type in contract['applies_to']['entity']
+    }
+    declared_relationship = {
+        (relation, name)
+        for name, contract in canonical.items()
+        for relation in contract['applies_to']['relationship']
+    }
+    assert owned_entity == declared_entity
+    assert owned_relationship == declared_relationship
+
+
 def test_normal_fixture_prompt_byte_budget():
     # Offline creep alarm, not a claim that bytes equal native tokens. The live
     # benchmark separately enforces 8,500 measured tokens on the deployed model.

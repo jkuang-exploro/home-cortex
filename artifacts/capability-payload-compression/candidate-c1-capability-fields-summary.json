@@ -1,0 +1,63 @@
+{
+  "method": "Raw generate counts of compact JSON sections; not additive with chat framing.",
+  "fields": {
+    "reference_kinds": {
+      "bytes": 374,
+      "raw_tokens": 78
+    },
+    "composition": {
+      "bytes": 397,
+      "raw_tokens": 76
+    },
+    "entity_types": {
+      "bytes": 35,
+      "raw_tokens": 9
+    },
+    "operations": {
+      "bytes": 210,
+      "raw_tokens": 49
+    },
+    "operation_requirements": {
+      "bytes": 1376,
+      "raw_tokens": 256
+    },
+    "filter_requirements": {
+      "bytes": 599,
+      "raw_tokens": 142
+    },
+    "property_ownership": {
+      "bytes": 488,
+      "raw_tokens": 111
+    },
+    "relations": {
+      "bytes": 92,
+      "raw_tokens": 23
+    },
+    "relation_signatures": {
+      "bytes": 351,
+      "raw_tokens": 84
+    },
+    "property_aliases": {
+      "bytes": 1248,
+      "raw_tokens": 266
+    },
+    "reference_concepts": {
+      "bytes": 3537,
+      "raw_tokens": 797
+    },
+    "collection_predicates": {
+      "bytes": 450,
+      "raw_tokens": 99
+    },
+    "predicate_disjointness": {
+      "bytes": 37,
+      "raw_tokens": 9
+    },
+    "property_contracts": {
+      "bytes": 2079,
+      "raw_tokens": 533
+    }
+  },
+  "payload_bytes": 11560,
+  "payload_raw_tokens": 2572
+}

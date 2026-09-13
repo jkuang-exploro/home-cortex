@@ -1,0 +1,371 @@
+{
+  "drop_indices": [],
+  "cases": 171,
+  "repeat": 1,
+  "prompt": {
+    "messages_sha256": "16b6a7e809fcf06ecd42315af0c291014a0bd024001af17e799ba3c2a5f54b8d",
+    "example_pairs": 42,
+    "component_bytes": {
+      "instructions": 11313,
+      "capabilities": 11575,
+      "few_shot_examples": 10935,
+      "context_reminder": 191,
+      "history": 0,
+      "user_input": 9,
+      "supplemental_notes_including_retry": 131
+    }
+  },
+  "scores": {
+    "plan_accuracy": {
+      "correct": 149,
+      "scored": 171,
+      "unscored": 0,
+      "rate": 0.8713
+    },
+    "answer_correctness": {
+      "correct": 148,
+      "scored": 171,
+      "unscored": 0,
+      "rate": 0.8655
+    },
+    "executor_status": {
+      "ambiguous": 1,
+      "entity_not_found": 4,
+      "found": 164,
+      "not_run": 2
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "metrics": {
+    "prompt_tokens": {
+      "n": 171,
+      "p50": 8002.0,
+      "p95": 8031.0
+    },
+    "output_tokens": {
+      "n": 171,
+      "p50": 47.0,
+      "p95": 55.0
+    },
+    "attempts": {
+      "n": 171,
+      "p50": 1.0,
+      "p95": 1.0
+    },
+    "planner_ms": {
+      "n": 171,
+      "p50": 1477.912,
+      "p95": 1771.35
+    },
+    "total_ms": {
+      "n": 171,
+      "p50": 1478.497,
+      "p95": 1772.352
+    }
+  },
+  "retries": 5,
+  "budgets": {
+    "normal_token_budget": 8500,
+    "all_counts_available": true,
+    "normal_exceeded": 0,
+    "context_exceeded": 0,
+    "length_stops": 0
+  },
+  "failures": [
+    {
+      "case_id": "5:kitchen",
+      "utterance": "厨房里有什么",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "11:missing_birthday",
+      "utterance": "你的出生日期是哪天",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "14:father_in_law_lover_dad",
+      "utterance": "我爱人的爸爸是谁？",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "16:marriage_duration_wife",
+      "utterance": "我和我老婆结婚多久了？",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "20:minor_count",
+      "utterance": "有几个孩子",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "25:daughter_given_name_jian",
+      "utterance": "我的女儿叫什么",
+      "sample_index": 0,
+      "plan_match": true,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "30:wife_father_given_name",
+      "utterance": "我妻子的父亲叫什么",
+      "sample_index": 0,
+      "plan_match": true,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "31:son_birthday_countdown",
+      "utterance": "从今天到我儿子生日相隔几天",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "35:self_identity::你知道我叫什么吗",
+      "utterance": "你知道我叫什么吗",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "INVALID_PLAN",
+      "executor_status": "not_run"
+    },
+    {
+      "case_id": "42:assistant_identity::我该怎么称呼你",
+      "utterance": "我该怎么称呼你",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "INVALID_PLAN",
+      "executor_status": "not_run"
+    },
+    {
+      "case_id": "47:daughter_given_name::我的女儿叫什么",
+      "utterance": "我的女儿叫什么",
+      "sample_index": 0,
+      "plan_match": true,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "62:oldest_member::哪位家庭成员年龄最大",
+      "utterance": "哪位家庭成员年龄最大",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "80:adult_count::咱家满十八岁的有几人",
+      "utterance": "咱家满十八岁的有几人",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "82:minor_count::有几个孩子",
+      "utterance": "有几个孩子",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "90:spouse_identity::我配偶叫什么",
+      "utterance": "我配偶叫什么",
+      "sample_index": 0,
+      "plan_match": true,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "108:marriage_duration::我们结婚多久了",
+      "utterance": "我们结婚多久了",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "109:marriage_duration::我和我老婆结婚多久了？",
+      "utterance": "我和我老婆结婚多久了？",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "112:marriage_duration::从结婚到现在过了几天",
+      "utterance": "从结婚到现在过了几天",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "ambiguous"
+    },
+    {
+      "case_id": "113:marriage_duration::这段婚姻关系持续多久了",
+      "utterance": "这段婚姻关系持续多久了",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "116:son_identity::哪个男孩是我儿子",
+      "utterance": "哪个男孩是我儿子",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "119:son_given_name::我的儿子叫什么",
+      "utterance": "我的儿子叫什么",
+      "sample_index": 0,
+      "plan_match": true,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "124:son_birth_date::我的男性子女何时出生",
+      "utterance": "我的男性子女何时出生",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "130:son_birthday_countdown::从今天到我儿子生日相隔几天",
+      "utterance": "从今天到我儿子生日相隔几天",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "137:father_in_law::我爱人的爸爸是谁？",
+      "utterance": "我爱人的爸爸是谁？",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "141:wife_father_given_name::我妻子的父亲叫什么",
+      "utterance": "我妻子的父亲叫什么",
+      "sample_index": 0,
+      "plan_match": true,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "144:residence_address::告诉我家庭地址",
+      "utterance": "告诉我家庭地址",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "146:residence_address::咱家的街道地址在哪里",
+      "utterance": "咱家的街道地址在哪里",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": true,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "150:pairwise_older_wife::我老婆和我谁年龄大",
+      "utterance": "我老婆和我谁年龄大",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    }
+  ],
+  "evaluation_cases_sha256": "11cd9c32fa0466ea1c981e2f7c66004e8d6bee404831511f6b43be0144e4e71c",
+  "frozen_manifest_sha256": "3277d5a978363fea2b96fdf3f311426f552ed12bd7a4444a0262934e450c3ee9",
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "abeca66c215bdf8687ff23c1bfb764aebecde5c2",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/hc-cap-c1/pkg/benchmarks/planner_prompt_compression.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "fd497c103bb2b1b62b1e360659722cf99e67392c3a84826b8d8be7122926c9ed",
+    "data_tree_sha256": "a6ab9fa06584cc0a369d4e7501252c4f2402f36ec700cc68e4126d1e360150ef",
+    "schema_tree_sha256": "e192342e0df849ea589a023775ef116c4b029d2fdb8454b37b7c807c4661c156",
+    "imported_package_path": "/tmp/hc-cap-c1/pkg/src/home_cortex/__init__.py",
+    "copied_package_sha256": "843ae936aee6bc1baf842b704b9781d4a74bfceb5fb1f8eec2e7194fdd88ac5a",
+    "harness_tree_sha256": "198e1af9000e406c482aed141650116fc9a5a2a4b4e01ab9987806633915d8bb",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.15",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 16384,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "frozen-json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 1,
+    "verified_cold": false
+  }
+}

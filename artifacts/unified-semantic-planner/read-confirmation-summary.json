@@ -1,0 +1,224 @@
+{
+  "mode": "shadow_only_no_dispatch",
+  "group": "reads",
+  "repeat": 3,
+  "summary": {
+    "existing": {
+      "requests": 6,
+      "llm_calls": {
+        "n": 6,
+        "p50": 2.5,
+        "p95": 3.0
+      },
+      "input_tokens": {
+        "n": 6,
+        "p50": 13630.5,
+        "p95": 17808.0
+      },
+      "output_tokens": {
+        "n": 6,
+        "p50": 76.5,
+        "p95": 89.0
+      },
+      "latency_ms": {
+        "n": 6,
+        "p50": 3163.993,
+        "p95": 7931.199
+      },
+      "validation_failures": 0,
+      "length_stops": 0,
+      "plan_correct": 6,
+      "answer_correct": 6,
+      "classification_correct": 0,
+      "payload_correct": 0,
+      "mutation_as_nonmutation": 0,
+      "read_as_mutation": 0
+    },
+    "unified": {
+      "requests": 6,
+      "llm_calls": {
+        "n": 6,
+        "p50": 1.5,
+        "p95": 2.0
+      },
+      "input_tokens": {
+        "n": 6,
+        "p50": 14412.5,
+        "p95": 19246.0
+      },
+      "output_tokens": {
+        "n": 6,
+        "p50": 65.0,
+        "p95": 78.0
+      },
+      "latency_ms": {
+        "n": 6,
+        "p50": 2096.437,
+        "p95": 8076.719
+      },
+      "validation_failures": 3,
+      "length_stops": 0,
+      "plan_correct": 0,
+      "answer_correct": 0,
+      "classification_correct": 0,
+      "payload_correct": 0,
+      "mutation_as_nonmutation": 0,
+      "read_as_mutation": 0
+    }
+  },
+  "unified_contract": {
+    "type": "SemanticPlan",
+    "branches": [
+      "fact",
+      "mutation",
+      "none"
+    ],
+    "schema_bytes": 38794,
+    "message_content_bytes": 41166,
+    "messages_sha256": "38c13239b8494183bde76cc44ec7091a96e6227f2ce79ebb7aad86b22d3e4c09"
+  },
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/hc-unified-0a411600/benchmarks/planner_prompt_compression.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "fd497c103bb2b1b62b1e360659722cf99e67392c3a84826b8d8be7122926c9ed",
+    "data_tree_sha256": "a6ab9fa06584cc0a369d4e7501252c4f2402f36ec700cc68e4126d1e360150ef",
+    "schema_tree_sha256": "e192342e0df849ea589a023775ef116c4b029d2fdb8454b37b7c807c4661c156",
+    "imported_package_path": "/tmp/hc-unified-0a411600/src/home_cortex/__init__.py",
+    "copied_package_sha256": "4828afc7e1423fe8f904a9a424ff4753152ff58416cd5397bddcf2cf18e2b273",
+    "harness_tree_sha256": "5e6579f5a40095638acc57540ece282aaad646c001336c3e642ef1af62ec8f39",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.15",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 16384,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "unified-shadow-frozen-json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 2,
+    "repeat": 3,
+    "verified_cold": false
+  },
+  "cases": [
+    {
+      "case_id": "38:self_identity::What is my name?",
+      "category": "read",
+      "utterance": "What is my name?",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          3
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "answer_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "resolve_reference": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "invalid": 3
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 3,
+        "plan_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "answer_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "None": 3
+        }
+      }
+    },
+    {
+      "case_id": "111:marriage_duration::我们成为夫妻多长时间了",
+      "category": "read",
+      "utterance": "我们成为夫妻多长时间了",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "answer_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "date_difference": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "plan_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "answer_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "date_difference": 3
+        }
+      }
+    }
+  ],
+  "paired_deltas": {
+    "plan_correct": {
+      "regressions": 6,
+      "improvements": 0
+    },
+    "answer_correct": {
+      "regressions": 6,
+      "improvements": 0
+    }
+  }
+}

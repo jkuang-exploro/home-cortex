@@ -1,0 +1,989 @@
+{
+  "mode": "shadow_only_no_dispatch",
+  "group": "intents",
+  "repeat": 3,
+  "summary": {
+    "existing": {
+      "requests": 63,
+      "llm_calls": {
+        "n": 63,
+        "p50": 1.0,
+        "p95": 2.0
+      },
+      "input_tokens": {
+        "n": 63,
+        "p50": 1211.0,
+        "p95": 9457.0
+      },
+      "output_tokens": {
+        "n": 63,
+        "p50": 51.0,
+        "p95": 70.0
+      },
+      "latency_ms": {
+        "n": 63,
+        "p50": 1499.02,
+        "p95": 2362.186
+      },
+      "validation_failures": 0,
+      "length_stops": 0,
+      "plan_correct": 0,
+      "answer_correct": 0,
+      "classification_correct": 39,
+      "payload_correct": 22,
+      "mutation_as_nonmutation": 0,
+      "read_as_mutation": 0
+    },
+    "unified": {
+      "requests": 63,
+      "llm_calls": {
+        "n": 63,
+        "p50": 1.0,
+        "p95": 1.0
+      },
+      "input_tokens": {
+        "n": 63,
+        "p50": 9581.0,
+        "p95": 9611.0
+      },
+      "output_tokens": {
+        "n": 63,
+        "p50": 47.0,
+        "p95": 64.0
+      },
+      "latency_ms": {
+        "n": 63,
+        "p50": 1478.983,
+        "p95": 2032.756
+      },
+      "validation_failures": 0,
+      "length_stops": 0,
+      "plan_correct": 0,
+      "answer_correct": 0,
+      "classification_correct": 30,
+      "payload_correct": 19,
+      "mutation_as_nonmutation": 9,
+      "read_as_mutation": 0
+    }
+  },
+  "unified_contract": {
+    "type": "SemanticPlan",
+    "branches": [
+      "fact",
+      "mutation",
+      "none"
+    ],
+    "schema_bytes": 38794,
+    "message_content_bytes": 41166,
+    "messages_sha256": "38c13239b8494183bde76cc44ec7091a96e6227f2ce79ebb7aad86b22d3e4c09"
+  },
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/hc-unified-49619433/benchmarks/mutation_routing.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "052ef9ed6f3432c2a04dcdb1192f8ac8b0aec8aedb7ae486cc24db5dab9e4f49",
+    "data_tree_sha256": "a6ab9fa06584cc0a369d4e7501252c4f2402f36ec700cc68e4126d1e360150ef",
+    "schema_tree_sha256": "e192342e0df849ea589a023775ef116c4b029d2fdb8454b37b7c807c4661c156",
+    "imported_package_path": "/tmp/hc-unified-49619433/src/home_cortex/__init__.py",
+    "copied_package_sha256": "4828afc7e1423fe8f904a9a424ff4753152ff58416cd5397bddcf2cf18e2b273",
+    "harness_tree_sha256": "cebbe12a2e9f836134d5faf27797a57517bc3442e3b52628d5013efb45786ef4",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.15",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 16384,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "unified-shadow-frozen-json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 2,
+    "repeat": 3,
+    "verified_cold": false
+  },
+  "cases": [
+    {
+      "case_id": null,
+      "category": "write",
+      "utterance": "记住牛奶在冰箱里",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "create": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "create": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "write",
+      "utterance": "Record a red screwdriver in the workshop drawer.",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "create": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "create": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "write",
+      "utterance": "把牛奶的位置改成冰箱",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "update_location": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "update_location": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "write",
+      "utterance": "Move the sketchbook to the studio shelf.",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "update_location": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "update_location": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "write",
+      "utterance": "把台灯的颜色改为蓝色。",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "update_attributes": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 1,
+          "scored": 3
+        },
+        "operations": {
+          "update_attributes": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "write",
+      "utterance": "Change the lamp color to blue.",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 1,
+          "scored": 3
+        },
+        "operations": {
+          "update_attributes": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "update_attributes": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "write",
+      "utterance": "删除台灯的记录",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "delete": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "delete": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "write",
+      "utterance": "Delete the sketchbook record.",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "delete": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "delete": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "write",
+      "utterance": "Preview recording a compass in the study drawer.",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "create": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "create": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "write",
+      "utterance": "预览把指南针记录在书房抽屉里。",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "create": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "create": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "mixed",
+      "utterance": "Who am I? Delete the lamp record.",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "delete": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "None": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "mixed",
+      "utterance": "我是谁，然后删除台灯的记录",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "delete": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "None": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "mixed",
+      "utterance": "Where is the lamp? Move it to the kitchen.",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 3,
+          "scored": 3
+        },
+        "operations": {
+          "update_location": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "classification_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "payload_correct": {
+          "correct": 0,
+          "scored": 3
+        },
+        "operations": {
+          "None": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "ambiguous",
+      "utterance": "冰箱里现在有牛奶",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "create": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "create": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "ambiguous",
+      "utterance": "牛奶在冰箱里",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "create": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "None": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "ambiguous",
+      "utterance": "牛奶是不是在冰箱里",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "None": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "None": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "ambiguous",
+      "utterance": "There is milk in the fridge now.",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "create": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "create": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "ambiguous",
+      "utterance": "The milk is in the fridge.",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "create": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "None": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "ambiguous",
+      "utterance": "Is the milk in the fridge?",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "None": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "None": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "ambiguous",
+      "utterance": "不对，牛奶在冰箱里",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "update_location": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "mutation": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "update_location": 3
+        }
+      }
+    },
+    {
+      "case_id": null,
+      "category": "ambiguous",
+      "utterance": "No, the milk is in the fridge.",
+      "existing": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          2
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "None": 3
+        }
+      },
+      "unified": {
+        "samples": 3,
+        "decision_kinds": {
+          "fact": 3
+        },
+        "llm_calls": [
+          1
+        ],
+        "validation_failures": 0,
+        "operations": {
+          "None": 3
+        }
+      }
+    }
+  ],
+  "paired_deltas": {
+    "classification_correct": {
+      "regressions": 9,
+      "improvements": 0
+    },
+    "payload_correct": {
+      "regressions": 8,
+      "improvements": 5
+    }
+  }
+}

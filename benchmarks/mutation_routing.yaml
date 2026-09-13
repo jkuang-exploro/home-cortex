@@ -1,0 +1,129 @@
+version: 1
+# Routing observations only. Writes are compiled, never dispatched.
+read:
+  - 我是谁
+  - 你是谁
+  - 家里都有谁
+  - 家里有几个人
+  - 家里有几个房间
+  - 厨房里有什么
+  - 冰箱里有什么
+  - 我岳父是谁
+  - Who is my son?
+write:
+  - 记住牛奶在冰箱里
+  - Record a red screwdriver in the workshop drawer.
+  - 把牛奶的位置改成冰箱
+  - Move the sketchbook to the studio shelf.
+  - 把台灯的颜色改为蓝色。
+  - Change the lamp color to blue.
+  - 删除台灯的记录
+  - Delete the sketchbook record.
+  - Preview recording a compass in the study drawer.
+  - 预览把指南针记录在书房抽屉里。
+  - Show me what would happen if I move the mug to the kitchen.
+  - Preview moving the mug to the kitchen.
+  - 先看看如果把杯子移到厨房会怎么样
+  - Move the mug to the kitchen now.
+write_gold:
+  记住牛奶在冰箱里:
+    operation: create
+    item_name: 牛奶
+    location_name: 冰箱
+    name_en: milk
+    name_zh: 牛奶
+    item_key: niunai
+    attributes: {item_type: food}
+    mode: commit
+  Record a red screwdriver in the workshop drawer.:
+    operation: create
+    item_name: red screwdriver
+    location_name: workshop drawer
+    name_en: red screwdriver
+    name_zh: 红色螺丝刀
+    item_key: red_screwdriver
+    attributes: {item_type: tool, color: red}
+    mode: commit
+  把牛奶的位置改成冰箱:
+    operation: update_location
+    item_name: 牛奶
+    location_name: 冰箱
+    mode: commit
+  Move the sketchbook to the studio shelf.:
+    operation: update_location
+    item_name: sketchbook
+    location_name: studio shelf
+    mode: commit
+  把台灯的颜色改为蓝色。:
+    operation: update_attributes
+    item_name: 台灯
+    attributes: {color: 蓝色}
+    mode: commit
+  Change the lamp color to blue.:
+    operation: update_attributes
+    item_name: lamp
+    attributes: {color: blue}
+    mode: commit
+  删除台灯的记录:
+    operation: delete
+    item_name: 台灯
+    mode: commit
+  Delete the sketchbook record.:
+    operation: delete
+    item_name: sketchbook
+    mode: commit
+  Preview recording a compass in the study drawer.:
+    operation: create
+    item_name: compass
+    location_name: study drawer
+    name_en: compass
+    name_zh: 指南针
+    item_key: compass
+    attributes: {item_type: unknown}
+    mode: preview
+  预览把指南针记录在书房抽屉里。:
+    operation: create
+    item_name: 指南针
+    location_name: 书房抽屉
+    name_en: compass
+    name_zh: 指南针
+    item_key: zhinanzhen
+    attributes: {item_type: unknown}
+    mode: preview
+  Show me what would happen if I move the mug to the kitchen.:
+    operation: update_location
+    item_name: mug
+    location_name: kitchen
+    mode: preview
+  Preview moving the mug to the kitchen.:
+    operation: update_location
+    item_name: mug
+    location_name: kitchen
+    mode: preview
+  先看看如果把杯子移到厨房会怎么样:
+    operation: update_location
+    item_name: 杯子
+    location_name: 厨房
+    mode: preview
+  Move the mug to the kitchen now.:
+    operation: update_location
+    item_name: mug
+    location_name: kitchen
+    mode: commit
+ambiguous:
+  - 冰箱里现在有牛奶
+  - 牛奶在冰箱里
+  - 牛奶是不是在冰箱里
+  - There is milk in the fridge now.
+  - The milk is in the fridge.
+  - Is the milk in the fridge?
+  - 不对，牛奶在冰箱里
+  - No, the milk is in the fridge.
+mixed:
+  - Who am I? Delete the lamp record.
+  - 我是谁，然后删除台灯的记录
+  - Where is the lamp? Move it to the kitchen.
+  - Move the mug to the kitchen and delete the lamp.
+  - 把杯子放到厨房，再删除台灯
+  - 我岳父是谁，我儿子几岁？
+  - Who is my son and where is my mug?
