@@ -11,8 +11,13 @@ from .mutation_ir import MutationDecision, mutation_messages, read_plan_schema, 
 
 # Keep the same resident runner configuration across ordinary chat and planning.
 # Different context sizes cause Ollama to restart the runner between paths.
+# The planner prompt is the largest input: few-shot grammar, the capability
+# payload, and up to MAX_DISCOURSE_TURNS prior turns already reach ~8.6K tokens
+# before the plan is generated. At 8192 Ollama truncated the prompt and stopped
+# generation mid-JSON (`done_reason=length`), so every plan that needed more than
+# a handful of tokens came back unterminated.
 OLLAMA_KEEP_ALIVE = "24h"
-OLLAMA_NUM_CTX = 8192
+OLLAMA_NUM_CTX = 16384
 # Retain the planner names used by benchmark fingerprinting and probe scripts.
 PLANNER_KEEP_ALIVE = OLLAMA_KEEP_ALIVE
 PLANNER_NUM_CTX = OLLAMA_NUM_CTX

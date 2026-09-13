@@ -1,12 +1,21 @@
 from home_cortex.mutation_ir import read_plan_schema
 import json
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 from ollama import ChatResponse
 
-from home_cortex.ollama import OllamaService
+from home_cortex.edge_schema import EdgeSchemaRegistry
+from home_cortex.ollama import (
+    OLLAMA_NUM_CTX,
+    PLANNER_NUM_PREDICT,
+    OllamaService,
+    planner_chat_messages,
+)
+from home_cortex.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.semantic_schema import SemanticSchemaRegistry
 from home_cortex.tools import TOOLS
 
 
@@ -75,7 +84,7 @@ async def test_ordinary_chat_call() -> None:
             "stream": False,
             "think": False,
             "keep_alive": "24h",
-            "options": {"num_ctx": 8192},
+            "options": {"num_ctx": OLLAMA_NUM_CTX},
         }
     ]
 
@@ -118,7 +127,7 @@ async def test_tool_call_response() -> None:
     assert client.calls[0]["stream"] is False
     assert client.calls[0]["think"] is False
     assert client.calls[0]["keep_alive"] == "24h"
-    assert client.calls[0]["options"] == {"num_ctx": 8192}
+    assert client.calls[0]["options"] == {"num_ctx": OLLAMA_NUM_CTX}
 
 
 @pytest.mark.asyncio
@@ -167,7 +176,7 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
     ]
     assert call["options"] == {
         "temperature": 0,
-        "num_ctx": 8192,
+        "num_ctx": OLLAMA_NUM_CTX,
         "num_predict": 384,
         "seed": 0,
     }
@@ -210,6 +219,34 @@ async def test_semantic_planner_prompt_preserves_speaker_resolver_boundary() -> 
         },
         {"role": "user", "content": "a speaker-relative relation"},
     ]
+
+
+def test_planner_prompt_leaves_room_to_generate_inside_the_context_window() -> None:
+    """The runner must have context left for the plan, not only for the prompt.
+
+    At a 8192 window the planner prompt alone filled the context, so Ollama
+    truncated it and stopped generating mid-JSON (`done_reason=length`). The
+    unterminated response then failed as MALFORMED_OUTPUT on every attempt.
+    """
+    schema = SemanticSchemaRegistry(
+        RuntimeSchemaCatalog.from_data_dir(
+            Path(__file__).parent / "static_test_data", EdgeSchemaRegistry.load_default()
+        )
+    )
+    # A session at the discourse-history bound is the largest planner prompt.
+    earlier = [
+        "家里有几口人", "我妻子是谁", "本户成年成员有多少", "我儿子几岁了",
+        "家里有几个房间", "我岳父是谁", "本户男性成员人数是多少", "我家在哪里",
+    ]
+    prompt = planner_chat_messages(
+        [{"role": "user", "content": utterance} for utterance in (*earlier, "我是谁")],
+        schema.planner_capability_payload(),
+        household_now="2026-09-12T00:00:00+00:00",
+    )
+    characters = sum(len(str(message["content"])) for message in prompt)
+    # This model family tokenizes the English grammar at roughly four characters
+    # per token; assume three so the budget keeps margin.
+    assert characters <= (OLLAMA_NUM_CTX - PLANNER_NUM_PREDICT) * 3
 
 
 @pytest.mark.asyncio
@@ -290,7 +327,7 @@ async def test_streaming_tool_chat_yields_chunks_and_closes_stream() -> None:
             "stream": True,
             "think": False,
             "keep_alive": "24h",
-            "options": {"num_ctx": 8192},
+            "options": {"num_ctx": OLLAMA_NUM_CTX},
         }
     ]
 
