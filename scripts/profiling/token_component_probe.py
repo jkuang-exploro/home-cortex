@@ -12,7 +12,7 @@ from pathlib import Path
 from scripts import PROJECT_ROOT
 
 from ollama import AsyncClient
-from home_cortex.ollama import _PLANNER_INSTRUCTIONS, _semantic_planner_examples
+from home_cortex.ollama import OLLAMA_NUM_CTX, _PLANNER_INSTRUCTIONS, _semantic_planner_examples
 from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
 
 ROOT = PROJECT_ROOT
@@ -36,7 +36,7 @@ async def run(args):
         for name, text in parts.items():
             response=await client.generate(model=args.model,prompt=text,raw=True,
                 stream=False,think=False,keep_alive='24h',
-                options={'num_predict':1,'num_ctx':8192,'temperature':0,'seed':0})
+                options={'num_predict':1,'num_ctx':OLLAMA_NUM_CTX,'temperature':0,'seed':0})
             rows.append({'component':name,'utf8_bytes':len(text.encode()),
                          'text_sha256':hashlib.sha256(text.encode()).hexdigest(),
                          'raw_prompt_tokens':response.prompt_eval_count,

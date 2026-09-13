@@ -233,7 +233,8 @@ def test_planner_prompt_leaves_room_to_generate_inside_the_context_window() -> N
             Path(__file__).parent / "static_test_data", EdgeSchemaRegistry.load_default()
         )
     )
-    # A session at the discourse-history bound is the largest planner prompt.
+    # Representative short turns at the discourse-history bound. Turn count
+    # alone cannot bound arbitrary user text; this is a regression scenario.
     earlier = [
         "家里有几口人", "我妻子是谁", "本户成年成员有多少", "我儿子几岁了",
         "家里有几个房间", "我岳父是谁", "本户男性成员人数是多少", "我家在哪里",

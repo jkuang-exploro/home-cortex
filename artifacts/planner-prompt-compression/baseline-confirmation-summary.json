@@ -1,0 +1,115 @@
+{
+  "drop_indices": [],
+  "cases": 4,
+  "repeat": 3,
+  "prompt": {
+    "messages_sha256": "5b33deffa21fb165d801a4eb00ef197b3c796a7eb861bded0f3cc92ad6dc1a58",
+    "example_pairs": 42,
+    "component_bytes": {
+      "instructions": 11313,
+      "capabilities": 12620,
+      "few_shot_examples": 10935,
+      "context_reminder": 191,
+      "history": 0,
+      "user_input": 16,
+      "supplemental_notes_including_retry": 108
+    }
+  },
+  "scores": {
+    "plan_accuracy": {
+      "correct": 12,
+      "scored": 12,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "answer_correctness": {
+      "correct": 12,
+      "scored": 12,
+      "unscored": 0,
+      "rate": 1.0
+    },
+    "executor_status": {
+      "found": 12
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "metrics": {
+    "prompt_tokens": {
+      "n": 12,
+      "p50": 8245.0,
+      "p95": 8327.0
+    },
+    "output_tokens": {
+      "n": 12,
+      "p50": 46.0,
+      "p95": 52.0
+    },
+    "attempts": {
+      "n": 12,
+      "p50": 1.0,
+      "p95": 2.0
+    },
+    "planner_ms": {
+      "n": 12,
+      "p50": 1525.403,
+      "p95": 2663.431
+    },
+    "total_ms": {
+      "n": 12,
+      "p50": 1526.238,
+      "p95": 2664.02
+    }
+  },
+  "retries": 3,
+  "budgets": {
+    "normal_token_budget": 8500,
+    "all_counts_available": true,
+    "normal_exceeded": 0,
+    "context_exceeded": 0,
+    "length_stops": 0
+  },
+  "failures": [],
+  "evaluation_cases_sha256": "fd4673d53c8639f99c360e9aac9846f4bafc24e0c61236832aa8b1f8ad54194f",
+  "frozen_manifest_sha256": "727a43d13539c57e661c1b6e1628a83e9cb0e89d3f6b3e85d15949e0637d2d63",
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/hc-prompt-727a43d1/benchmarks/planner_prompt_compression.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "fd497c103bb2b1b62b1e360659722cf99e67392c3a84826b8d8be7122926c9ed",
+    "data_tree_sha256": "a6ab9fa06584cc0a369d4e7501252c4f2402f36ec700cc68e4126d1e360150ef",
+    "schema_tree_sha256": "e192342e0df849ea589a023775ef116c4b029d2fdb8454b37b7c807c4661c156",
+    "imported_package_path": "/tmp/hc-prompt-727a43d1/src/home_cortex/__init__.py",
+    "copied_package_sha256": "4828afc7e1423fe8f904a9a424ff4753152ff58416cd5397bddcf2cf18e2b273",
+    "harness_tree_sha256": "198e1af9000e406c482aed141650116fc9a5a2a4b4e01ab9987806633915d8bb",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.15",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 16384,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "frozen-json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 3,
+    "verified_cold": false
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "plan_match": {
+    "regressions": [
+      [
+        "111:marriage_duration::我们成为夫妻多长时间了",
+        0
+      ],
+      [
+        "116:son_identity::哪个男孩是我儿子",
+        0
+      ],
+      [
+        "124:son_birth_date::我的男性子女何时出生",
+        0
+      ],
+      [
+        "38:self_identity::What is my name?",
+        0
+      ]
+    ],
+    "improvements": []
+  },
+  "answer_correct": {
+    "regressions": [
+      [
+        "111:marriage_duration::我们成为夫妻多长时间了",
+        0
+      ],
+      [
+        "116:son_identity::哪个男孩是我儿子",
+        0
+      ],
+      [
+        "124:son_birth_date::我的男性子女何时出生",
+        0
+      ],
+      [
+        "38:self_identity::What is my name?",
+        0
+      ]
+    ],
+    "improvements": []
+  },
+  "metrics": {
+    "prompt_tokens": {
+      "before_p50": 8245.0,
+      "after_p50": 8111.0,
+      "delta": -134.0,
+      "change_percent": -1.63
+    },
+    "output_tokens": {
+      "before_p50": 47.0,
+      "after_p50": 47.0,
+      "delta": 0.0,
+      "change_percent": 0.0
+    },
+    "attempts": {
+      "before_p50": 1.0,
+      "after_p50": 1.0,
+      "delta": 0.0,
+      "change_percent": 0.0
+    },
+    "planner_ms": {
+      "before_p50": 1481.629,
+      "after_p50": 1478.922,
+      "delta": -2.707,
+      "change_percent": -0.18
+    },
+    "total_ms": {
+      "before_p50": 1482.369,
+      "after_p50": 1479.533,
+      "delta": -2.836,
+      "change_percent": -0.19
+    }
+  },
+  "semantic_regression": true
+}

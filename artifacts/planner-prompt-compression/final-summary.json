@@ -1,0 +1,170 @@
+{
+  "drop_indices": [],
+  "cases": 12,
+  "repeat": 3,
+  "prompt": {
+    "messages_sha256": "ba226a740e590ae45041d4b599b6bfc0bbb83725f3dfb4e5b5295ace75d33d70",
+    "example_pairs": 42,
+    "component_bytes": {
+      "instructions": 11313,
+      "capabilities": 12620,
+      "few_shot_examples": 10935,
+      "context_reminder": 191,
+      "history": 0,
+      "user_input": 9,
+      "supplemental_notes_including_retry": 131
+    }
+  },
+  "scores": {
+    "plan_accuracy": {
+      "correct": 30,
+      "scored": 36,
+      "unscored": 0,
+      "rate": 0.8333
+    },
+    "answer_correctness": {
+      "correct": 30,
+      "scored": 36,
+      "unscored": 0,
+      "rate": 0.8333
+    },
+    "executor_status": {
+      "found": 36
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "metrics": {
+    "prompt_tokens": {
+      "n": 36,
+      "p50": 8243.5,
+      "p95": 8272.0
+    },
+    "output_tokens": {
+      "n": 36,
+      "p50": 47.0,
+      "p95": 51.0
+    },
+    "attempts": {
+      "n": 36,
+      "p50": 1.0,
+      "p95": 1.0
+    },
+    "planner_ms": {
+      "n": 36,
+      "p50": 1468.317,
+      "p95": 1555.829
+    },
+    "total_ms": {
+      "n": 36,
+      "p50": 1469.036,
+      "p95": 1556.529
+    }
+  },
+  "retries": 0,
+  "budgets": {
+    "normal_token_budget": 8500,
+    "all_counts_available": true,
+    "normal_exceeded": 0,
+    "context_exceeded": 0,
+    "length_stops": 0
+  },
+  "failures": [
+    {
+      "case_id": "kitchen",
+      "utterance": "厨房里有什么",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "missing_birthday",
+      "utterance": "你的出生日期是哪天",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "kitchen",
+      "utterance": "厨房里有什么",
+      "sample_index": 1,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "missing_birthday",
+      "utterance": "你的出生日期是哪天",
+      "sample_index": 1,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "kitchen",
+      "utterance": "厨房里有什么",
+      "sample_index": 2,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "missing_birthday",
+      "utterance": "你的出生日期是哪天",
+      "sample_index": 2,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    }
+  ],
+  "evaluation_cases_sha256": "b918d83f35e1a8e1a68ab0a35c0aa1d6eae8d8b4dccb87f1244688b8993038dd",
+  "frozen_manifest_sha256": "727a43d13539c57e661c1b6e1628a83e9cb0e89d3f6b3e85d15949e0637d2d63",
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/hc-prompt-727a43d1/benchmarks/planner_prompt_compression.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "fd497c103bb2b1b62b1e360659722cf99e67392c3a84826b8d8be7122926c9ed",
+    "data_tree_sha256": "a6ab9fa06584cc0a369d4e7501252c4f2402f36ec700cc68e4126d1e360150ef",
+    "schema_tree_sha256": "e192342e0df849ea589a023775ef116c4b029d2fdb8454b37b7c807c4661c156",
+    "imported_package_path": "/tmp/hc-prompt-727a43d1/src/home_cortex/__init__.py",
+    "copied_package_sha256": "4828afc7e1423fe8f904a9a424ff4753152ff58416cd5397bddcf2cf18e2b273",
+    "harness_tree_sha256": "198e1af9000e406c482aed141650116fc9a5a2a4b4e01ab9987806633915d8bb",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.15",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 16384,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "frozen-json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 3,
+    "verified_cold": false
+  }
+}

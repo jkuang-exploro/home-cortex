@@ -1,0 +1,351 @@
+{
+  "method": "Exact UTF-8 message content; optional model-native raw generate counts exclude chat framing and are not additive.",
+  "model": "qwen3.5:9b",
+  "num_ctx": 16384,
+  "output_budget": 384,
+  "content_bytes": 35077,
+  "wire_messages_bytes": 41316,
+  "messages_sha256": "cdf19be8bbc37bac1f452c2c111a2dcd5fcd343415ecd96e7f33ea29489f3132",
+  "schema_format_bytes_separate": 35296,
+  "components": {
+    "instructions": {
+      "bytes": 11313,
+      "content_byte_percent": 32.25,
+      "raw_tokens": 2413,
+      "sha256": "e39d27ccd2f3b6f2a7daf5e8575fc628a73d5a416c33db42aec6233f54deb3ee"
+    },
+    "capabilities": {
+      "bytes": 12620,
+      "content_byte_percent": 35.98,
+      "raw_tokens": 2819,
+      "sha256": "70054107230e9a9cc9e576569b396248a4d406c454d8ef93fd4c599f683814cf"
+    },
+    "few_shot_examples": {
+      "bytes": 10935,
+      "content_byte_percent": 31.17,
+      "raw_tokens": 2505,
+      "sha256": "19d7e847d61b21fee13e005200d58681a61acc620622253193a3d2797dee9f03"
+    },
+    "context_reminder": {
+      "bytes": 191,
+      "content_byte_percent": 0.54,
+      "raw_tokens": 62,
+      "sha256": "525c63e4a709d80a5952f14e0963e8b99169e5fa6799539d5134710083f053e5"
+    },
+    "history": {
+      "bytes": 0,
+      "content_byte_percent": 0.0,
+      "raw_tokens": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "user_input": {
+      "bytes": 18,
+      "content_byte_percent": 0.05,
+      "raw_tokens": 2,
+      "sha256": "aafe3e5401633705d1275f871c8e8cb2ade264d9802ecf570280a6710f61e644"
+    },
+    "supplemental_notes_including_retry": {
+      "bytes": 0,
+      "content_byte_percent": 0.0,
+      "raw_tokens": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "examples": [
+    {
+      "index": 0,
+      "utterance": "请介绍一下你自己。",
+      "operation": "resolve_reference",
+      "bytes": 203,
+      "same_plan_as": null
+    },
+    {
+      "index": 1,
+      "utterance": "Who is the authenticated speaker?",
+      "operation": "resolve_reference",
+      "bytes": 204,
+      "same_plan_as": null
+    },
+    {
+      "index": 2,
+      "utterance": "Who belongs to my household?",
+      "operation": "select",
+      "bytes": 232,
+      "same_plan_as": null
+    },
+    {
+      "index": 3,
+      "utterance": "How many people in my household?",
+      "operation": "count",
+      "bytes": 235,
+      "same_plan_as": null
+    },
+    {
+      "index": 4,
+      "utterance": "我这个家里出生日期最靠前的是哪一位？",
+      "operation": "argmin",
+      "bytes": 266,
+      "same_plan_as": null
+    },
+    {
+      "index": 5,
+      "utterance": "Who here was born most recently?",
+      "operation": "argmax",
+      "bytes": 244,
+      "same_plan_as": null
+    },
+    {
+      "index": 6,
+      "utterance": "本户符合成年条件的成员有多少？",
+      "operation": "count",
+      "bytes": 282,
+      "same_plan_as": null
+    },
+    {
+      "index": 7,
+      "utterance": "How many household minors are there?",
+      "operation": "count",
+      "bytes": 273,
+      "same_plan_as": null
+    },
+    {
+      "index": 8,
+      "utterance": "本户男性成员人数是多少？",
+      "operation": "count",
+      "bytes": 304,
+      "same_plan_as": null
+    },
+    {
+      "index": 9,
+      "utterance": "How many female members here?",
+      "operation": "count",
+      "bytes": 299,
+      "same_plan_as": null
+    },
+    {
+      "index": 10,
+      "utterance": "本户出生于1991年的成员有几位？",
+      "operation": "count",
+      "bytes": 344,
+      "same_plan_as": null
+    },
+    {
+      "index": 11,
+      "utterance": "List members aged 40 or older.",
+      "operation": "select",
+      "bytes": 345,
+      "same_plan_as": null
+    },
+    {
+      "index": 12,
+      "utterance": "本户未满三十周岁的成员有多少？",
+      "operation": "count",
+      "bytes": 358,
+      "same_plan_as": null
+    },
+    {
+      "index": 13,
+      "utterance": "请列出本户的房间。",
+      "operation": "select",
+      "bytes": 229,
+      "same_plan_as": null
+    },
+    {
+      "index": 14,
+      "utterance": "我的男孩后代是哪一位？",
+      "operation": "resolve_reference",
+      "bytes": 231,
+      "same_plan_as": null
+    },
+    {
+      "index": 15,
+      "utterance": "List my female descendants.",
+      "operation": "select",
+      "bytes": 219,
+      "same_plan_as": null
+    },
+    {
+      "index": 16,
+      "utterance": "我母亲的丈夫是哪位？",
+      "operation": "resolve_reference",
+      "bytes": 253,
+      "same_plan_as": null
+    },
+    {
+      "index": 17,
+      "utterance": "Who is 我岳父?",
+      "operation": "resolve_reference",
+      "bytes": 225,
+      "same_plan_as": null
+    },
+    {
+      "index": 18,
+      "utterance": "我 wife 的 birthday 是哪天？",
+      "operation": "select",
+      "bytes": 230,
+      "same_plan_as": null
+    },
+    {
+      "index": 19,
+      "utterance": "我 son 几岁了？",
+      "operation": "date_difference",
+      "bytes": 239,
+      "same_plan_as": null
+    },
+    {
+      "index": 20,
+      "utterance": "List members whose residence started in 2015.",
+      "operation": "select",
+      "bytes": 367,
+      "same_plan_as": null
+    },
+    {
+      "index": 21,
+      "utterance": "Give this home's street address.",
+      "operation": "select",
+      "bytes": 235,
+      "same_plan_as": null
+    },
+    {
+      "index": 22,
+      "utterance": "说话人现居所是否即当前配置家庭？",
+      "operation": "same_entity",
+      "bytes": 320,
+      "same_plan_as": null
+    },
+    {
+      "index": 23,
+      "utterance": "Does that mother live at the configured home?",
+      "operation": "same_entity",
+      "bytes": 338,
+      "same_plan_as": null
+    },
+    {
+      "index": 24,
+      "utterance": "我的居住关系从哪天开始？",
+      "operation": "select",
+      "bytes": 243,
+      "same_plan_as": null
+    },
+    {
+      "index": 25,
+      "utterance": "How many years has this residence lasted?",
+      "operation": "date_difference",
+      "bytes": 272,
+      "same_plan_as": null
+    },
+    {
+      "index": 26,
+      "utterance": "住进现居所至今有多少天？",
+      "operation": "date_difference",
+      "bytes": 266,
+      "same_plan_as": null
+    },
+    {
+      "index": 27,
+      "utterance": "Between me and my mother, who was born earlier?",
+      "operation": "argmin",
+      "bytes": 305,
+      "same_plan_as": null
+    },
+    {
+      "index": 28,
+      "utterance": "花瓶在哪里？",
+      "operation": "resolve_reference",
+      "bytes": 231,
+      "same_plan_as": null
+    },
+    {
+      "index": 29,
+      "utterance": "工作间里还有哪些工具？",
+      "operation": "select",
+      "bytes": 400,
+      "same_plan_as": null
+    },
+    {
+      "index": 30,
+      "utterance": "旅行箱里有哪些东西？",
+      "operation": "select",
+      "bytes": 233,
+      "same_plan_as": null
+    },
+    {
+      "index": 31,
+      "utterance": "What does the workbench cubby hold?",
+      "operation": "select",
+      "bytes": 244,
+      "same_plan_as": null
+    },
+    {
+      "index": 32,
+      "utterance": "展示柜有哪些分区？",
+      "operation": "select",
+      "bytes": 234,
+      "same_plan_as": null
+    },
+    {
+      "index": 33,
+      "utterance": "How many spaces does 写字台 host?",
+      "operation": "count",
+      "bytes": 242,
+      "same_plan_as": null
+    },
+    {
+      "index": 34,
+      "utterance": "Where is the kettle?",
+      "operation": "resolve_reference",
+      "bytes": 233,
+      "same_plan_as": null
+    },
+    {
+      "index": 35,
+      "utterance": "How many days until 林青's next birthday?",
+      "operation": "annual_occurrence",
+      "bytes": 248,
+      "same_plan_as": null
+    },
+    {
+      "index": 36,
+      "utterance": "周岚现在多大？",
+      "operation": "date_difference",
+      "bytes": 225,
+      "same_plan_as": null
+    },
+    {
+      "index": 37,
+      "utterance": "When was his 20th birthday?",
+      "operation": "date_add",
+      "bytes": 255,
+      "same_plan_as": null
+    },
+    {
+      "index": 38,
+      "utterance": "Count this household's adults.",
+      "operation": "count",
+      "bytes": 267,
+      "same_plan_as": 6
+    },
+    {
+      "index": 39,
+      "utterance": "How old is Zhou Lan?",
+      "operation": "date_difference",
+      "bytes": 226,
+      "same_plan_as": null
+    },
+    {
+      "index": 40,
+      "utterance": "他的二十岁生日是哪天？",
+      "operation": "date_add",
+      "bytes": 261,
+      "same_plan_as": 37
+    },
+    {
+      "index": 41,
+      "utterance": "Just chatting, no household question.",
+      "operation": "chat",
+      "bytes": 75,
+      "same_plan_as": null
+    }
+  ],
+  "example_pairs": 42
+}

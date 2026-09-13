@@ -1,0 +1,117 @@
+{
+  "plan_match": {
+    "regressions": [
+      [
+        "111:marriage_duration::我们成为夫妻多长时间了",
+        0
+      ],
+      [
+        "111:marriage_duration::我们成为夫妻多长时间了",
+        1
+      ],
+      [
+        "111:marriage_duration::我们成为夫妻多长时间了",
+        2
+      ],
+      [
+        "116:son_identity::哪个男孩是我儿子",
+        0
+      ],
+      [
+        "116:son_identity::哪个男孩是我儿子",
+        1
+      ],
+      [
+        "116:son_identity::哪个男孩是我儿子",
+        2
+      ],
+      [
+        "38:self_identity::What is my name?",
+        0
+      ],
+      [
+        "38:self_identity::What is my name?",
+        1
+      ],
+      [
+        "38:self_identity::What is my name?",
+        2
+      ]
+    ],
+    "improvements": []
+  },
+  "answer_correct": {
+    "regressions": [
+      [
+        "111:marriage_duration::我们成为夫妻多长时间了",
+        0
+      ],
+      [
+        "111:marriage_duration::我们成为夫妻多长时间了",
+        1
+      ],
+      [
+        "111:marriage_duration::我们成为夫妻多长时间了",
+        2
+      ],
+      [
+        "116:son_identity::哪个男孩是我儿子",
+        0
+      ],
+      [
+        "116:son_identity::哪个男孩是我儿子",
+        1
+      ],
+      [
+        "116:son_identity::哪个男孩是我儿子",
+        2
+      ],
+      [
+        "38:self_identity::What is my name?",
+        0
+      ],
+      [
+        "38:self_identity::What is my name?",
+        1
+      ],
+      [
+        "38:self_identity::What is my name?",
+        2
+      ]
+    ],
+    "improvements": []
+  },
+  "metrics": {
+    "prompt_tokens": {
+      "before_p50": 8245.0,
+      "after_p50": 8111.0,
+      "delta": -134.0,
+      "change_percent": -1.63
+    },
+    "output_tokens": {
+      "before_p50": 46.0,
+      "after_p50": 45.5,
+      "delta": -0.5,
+      "change_percent": -1.09
+    },
+    "attempts": {
+      "before_p50": 1.0,
+      "after_p50": 1.0,
+      "delta": 0.0,
+      "change_percent": 0.0
+    },
+    "planner_ms": {
+      "before_p50": 1525.403,
+      "after_p50": 1478.841,
+      "delta": -46.562,
+      "change_percent": -3.05
+    },
+    "total_ms": {
+      "before_p50": 1526.238,
+      "after_p50": 1479.401,
+      "delta": -46.837,
+      "change_percent": -3.07
+    }
+  },
+  "semantic_regression": true
+}

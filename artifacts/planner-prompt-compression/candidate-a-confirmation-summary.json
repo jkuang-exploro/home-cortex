@@ -1,0 +1,201 @@
+{
+  "drop_indices": [
+    6,
+    34
+  ],
+  "cases": 4,
+  "repeat": 3,
+  "prompt": {
+    "messages_sha256": "9d5ebd31d0dbe893d2af477a60e8f97781f9183ffa419393863dd2f05e657d86",
+    "example_pairs": 40,
+    "component_bytes": {
+      "instructions": 11313,
+      "capabilities": 12620,
+      "few_shot_examples": 10420,
+      "context_reminder": 191,
+      "history": 0,
+      "user_input": 16,
+      "supplemental_notes_including_retry": 108
+    }
+  },
+  "scores": {
+    "plan_accuracy": {
+      "correct": 3,
+      "scored": 12,
+      "unscored": 0,
+      "rate": 0.25
+    },
+    "answer_correctness": {
+      "correct": 3,
+      "scored": 12,
+      "unscored": 0,
+      "rate": 0.25
+    },
+    "executor_status": {
+      "found": 9,
+      "not_run": 3
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "metrics": {
+    "prompt_tokens": {
+      "n": 12,
+      "p50": 8111.0,
+      "p95": 8193.0
+    },
+    "output_tokens": {
+      "n": 12,
+      "p50": 45.5,
+      "p95": 52.0
+    },
+    "attempts": {
+      "n": 12,
+      "p50": 1.0,
+      "p95": 2.0
+    },
+    "planner_ms": {
+      "n": 12,
+      "p50": 1478.841,
+      "p95": 2631.811
+    },
+    "total_ms": {
+      "n": 12,
+      "p50": 1479.401,
+      "p95": 2632.15
+    }
+  },
+  "retries": 3,
+  "budgets": {
+    "normal_token_budget": 8500,
+    "all_counts_available": true,
+    "normal_exceeded": 0,
+    "context_exceeded": 0,
+    "length_stops": 0
+  },
+  "failures": [
+    {
+      "case_id": "38:self_identity::What is my name?",
+      "utterance": "What is my name?",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "INVALID_PLAN",
+      "executor_status": "not_run"
+    },
+    {
+      "case_id": "111:marriage_duration::我们成为夫妻多长时间了",
+      "utterance": "我们成为夫妻多长时间了",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "116:son_identity::哪个男孩是我儿子",
+      "utterance": "哪个男孩是我儿子",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "38:self_identity::What is my name?",
+      "utterance": "What is my name?",
+      "sample_index": 1,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "INVALID_PLAN",
+      "executor_status": "not_run"
+    },
+    {
+      "case_id": "111:marriage_duration::我们成为夫妻多长时间了",
+      "utterance": "我们成为夫妻多长时间了",
+      "sample_index": 1,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "116:son_identity::哪个男孩是我儿子",
+      "utterance": "哪个男孩是我儿子",
+      "sample_index": 1,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "38:self_identity::What is my name?",
+      "utterance": "What is my name?",
+      "sample_index": 2,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "INVALID_PLAN",
+      "executor_status": "not_run"
+    },
+    {
+      "case_id": "111:marriage_duration::我们成为夫妻多长时间了",
+      "utterance": "我们成为夫妻多长时间了",
+      "sample_index": 2,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "116:son_identity::哪个男孩是我儿子",
+      "utterance": "哪个男孩是我儿子",
+      "sample_index": 2,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    }
+  ],
+  "evaluation_cases_sha256": "fd4673d53c8639f99c360e9aac9846f4bafc24e0c61236832aa8b1f8ad54194f",
+  "frozen_manifest_sha256": "727a43d13539c57e661c1b6e1628a83e9cb0e89d3f6b3e85d15949e0637d2d63",
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/hc-prompt-727a43d1/benchmarks/planner_prompt_compression.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "fd497c103bb2b1b62b1e360659722cf99e67392c3a84826b8d8be7122926c9ed",
+    "data_tree_sha256": "a6ab9fa06584cc0a369d4e7501252c4f2402f36ec700cc68e4126d1e360150ef",
+    "schema_tree_sha256": "e192342e0df849ea589a023775ef116c4b029d2fdb8454b37b7c807c4661c156",
+    "imported_package_path": "/tmp/hc-prompt-727a43d1/src/home_cortex/__init__.py",
+    "copied_package_sha256": "4828afc7e1423fe8f904a9a424ff4753152ff58416cd5397bddcf2cf18e2b273",
+    "harness_tree_sha256": "198e1af9000e406c482aed141650116fc9a5a2a4b4e01ab9987806633915d8bb",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.15",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 16384,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "frozen-json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 3,
+    "verified_cold": false
+  }
+}

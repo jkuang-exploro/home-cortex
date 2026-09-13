@@ -1,0 +1,52 @@
+version: 1
+# Fixed acceptance queries; never imported into runtime examples.
+# Answers are compared with execution of these independently specified gold plans.
+cases:
+  - id: assistant
+    category: identity
+    utterance: 你是谁
+    request: {operation: resolve_reference, subject: {kind: assistant, entity_type: person}}
+  - id: self
+    category: identity
+    utterance: 我是谁
+    request: {operation: resolve_reference, subject: {kind: self, entity_type: person}}
+  - id: members
+    category: membership
+    utterance: 家里都有谁
+    request: {operation: select, subject: {kind: current_household, entity_type: address, path: [{concept: member}]}}
+  - id: member_count
+    category: membership
+    utterance: 家里有几个人
+    request: {operation: count, subject: {kind: current_household, entity_type: address, path: [{concept: member}]}}
+  - id: rooms
+    category: space
+    utterance: 家里有几个房间
+    request: {operation: count, subject: {kind: current_household, entity_type: address, path: [{concept: room}]}}
+  - id: kitchen
+    category: containment
+    utterance: 厨房里有什么
+    request: {operation: select, subject: {kind: named_entity, value: 厨房, entity_type: space, path: [{concept: contents}]}}
+  - id: refrigerator
+    category: containment
+    utterance: 冰箱里有什么
+    request: {operation: select, subject: {kind: named_entity, value: 冰箱, entity_type: null, path: [{concept: contents}]}}
+  - id: door_rack
+    category: nested_containment
+    utterance: 冰箱门架上有什么
+    request: {operation: select, subject: {kind: named_entity, value: 冰箱门架, entity_type: null, path: [{concept: contents}]}}
+  - id: father_in_law
+    category: relationship
+    utterance: 我岳父是谁
+    request: {operation: resolve_reference, subject: {kind: self, entity_type: person, path: [{concept: father_in_law}]}}
+  - id: son_en
+    category: english
+    utterance: Who is my son?
+    request: {operation: resolve_reference, subject: {kind: self, entity_type: person, path: [{concept: son}]}}
+  - id: rooms_en
+    category: english
+    utterance: How many rooms are in the house?
+    request: {operation: count, subject: {kind: current_household, entity_type: address, path: [{concept: room}]}}
+  - id: missing_birthday
+    category: missing_fact
+    utterance: 你的出生日期是哪天
+    request: {operation: select, property: birth_date, subject: {kind: assistant, entity_type: person}}

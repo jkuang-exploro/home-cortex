@@ -1,0 +1,16 @@
+{
+  "reference_kinds": 374,
+  "composition": 397,
+  "entity_types": 35,
+  "operations": 210,
+  "operation_requirements": 1376,
+  "filter_requirements": 599,
+  "property_ownership": 488,
+  "relations": 92,
+  "relation_signatures": 351,
+  "property_aliases": 1248,
+  "reference_concepts": 3537,
+  "collection_predicates": 450,
+  "predicate_disjointness": 37,
+  "property_contracts": 3124
+}

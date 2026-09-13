@@ -36,3 +36,36 @@ instrumentation to the API, DB, and model clients, not a profiling CLI.
 Historical artifact reports retain the paths used for their original runs.
 The withdrawn compact semantic codec lives beside its offline profiler; it is
 not an alternate runtime transport in `home_cortex`.
+
+Planner prompt compression experiments:
+
+```sh
+python -m scripts.profiling.planner_prompt_audit --output /tmp/prompt-summary.json
+python -m scripts.profiling.planner_prompt_audit --data-dir /path/to/frozen-data --ollama-url http://ollama:11434 --model qwen3.5:9b --output /tmp/native-components-summary.json
+python -m scripts.benchmarks.planner_prompt_experiment --data-dir /path/to/frozen-data --repeat 3 --enforce-budgets --output /tmp/baseline-summary.json
+python -m scripts.benchmarks.planner_prompt_experiment --data-dir /path/to/frozen-data --repeat 3 --drop 6 --drop 34 --enforce-budgets --output /tmp/candidate-a-summary.json
+python -m scripts.benchmarks.planner_prompt_experiment --data-dir /path/to/frozen-data --regression --repeat 1 --output /tmp/regression-summary.json
+```
+
+Run live experiments only from an isolated frozen package on the GPU host, with
+identical frozen data, schema, model and case fingerprints. Example indices refer
+to that package's example inventory; inspect it before selecting a candidate.
+The override exists only within the benchmark process and restores on failure.
+Do not run competing model experiments concurrently. Each output path must be
+new; its adjacent JSONL contains per-case plans, answers, timings and model calls.
+Keep raw results on the evaluation host; commit concise `*-summary.json` files.
+
+The fixed set has 12 requests; `--regression` adds the existing 20-case probe,
+119 generalization utterances, and 20 bilingual utterances. Gold plans expand
+through the canonical ontology. Answer comparisons execute gold plans against
+the same frozen graph; they do not independently validate the executor or data.
+Latency covers planner, deterministic JSON-graph execution, and rendering;
+it excludes HTTP, mutation routing, conversation persistence, and live DB I/O.
+
+Native raw component token counts exclude chat framing and are not additive.
+Structured `format` schema bytes are reported separately: they constrain decoding
+and are not added to message content. The live harness records every model call
+and optionally fails on the measured 8,500-token normal budget, insufficient
+16K context headroom for the 384-token output allocation, or a length stop.
+These are observed-call guardrails, not a universal bound on arbitrary user text.
+The offline 32,000-byte synthetic-fixture check is a separate prompt-creep alarm.

@@ -1,0 +1,164 @@
+{
+  "drop_indices": [
+    6,
+    34
+  ],
+  "cases": 12,
+  "repeat": 3,
+  "prompt": {
+    "messages_sha256": "6b2a20aeea0cf91eed147e1a703148400434e8c1389d705cd26a5989f1b796db",
+    "example_pairs": 40,
+    "component_bytes": {
+      "instructions": 11313,
+      "capabilities": 12620,
+      "few_shot_examples": 10420,
+      "context_reminder": 191,
+      "history": 0,
+      "user_input": 9,
+      "supplemental_notes_including_retry": 131
+    }
+  },
+  "scores": {
+    "plan_accuracy": {
+      "correct": 30,
+      "scored": 36,
+      "unscored": 0,
+      "rate": 0.8333
+    },
+    "answer_correctness": {
+      "correct": 30,
+      "scored": 36,
+      "unscored": 0,
+      "rate": 0.8333
+    },
+    "executor_status": {
+      "found": 36
+    },
+    "unscored_or_unverifiable": {
+      "plan": [],
+      "answer": []
+    }
+  },
+  "metrics": {
+    "prompt_tokens": {
+      "n": 36,
+      "p50": 8109.5,
+      "p95": 8138.0
+    },
+    "output_tokens": {
+      "n": 36,
+      "p50": 47.0,
+      "p95": 51.0
+    },
+    "attempts": {
+      "n": 36,
+      "p50": 1.0,
+      "p95": 1.0
+    },
+    "planner_ms": {
+      "n": 36,
+      "p50": 1459.676,
+      "p95": 1552.888
+    },
+    "total_ms": {
+      "n": 36,
+      "p50": 1460.265,
+      "p95": 1553.536
+    }
+  },
+  "retries": 0,
+  "failures": [
+    {
+      "case_id": "kitchen",
+      "utterance": "厨房里有什么",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "missing_birthday",
+      "utterance": "你的出生日期是哪天",
+      "sample_index": 0,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "kitchen",
+      "utterance": "厨房里有什么",
+      "sample_index": 1,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "missing_birthday",
+      "utterance": "你的出生日期是哪天",
+      "sample_index": 1,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "kitchen",
+      "utterance": "厨房里有什么",
+      "sample_index": 2,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    },
+    {
+      "case_id": "missing_birthday",
+      "utterance": "你的出生日期是哪天",
+      "sample_index": 2,
+      "plan_match": false,
+      "answer_correct": false,
+      "validation_result": "VALID",
+      "executor_status": "found"
+    }
+  ],
+  "provenance": {
+    "git_commit": "unavailable",
+    "git_dirty": "unavailable",
+    "host_git_commit": "unavailable",
+    "host_git_dirty": "unavailable",
+    "dataset_path": "/tmp/hc-prompt-4baa972b/benchmarks/planner_prompt_compression.yaml",
+    "dataset_version": 1,
+    "eval_sha256": "fd497c103bb2b1b62b1e360659722cf99e67392c3a84826b8d8be7122926c9ed",
+    "data_tree_sha256": "a6ab9fa06584cc0a369d4e7501252c4f2402f36ec700cc68e4126d1e360150ef",
+    "schema_tree_sha256": "e192342e0df849ea589a023775ef116c4b029d2fdb8454b37b7c807c4661c156",
+    "imported_package_path": "/tmp/hc-prompt-4baa972b/src/home_cortex/__init__.py",
+    "copied_package_sha256": "4828afc7e1423fe8f904a9a424ff4753152ff58416cd5397bddcf2cf18e2b273",
+    "harness_tree_sha256": "e20bfdba9513ecf1924807f5fee90e3cd5f461304dd10a2eeb493a876fe15029",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "model_name": "qwen3.5:9b",
+    "model_digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "ollama_version": "0.32.15",
+    "hardware": {
+      "platform": "Linux-6.8.0-139-generic-x86_64-with-glibc2.41",
+      "machine": "x86_64",
+      "processor": "unavailable",
+      "ollama_processor": "100% GPU"
+    },
+    "request_settings": {
+      "think": false,
+      "temperature": 0,
+      "num_ctx": 16384,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h",
+      "natural_language_path": "semantic_interpreter"
+    },
+    "backend": "frozen-json",
+    "frozen_evaluation_time": "2026-09-03T12:00:00-07:00",
+    "warmup": 1,
+    "repeat": 3,
+    "verified_cold": false
+  }
+}

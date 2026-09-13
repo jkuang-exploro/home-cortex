@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from scripts import PROJECT_ROOT
 
-from home_cortex.ollama import OllamaService, _semantic_planner_examples
+from home_cortex.ollama import OllamaService, _semantic_planner_examples, planner_system_prompt
 from scripts.benchmarks.semantic_planner_benchmark import (
     DEFAULT_EVAL_PATH,
     build_json_fact_service,
@@ -68,7 +68,7 @@ async def run(args: argparse.Namespace) -> dict:
         "examples": _semantic_planner_examples(),
         "capabilities": service.engine.schema.planner_capability_payload(),
         "output_schema": service.engine.schema.planner_output_schema(),
-        "system_prompt": ollama._planner_system_prompt(
+        "system_prompt": planner_system_prompt(
             service.engine.schema.planner_capability_payload()
         ),
     }
