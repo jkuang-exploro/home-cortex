@@ -28,6 +28,7 @@ from home_cortex.semantic_ir import (
 from home_cortex.household_fact_engine import HouseholdFactEngine
 from home_cortex.semantic_planner import SemanticFactPlanner
 from home_cortex.semantic_facts import SemanticFactService
+from home_cortex.semantic_ontology import SemanticOntology
 from home_cortex.semantic_schema import SemanticSchemaRegistry
 from home_cortex.tools import ToolDispatcher, get_tool_definitions
 
@@ -143,6 +144,23 @@ class _ChatOllama:
 def _schema(data_dir: Path) -> SemanticSchemaRegistry:
     registry = EdgeSchemaRegistry.load_default(data_dir)
     return SemanticSchemaRegistry(RuntimeSchemaCatalog.from_data_dir(data_dir, registry))
+
+
+def _declared_ontology(tmp_path: Path, name: str, kind: str) -> SemanticOntology:
+    """Clone the canonical ontology with one extra declared person property."""
+    import yaml
+
+    raw = yaml.safe_load((ROOT / "schemas" / "semantic" / "ontology.yaml").read_text())
+    raw["properties"][name] = {
+        "fields": [name],
+        "aliases": [],
+        "type": {"kind": kind},
+        "applies_to": {"entity": ["person"], "relationship": []},
+        "filter_operators": ["eq", "gte", "in", "exists"],
+    }
+    path = tmp_path / "ontology.yaml"
+    path.write_text(yaml.safe_dump(raw, allow_unicode=True, sort_keys=False))
+    return SemanticOntology.from_file(path)
 
 
 def _context(
@@ -947,11 +965,13 @@ async def test_named_person_missing_birth_date_is_property_unavailable_not_compu
 
 
 @pytest.mark.asyncio
-async def test_invalid_birth_date_is_computation_impossible(
+async def test_invalid_birth_date_is_reported_as_missing_computation_input(
     service: SemanticFactService,
     context: AgentRequestContext,
     dispatcher: JsonGraphDispatcher,
 ) -> None:
+    # A stored value that violates the declared type is an unavailable input, not
+    # an impossible computation: typed validation surfaces it before the operator.
     dispatcher.entities["person:dylan_kuang"]["dob"] = "not-a-date"
     request = SemanticFactRequest(
         operation="annual_occurrence",
@@ -961,7 +981,7 @@ async def test_invalid_birth_date_is_computation_impossible(
     )
     result, _ = await _execute(service, request, context)
 
-    assert result.status == "computation_impossible"
+    assert result.status == "computation_input_missing"
 
 
 @pytest.mark.asyncio
@@ -1142,8 +1162,10 @@ def test_capabilities_are_semantic_and_allowlisted(
     )
     capabilities = schema.capability_payload()
 
-    assert schema.physical_property("person", "favorite_color") == "favorite_color"
-    assert "favorite_color" in capabilities["semantic_properties"]["person"]
+    # Only declared semantic properties are addressable: a catalog field with no
+    # ontology declaration is not silently promoted to a semantic name.
+    assert schema.physical_property("person", "favorite_color") is None
+    assert "favorite_color" not in capabilities["semantic_properties"]["person"]
     assert "birth_date" in capabilities["semantic_properties"]["person"]
     assert "dob" not in capabilities["semantic_properties"]["person"]
     assert "parent_of" not in json.dumps(capabilities)
@@ -1172,9 +1194,10 @@ def test_capabilities_are_semantic_and_allowlisted(
 
 
 @pytest.mark.asyncio
-async def test_tier_one_can_select_a_new_schema_field_without_a_fact_handler(
+async def test_tier_one_can_select_a_declared_schema_field_without_a_fact_handler(
     dispatcher: JsonGraphDispatcher,
     context: AgentRequestContext,
+    tmp_path: Path,
 ) -> None:
     dispatcher.entities["person:jian_kuang"]["favorite_color"] = "green"
     catalog = RuntimeSchemaCatalog.from_data_dir(DATA_DIR, dispatcher.registry)
@@ -1189,7 +1212,8 @@ async def test_tier_one_can_select_a_new_schema_field_without_a_fact_handler(
             {**catalog.entities, "person": augmented},
             catalog.relations,
             catalog.edge_registry,
-        )
+        ),
+        _declared_ontology(tmp_path, "favorite_color", "string"),
     )
     request = _select(_self(), "favorite_color")
     service = _service(dispatcher, request, schema=schema)
@@ -1622,8 +1646,12 @@ async def test_semantic_validation_failure_is_classified_after_retry(
 
 def test_semantic_validation_classifies_unknown_relation() -> None:
     request = _resolve(_self(SemanticRelationStep(relation="invented_relation")))
+    schema = _schema(DATA_DIR)
 
-    assert _schema(DATA_DIR).validation_code(request) == "UNKNOWN_RELATION"
+    # The declared contract owns path validation, so an undeclared relation is
+    # rejected as an invalid path before the physical-relation classification runs.
+    assert schema.contract_error(request) == "INVALID_PATH"
+    assert schema.validation_code(request) == "INVALID_PLAN"
 
 
 @pytest.mark.asyncio
@@ -1661,9 +1689,10 @@ async def test_planner_rejects_wrong_scope_and_predicate_shape_without_repair(
 
 
 @pytest.mark.asyncio
-async def test_new_numeric_field_immediately_supports_generic_argmax(
+async def test_new_declared_numeric_field_immediately_supports_generic_argmax(
     dispatcher: JsonGraphDispatcher,
     context: AgentRequestContext,
+    tmp_path: Path,
 ) -> None:
     household_ids = {
         "person:jian_kuang",
@@ -1686,7 +1715,8 @@ async def test_new_numeric_field_immediately_supports_generic_argmax(
             {**catalog.entities, "person": augmented},
             catalog.relations,
             catalog.edge_registry,
-        )
+        ),
+        _declared_ontology(tmp_path, "fixture_score", "integer"),
     )
     engine = HouseholdFactEngine(dispatcher, schema)
     request = SemanticFactRequest(

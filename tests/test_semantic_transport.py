@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from home_cortex.semantic_ir import SemanticPlan
+from home_cortex.semantic_ir import SemanticFactRequest, SemanticPlan
 from home_cortex.semantic_schema import SemanticSchemaRegistry
 from scripts.profiling.semantic_transport import (
     SemanticTransport, canonical_json, pack_capabilities, unpack_capabilities,
@@ -179,20 +179,20 @@ def test_transport_dictionary_version_snapshot():
     assert (codec.version, fingerprint(codec.aliases)[:8]) == (4, 'd429a8f4')
 
 
-@pytest.mark.parametrize(('filter_wire', 'expected_validation'), [
-    ('["eq","display_name",null,{}]', 'INVALID_PLAN'),
-    ('["eq","display_name","林青",{"u":"relation"}]', 'UNKNOWN_PROPERTY'),
+@pytest.mark.parametrize('filter_wire', [
+    '["eq","display_name",null,{}]',
+    '["eq","display_name","林青",{"u":"relation"}]',
 ])
-def test_production_identity_counterexamples_are_not_repaired(household, filter_wire, expected_validation):
+def test_production_identity_counterexamples_are_not_repaired(household, filter_wire):
     # Captured from qwen3.5:9b / Ollama 0.32.15 with the synthetic contract.
     # Both outputs parse; the model invented filters absent from the utterance.
+    # The canonical contract declares display_name as a person entity string, so
+    # both are now rejected before transport rather than repaired into a legal plan.
     schema = household[0].schema
     codec = SemanticTransport(schema.planner_output_schema())
     wire = '[1,[true,{"s":["resolve_reference",null,"entity",["assistant",{"d":"person","z":null}],{"f":[' + filter_wire + ']}]}]]'
     with pytest.raises(ValueError, match='Unsupported semantic transport version'):
         codec.decode_plan(wire, schema)
-    # Preserve the captured V1 meaning when exercising the current dictionary;
-    # old bytes must not silently acquire different field meanings.
     operator, prop, value, extra = json.loads(filter_wire)
     payload = {'requires_fact': True, 'request': {
         'operation': 'resolve_reference', 'property': None, 'property_source': 'entity',
@@ -200,11 +200,13 @@ def test_production_identity_counterexamples_are_not_repaired(household, filter_
         'filters': [{'operator': operator, 'property': prop, 'value': value,
                      'source': extra.get('u', 'entity')}],
     }}
-    plan = codec.decode_plan(codec.encode(payload), schema)
-    assert plan.requires_fact is True
-    assert plan.request.subject.kind == 'assistant'
-    assert len(plan.request.filters) == 1
-    assert schema.validation_code(plan.request) == expected_validation
+    with pytest.raises(ValueError, match='Invalid expanded semantic schema'):
+        codec.encode(payload)
+    # The invented filter survives intact and is classified, never silently dropped.
+    request = SemanticFactRequest.model_validate(payload['request'])
+    assert len(request.filters) == 1
+    assert request.filters[0].property == 'display_name'
+    assert schema.validation_code(request) == 'INVALID_PLAN'
     # Control is a different plan, not a repair performed by the codec/runtime.
     control = SemanticPlan.model_validate({'requires_fact': True, 'request': {
         'operation': 'resolve_reference', 'subject': {'kind': 'assistant'},

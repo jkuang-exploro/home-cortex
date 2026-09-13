@@ -172,7 +172,13 @@ async def test_new_property_and_translation_are_declarative_and_service_uses_the
     raw = yaml.safe_load(ONTOLOGY.read_text())
     raw['properties']['preferred_language'] = {
         'fields': ['language'], 'aliases': [], 'label': {'en': 'preferred language', 'zh': '首选语言'},
-        'value_labels': {'ja': {'en': 'Japanese', 'zh': '日语'}},
+        'type': {'kind': 'string'},
+        'applies_to': {'entity': ['person'], 'relationship': []},
+        'filter_operators': ['eq', 'in', 'exists'],
+        'values': {
+            'ja': {'label': {'en': 'Japanese', 'zh': '日语'}},
+            'en': {'label': {'en': 'English', 'zh': '英语'}},
+        },
     }
     path = tmp_path / 'custom-ontology.yaml'
     path.write_text(yaml.safe_dump(raw, allow_unicode=True))

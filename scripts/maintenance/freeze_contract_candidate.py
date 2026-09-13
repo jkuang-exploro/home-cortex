@@ -28,7 +28,6 @@ def sha(data):
 def freeze(output: Path):
     from scripts.benchmarks.composition_eval import household_engine, composition_fingerprint_payload
     from home_cortex.semantic_schema import SemanticSchemaRegistry
-    from home_cortex.semantic_ontology import SemanticOntology
 
     payload = {}
     # Deliberate allowlist. In particular, exclude data/, docker envs, .git,
@@ -43,16 +42,14 @@ def freeze(output: Path):
     views = {}
     for household in ('alpha', 'beta', 'gamma'):
         engine, _ = household_engine(household)
-        for version, ontology in [('v1', engine.schema.ontology), ('v2', SemanticOntology.from_file(ROOT / 'schemas/semantic/ontology-v2.yaml'))]:
-            schema = SemanticSchemaRegistry(engine.schema.catalog, ontology)
-            for kind, view in [('capabilities', schema.planner_capability_payload()), ('output-schema', schema.planner_output_schema())]:
-                name = f'contract-views/{household}-{version}-{kind}.json'
-                payload[name] = encoded(view)
-                views[name] = {'sha256': sha(payload[name]), 'bytes': len(payload[name])}
-            if schema.contracts:
-                views[f'{household}-resolved-contract'] = {'sha256': schema.contracts.fingerprint}
+        schema = SemanticSchemaRegistry(engine.schema.catalog)
+        for kind, view in [('capabilities', schema.planner_capability_payload()), ('output-schema', schema.planner_output_schema())]:
+            name = f'contract-views/{household}-{kind}.json'
+            payload[name] = encoded(view)
+            views[name] = {'sha256': sha(payload[name]), 'bytes': len(payload[name])}
+        views[f'{household}-resolved-contract'] = {'sha256': schema.contracts.fingerprint}
     manifest = {
-        'format': 1, 'profile': 'explicit ontology-v2.yaml; default ontology.yaml remains V1',
+        'format': 1, 'profile': 'canonical typed ontology contract (schemas/semantic/ontology.yaml)',
         'git_base': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         'files': {name: sha(data) for name, data in sorted(payload.items())},
         'views': views, 'composition': composition_fingerprint_payload(),

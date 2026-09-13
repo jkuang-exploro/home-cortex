@@ -1,22 +1,34 @@
-version: 1
+version: 2
 
 properties:
   display_name:
     label: {en: name, zh: 姓名}
     fields: [display_name, name, full_name]
     aliases: [姓名, 名字, name, display name]
+    type: {any_of: [{kind: string}, {kind: collection, items: {kind: string}}]}
+    applies_to: {entity: [person], relationship: []}
+    filter_operators: [exists]
   given_name:
     label: {en: given name, zh: 名字}
     fields: [given_name, first_name]
     aliases: [名字, given name, first name]
+    type: {any_of: [{kind: string}, {kind: collection, items: {kind: string}}]}
+    applies_to: {entity: [person], relationship: []}
+    filter_operators: [exists]
   family_name:
     label: {en: family name, zh: 姓氏}
     fields: [family_name, last_name, surname]
     aliases: [姓氏, surname, family name, last name]
+    type: {any_of: [{kind: string}, {kind: collection, items: {kind: string}}]}
+    applies_to: {entity: [person], relationship: []}
+    filter_operators: [exists]
   form_of_address:
     label: {en: form of address, zh: 称呼}
     fields: [form_of_address, address_as]
     aliases: [称呼, form of address]
+    type: {any_of: [{kind: string}, {kind: collection, items: {kind: string}}, {kind: object}]}
+    applies_to: {entity: [person], relationship: []}
+    filter_operators: [exists]
   birth_date:
     label: {en: birth date, zh: 出生日期}
     ordering:
@@ -24,17 +36,26 @@ properties:
       maximum: [年幼, 年纪小, 年龄最小, 出生最晚, younger, youngest, latest born]
     fields: [birth_date, birthday, dob, date_of_birth]
     aliases: [生日, 出生日期, 出生时间, 哪天出生, birthday, birth date, date of birth, born]
+    type: {kind: date}
+    applies_to: {entity: [person], relationship: []}
+    filter_operators: &ordered_filters [eq, ne, gt, gte, lt, lte, in, exists, date_range]
   full_address:
     label: {en: street address, zh: 具体住址}
     fields: [full_address, address, street_address]
     aliases: [住址, 地址, 街道地址, full address, street address]
+    type: {any_of: [{kind: string}, {kind: object}]}
+    applies_to: {entity: [address], relationship: []}
+    filter_operators: [exists]
   gender:
     label: {en: gender, zh: 性别}
-    value_labels:
-      female: {en: female, zh: 女性}
-      male: {en: male, zh: 男性}
+    values:
+      female: {aliases: [女, 女性, female], label: {en: female, zh: 女性}}
+      male: {aliases: [男, 男性, male], label: {en: male, zh: 男性}}
     fields: [gender, sex]
     aliases: [性别, gender, sex]
+    type: {kind: string}
+    applies_to: {entity: [person], relationship: []}
+    filter_operators: [eq, ne, in, exists]
   household_role:
     label: {en: household role, zh: 家庭角色}
     value_labels:
@@ -43,14 +64,23 @@ properties:
       minor_dependent: {en: minor dependent, zh: 未成年受扶养人}
     fields: [household_role, member_role, role]
     aliases: [家庭角色, household role]
+    type: {kind: string}
+    applies_to: {entity: [], relationship: [member, residence]}
+    filter_operators: [eq, ne, in, exists]
   start_date:
     label: {en: start date, zh: 开始日期}
     fields: [start, since, start_date]
     aliases: [开始日期, 起始日期, 结婚日期, start date, since]
+    type: {kind: date}
+    applies_to: {entity: [], relationship: [spouse, child, parent, member, residence]}
+    filter_operators: *ordered_filters
   end_date:
     label: {en: end date, zh: 结束日期}
     fields: [end, until, end_date]
     aliases: [结束日期, end date, until]
+    type: {kind: date}
+    applies_to: {entity: [], relationship: [spouse, child, parent, member, residence]}
+    filter_operators: *ordered_filters
   item_type:
     item_writable: string
     label: {en: item type, zh: 物品类型}
@@ -65,50 +95,77 @@ properties:
       unknown: {en: unknown, zh: 未知}
     fields: [item_type]
     aliases: [物品类型, 物品类别, 类别, item type, item category, product category]
+    type: {kind: string}
+    applies_to: {entity: [item], relationship: []}
+    filter_operators: [eq, ne, in, exists]
   brand:
     item_writable: string
     label: {en: brand, zh: 品牌}
     fields: [brand]
     aliases: [品牌, brand]
+    type: {kind: string}
+    applies_to: {entity: [item], relationship: []}
+    filter_operators: [eq, ne, in, exists]
   model:
     item_writable: string
     label: {en: model, zh: 型号}
     fields: [model]
     aliases: [型号, model]
+    type: {kind: string}
+    applies_to: {entity: [item], relationship: []}
+    filter_operators: [eq, ne, in, exists]
   color:
     item_writable: string
     label: {en: color, zh: 颜色}
     fields: [color]
     aliases: [颜色, color]
+    type: {kind: string}
+    applies_to: {entity: [item], relationship: []}
+    filter_operators: [eq, ne, in, exists]
   quantity:
     item_writable: number
     write_hint: "Only explicitly stated numeric quantity; do not default to 1 from a/an or a singular noun."
     label: {en: quantity, zh: 数量}
     fields: [quantity]
     aliases: [数量, quantity]
+    type: {kind: number}
+    applies_to: {entity: [item], relationship: []}
+    filter_operators: [eq, ne, gt, gte, lt, lte, in, exists]
   unit:
     item_writable: string
     write_hint: "Only an explicitly supplied counting or measurement unit. No default unit, and do not invent a Chinese measure word for English input."
     label: {en: unit, zh: 单位}
     fields: [unit]
     aliases: [单位, unit]
+    type: {kind: string}
+    applies_to: {entity: [item], relationship: []}
+    filter_operators: [eq, ne, in, exists]
   description:
     item_writable: string
     write_hint: "Only an explicitly supplied description beyond the identifying noun phrase. Never copy the item name, command, or a generated summary into this field."
     label: {en: description, zh: 描述}
     fields: [description]
     aliases: [描述, description]
+    type: {kind: string}
+    applies_to: {entity: [item], relationship: []}
+    filter_operators: [eq, ne, in, exists]
   expiration_date:
     item_writable: date
     label: {en: expiration date, zh: 到期日期}
     fields: [expiration_date]
     aliases: [到期日期, expiration date]
+    type: {kind: date}
+    applies_to: {entity: [item], relationship: []}
+    filter_operators: *ordered_filters
   space_type:
     label: {en: space type, zh: 空间类型}
     value_labels:
       room: {en: room, zh: 房间}
     fields: [space_type, type]
     aliases: [空间类型, 房间类型, space type, room type]
+    type: {kind: string}
+    applies_to: {entity: [space], relationship: []}
+    filter_operators: [eq, ne, in, exists]
 
 policy_values:
   adulthood_years: 18

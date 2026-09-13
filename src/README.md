@@ -22,15 +22,16 @@ or normalize input values. Missing labels fall back to English, then the semanti
 key or literal. No new sentence template is needed for an additional filter.
 The model-facing capabilities and output schema omit this display metadata.
 
-The display extension remains compatible with ontology version 1. An opt-in V2
-contract candidate is available in `schemas/semantic/ontology-v2.yaml`; pass the
-loaded ontology into `SemanticSchemaRegistry` for both planner and executor.
-V2 generates typed filter constraints and validates declared types, domains,
-ownership and stored inputs. The default ontology remains V1 pending evaluation.
+`schemas/semantic/ontology.yaml` is the single canonical contract, declared as
+`version: 2`. Every property declares its `type`, its `applies_to` owners and its
+`filter_operators`; a closed domain declares `values` instead of `value_labels`.
+The registry generates typed filter constraints from those declarations and
+validates declared types, domains, ownership and stored inputs, so an undeclared
+catalog field is not addressable as a semantic property.
 See the [contract implementation and evaluation handoff](../artifacts/generic-contracts/REPORT.md).
-Deploy the updated loader with the
-labeled ontology; older loaders reject the new fields. Unlabeled V1 ontologies
-remain supported. See the [before/after report](../artifacts/condition-rendering/REPORT.md)
+Deploy the loader with the
+labeled ontology; older loaders reject the typed fields. See the
+[before/after report](../artifacts/condition-rendering/REPORT.md)
 for validation and presentation limitations.
 
 ## Endpoints
@@ -754,14 +755,14 @@ The schema-named modules own different facts:
 | `edge_schema.py` | physical relationship tables, directions, endpoints, temporal fields, and inverses | natural-language concepts |
 | `schema_catalog.py` | deployed node/edge fields and types, plus shared name/appellation matching | planner grammar |
 | `semantic_schema.py` | binding ontology vocabulary to the catalog, plan validation, and derived planner capabilities | a second ontology |
-| `semantic_contracts.py` | opt-in V2 typed property constraints | the default V1 vocabulary or execution flow |
+| `semantic_contracts.py` | typed property constraints resolved from the canonical ontology | the deployed catalog fields |
 | `operator_registry.py` | the public operation type, predicate allowlist, validation contracts, and deterministic implementations | entity resolution or rendering |
 
 `semantic_ir.py` is the canonical read IR. `mutation_ir.py` remains separate
 because writes add preview/apply modes, update constraints, and confirmation
-semantics that no factual request carries. `semantic_contracts.py` remains only
-for the explicitly loaded V2 candidate; default V1 execution does not convert
-through it.
+semantics that no factual request carries. `semantic_contracts.py` holds the
+typed contract that `SemanticSchemaRegistry` resolves once per deployment; plan
+validation and capability generation both read that single resolved contract.
 
 Speaker identity is established once by `AgentService` from the authenticated
 identity mapping. The same `AgentRequestContext` reaches discourse resolution,

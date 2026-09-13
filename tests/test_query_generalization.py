@@ -28,11 +28,7 @@ from home_cortex.semantic_planner import (
     _object_location_mismatch,
 )
 from home_cortex.semantic_schema import SemanticSchemaRegistry
-from home_cortex.semantic_ontology import SemanticOntology
 from test_semantic_contract import household
-
-
-V2_ONTOLOGY = Path(__file__).parents[1] / "schemas/semantic/ontology-v2.yaml"
 
 
 def _write(root, kind: str, name: str, rows: list[dict]) -> None:
@@ -152,24 +148,6 @@ async def test_declared_room_path_and_named_item_location_are_household_scoped(t
     located = fridge_result.value if isinstance(fridge_result.value, list) else [fridge_result.value]
     assert [item["id"] for item in located] == ["space:kitchen_a"]
 
-    v2_schema = SemanticSchemaRegistry(
-        RuntimeSchemaCatalog.from_data_dir(tmp_path, engine.schema.edge_registry),
-        SemanticOntology.from_file(V2_ONTOLOGY),
-    )
-    v2_rooms = SemanticFactRequest.model_validate(
-        v2_schema.expand_planner_concepts({
-            "request": {
-                "operation": "count",
-                "subject": {
-                    "kind": "current_household",
-                    "entity_type": "address",
-                    "path": [{"concept": "room"}],
-                },
-            }
-        })["request"]
-    )
-    assert v2_schema.validates(v2_rooms)
-
 
 @pytest.mark.asyncio
 async def test_named_space_contents_filter_by_stored_item_type(tmp_path):
@@ -248,10 +226,14 @@ def test_active_contract_rejects_declared_disjoint_predicates(tmp_path):
     request = SemanticFactRequest.model_validate(payload["request"])
     assert engine.schema.contract_error(request) == "CONTRADICTORY_PREDICATES"
     assert engine.schema.validation_code(request) == "INVALID_PLAN"
-    assert engine.schema.planner_capability_payload()["predicate_disjointness"] == {
-        "adult": ["minor"],
-        "minor": ["adult"],
-    }
+    # Predicates are advertised only when this deployment binds their fallback
+    # property; the contradiction is still rejected from the declaration itself.
+    assert engine.schema.planner_capability_payload()["predicate_disjointness"] == {}
+
+
+def test_disjoint_predicates_are_advertised_once_their_fallback_binds(household):
+    payload = household[0].schema.planner_capability_payload()
+    assert payload["predicate_disjointness"] == {"adult": ["minor"], "minor": ["adult"]}
 
 
 @pytest.mark.asyncio

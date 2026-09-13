@@ -116,14 +116,26 @@ class SemanticTransport:
     def _convert(self, value: Any, node: Any, *, decode: bool) -> Any:
         node = self._resolve(node)
         if 'anyOf' in node:
+            fallback = None
             for branch in node['anyOf']:
                 if decode:
                     wire_schema = {**self._schema(branch), '$defs': self.schema['$defs']}
                     matches = Draft202012Validator(wire_schema).is_valid(value)
                 else:
                     matches = Draft202012Validator({**self._shape_schema(branch), '$defs': self._shape_schema(self.expanded_schema.get('$defs', {}))}).is_valid(value)
-                if matches:
-                    return self._convert(value, branch, decode=decode)
+                if not matches:
+                    continue
+                if decode:
+                    return self._convert(value, branch, decode=True)
+                # Branches can share a shape but differ in which fields are required.
+                # Prefer one the value satisfies under its real constraints so the
+                # emitted layout is accepted by the schema the wire is validated against.
+                strict = {**self._resolve(branch), '$defs': self.expanded_schema.get('$defs', {})}
+                if Draft202012Validator(strict).is_valid(value):
+                    return self._convert(value, branch, decode=False)
+                fallback = fallback if fallback is not None else branch
+            if fallback is not None:
+                return self._convert(value, fallback, decode=False)
             raise ValueError('Invalid semantic transport union')
         if node.get('type') == 'object' and 'properties' in node:
             required = sorted(node.get('required', []))
