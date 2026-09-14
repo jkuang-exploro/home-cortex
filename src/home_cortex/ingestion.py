@@ -16,6 +16,12 @@ from .record_ids import (
     canonical_record_id,
 )
 from .schema_catalog import node_table_sources
+from .spatial.contracts import (
+    apply_located_in_pose,
+    apply_space_spatial_fields,
+    located_in_endpoints_allowed,
+    reject_non_space_spatial_fields,
+)
 
 TABLE_PATTERN = TABLE_NAME_RE
 _RETIRED_EDGE_TABLES = ("contained_in", "resides_in")
@@ -228,6 +234,12 @@ async def ingest_directory(
                     path,
                     record_id.table_name,
                 )
+                if record_id.table_name == "space":
+                    apply_space_spatial_fields(record, source=path)
+                else:
+                    reject_non_space_spatial_fields(
+                        record, record_id.table_name, source=path
+                    )
                 content = {key: value for key, value in record.items() if key != "id"}
                 table_nodes.append(_PreparedNode(record_id, content))
         prepared_nodes[table] = table_nodes
@@ -268,11 +280,21 @@ async def ingest_directory(
 
             source = parse_record_id(raw_from, source=path)
             target = parse_record_id(raw_to, source=path)
-            registry.validate_endpoints(
-                relation,
-                source.table_name,
-                target.table_name,
-            )
+            if relation == "located_in":
+                if not located_in_endpoints_allowed(
+                    source.table_name, target.table_name
+                ):
+                    raise ValueError(
+                        f"Invalid located_in endpoints: {source.table_name} -> "
+                        f"{target.table_name}; expected item -> address|space "
+                        "or space -> space"
+                    )
+            else:
+                registry.validate_endpoints(
+                    relation,
+                    source.table_name,
+                    target.table_name,
+                )
             for endpoint, role in ((source, "from"), (target, "to")):
                 canonical_endpoint = canonical_record_id(endpoint)
                 if canonical_endpoint not in known_node_ids:
@@ -281,6 +303,10 @@ async def ingest_directory(
                         f"{canonical_endpoint!r}"
                     )
             _validate_temporal_fields(record, path, schema)
+            if relation == "located_in":
+                apply_located_in_pose(
+                    record, target_type=target.table_name, source=path
+                )
 
             pair = _edge_pair(schema, source, target)
             if pair in seen_pairs:

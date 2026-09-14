@@ -139,13 +139,34 @@ remain in human-editable `data/edges/*.json`. The initial registry defines:
   the derived inverse name `child_of`;
 - `lives_in` as a directed temporal Person-to-Address relationship;
 - `located_in` as a directed, non-temporal Item-to-Address-or-Space
-  relationship;
+  relationship. Optional SI pose (`position` in meters, `orientation` in
+  radians) is interpreted in the target space's intrinsic coordinates and is
+  invalid when the target is an Address. Coordinate-free edges remain valid.
+  Ingestion also accepts Space-to-Space `located_in` as physical placement;
+  the edge schema's `from_types` stay item-only so semantic `contents` remain
+  item-typed. `hosted_by` remains structural containment;
 - `hosted_by` as a directed, non-temporal Space-to-Item-or-Space relationship with the
   derived inverse name `hosts_space`.
 
+A Space may optionally declare intrinsic Cartesian metadata (`coordinate`,
+`geometry` as a box, `navigable`, `accessible`). Canonical units are meters,
+radians, and seconds. Validation lives in `home_cortex.spatial`; this is not a
+planner property and does not introduce localization or ROS. Structured
+metric/imperial conversion and nested pose composition are pure functions in
+`spatial.units` and `spatial.transforms` (z-up, intrinsic yaw-pitch-roll). The
+LLM never converts measurements. Runtime robot pose (`spatial.pose`) is an
+ephemeral estimate in a known space: it is not stored on `space.json` and does
+not assume a starting corner. Optional surveyed anchors (`spatial.anchors`) are
+development calibration points; deleting them does not change the space
+coordinate system. `spatial.localize` solves the robot body pose in a known
+space from surveyed anchor poses plus camera-frame observations and a
+camera-in-body transform. The start pose is not an input. Detectors must emit
+`spatial.observation` records; they do not define the ontology.
+
 Store each fact once. Model an addressable home as an Address, its physical
 house as an Item located at that Address, and its rooms as Spaces hosted by the
-house Item. Do not add a reverse spouse edge or a `child_of.json` file.
+house Item. A Space may also be `located_in` another Space. Do not add a reverse
+spouse edge or a `child_of.json` file.
 Likewise, do not add `hosts_space.json`; inverse hosted-space traversal uses the
 canonical `hosted_by` table. `get_relationships` consults the registry,
 accepts `out`, `in`, or `both` directions, and excludes ended temporal edges
