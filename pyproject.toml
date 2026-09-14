@@ -17,6 +17,7 @@ dependencies = [
     "uvicorn[standard]>=0.35,<1",
     "pytest>=8,<9",
     "pytest-asyncio>=1,<2",
+    "pytest-cov>=6,<8",
     "httpx2>=2,<3",
 ]
 
@@ -30,6 +31,7 @@ dev = [
     "tiktoken>=0.9,<1",
     "pytest>=8,<9",
     "pytest-asyncio>=1,<2",
+    "pytest-cov>=6,<8",
     "httpx2>=2,<3",
 ]
 
