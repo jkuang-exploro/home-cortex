@@ -1,0 +1,16 @@
+{
+  "mode": "isolated_integrated_planner_only",
+  "branches": [
+    {"utterance": "Who am I?", "kind": "fact", "calls": 1, "validation": "VALID"},
+    {"utterance": "Preview moving the mug to the kitchen.", "kind": "mutation", "mode": "preview", "calls": 1, "validation": "VALID"},
+    {"utterance": "Who am I? Delete the lamp record.", "kind": "multi_intent", "calls": 1, "validation": "VALID"},
+    {"utterance": "Write a short poem about autumn.", "kind": "conversation", "calls": 1, "validation": "NOT_A_FACT"}
+  ],
+  "critical_confirmation": {
+    "passes": 3,
+    "son_name": "3/3 valid resolve_reference after one validation retry",
+    "self_name": "3/3 valid resolve_reference in one call",
+    "unspecified_marriage_duration": "3/3 valid date_difference in days in one call"
+  },
+  "graph_or_write_execution_available_to_probe": false
+}

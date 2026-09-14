@@ -127,6 +127,20 @@ class _ChatOllama:
     async def plan_semantic_fact(self, *args: Any, **kwargs: Any) -> Any:
         return await self.interpreter.plan_semantic_fact(*args, **kwargs)
 
+    async def plan_unified_semantic(self, messages: Any, output_schema: Any) -> Any:
+        payload = await self.interpreter.plan_semantic_fact(
+            messages, {}, output_schema
+        )
+        if not isinstance(payload, Mapping):
+            return payload
+        return {
+            "requires_fact": False,
+            "request": None,
+            "mutation": None,
+            "multi_intent": False,
+            **payload,
+        }
+
     async def chat_with_tools(
         self, messages: list[dict[str, Any]], tools: Any
     ) -> ChatResponse:

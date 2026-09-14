@@ -403,16 +403,18 @@ current-turn mutation intent. The interpreter emits `requires_fact: false`,
 the full `location_name` for creation/movement, and `mode`. Create also carries
 bilingual display names (`name_en`, `name_zh`) and a readable `item_key` used as
 `item:<item_key>`. Creation and attribute
-updates carry `attributes` keyed by semantic property names. Read requests and mutations
-are mutually exclusive. The agent invokes the tool after interpretation, including
+updates carry `attributes` keyed by semantic property names. The one-call interpreter
+chooses exactly one fact, mutation, conversation, or multi-intent branch. Read requests
+and mutations are mutually exclusive. The agent invokes the tool after interpretation, including
 for streaming responses. Discourse replay returns mutation intents without running
 them; the ordinary conversation loop cannot invoke `write_item`.
 
-Mutation-enabled agents first run a small structured intent compiler with only
-the current user turn. Non-mutations continue through the unchanged read prompt,
-examples, and read-only output schema. This adds one model call to ordinary reads
-for those agents; planner diagnostics include both calls. Read-only agents and
-the fact benchmark do not run the mutation classifier.
+Mutation-enabled agents use `UnifiedSemanticPlanner`, which composes the declared
+fact grammar and canonical named-item mutation contract in one structured call.
+A turn with more than one independent fact or mutation objective emits only the
+non-executable multi-intent branch; the service performs no graph query or write
+and asks the user for one instruction at a time. Read-only agents and the fact
+benchmark continue to use `SemanticFactPlanner`.
 
 The model-facing adapter resolves names within the configured household and
 stores create names as `{en, zh}` using the interpreter translations. New
@@ -721,9 +723,10 @@ See [the audit report](../artifacts/token-latency-audit/REPORT.md) for results a
 ## Semantic ownership and convergence
 
 `AgentService` constructs the trusted `AgentRequestContext`; conversation focus
-extends it and named mutations receive that same context. `SemanticFactPlanner`
-compiles model output through ontology expansion and validation into
-`SemanticFactRequest`. `HouseholdFactEngine` executes it using `EntityResolver`
+extends it and named mutations receive that same context. `UnifiedSemanticPlanner`
+or the read-only `SemanticFactPlanner` compiles model output through ontology
+expansion and validation into the canonical `SemanticPlan` envelope.
+`HouseholdFactEngine` executes its `SemanticFactRequest` using `EntityResolver`
 and returns `FactResult` for deterministic rendering. Invalid location plans
 are never rewritten into a different request.
 
@@ -733,7 +736,7 @@ The request path has one representation at each semantic boundary:
 |---|---|---|---|
 | HTTP and identity | `api.py`, `agent_service.py` | `AgentRequestContext` | authenticated headers and messages → trusted context |
 | Conversation focus | `semantic_conversation.py` | `DiscourseContext` | prior resolved focus → scoped context extension |
-| Interpretation | `semantic_planner.py` | `SemanticPlan` | utterance plus capabilities → validated request or mutation |
+| Interpretation | `unified_semantic_planner.py`, `semantic_planner.py` | `SemanticPlan` | utterance plus capabilities → one validated branch |
 | Read request | `semantic_ir.py` | `SemanticFactRequest` | semantic plan → unchanged executor input |
 | Grounding | `entity_resolver.py` | `ResolvedEntities` | semantic references plus context → graph entities and edges |
 | Computation | `household_fact_engine.py` | `FactResult` | grounded request → deterministic value and evidence |

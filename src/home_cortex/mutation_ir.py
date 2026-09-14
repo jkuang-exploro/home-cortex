@@ -176,9 +176,15 @@ def read_plan_schema(schema):
     """Keep the read compiler's schema stable as the overall intent union grows."""
     from copy import deepcopy
     result = deepcopy(dict(schema))
-    if 'mutation' not in result.get('properties', {}):
+    removable = {'mutation', 'multi_intent'}.intersection(
+        result.get('properties', {})
+    )
+    if not removable:
         return result
-    result['properties'].pop('mutation', None)
+    for name in removable:
+        result['properties'].pop(name, None)
+        if name in result.get('required', []):
+            result['required'].remove(name)
     definitions = result.get('$defs', {})
     needed = set()
 

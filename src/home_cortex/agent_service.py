@@ -31,6 +31,7 @@ from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_ir import FactAnswer, AgentRequestContext, SemanticMutationIntent
 from .household_fact_engine import HouseholdFactEngine
 from .semantic_planner import SemanticFactPlanner
+from .unified_semantic_planner import UnifiedSemanticPlanner
 from .semantic_facts import SemanticFactService
 from .semantic_schema import SemanticSchemaRegistry
 from .semantic_writing import render_mutation_result
@@ -92,13 +93,18 @@ class AgentService:
         self._clock = clock
         self._mutation_enabled = any(tool["function"]["name"] == "write_item" for tool in tools)
         semantic_schema = SemanticSchemaRegistry(schema_catalog)
+        semantic_planner = (
+            UnifiedSemanticPlanner(ollama, semantic_schema)
+            if self._mutation_enabled
+            else SemanticFactPlanner(ollama, semantic_schema)
+        )
         self.semantic_facts = SemanticFactService(
             HouseholdFactEngine(
                 dispatcher,
                 semantic_schema,
                 max_records=self.model_loop.max_tool_records,
             ),
-            planner=SemanticFactPlanner(ollama, semantic_schema, enable_mutations=self._mutation_enabled),
+            planner=semantic_planner,
         )
 
         self.semantic_conversations = SemanticConversationService(self.semantic_facts)

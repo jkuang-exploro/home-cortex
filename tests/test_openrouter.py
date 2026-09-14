@@ -168,6 +168,42 @@ async def test_openrouter_planner_uses_json_schema_and_parses_content() -> None:
 
 
 @pytest.mark.asyncio
+async def test_openrouter_unified_planner_uses_supplied_prompt_and_schema() -> None:
+    captured: dict[str, Any] = {}
+    decision = {
+        "requires_fact": False,
+        "request": None,
+        "mutation": None,
+        "multi_intent": True,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_completion(json.dumps(decision)))
+
+    service = OpenRouterService(
+        "https://openrouter.ai/api/v1",
+        "test/model",
+        api_key="sk-or-test",
+        client=_client(handler),
+    )
+    messages = [{"role": "system", "content": "unified"}]
+    schema = {"type": "object", "required": ["multi_intent"]}
+
+    result = await service.plan_unified_semantic(messages, schema)
+
+    body = captured["body"]
+    assert result == decision
+    assert body["messages"] == messages
+    assert body["response_format"]["json_schema"] == {
+        "name": "UnifiedSemanticPlan",
+        "strict": False,
+        "schema": schema,
+    }
+    await service.close()
+
+
+@pytest.mark.asyncio
 async def test_openrouter_streaming_yields_content_then_completed_tool_calls() -> None:
     chunks = [
         'data: {"choices":[{"delta":{"content":"Hello "}}]}\n\n',

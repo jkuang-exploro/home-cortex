@@ -8,6 +8,7 @@ import sys
 import pytest
 
 from home_cortex.semantic_ir import SemanticFactRequest, SemanticPlan
+from home_cortex.mutation_ir import read_plan_schema
 from home_cortex.semantic_schema import SemanticSchemaRegistry
 from scripts.profiling.semantic_transport import (
     SemanticTransport, canonical_json, pack_capabilities, unpack_capabilities,
@@ -62,6 +63,12 @@ def test_nonfact_and_explicit_defaults_are_equivalent():
     plan = SemanticPlan(requires_fact=False)
     assert codec.decode_plan(codec.encode(plan)) == plan
     assert codec.encode(plan) == codec.encode(SemanticPlan(requires_fact=False, request=None))
+
+
+def test_read_only_output_schema_excludes_write_and_multi_intent_branches():
+    properties = read_plan_schema(SemanticPlan.model_json_schema())["properties"]
+    assert "mutation" not in properties
+    assert "multi_intent" not in properties
 
 
 @pytest.mark.parametrize('mutation', ['version', 'unknown', 'enum', 'duplicate', 'trailing', 'nan', 'fence', 'type', 'expanded', 'extra_slot', 'bool_version', 'overflow'])
@@ -176,7 +183,7 @@ def test_transport_dictionary_version_snapshot():
     from scripts.profiling.semantic_transport import fingerprint
     codec = SemanticTransport(SemanticPlan.model_json_schema())
     # Changing field allocation requires an intentional codec version change.
-    assert (codec.version, fingerprint(codec.aliases)[:8]) == (4, 'd429a8f4')
+    assert (codec.version, fingerprint(codec.aliases)[:8]) == (5, 'a0a6ce22')
 
 
 @pytest.mark.parametrize('filter_wire', [

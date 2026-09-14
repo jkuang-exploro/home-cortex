@@ -12,6 +12,7 @@ from scripts import PROJECT_ROOT
 from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service, collect_provenance, summarize_latencies
 from home_cortex.ollama import OllamaService
 from home_cortex.request_tracing import trace_request
+from scripts.probes.two_stage_semantic_planner import LegacyTwoStagePlanner
 
 
 class ObservedOllama(OllamaService):
@@ -30,7 +31,7 @@ async def run(args):
     cases = yaml.safe_load(args.eval.read_text())
     client = ObservedOllama(args.ollama_url, args.model)
     service, context = build_json_fact_service(args.data_dir, PROJECT_ROOT / 'schemas/edge', client)
-    service.planner.enable_mutations = True
+    service.planner = LegacyTwoStagePlanner(client, service.engine.schema)
     rows = []
     try:
         for sample in range(-1, args.repeat):

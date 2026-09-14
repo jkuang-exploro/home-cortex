@@ -8,14 +8,15 @@ from jsonschema.exceptions import ValidationError as JSONSchemaValidationError
 from ollama import ChatResponse
 
 from home_cortex.ollama import OllamaService
-from home_cortex.semantic_ir import SemanticPlan
-from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
-from scripts.probes.unified_semantic_planner import (
-    UnifiedShadowPlanner,
+from home_cortex.semantic_ir import AgentRequestContext, SemanticPlan
+from home_cortex.unified_semantic_planner import (
+    UnifiedSemanticPlanner,
     unified_chat_messages,
     unified_output_schema,
     validate_unified_payload,
 )
+from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
+from scripts.probes.unified_semantic_planner import UnifiedShadowPlanner
 from scripts.profiling.summarize_unified_experiment import summarize
 
 
@@ -133,6 +134,13 @@ def test_unified_schema_rejects_parallel_branches_and_unknown_write_attributes()
         "multi_intent": False,
     }
     assert list(validator.iter_errors(invalid_attribute))
+    missing_mode = {
+        "requires_fact": False,
+        "request": None,
+        "mutation": {"operation": "delete", "item_name": "lamp"},
+        "multi_intent": False,
+    }
+    assert list(validator.iter_errors(missing_mode))
 
 
 def test_unified_prompt_transforms_existing_mutation_examples_into_semantic_plan():
@@ -197,6 +205,45 @@ async def test_shadow_planner_returns_intent_without_execution():
     assert result.attempts == 1
     assert len(client.calls) == 1
     assert client.calls[0]["format"] == unified_output_schema(schema)
+
+
+@pytest.mark.asyncio
+async def test_production_unified_planner_uses_one_call_for_valid_result():
+    schema = _schema()
+    payload = {
+        "requires_fact": False,
+        "request": None,
+        "mutation": None,
+        "multi_intent": True,
+    }
+
+    class Interpreter:
+        last_planner_runtime = {"prompt_eval_count": 11269, "eval_count": 18}
+
+        def __init__(self):
+            self.calls = []
+
+        async def plan_unified_semantic(self, messages, output_schema):
+            self.calls.append((messages, output_schema))
+            return payload
+
+    interpreter = Interpreter()
+    planner = UnifiedSemanticPlanner(interpreter, schema)
+    outcome = await planner.plan(
+        [{"role": "user", "content": "Who am I, and where is the lamp?"}],
+        AgentRequestContext(
+            caller_entity_id="person:test",
+            assistant_id="steward",
+            assistant_display_name="Steward",
+            household_id="address:home",
+            current_time=datetime(2026, 9, 13),
+            locale="en",
+        ),
+    )
+    assert outcome.plan.multi_intent is True
+    assert outcome.diagnostics.attempt_count == 1
+    assert outcome.diagnostics.prompt_eval_count == 11269
+    assert len(interpreter.calls) == 1
 
 
 def test_shadow_summary_reports_paired_safety_regression():

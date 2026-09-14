@@ -1,0 +1,48 @@
+{
+  "mode": "isolated_paired_frozen_json",
+  "requests_per_route": 171,
+  "existing": {
+    "llm_calls_p50": 2.0,
+    "llm_calls_p95": 2.0,
+    "input_tokens_p50": 9453.0,
+    "input_tokens_p95": 9478.5,
+    "output_tokens_p50": 59.0,
+    "output_tokens_p95": 70.5,
+    "latency_ms_p50": 2623.162,
+    "latency_ms_p95": 2852.817,
+    "validation_failures": 2,
+    "length_stops": 0,
+    "plan_correct": 154,
+    "answer_correct": 150
+  },
+  "unified": {
+    "llm_calls_p50": 1.0,
+    "llm_calls_p95": 1.0,
+    "input_tokens_p50": 11269.0,
+    "input_tokens_p95": 11297.0,
+    "output_tokens_p50": 56.0,
+    "output_tokens_p95": 64.0,
+    "latency_ms_p50": 1706.96,
+    "latency_ms_p95": 1931.136,
+    "validation_failures": 0,
+    "length_stops": 0,
+    "plan_correct": 165,
+    "answer_correct": 162
+  },
+  "paired_deltas": {
+    "plan_regressions": 1,
+    "plan_improvements": 12,
+    "answer_regressions": 0,
+    "answer_improvements": 12,
+    "sole_plan_regression": {
+      "case_id": "144:residence_address::告诉我家庭地址",
+      "answer_unchanged_and_correct": true
+    }
+  },
+  "contract": {
+    "branches": ["fact", "mutation", "conversation", "multi_intent"],
+    "schema_bytes": 40346,
+    "message_content_bytes": 47804,
+    "messages_sha256": "760f9e46c3154b7e0b7fd90d8ea8b25d5d56386b0d3a5ea8ca71fb40c6512239"
+  }
+}

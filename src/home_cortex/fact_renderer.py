@@ -283,6 +283,8 @@ class FactRenderer:
             return "当前语义查询协议不支持这项计算。"
         if result.status == "semantic_plan_unsupported":
             return "老管家无法将这个请求转换为受支持的家庭事实查询。"
+        if result.status == "multi_intent_unsupported":
+            return "这句话包含多个操作，请一次吩咐一件事。"
         if result.status == "ambiguous":
             names = "、".join(_name(item, "zh") for item in result.candidates)
             return f"找到多个符合条件的家庭成员：{names}。请说明您指哪一位。"
@@ -395,6 +397,9 @@ class FactRenderer:
                 "operator_unsupported": "That semantic operator is not supported.",
                 "semantic_plan_unsupported": (
                     "The request could not be expressed in the supported household query protocol."
+                ),
+                "multi_intent_unsupported": (
+                    "That request contains more than one action. Please give me one instruction at a time."
                 ),
                 "ambiguous": "More than one household entity matches; please clarify which one.",
                 "computation_input_missing": (

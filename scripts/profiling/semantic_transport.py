@@ -16,7 +16,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-CODEC_VERSION = 4
+CODEC_VERSION = 5
 
 
 def canonical_json(value: Any) -> str:

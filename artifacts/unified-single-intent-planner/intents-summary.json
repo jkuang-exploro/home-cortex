@@ -1,0 +1,36 @@
+{
+  "mode": "shadow_only_no_dispatch",
+  "passes": 3,
+  "observations_per_route": 87,
+  "gold": {
+    "standalone_writes": 42,
+    "mixed_intents": 21,
+    "ambiguous_unscored": 24
+  },
+  "existing": {
+    "gold_classification_correct": 36,
+    "standalone_exact_payload": 24,
+    "mixed_partial_plans": 18,
+    "explicit_previews_preserved": "3/15",
+    "explicit_preview_as_commit": 6,
+    "validation_failures": 6,
+    "latency_ms_p50": 1525.924,
+    "latency_ms_p95": 4241.878
+  },
+  "unified": {
+    "gold_classification_correct": 63,
+    "standalone_write_classification": "42/42",
+    "standalone_exact_payload": "34/42",
+    "mixed_multi_intent": "21/21",
+    "mixed_partial_plans": 0,
+    "explicit_previews_preserved": "15/15",
+    "explicit_preview_as_commit": 0,
+    "validation_failures": 0,
+    "length_stops": 0,
+    "llm_calls_p50": 1.0,
+    "llm_calls_p95": 1.0,
+    "latency_ms_p50": 1396.444,
+    "latency_ms_p95": 2523.212
+  },
+  "contract_messages_sha256": "760f9e46c3154b7e0b7fd90d8ea8b25d5d56386b0d3a5ea8ca71fb40c6512239"
+}

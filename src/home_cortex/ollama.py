@@ -370,10 +370,42 @@ class OllamaService:
                 "seed": PLANNER_SEED,
             },
         )
-        self.last_planner_runtime = _ollama_runtime_metrics(response)
+        self.last_planner_runtime = {
+            **_ollama_runtime_metrics(response),
+            "done_reason": response.done_reason,
+        }
         parsed = json.loads(response.message.content or "")
         if not isinstance(parsed, Mapping):
             raise ValueError("Semantic fact planner returned a non-object")
+        return parsed
+
+    async def plan_unified_semantic(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        output_schema: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        """Run the unified interpreter using its already-built canonical prompt."""
+        response = await self._chat(
+            model=self.model,
+            messages=messages,
+            stream=False,
+            think=False,
+            keep_alive=PLANNER_KEEP_ALIVE,
+            format=output_schema,
+            options={
+                "temperature": 0,
+                "num_ctx": PLANNER_NUM_CTX,
+                "num_predict": PLANNER_NUM_PREDICT,
+                "seed": PLANNER_SEED,
+            },
+        )
+        self.last_planner_runtime = {
+            **_ollama_runtime_metrics(response),
+            "done_reason": response.done_reason,
+        }
+        parsed = json.loads(response.message.content or "")
+        if not isinstance(parsed, Mapping):
+            raise ValueError("Unified semantic planner returned a non-object")
         return parsed
 
     async def stream_chat_with_tools(

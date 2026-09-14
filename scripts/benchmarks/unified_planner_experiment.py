@@ -31,6 +31,7 @@ from scripts.probes.unified_semantic_planner import (
     unified_chat_messages,
     unified_output_schema,
 )
+from scripts.probes.two_stage_semantic_planner import LegacyTwoStagePlanner
 
 
 class ObservedOllama(prompts.OllamaService):
@@ -211,7 +212,7 @@ async def run(args):
     service, context = build_json_fact_service(
         args.data_dir, PROJECT_ROOT / "schemas/edge", client
     )
-    service.planner.enable_mutations = True
+    service.planner = LegacyTwoStagePlanner(client, service.engine.schema)
     unified = UnifiedShadowPlanner(client, service.engine.schema)
     rows = []
     try:

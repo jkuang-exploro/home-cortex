@@ -77,13 +77,13 @@ planning-only probe from a frozen package on the GPU host:
 python -m scripts.probes.mutation_routing_probe --data-dir /path/to/frozen-data --repeat 3 --output /tmp/mutation-routing.json
 ```
 
-It enables the existing mutation planner and records calls, typed decisions and
+It reproduces the historical two-stage mutation-first planner and records calls, typed decisions and
 latencies for fixed read/write/ambiguous inputs in `benchmarks/mutation_routing.yaml`.
 It never calls the fact executor or write dispatcher. Results therefore measure
 planning cost, not end-to-end API latency or successful database mutations.
 
-To compare the current two-stage route with the one-call unified planner
-prototype in shadow mode:
+To compare the historical two-stage route with the integrated one-call planner's
+evaluated shadow implementation:
 
 ```sh
 python -m scripts.benchmarks.unified_planner_experiment --group intents --repeat 3 --data-dir /path/to/frozen-data --output /tmp/unified-intents.json
@@ -93,5 +93,5 @@ python -m scripts.benchmarks.unified_planner_experiment --group reads --repeat 1
 The intent group compiles explicit writes, ambiguous declarations, and mixed
 question/write turns without dispatching them. The read group executes only fact
 plans against the frozen JSON graph for differential answer comparison. Run both
-routes sequentially on an isolated frozen package; the harness does not alter the
-serving planner or deployment.
+routes sequentially on an isolated frozen package; the harness does not dispatch
+mutations or alter the deployment.

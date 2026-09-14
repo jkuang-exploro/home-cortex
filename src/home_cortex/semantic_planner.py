@@ -25,10 +25,9 @@ from .text import latest_user_message
 class SemanticFactPlanner:
     """Strict semantic interpreter that never sees storage field names."""
 
-    def __init__(self, ollama: Any, schema: SemanticSchemaRegistry, *, enable_mutations: bool = False) -> None:
+    def __init__(self, ollama: Any, schema: SemanticSchemaRegistry) -> None:
         self.ollama = ollama
         self.schema = schema
-        self.enable_mutations = enable_mutations
 
     @stage("planner.total")
     async def plan(
@@ -42,31 +41,12 @@ class SemanticFactPlanner:
         capabilities = self.schema.planner_capability_payload()
         input_summary = planner_input_summary(self.schema.capability_payload())
         prompt_build_ms = (perf_counter() - build_started) * 1000
-        mutation_runtime = {}
-        mutation_calls = 0
-        mutation_ms = 0.0
-        mutation_planner = getattr(self.ollama, "plan_item_mutation", None) if self.enable_mutations else None
-        if mutation_planner is not None:
-            mutation_started = perf_counter()
-            decision, mutation_runtime = await mutation_planner(messages)
-            mutation_ms = (perf_counter() - mutation_started) * 1000
-            mutation_calls = 1
-            if decision.requires_mutation:
-                mutation_plan = SemanticPlan(requires_fact=False, mutation=decision.mutation)
-                latency = (perf_counter() - started) * 1000
-                return SemanticPlannerOutcome(mutation_plan, latency, PlannerDiagnostics(
-                    input_summary=input_summary, output_raw=decision.model_dump(mode="json"),
-                    normalized_plan=mutation_plan.model_dump(mode="json"),
-                    validation_result="VALID", attempt_count=1, latency_ms=latency,
-                    request_ms=mutation_ms, prompt_build_ms=prompt_build_ms,
-                    **_planner_runtime_fields(mutation_runtime),
-                ))
         payload: Mapping[str, Any] | None = None
         plan: SemanticPlan | None = None
         structural_error: Exception | None = None
         validation: PlannerValidationCode | None = None
         attempts = 0
-        request_ms = mutation_ms
+        request_ms = 0.0
         validation_ms = 0.0
         runtime: Mapping[str, Any] = {}
         transport_attempts: list[dict[str, Any]] = []
@@ -154,13 +134,6 @@ class SemanticFactPlanner:
                     })
                 request_ms += (perf_counter() - request_started) * 1000
         latency_ms = (perf_counter() - started) * 1000
-        attempts += mutation_calls
-        if mutation_runtime:
-            runtime = dict(runtime)
-            for key in ("prompt_eval_count", "prompt_eval_duration_ms", "eval_count",
-                        "eval_duration_ms", "load_duration_ms"):
-                left, right = runtime.get(key), mutation_runtime.get(key)
-                runtime[key] = left + right if left is not None and right is not None else None
         timing = {
             "prompt_build_ms": prompt_build_ms,
             "request_ms": request_ms,

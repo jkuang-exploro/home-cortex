@@ -87,6 +87,16 @@ class SemanticFactService:
                 llm_call_count=llm_call_count,
                 planner_diagnostics=planner_diagnostics,
             )
+        if plan.multi_intent:
+            return self._failure_answer(
+                context,
+                started,
+                request_id=request_id,
+                llm_ms=llm_ms,
+                llm_call_count=llm_call_count,
+                planner_diagnostics=planner_diagnostics,
+                status="multi_intent_unsupported",
+            )
         if plan.mutation is not None:
             # Return intent only: discourse replay must never execute writes.
             return SemanticMutationIntent(
@@ -308,4 +318,5 @@ def _failure_stage(status: FactStatus) -> str | None:
         "computation_impossible": "computation",
         "collection_incomplete": "collection_completeness",
         "semantic_plan_unsupported": "semantic_plan_validation",
+        "multi_intent_unsupported": "semantic_intent_routing",
     }[status]

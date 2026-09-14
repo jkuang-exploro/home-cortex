@@ -105,6 +105,36 @@ class OpenRouterService:
             raise ValueError("Semantic fact planner returned a non-object")
         return parsed
 
+    async def plan_unified_semantic(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        output_schema: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        """Run the already-built unified prompt with the canonical output union."""
+        payload = await self._post(
+            {
+                "model": self.model,
+                "messages": list(messages),
+                "temperature": 0,
+                "max_tokens": PLANNER_NUM_PREDICT,
+                "seed": PLANNER_SEED,
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "UnifiedSemanticPlan",
+                        "strict": False,
+                        "schema": output_schema,
+                    },
+                },
+                "provider": {"require_parameters": True},
+            }
+        )
+        self.last_planner_runtime = _openrouter_runtime_metrics(payload)
+        parsed = _parse_json_object(_message_content(payload))
+        if not isinstance(parsed, Mapping):
+            raise ValueError("Unified semantic planner returned a non-object")
+        return parsed
+
     @stream_model_call("openrouter")
     async def stream_chat_with_tools(
         self,

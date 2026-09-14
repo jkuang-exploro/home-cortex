@@ -34,6 +34,7 @@ FactStatus = Literal[
     "filter_unsupported",
     "operator_unsupported",
     "semantic_plan_unsupported",
+    "multi_intent_unsupported",
     "ambiguous",
     "computation_input_missing",
     "computation_impossible",
@@ -241,6 +242,13 @@ class SemanticPlan(_SemanticModel):
     requires_fact: bool
     request: SemanticFactRequest | None = None
     mutation: NamedCreateItem | NamedMoveItem | NamedUpdateAttributes | NamedDeleteItem | None = None
+    multi_intent: bool = Field(
+        default=False,
+        description=(
+            "True only when the latest user turn contains more than one "
+            "independent actionable fact query or mutation."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_request_presence(self) -> "SemanticPlan":
@@ -248,6 +256,8 @@ class SemanticPlan(_SemanticModel):
             raise ValueError("requires_fact must match request presence")
         if self.mutation is not None and self.request is not None:
             raise ValueError("A plan cannot both query facts and mutate state")
+        if self.multi_intent and (self.request is not None or self.mutation is not None):
+            raise ValueError("A multi-intent plan cannot carry an executable branch")
         return self
 
 
