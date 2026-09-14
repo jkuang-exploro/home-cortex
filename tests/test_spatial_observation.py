@@ -12,7 +12,7 @@ ABS = 1e-12
 
 def _observation(**fields):
     payload = {
-        "anchor": "anchor:kitchen_x_137",
+        "anchor": "x_137",
         "position": {"x": 0.4, "y": 0.0, "z": 0.2},
         "orientation": {"yaw": 0.0, "pitch": 0.0, "roll": 0.0},
         "timestamp": "2026-09-13T12:00:00-07:00",
@@ -25,7 +25,7 @@ def _observation(**fields):
 
 def test_valid_fiducial_observation() -> None:
     observation = parse_fiducial_observation(_observation())
-    assert observation.anchor_id == "anchor:kitchen_x_137"
+    assert observation.anchor_id == "x_137"
     assert observation.pose.position.x == pytest.approx(0.4, abs=ABS)
     assert observation.confidence == pytest.approx(0.92, abs=ABS)
     assert observation.reprojection_error_px == pytest.approx(0.8, abs=ABS)

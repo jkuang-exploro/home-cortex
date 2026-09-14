@@ -139,6 +139,20 @@ async def test_edge_round_trip_preserves_properties_and_null_end(
         }
     ]
 
+    located_in = _load_json(target / "edges" / "located_in.json")
+    by_item = {edge["from"]: edge for edge in located_in}
+    assert by_item["item:fridge_01"]["to"] == "space:kitchen"
+    assert by_item["item:fridge_01"]["position"] == {"x": 3.7, "y": 0.4, "z": 0.0}
+    assert by_item["item:fridge_01"]["orientation"] == {
+        "pitch": 0.0,
+        "roll": 0.0,
+        "yaw": 0.0,
+    }
+    assert by_item["item:test_house"] == {
+        "from": "item:test_house",
+        "to": "address:test_house",
+    }
+
 
 @pytest.mark.asyncio
 async def test_multiple_object_types_write_distinct_files(tmp_path: Path) -> None:

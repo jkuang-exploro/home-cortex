@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping
 
-from ..record_ids import split_record_id
+from .anchors import parse_local_anchor_id
 from .contracts import SpatialContractError
 from .pose import measured_orientation, measured_position
 from .transforms import Pose, pose
@@ -58,7 +58,7 @@ def parse_fiducial_observation(value: Mapping[str, Any]) -> FiducialObservation:
     position = measured_position(value["position"])
     orientation = measured_orientation(value["orientation"])
     return FiducialObservation(
-        anchor_id=_typed_id(raw_id, "anchor", "anchor"),
+        anchor_id=parse_local_anchor_id(raw_id),
         pose=pose(
             x=position.x, y=position.y, z=position.z,
             yaw=orientation.yaw, pitch=orientation.pitch, roll=orientation.roll,
@@ -77,18 +77,6 @@ def parse_fiducial_observations(
     if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
         raise SpatialContractError("fiducial observations must be a list")
     return tuple(parse_fiducial_observation(item) for item in values)
-
-
-def _typed_id(value: Any, field: str, table: str) -> str:
-    if not isinstance(value, str):
-        raise SpatialContractError(f"{field} must be a {table}: record ID")
-    try:
-        parsed, _ = split_record_id(value)
-    except ValueError as error:
-        raise SpatialContractError(f"{field} must be a {table}: record ID") from error
-    if parsed != table:
-        raise SpatialContractError(f"{field} must be a {table}: record ID")
-    return value
 
 
 def _timestamp(value: Any) -> str:

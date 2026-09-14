@@ -22,12 +22,25 @@ _LENGTH_ALIASES = {
     "metre": LENGTH_UNIT,
     "metres": LENGTH_UNIT,
 }
-_COORDINATE_FIELDS = frozenset({"origin", "unit", "x_axis", "y_axis", "z_axis"})
+_COORDINATE_FIELDS = frozenset({
+    "anchors",
+    "basis",
+    "origin",
+    "unit",
+    "x_axis",
+    "y_axis",
+    "z_axis",
+})
 _GEOMETRY_FIELDS = frozenset({"size", "type"})
 _POSITION_FIELDS = frozenset({"x", "y", "z"})
 _ORIENTATION_FIELDS = frozenset({"pitch", "roll", "yaw"})
 _UP = "up"
 _BOX = "box"
+_IDENTITY_BASIS = {
+    "x": [1.0, 0.0, 0.0],
+    "y": [0.0, 1.0, 0.0],
+    "z": [0.0, 0.0, 1.0],
+}
 
 
 class SpatialContractError(ValueError):
@@ -37,7 +50,9 @@ class SpatialContractError(ValueError):
 def apply_space_spatial_fields(record: dict[str, Any], *, source: Path | str) -> None:
     """Validate optional space spatial fields and canonicalize units in place."""
     if "coordinate" in record:
-        record["coordinate"] = _canonical_coordinate(record["coordinate"], source)
+        record["coordinate"] = _canonical_coordinate(
+            record["coordinate"], source, space_id=record.get("id")
+        )
     if "geometry" in record:
         record["geometry"] = _canonical_geometry(record["geometry"], source)
     for field in ("navigable", "accessible"):
@@ -102,23 +117,53 @@ def apply_located_in_pose(
         )
 
 
-def _canonical_coordinate(value: Any, source: Path | str) -> dict[str, Any]:
+def _canonical_coordinate(
+    value: Any, source: Path | str, *, space_id: str | None = None
+) -> dict[str, Any]:
     item = _object(value, "coordinate", source, _COORDINATE_FIELDS)
-    canonical: dict[str, Any] = {}
-    if "unit" in item:
-        canonical["unit"] = _length_unit(item["unit"], source)
-    elif item:
-        canonical["unit"] = LENGTH_UNIT
     if "origin" in item:
-        canonical["origin"] = _vector3(item["origin"], "coordinate.origin", source)
-    for axis in ("x_axis", "y_axis", "z_axis"):
-        if axis not in item:
-            continue
-        if axis == "z_axis" and item[axis] == _UP:
-            canonical[axis] = _UP
-        else:
-            canonical[axis] = _axis_vector(item[axis], f"coordinate.{axis}", source)
+        _vector3(item["origin"], "coordinate.origin", source)
+    canonical: dict[str, Any] = {
+        "unit": _length_unit(item["unit"], source) if "unit" in item else LENGTH_UNIT,
+        "basis": _canonical_basis(item, source),
+    }
+    if "anchors" in item:
+        from .anchors import embedded_anchor_as_mapping, parse_embedded_anchors
+
+        parsed = parse_embedded_anchors(item["anchors"], space=space_id)
+        if parsed:
+            canonical["anchors"] = [embedded_anchor_as_mapping(anchor) for anchor in parsed]
     return canonical
+
+
+def _canonical_basis(item: Mapping[str, Any], source: Path | str) -> dict[str, list[float]]:
+    from .transforms import SpatialTransformError, canonical_basis
+
+    if "basis" in item:
+        raw = item["basis"]
+    elif any(name in item for name in ("x_axis", "y_axis", "z_axis")):
+        raw = _basis_from_legacy_axes(item, source)
+    else:
+        return {name: list(vector) for name, vector in _IDENTITY_BASIS.items()}
+    try:
+        return canonical_basis(raw)
+    except SpatialTransformError as error:
+        raise SpatialContractError(
+            f"coordinate.basis in {_label(source)}: {error}"
+        ) from error
+
+
+def _basis_from_legacy_axes(item: Mapping[str, Any], source: Path | str) -> dict[str, Any]:
+    axes = {
+        "x": item.get("x_axis", _IDENTITY_BASIS["x"]),
+        "y": item.get("y_axis", _IDENTITY_BASIS["y"]),
+        "z": item.get("z_axis", _IDENTITY_BASIS["z"]),
+    }
+    if axes["z"] == _UP:
+        axes["z"] = list(_IDENTITY_BASIS["z"])
+    for name, vector in axes.items():
+        _axis_vector(vector, f"coordinate.{name}_axis", source)
+    return axes
 
 
 def _canonical_geometry(value: Any, source: Path | str) -> dict[str, Any]:

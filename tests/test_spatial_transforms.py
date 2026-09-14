@@ -4,12 +4,16 @@ import math
 import pytest
 
 from home_cortex.spatial.transforms import (
+    IDENTITY_BASIS,
     Pose,
     Position,
     SpatialTransformError,
+    canonical_basis,
     compose_chain,
     compose_pose,
     invert_pose,
+    local_to_physical,
+    physical_to_local,
     pose,
     pose_as_mapping,
     pose_from_mapping,
@@ -131,3 +135,60 @@ def test_contract_mapping_round_trip() -> None:
 
 def test_empty_chain_is_identity() -> None:
     _approx_pose(compose_chain(()), Pose())
+
+
+def test_identity_basis_preserves_local_coordinates() -> None:
+    point = (1.37, 0.5, 0.31)
+    _approx_position(local_to_physical(point, IDENTITY_BASIS), point)
+    _approx_position(physical_to_local(point, IDENTITY_BASIS), point)
+
+
+def test_scaled_z_basis_maps_local_height_to_physical_meters() -> None:
+    basis = canonical_basis({
+        "x": [1.0, 0.0, 0.0],
+        "y": [0.0, 1.0, 0.0],
+        "z": [0.0, 0.0, 0.1],
+    })
+    _approx_position(local_to_physical((0.0, 0.0, 1.0), basis), (0.0, 0.0, 0.1))
+    _approx_position(local_to_physical((0.0, 0.0, 0.5), basis), (0.0, 0.0, 0.05))
+    _approx_position(physical_to_local((0.0, 0.0, 0.1), basis), (0.0, 0.0, 1.0))
+    _approx_position(physical_to_local((0.0, 0.0, 0.05), basis), (0.0, 0.0, 0.5))
+
+
+def test_rotated_and_skewed_bases_are_invertible() -> None:
+    rotated = canonical_basis({
+        "x": [0.0, 1.0, 0.0],
+        "y": [-1.0, 0.0, 0.0],
+        "z": [0.0, 0.0, 1.0],
+    })
+    _approx_position(local_to_physical((1.0, 0.0, 0.0), rotated), (0.0, 1.0, 0.0))
+    _approx_position(physical_to_local((0.0, 1.0, 0.0), rotated), (1.0, 0.0, 0.0))
+    skewed = canonical_basis({
+        "x": [1.0, 0.0, 0.0],
+        "y": [1.0, 1.0, 0.0],
+        "z": [0.0, 0.0, 1.0],
+    })
+    physical = local_to_physical((2.0, 3.0, 0.5), skewed)
+    _approx_position(physical, (5.0, 3.0, 0.5))
+    _approx_position(physical_to_local(physical, skewed), (2.0, 3.0, 0.5))
+
+
+def test_singular_basis_is_rejected() -> None:
+    with pytest.raises(SpatialTransformError, match="zero vector"):
+        canonical_basis({
+            "x": [1.0, 0.0, 0.0],
+            "y": [0.0, 1.0, 0.0],
+            "z": [0.0, 0.0, 0.0],
+        })
+    with pytest.raises(SpatialTransformError, match="linearly independent"):
+        canonical_basis({
+            "x": [1.0, 0.0, 0.0],
+            "y": [2.0, 0.0, 0.0],
+            "z": [0.0, 0.0, 1.0],
+        })
+    with pytest.raises(SpatialTransformError, match="finite"):
+        canonical_basis({
+            "x": [math.inf, 0.0, 0.0],
+            "y": [0.0, 1.0, 0.0],
+            "z": [0.0, 0.0, 1.0],
+        })

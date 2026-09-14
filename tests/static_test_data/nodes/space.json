@@ -2,17 +2,61 @@
   {
     "id": "space:kitchen",
     "space_type": "room",
-    "name": {"en": "Kitchen", "zh": "厨房"}
+    "name": {"en": "Kitchen", "zh": "厨房"},
+    "coordinate": {
+      "unit": "m",
+      "basis": {
+        "x": [1.0, 0.0, 0.0],
+        "y": [0.0, 1.0, 0.0],
+        "z": [0.0, 0.0, 1.0]
+      },
+      "anchors": [
+        {
+          "id": "x_100",
+          "type": "fiducial",
+          "position": {"x": 1.0, "y": 0.0, "z": 0.31},
+          "orientation": {"yaw": 1.5708, "pitch": 0.0, "roll": 0.0},
+          "survey": {"method": "tape_measure"}
+        },
+        {
+          "id": "x_137",
+          "type": "fiducial",
+          "position": {"x": 1.37, "y": 0.0, "z": 0.31},
+          "orientation": {"yaw": 1.5708, "pitch": 0.0, "roll": 0.0},
+          "survey": {"method": "tape_measure"}
+        },
+        {
+          "id": "y_105",
+          "type": "fiducial",
+          "position": {"x": 0.0, "y": 1.05, "z": 0.31},
+          "orientation": {"yaw": 0.0, "pitch": 0.0, "roll": 0.0},
+          "survey": {"method": "tape_measure"}
+        },
+        {
+          "id": "y_200",
+          "type": "fiducial",
+          "position": {"x": 0.0, "y": 2.0, "z": 0.31},
+          "orientation": {"yaw": 0.0, "pitch": 0.0, "roll": 0.0},
+          "survey": {"method": "tape_measure"}
+        }
+      ]
+    },
+    "navigable": true,
+    "accessible": true
   },
   {
     "id": "space:test_house:kitchen:fridge_01:interior",
     "space_type": "storage",
-    "name": {"en": "Refrigerator interior", "zh": "冰箱内部"}
+    "name": {"en": "Refrigerator interior", "zh": "冰箱内部"},
+    "navigable": false,
+    "accessible": false
   },
   {
     "id": "space:test_house:kitchen:fridge_01:freezer",
     "space_type": "storage",
-    "name": {"en": "Freezer", "zh": "冷冻室"}
+    "name": {"en": "Freezer", "zh": "冷冻室"},
+    "navigable": false,
+    "accessible": false
   },
   {
     "id": "space:drawer_1:interior",

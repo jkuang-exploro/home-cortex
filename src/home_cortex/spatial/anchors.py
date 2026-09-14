@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Mapping
@@ -13,6 +14,7 @@ from .transforms import Orientation, Position
 from .units import SpatialUnitError, as_meters
 
 ANCHOR_KINDS = ("fiducial", "natural_landmark", "dock", "survey_point")
+LOCAL_ANCHOR_ID = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
 _ANCHOR_FIELDS = frozenset({
     "id",
     "kind",
@@ -52,7 +54,13 @@ class SurveyedAnchor:
     survey: AnchorSurvey | None = None
 
 
-def parse_surveyed_anchor(value: Mapping[str, Any]) -> SurveyedAnchor:
+def global_anchor_id(space: str, local_id: str) -> str:
+    return f"{space}#{local_id}"
+
+
+def parse_surveyed_anchor(
+    value: Mapping[str, Any], *, space: str | None = None
+) -> SurveyedAnchor:
     if not isinstance(value, Mapping):
         raise SpatialContractError("surveyed anchor must be an object")
     extra = sorted(set(value) - _ANCHOR_FIELDS)
@@ -70,9 +78,18 @@ def parse_surveyed_anchor(value: Mapping[str, Any]) -> SurveyedAnchor:
         )
     if "position" not in value:
         raise SpatialContractError("surveyed anchor requires position")
+    space_id = space or value.get("space")
+    if not isinstance(space_id, str):
+        raise SpatialContractError("surveyed anchor requires a space")
+    try:
+        table, _ = split_record_id(space_id)
+    except ValueError as error:
+        raise SpatialContractError("space must be a space: record ID") from error
+    if table != "space":
+        raise SpatialContractError("space must be a space: record ID")
     return SurveyedAnchor(
-        id=_typed_id(value.get("id"), "id", "anchor"),
-        space=_typed_id(value.get("space"), "space", "space"),
+        id=parse_local_anchor_id(value.get("id"), space=space_id),
+        space=space_id,
         position=measured_position(value["position"]),
         kind=kind,
         orientation=(
@@ -89,19 +106,62 @@ def parse_surveyed_anchor(value: Mapping[str, Any]) -> SurveyedAnchor:
 
 def parse_surveyed_anchors(
     values: Sequence[Mapping[str, Any]] | None,
+    *,
+    space: str | None = None,
 ) -> tuple[SurveyedAnchor, ...]:
     """Empty or omitted collections are valid; spaces do not depend on anchors."""
     if values is None:
         return ()
     if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
         raise SpatialContractError("surveyed anchors must be a list")
-    anchors = tuple(parse_surveyed_anchor(item) for item in values)
+    anchors = tuple(parse_surveyed_anchor(item, space=space) for item in values)
     seen: set[str] = set()
     for anchor in anchors:
         if anchor.id in seen:
             raise SpatialContractError(f"Duplicate surveyed anchor ID {anchor.id}")
         seen.add(anchor.id)
     return anchors
+
+
+def parse_embedded_anchors(
+    values: Sequence[Mapping[str, Any]] | None, *, space: str | None
+) -> tuple[SurveyedAnchor, ...]:
+    return parse_surveyed_anchors(values, space=space)
+
+
+def anchors_from_space(record: Mapping[str, Any]) -> tuple[SurveyedAnchor, ...]:
+    coordinate = record.get("coordinate")
+    if not isinstance(coordinate, Mapping):
+        return ()
+    space_id = record.get("id")
+    if not isinstance(space_id, str):
+        raise SpatialContractError("space record requires id")
+    return parse_embedded_anchors(coordinate.get("anchors"), space=space_id)
+
+
+def parse_local_anchor_id(value: Any, *, space: str | None = None) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise SpatialContractError("anchor id must be a string")
+    if "#" in value:
+        owner, local = value.split("#", 1)
+        if space is not None and owner != space:
+            raise SpatialContractError("anchor id space does not match owning space")
+        if LOCAL_ANCHOR_ID.fullmatch(local) is None:
+            raise SpatialContractError("anchor id must be a local token")
+        return local
+    if ":" in value:
+        try:
+            table, key = split_record_id(value)
+        except ValueError as error:
+            raise SpatialContractError("anchor id must be a local token") from error
+        if table != "anchor":
+            raise SpatialContractError("anchor id must not use a non-anchor table")
+        if LOCAL_ANCHOR_ID.fullmatch(key) is None:
+            raise SpatialContractError("anchor id must be a local token")
+        return key
+    if LOCAL_ANCHOR_ID.fullmatch(value) is None:
+        raise SpatialContractError("anchor id must be a local token")
+    return value
 
 
 def surveyed_anchor_as_mapping(value: SurveyedAnchor) -> dict[str, Any]:
@@ -134,6 +194,12 @@ def surveyed_anchor_as_mapping(value: SurveyedAnchor) -> dict[str, Any]:
     return payload
 
 
+def embedded_anchor_as_mapping(value: SurveyedAnchor) -> dict[str, Any]:
+    payload = surveyed_anchor_as_mapping(value)
+    payload.pop("space", None)
+    return payload
+
+
 def _recognition(value: Any) -> AnchorRecognition:
     item = _object(value, "recognition", _RECOGNITION_FIELDS)
     family = item.get("family")
@@ -163,18 +229,6 @@ def _survey(value: Any) -> AnchorSurvey:
                 "survey.uncertainty_m must be a finite non-negative length"
             )
     return AnchorSurvey(method=method, uncertainty_m=uncertainty)
-
-
-def _typed_id(value: Any, field: str, table: str) -> str:
-    if not isinstance(value, str):
-        raise SpatialContractError(f"{field} must be a {table}: record ID")
-    try:
-        parsed, _ = split_record_id(value)
-    except ValueError as error:
-        raise SpatialContractError(f"{field} must be a {table}: record ID") from error
-    if parsed != table:
-        raise SpatialContractError(f"{field} must be a {table}: record ID")
-    return value
 
 
 def _object(value: Any, field: str, allowed: frozenset[str]) -> dict[str, Any]:

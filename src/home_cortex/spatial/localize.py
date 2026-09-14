@@ -4,8 +4,9 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
-from .anchors import SurveyedAnchor
+from .anchors import SurveyedAnchor, anchors_from_space, global_anchor_id
 from .contracts import SpatialContractError
 from .observation import FiducialObservation
 from .pose import PoseUncertainty, RuntimePose
@@ -75,6 +76,28 @@ def localize_from_fiducials(
     )
 
 
+def localize_in_space(
+    *,
+    agent: str,
+    space_record: Mapping[str, Any],
+    observations: Sequence[FiducialObservation],
+    camera_in_body: Pose,
+    timestamp: str | None = None,
+) -> LocalizationSolution:
+    """Run the solver using anchors embedded on ``space.coordinate``."""
+    space_id = space_record.get("id")
+    if not isinstance(space_id, str):
+        raise SpatialContractError("space record requires id")
+    return localize_from_fiducials(
+        agent=agent,
+        space=space_id,
+        anchors=anchors_from_space(space_record),
+        observations=observations,
+        camera_in_body=camera_in_body,
+        timestamp=timestamp,
+    )
+
+
 def synthetic_observation(
     *,
     body_in_space: Pose,
@@ -113,6 +136,7 @@ def _anchor_catalog(anchors: Sequence[SurveyedAnchor], space: str) -> dict[str, 
         if anchor.space != space:
             continue
         catalog[anchor.id] = anchor
+        catalog[global_anchor_id(anchor.space, anchor.id)] = anchor
     return catalog
 
 

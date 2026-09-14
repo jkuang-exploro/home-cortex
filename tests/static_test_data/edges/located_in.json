@@ -5,7 +5,17 @@
   },
   {
     "from": "item:fridge_01",
-    "to": "space:kitchen"
+    "to": "space:kitchen",
+    "position": {
+      "x": 3.7,
+      "y": 0.4,
+      "z": 0.0
+    },
+    "orientation": {
+      "yaw": 0.0,
+      "pitch": 0.0,
+      "roll": 0.0
+    }
   },
   {
     "from": "item:milk",

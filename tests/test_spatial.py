@@ -2,7 +2,6 @@
 import json
 import math
 from pathlib import Path
-from shutil import copytree
 from typing import Any
 
 import pytest
@@ -63,8 +62,12 @@ def test_space_coordinate_metadata_canonicalizes_si_unit() -> None:
     )
     apply_space_spatial_fields(record, source="space.json")
     assert record["coordinate"]["unit"] == LENGTH_UNIT
-    assert record["coordinate"]["origin"] == [0, 0, 0]
-    assert record["coordinate"]["z_axis"] == "up"
+    assert "origin" not in record["coordinate"]
+    assert record["coordinate"]["basis"] == {
+        "x": [1.0, 0.0, 0.0],
+        "y": [0.0, 1.0, 0.0],
+        "z": [0.0, 0.0, 1.0],
+    }
 
 
 def test_space_navigable_and_accessible_booleans() -> None:
@@ -126,17 +129,28 @@ def test_space_may_be_located_in_another_space() -> None:
     "mutate, match",
     [
         (lambda r: r["coordinate"].update(origin=[1, math.inf, 0]), "finite"),
-        (lambda r: r["coordinate"].update(origin=[1, math.nan, 0]), "finite"),
         (lambda r: r.update(navigable=1), "boolean"),
         (lambda r: r["geometry"].update(size=[4.8, 3.6, 0]), "positive"),
         (lambda r: r["geometry"].update(type="mesh"), "box"),
         (lambda r: r["coordinate"].update(unit="inch"), "must be 'm'"),
-        (lambda r: r["coordinate"].update(z_axis=[0, 0, 0]), "zero vector"),
+        (lambda r: r["coordinate"]["basis"].update(z=[0, 0, 0]), "zero vector"),
+        (
+            lambda r: r["coordinate"]["basis"].update(y=[2.0, 0.0, 0.0]),
+            "linearly independent",
+        ),
+        (lambda r: r["coordinate"]["basis"].update(x=[math.nan, 0, 0]), "finite"),
     ],
 )
 def test_invalid_space_spatial_values(mutate, match) -> None:
     record = _space(
-        coordinate={"unit": "m", "origin": [0.0, 0.0, 0.0], "z_axis": "up"},
+        coordinate={
+            "unit": "m",
+            "basis": {
+                "x": [1.0, 0.0, 0.0],
+                "y": [0.0, 1.0, 0.0],
+                "z": [0.0, 0.0, 1.0],
+            },
+        },
         geometry={"type": "box", "size": [4.8, 3.6, 2.7]},
         navigable=True,
         accessible=True,
@@ -183,42 +197,77 @@ def test_existing_household_records_remain_valid() -> None:
         )
 
 
+def _static_spaces() -> dict[str, dict[str, Any]]:
+    records = json.loads((STATIC_TEST_DATA / "nodes" / "space.json").read_text())
+    return {record["id"]: record for record in records}
+
+
+def _static_located_in() -> list[dict[str, Any]]:
+    return json.loads((STATIC_TEST_DATA / "edges" / "located_in.json").read_text())
+
+
+def test_canonical_kitchen_has_spatial_metadata() -> None:
+    kitchen = _static_spaces()["space:kitchen"]
+    apply_space_spatial_fields(kitchen, source="space.json")
+    assert kitchen["coordinate"]["unit"] == LENGTH_UNIT
+    assert "origin" not in kitchen["coordinate"]
+    assert kitchen["coordinate"]["basis"]["x"] == [1.0, 0.0, 0.0]
+    assert kitchen["coordinate"]["basis"]["z"] == [0.0, 0.0, 1.0]
+    assert "geometry" not in kitchen
+    assert [anchor["id"] for anchor in kitchen["coordinate"]["anchors"]] == [
+        "x_100",
+        "x_137",
+        "y_105",
+        "y_200",
+    ]
+    assert kitchen["navigable"] is True
+    assert kitchen["accessible"] is True
+    assert kitchen["space_type"] == "room"
+    assert kitchen["name"] == {"en": "Kitchen", "zh": "厨房"}
+
+
+def test_canonical_storage_spaces_are_not_navigable() -> None:
+    interior = _static_spaces()["space:test_house:kitchen:fridge_01:interior"]
+    apply_space_spatial_fields(interior, source="space.json")
+    assert interior["navigable"] is False
+    assert interior["accessible"] is False
+    assert "coordinate" not in interior
+
+
+def test_canonical_fixture_keeps_a_legacy_space() -> None:
+    drawer = _static_spaces()["space:drawer_1:interior"]
+    apply_space_spatial_fields(drawer, source="space.json")
+    assert set(drawer) == {"id", "space_type", "name"}
+
+
+def test_canonical_located_in_is_mixed_posed_and_legacy() -> None:
+    edges = _static_located_in()
+    fridge = next(edge for edge in edges if edge["from"] == "item:fridge_01")
+    apply_located_in_pose(fridge, target_type="space", source="located_in.json")
+    assert fridge["to"] == "space:kitchen"
+    assert fridge["position"] == {"x": 3.7, "y": 0.4, "z": 0.0}
+    assert fridge["orientation"] == {"pitch": 0.0, "roll": 0.0, "yaw": 0.0}
+    house = next(edge for edge in edges if edge["from"] == "item:test_house")
+    apply_located_in_pose(house, target_type="address", source="located_in.json")
+    assert house == {"from": "item:test_house", "to": "address:test_house"}
+    milk = next(edge for edge in edges if edge["from"] == "item:milk")
+    assert "position" not in milk and "orientation" not in milk
+
+
+def test_static_household_does_not_persist_runtime_pose() -> None:
+    tree = STATIC_TEST_DATA.rglob("*.json")
+    blob = "\n".join(path.read_text() for path in tree)
+    assert "agent:microduck" not in blob
+    assert '"quality": "localized"' not in blob
+    assert '"source": "external_localization"' not in blob
+
+
 @pytest.mark.asyncio
 async def test_ingestion_export_round_trip_preserves_spatial_data(tmp_path: Path) -> None:
-    data_dir = tmp_path / "graph"
-    copytree(STATIC_TEST_DATA, data_dir)
-    spaces = json.loads((data_dir / "nodes" / "space.json").read_text())
-    kitchen = next(space for space in spaces if space["id"] == "space:kitchen")
-    kitchen.update(
-        {
-            "coordinate": {
-                "unit": "m",
-                "origin": [0.0, 0.0, 0.0],
-                "z_axis": "up",
-            },
-            "geometry": {"type": "box", "size": [4.8, 3.6, 2.7]},
-            "navigable": True,
-            "accessible": True,
-        }
-    )
-    (data_dir / "nodes" / "space.json").write_text(json.dumps(spaces))
-    edges = json.loads((data_dir / "edges" / "located_in.json").read_text())
-    milk = next(edge for edge in edges if edge["from"] == "item:milk")
-    milk["position"] = {"x": 0.2, "y": 0.1, "z": 0.4}
-    milk["orientation"] = {"yaw": 0.0, "pitch": 0.0, "roll": 0.0}
-    edges.append(
-        {
-            "from": "space:test_house:kitchen:fridge_01:interior",
-            "to": "space:kitchen",
-            "position": {"x": 1.0, "y": 0.5, "z": 0.0},
-        }
-    )
-    (data_dir / "edges" / "located_in.json").write_text(json.dumps(edges))
-
     database = MemoryDatabase()
     await database.connect()
     try:
-        await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+        await ingest_directory(database, STATIC_TEST_DATA)  # type: ignore[arg-type]
         target = tmp_path / "export"
         await export_directory(database, target)  # type: ignore[arg-type]
     finally:
@@ -228,14 +277,30 @@ async def test_ingestion_export_round_trip_preserves_spatial_data(tmp_path: Path
         row["id"]: row
         for row in json.loads((target / "nodes" / "space.json").read_text())
     }
-    assert exported_spaces["space:kitchen"]["coordinate"]["unit"] == "m"
-    assert exported_spaces["space:kitchen"]["geometry"]["type"] == "box"
-    assert exported_spaces["space:kitchen"]["navigable"] is True
-    assert exported_spaces["space:kitchen"]["accessible"] is True
+    kitchen = exported_spaces["space:kitchen"]
+    assert kitchen["coordinate"]["unit"] == "m"
+    assert "origin" not in kitchen["coordinate"]
+    assert kitchen["coordinate"]["basis"]["z"] == [0.0, 0.0, 1.0]
+    assert "geometry" not in kitchen
+    assert [anchor["id"] for anchor in kitchen["coordinate"]["anchors"]] == [
+        "x_100",
+        "x_137",
+        "y_105",
+        "y_200",
+    ]
+    assert kitchen["navigable"] is True
+    assert kitchen["accessible"] is True
+    freezer = exported_spaces["space:test_house:kitchen:fridge_01:freezer"]
+    assert "coordinate" not in freezer
+    assert freezer["navigable"] is False
+    assert freezer["accessible"] is False
+    drawer = exported_spaces["space:drawer_1:interior"]
+    assert "coordinate" not in drawer
+    assert "navigable" not in drawer
     exported_edges = json.loads((target / "edges" / "located_in.json").read_text())
     by_from = {edge["from"]: edge for edge in exported_edges}
-    assert by_from["item:milk"]["position"] == {"x": 0.2, "y": 0.1, "z": 0.4}
-    assert by_from["item:milk"]["orientation"] == {
+    assert by_from["item:fridge_01"]["position"] == {"x": 3.7, "y": 0.4, "z": 0.0}
+    assert by_from["item:fridge_01"]["orientation"] == {
         "pitch": 0.0,
         "roll": 0.0,
         "yaw": 0.0,
@@ -244,9 +309,4 @@ async def test_ingestion_export_round_trip_preserves_spatial_data(tmp_path: Path
         "from": "item:test_house",
         "to": "address:test_house",
     }
-    assert by_from["space:test_house:kitchen:fridge_01:interior"]["to"] == "space:kitchen"
-    assert by_from["space:test_house:kitchen:fridge_01:interior"]["position"] == {
-        "x": 1.0,
-        "y": 0.5,
-        "z": 0.0,
-    }
+    assert "position" not in by_from["item:milk"]

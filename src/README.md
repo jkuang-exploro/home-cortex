@@ -148,20 +148,22 @@ remain in human-editable `data/edges/*.json`. The initial registry defines:
 - `hosted_by` as a directed, non-temporal Space-to-Item-or-Space relationship with the
   derived inverse name `hosts_space`.
 
-A Space may optionally declare intrinsic Cartesian metadata (`coordinate`,
-`geometry` as a box, `navigable`, `accessible`). Canonical units are meters,
-radians, and seconds. Validation lives in `home_cortex.spatial`; this is not a
-planner property and does not introduce localization or ROS. Structured
-metric/imperial conversion and nested pose composition are pure functions in
-`spatial.units` and `spatial.transforms` (z-up, intrinsic yaw-pitch-roll). The
-LLM never converts measurements. Runtime robot pose (`spatial.pose`) is an
-ephemeral estimate in a known space: it is not stored on `space.json` and does
-not assume a starting corner. Optional surveyed anchors (`spatial.anchors`) are
-development calibration points; deleting them does not change the space
-coordinate system. `spatial.localize` solves the robot body pose in a known
-space from surveyed anchor poses plus camera-frame observations and a
-camera-in-body transform. The start pose is not an input. Detectors must emit
-`spatial.observation` records; they do not define the ontology.
+A Space may optionally declare intrinsic Cartesian metadata. Canonical
+`coordinate` fields are `unit`, a 3-vector `basis`, and optional embedded
+`anchors`. Local coordinates times the basis yield physical SI displacement;
+basis magnitude may encode scale. Geometry, `origin`, and a surveyed zero
+marker are not required. `navigable` and `accessible` remain explicit local
+booleans. Validation lives in `home_cortex.spatial`; this is not a planner
+property and does not introduce localization or ROS. Structured metric/imperial
+conversion and nested pose composition are pure functions in `spatial.units`
+and `spatial.transforms` (z-up, intrinsic yaw-pitch-roll). The LLM never
+converts measurements. Runtime robot pose (`spatial.pose`) is ephemeral and is
+not stored on `space.json`. Optional surveyed anchors live on
+`space.coordinate.anchors`; deleting them leaves the coordinate system valid.
+`spatial.localize` solves body pose from those anchors plus camera-frame
+observations and a camera-in-body transform. The start pose is not an input.
+Detectors must emit `spatial.observation` records; they do not define the
+ontology.
 
 Store each fact once. Model an addressable home as an Address, its physical
 house as an Item located at that Address, and its rooms as Spaces hosted by the

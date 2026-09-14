@@ -10,8 +10,14 @@ from .contracts import POSE_FIELDS
 
 # ZYX intrinsic (yaw about +z, then pitch about +y, then roll about +x), z-up.
 _GIMBAL = 1e-9
+_BASIS_SINGULAR = 1e-12
 _ORIENTATION_FIELDS = ("yaw", "pitch", "roll")
 _POSITION_FIELDS = ("x", "y", "z")
+IDENTITY_BASIS = {
+    "x": [1.0, 0.0, 0.0],
+    "y": [0.0, 1.0, 0.0],
+    "z": [0.0, 0.0, 1.0],
+}
 
 
 class SpatialTransformError(ValueError):
@@ -128,6 +134,37 @@ def transform_pose(local: Pose, frame: Pose) -> Pose:
     return compose_pose(frame, local)
 
 
+def canonical_basis(value: Any) -> dict[str, list[float]]:
+    """Validate a 3D basis. Magnitude may encode scale; orthogonality is not required."""
+    if not isinstance(value, Mapping):
+        raise SpatialTransformError("basis must be an object")
+    extra = sorted(set(value) - {"x", "y", "z"})
+    if extra:
+        raise SpatialTransformError(f"Unknown basis fields: {', '.join(extra)}")
+    missing = [name for name in ("x", "y", "z") if name not in value]
+    if missing:
+        raise SpatialTransformError("basis requires x, y, and z")
+    vectors = {name: _basis_vector(value[name], name) for name in ("x", "y", "z")}
+    _require_invertible(vectors)
+    return vectors
+
+
+def local_to_physical(
+    local: Position | Mapping[str, Any] | Sequence[Any],
+    basis: Mapping[str, Sequence[float]],
+) -> Position:
+    """Map local coordinates through the basis to physical SI displacement."""
+    return Position(*_matvec(_basis_matrix(basis), _as_position(local).as_tuple()))
+
+
+def physical_to_local(
+    physical: Position | Mapping[str, Any] | Sequence[Any],
+    basis: Mapping[str, Sequence[float]],
+) -> Position:
+    """Map physical SI displacement back to local coordinates."""
+    return Position(*_matvec(_invert3(_basis_matrix(basis)), _as_position(physical).as_tuple()))
+
+
 def compose_chain(poses: Sequence[Pose | None]) -> Pose:
     """Compose ancestor-to-descendant child-in-parent poses.
 
@@ -237,3 +274,49 @@ def _finite(value: Any, name: str) -> float:
     if type(value) not in {int, float} or not math.isfinite(value):
         raise SpatialTransformError(f"{name} must be a finite number")
     return float(value)
+
+
+def _basis_vector(value: Any, name: str) -> list[float]:
+    if not isinstance(value, list) or len(value) != 3:
+        raise SpatialTransformError(f"basis.{name} must be a list of three finite numbers")
+    vector = [_finite(item, f"basis.{name}") for item in value]
+    if all(component == 0 for component in vector):
+        raise SpatialTransformError(f"basis.{name} cannot be a zero vector")
+    return vector
+
+
+def _basis_matrix(basis: Mapping[str, Sequence[float]]) -> tuple[tuple[float, float, float], ...]:
+    x, y, z = tuple(basis["x"]), tuple(basis["y"]), tuple(basis["z"])
+    return (
+        (float(x[0]), float(y[0]), float(z[0])),
+        (float(x[1]), float(y[1]), float(z[1])),
+        (float(x[2]), float(y[2]), float(z[2])),
+    )
+
+
+def _require_invertible(vectors: Mapping[str, Sequence[float]]) -> None:
+    if abs(_det3(_basis_matrix(vectors))) < _BASIS_SINGULAR:
+        raise SpatialTransformError("basis vectors must be linearly independent")
+
+
+def _det3(matrix: tuple[tuple[float, float, float], ...]) -> float:
+    a, b, c = matrix[0]
+    d, e, f = matrix[1]
+    g, h, i = matrix[2]
+    return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+
+
+def _invert3(
+    matrix: tuple[tuple[float, float, float], ...],
+) -> tuple[tuple[float, float, float], ...]:
+    det = _det3(matrix)
+    if abs(det) < _BASIS_SINGULAR:
+        raise SpatialTransformError("singular basis")
+    a, b, c = matrix[0]
+    d, e, f = matrix[1]
+    g, h, i = matrix[2]
+    return (
+        ((e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det),
+        ((f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det),
+        ((d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det),
+    )

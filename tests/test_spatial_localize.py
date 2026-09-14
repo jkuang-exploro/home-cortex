@@ -1,13 +1,17 @@
 """Arbitrary-start surveyed-anchor localization. Synthetic observations only."""
+import json
 import math
+from pathlib import Path
 
 import pytest
 
-from home_cortex.spatial.anchors import SurveyedAnchor, parse_surveyed_anchors
+from home_cortex.spatial.anchors import SurveyedAnchor, anchors_from_space
+from home_cortex.spatial.contracts import apply_space_spatial_fields
 from home_cortex.spatial.localize import (
     LOCALIZED_TRANSLATION_M,
     LOCALIZED_YAW_RAD,
     localize_from_fiducials,
+    localize_in_space,
     synthetic_observation,
 )
 from home_cortex.spatial.observation import FiducialObservation
@@ -20,43 +24,21 @@ AGENT = "agent:microduck"
 SPACE = "space:kitchen"
 RIGHT = normalize_angle(90, "deg")
 CAMERA = pose(x=0.08, z=0.12)
+STATIC_SPACES = Path(__file__).parent / "static_test_data" / "nodes" / "space.json"
+
+
+def kitchen_space() -> dict:
+    kitchen = next(
+        record
+        for record in json.loads(STATIC_SPACES.read_text())
+        if record["id"] == SPACE
+    )
+    apply_space_spatial_fields(kitchen, source=str(STATIC_SPACES))
+    return kitchen
 
 
 def kitchen_anchors() -> tuple[SurveyedAnchor, ...]:
-    return parse_surveyed_anchors([
-        {
-            "id": "anchor:kitchen_x_137",
-            "space": SPACE,
-            "type": "fiducial",
-            "position": {"x": {"value": 137, "unit": "cm"}, "y": 0.0, "z": 0.31},
-            "orientation": {"yaw": RIGHT, "pitch": 0.0, "roll": 0.0},
-            "survey": {"method": "tape_measure", "uncertainty_m": 0.005},
-        },
-        {
-            "id": "anchor:kitchen_x_100",
-            "space": SPACE,
-            "type": "fiducial",
-            "position": {"x": {"value": 100, "unit": "cm"}, "y": 0.0, "z": 0.31},
-            "orientation": {"yaw": RIGHT, "pitch": 0.0, "roll": 0.0},
-            "survey": {"method": "tape_measure", "uncertainty_m": 0.005},
-        },
-        {
-            "id": "anchor:kitchen_y_105",
-            "space": SPACE,
-            "type": "fiducial",
-            "position": {"x": 0.0, "y": {"value": 105, "unit": "cm"}, "z": 0.31},
-            "orientation": {"yaw": 0.0, "pitch": 0.0, "roll": 0.0},
-            "survey": {"method": "tape_measure", "uncertainty_m": 0.005},
-        },
-        {
-            "id": "anchor:kitchen_y_200",
-            "space": SPACE,
-            "type": "fiducial",
-            "position": {"x": 0.0, "y": {"value": 200, "unit": "cm"}, "z": 0.31},
-            "orientation": {"yaw": 0.0, "pitch": 0.0, "roll": 0.0},
-            "survey": {"method": "tape_measure", "uncertainty_m": 0.005},
-        },
-    ])
+    return anchors_from_space(kitchen_space())
 
 
 def _observe(body: Pose, anchors: tuple[SurveyedAnchor, ...], count: int | None = None) -> tuple:
@@ -160,7 +142,7 @@ def test_unknown_anchor_observation_is_ignored() -> None:
     body = pose(x=1.2, y=0.9, yaw=0.2)
     known = _observe(body, kitchen_anchors(), 1)
     ghost = FiducialObservation(
-        anchor_id="anchor:unsurveyed",
+        anchor_id="unsurveyed",
         pose=pose(x=0.3),
         timestamp=STAMP,
     )
@@ -177,7 +159,9 @@ def test_kitchen_anchor_fixture_is_not_origin_or_limits() -> None:
     assert as_meters({"value": 137, "unit": "cm"}) in xs
     assert as_meters({"value": 105, "unit": "cm"}) in ys
     assert 0.0 in xs and 0.0 in ys
-    assert 4.8 not in xs and 3.6 not in ys
+    assert (0.0, 0.0) not in {
+        (round(item.position.x, 4), round(item.position.y, 4)) for item in anchors
+    }
 
 
 def test_accuracy_within_localized_budget_for_arbitrary_yaw() -> None:
@@ -196,3 +180,19 @@ def test_accuracy_within_localized_budget_for_arbitrary_yaw() -> None:
         assert yaw_error < LOCALIZED_YAW_RAD
         assert solution.pose.quality == "localized"
     assert errors
+
+
+def test_localize_in_space_reads_embedded_anchors() -> None:
+    body = pose(x=1.4, y=0.9, yaw=0.3)
+    space = kitchen_space()
+    observations = _observe(body, anchors_from_space(space), 4)
+    solution = localize_in_space(
+        agent=AGENT,
+        space_record=space,
+        observations=observations,
+        camera_in_body=CAMERA,
+        timestamp=STAMP,
+    )
+    assert solution.pose.quality == "localized"
+    assert solution.pose.estimate is not None
+    _approx_pose(solution.pose.estimate, body)
