@@ -34,6 +34,9 @@ dev = [
     "pytest-cov>=6,<8",
     "httpx2>=2,<3",
 ]
+vision = [
+    "opencv-python>=4.8,<5",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/home_cortex", "scripts"]
@@ -41,3 +44,6 @@ packages = ["src/home_cortex", "scripts"]
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
 testpaths = ["tests"]
+markers = [
+    "manual: opt-in hardware or live-device checks (VISION_EDGE_SMOKE=1)",
+]

@@ -165,6 +165,23 @@ observations and a camera-in-body transform. The start pose is not an input.
 Detectors must emit `spatial.observation` records; they do not define the
 ontology.
 
+Visual evidence is a separate bounded package (`home_cortex.vision`). Home
+Cortex consumes `VisualObservation` records with normalized [0, 1] bounding
+boxes. Detector-native types (YOLO xyxy, tensors, class IDs) do not cross that
+boundary. An observation is evidence only: it does not create items or write
+`located_in`. `observer` may be null so vision does not depend on spatial pose.
+Media bytes live in a local SHA-256 artifact store; `EvidenceClip` records hold
+status and references, not payloads.
+
+The Mac EdgeVision runtime (`python -m home_cortex.vision.edge`) is a separate
+process from the semantic API. It captures the built-in camera through a
+replaceable `CameraSource` and serves an encoded MJPEG-over-HTTP preview
+(`http://127.0.0.1:8088/live.mjpg`). MJPEG was chosen because ffmpeg/MediaMTX/
+aiortc are not in the current environment; JPEG is encoded, and a browser or
+VLC can view it. Frame timestamps are timezone-aware ISO-8601. Identity is
+`device:dev_macbook` / `camera:built_in`. Use `--source synthetic` without a
+camera. Mac capture needs `pip install 'home-cortex[vision]'`.
+
 Store each fact once. Model an addressable home as an Address, its physical
 house as an Item located at that Address, and its rooms as Spaces hosted by the
 house Item. A Space may also be `located_in` another Space. Do not add a reverse

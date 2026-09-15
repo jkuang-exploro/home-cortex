@@ -1,0 +1,85 @@
+"""Glue: camera source + encoded MJPEG preview. Not the Home Cortex API process."""
+from __future__ import annotations
+
+import json
+import threading
+from typing import Any
+
+from .frames import CameraFrame, CameraSource
+from .stream import MJPEGStreamServer, StreamConfig
+
+
+class EdgeRuntime:
+    def __init__(
+        self,
+        source: CameraSource,
+        *,
+        config: StreamConfig | None = None,
+        fps: float = 10.0,
+    ) -> None:
+        self.source = source
+        self.config = config or StreamConfig()
+        self.fps = fps
+        self.frame_interval = 1.0 / fps if fps > 0 else 0.1
+        self._lock = threading.Lock()
+        self._latest: CameraFrame | None = None
+        self._stop = threading.Event()
+        self._frames = 0
+        self._capture_thread: threading.Thread | None = None
+        self._stream = MJPEGStreamServer(self, self.config)
+
+    @property
+    def running(self) -> bool:
+        return not self._stop.is_set() and self._capture_thread is not None
+
+    def start(self) -> str:
+        self._stop.clear()
+        self.source.open()
+        self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
+        self._capture_thread.start()
+        self._stream.start()
+        return self._stream.endpoint
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._stream.stop()
+        thread = self._capture_thread
+        self._capture_thread = None
+        if thread is not None:
+            thread.join(timeout=2)
+        self.source.close()
+
+    def wait(self, timeout: float) -> None:
+        self._stop.wait(timeout)
+
+    def latest_frame(self) -> CameraFrame | None:
+        with self._lock:
+            return self._latest
+
+    def health_json(self) -> str:
+        frame = self.latest_frame()
+        payload: dict[str, Any] = {
+            "device_id": self.source.device_id,
+            "camera_id": self.source.camera_id,
+            "transport": self.config.transport,
+            "stream": self._stream.endpoint,
+            "viewer": self._stream.viewer,
+            "frames": self._frames,
+            "running": self.running,
+            "last_timestamp": None if frame is None else frame.timestamp,
+            "width": None if frame is None else frame.width,
+            "height": None if frame is None else frame.height,
+        }
+        return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+
+    def _capture_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                frame = self.source.read()
+            except Exception:
+                self._stop.set()
+                return
+            with self._lock:
+                self._latest = frame
+                self._frames += 1
+            self._stop.wait(self.frame_interval)
