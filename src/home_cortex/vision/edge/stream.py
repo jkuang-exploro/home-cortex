@@ -85,7 +85,7 @@ class MJPEGStreamServer:
                             f"--{BOUNDARY}\r\n"
                             "Content-Type: image/jpeg\r\n"
                             f"Content-Length: {len(frame.jpeg)}\r\n"
-                            f"X-Timestamp: {frame.timestamp}\r\n"
+                            f"X-Captured-At: {frame.captured_at}\r\n"
                             "\r\n"
                         ).encode() + frame.jpeg + b"\r\n"
                         self.wfile.write(payload)

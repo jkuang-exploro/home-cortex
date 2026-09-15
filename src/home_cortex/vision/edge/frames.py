@@ -13,7 +13,7 @@ DEV_CAMERA_ID = "camera:built_in"
 class CameraFrame:
     """One captured frame. Camera-native buffers stay inside the source."""
 
-    timestamp: str
+    captured_at: str
     width: int
     height: int
     jpeg: bytes
@@ -31,6 +31,6 @@ class CameraSource(Protocol):
 
 
 def capture_timestamp(when: datetime | None = None) -> str:
-    """Timezone-aware ISO-8601, matching VisualObservation.observed_at."""
+    """Timezone-aware ISO-8601, matching VisualObservation.captured_at."""
     moment = when if when is not None else datetime.now().astimezone()
     return moment.isoformat(timespec="milliseconds")

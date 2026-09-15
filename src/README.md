@@ -165,13 +165,26 @@ observations and a camera-in-body transform. The start pose is not an input.
 Detectors must emit `spatial.observation` records; they do not define the
 ontology.
 
-Visual evidence is a separate bounded package (`home_cortex.vision`). Home
-Cortex consumes `VisualObservation` records with normalized [0, 1] bounding
-boxes. Detector-native types (YOLO xyxy, tensors, class IDs) do not cross that
-boundary. An observation is evidence only: it does not create items or write
-`located_in`. `observer` may be null so vision does not depend on spatial pose.
-Media bytes live in a local SHA-256 artifact store; `EvidenceClip` records hold
-status and references, not payloads.
+Visual evidence is a separate bounded package (`home_cortex.vision`). Its
+[domain boundary](home_cortex/vision/README.md) distinguishes detector category
+belief, persistent visual candidates, human-confirmed enrollments, and household
+items. Detector-native types (YOLO xyxy, tensors, class IDs) do not cross that
+boundary. An observation is evidence only: it does not create items, confirm
+identity, or write `located_in`. Unknown observer and object positions are null;
+available spatial estimates reuse `home_cortex.spatial` types. Media bytes live
+outside SurrealDB behind content-addressed references. Evidence clips have an
+independent pending/available/failed lifecycle, so observations remain valid
+when clip generation is delayed or fails.
+The [edge interface](home_cortex/vision/EDGE_INTERFACE.md) defines three
+independent channels for live media, observation events, and asynchronous clips,
+using at-least-once observation delivery with idempotent ingestion and replay.
+The [enrollment boundary](home_cortex/vision/ENROLLMENT.md) separates detector
+categories, candidate matches, scored household-item hypotheses, and auditable
+human confirmation. Missing items use the existing `write_item` path before a
+separate enrollment can be created; visual identity never implies location.
+The [Vision page architecture](home_cortex/vision/FRONTEND.md) defines a minimal
+live view, polled observation feed, asynchronous clip review, and existing-item
+enrollment workflow without introducing a frontend framework.
 
 The Mac EdgeVision runtime (`python -m home_cortex.vision.edge`) is a separate
 process from the semantic API. It captures the built-in camera through a

@@ -25,6 +25,7 @@ class EdgeRuntime:
         self._latest: CameraFrame | None = None
         self._stop = threading.Event()
         self._frames = 0
+        self._failure_code: str | None = None
         self._capture_thread: threading.Thread | None = None
         self._stream = MJPEGStreamServer(self, self.config)
 
@@ -34,10 +35,15 @@ class EdgeRuntime:
 
     def start(self) -> str:
         self._stop.clear()
+        self._failure_code = None
         self.source.open()
         self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._capture_thread.start()
-        self._stream.start()
+        try:
+            self._stream.start()
+        except Exception:
+            self.stop()
+            raise
         return self._stream.endpoint
 
     def stop(self) -> None:
@@ -66,7 +72,13 @@ class EdgeRuntime:
             "viewer": self._stream.viewer,
             "frames": self._frames,
             "running": self.running,
-            "last_timestamp": None if frame is None else frame.timestamp,
+            "source_status": (
+                "camera_disconnected"
+                if self._failure_code is not None
+                else "online" if self.running else "offline"
+            ),
+            "failure_code": self._failure_code,
+            "last_captured_at": None if frame is None else frame.captured_at,
             "width": None if frame is None else frame.width,
             "height": None if frame is None else frame.height,
         }
@@ -77,6 +89,7 @@ class EdgeRuntime:
             try:
                 frame = self.source.read()
             except Exception:
+                self._failure_code = "camera_read_failed"
                 self._stop.set()
                 return
             with self._lock:

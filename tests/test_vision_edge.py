@@ -29,9 +29,9 @@ def test_synthetic_source_timestamps_and_dimensions() -> None:
         source.close()
     assert first.width == 320 and first.height == 240
     assert first.jpeg.startswith(b"\xff\xd8")
-    parsed = datetime.fromisoformat(first.timestamp)
+    parsed = datetime.fromisoformat(first.captured_at)
     assert parsed.tzinfo is not None
-    assert datetime.fromisoformat(second.timestamp) > parsed
+    assert datetime.fromisoformat(second.captured_at) > parsed
     datetime.fromisoformat(capture_timestamp())
 
 
@@ -78,11 +78,57 @@ def test_runtime_start_health_and_clean_shutdown() -> None:
         assert health["camera_id"] == DEV_CAMERA_ID
         assert health["transport"] == "mjpeg-http"
         assert health["running"] is True
+        assert health["source_status"] == "online"
+        assert health["failure_code"] is None
+        assert health["last_captured_at"] == frame.captured_at
         with urlopen(endpoint, timeout=2) as stream:
             chunk = stream.read(160)
         assert b"--edgeframe" in chunk or chunk.startswith(b"--") or b"\xff\xd8" in chunk
     finally:
         runtime.stop()
+    assert runtime.running is False
+
+
+def test_capture_failure_has_stable_health_state() -> None:
+    class FailingSource(SyntheticCameraSource):
+        def read(self) -> CameraFrame:
+            raise RuntimeError("native camera detail must not cross the boundary")
+
+    source = FailingSource()
+    runtime = EdgeRuntime(source, config=StreamConfig(host="127.0.0.1", port=0))
+    runtime.start()
+    try:
+        deadline = time.time() + 2
+        while runtime.running and time.time() < deadline:
+            runtime.wait(0.01)
+        health = json.loads(runtime.health_json())
+        assert health["running"] is False
+        assert health["source_status"] == "camera_disconnected"
+        assert health["failure_code"] == "camera_read_failed"
+        assert "native camera detail" not in runtime.health_json()
+    finally:
+        runtime.stop()
+
+
+def test_stream_start_failure_closes_capture_source(monkeypatch) -> None:
+    class RecordingSource(SyntheticCameraSource):
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+            super().close()
+
+    source = RecordingSource()
+    runtime = EdgeRuntime(source)
+
+    def fail_start() -> None:
+        raise OSError("bind failed")
+
+    monkeypatch.setattr(runtime._stream, "start", fail_start)
+    with pytest.raises(OSError, match="bind failed"):
+        runtime.start()
+
+    assert source.closed is True
     assert runtime.running is False
 
 
@@ -104,4 +150,4 @@ def test_mac_camera_smoke() -> None:
         source.close()
     assert frame.width > 0 and frame.height > 0
     assert frame.jpeg.startswith(b"\xff\xd8")
-    datetime.fromisoformat(frame.timestamp)
+    datetime.fromisoformat(frame.captured_at)

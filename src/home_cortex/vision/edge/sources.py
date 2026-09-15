@@ -55,7 +55,7 @@ class SyntheticCameraSource:
         when = self._start + timedelta(seconds=self._index / self.fps)
         self._index += 1
         return CameraFrame(
-            timestamp=capture_timestamp(when),
+            captured_at=capture_timestamp(when),
             width=self.width,
             height=self.height,
             jpeg=self._jpeg,
@@ -111,6 +111,7 @@ class MacCameraSource:
         ok, image = self._capture.read()
         if not ok or image is None:
             raise RuntimeError("Camera frame grab failed")
+        captured_at = capture_timestamp()
         height, width = image.shape[:2]
         ok, encoded = self._cv2.imencode(
             ".jpg", image, [int(self._cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
@@ -118,7 +119,7 @@ class MacCameraSource:
         if not ok:
             raise RuntimeError("JPEG encode failed")
         return CameraFrame(
-            timestamp=capture_timestamp(),
+            captured_at=captured_at,
             width=int(width),
             height=int(height),
             jpeg=encoded.tobytes(),
