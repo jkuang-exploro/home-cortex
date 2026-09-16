@@ -20,7 +20,10 @@ def build_parser() -> argparse.ArgumentParser:
         default="mac",
         help="mac uses the built-in camera; synthetic needs no hardware",
     )
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument(
+        "--host", default="0.0.0.0",
+        help="listen address (default: all interfaces for the Cortex server; use 127.0.0.1 for local-only)",
+    )
     parser.add_argument("--port", type=int, default=8088)
     parser.add_argument("--width", type=int, default=None)
     parser.add_argument("--height", type=int, default=None)
@@ -60,6 +63,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  transport={config.transport}")
     print(f"  stream={endpoint}")
     print(f"  viewer={config.viewer}")
+    if args.host == "0.0.0.0":
+        print("  LAN access: use this Mac's LAN IP in VISION_STREAM_URL, not 0.0.0.0")
     print("  stop=Ctrl-C")
     try:
         while runtime.running:

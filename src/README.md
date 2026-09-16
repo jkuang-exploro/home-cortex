@@ -54,11 +54,13 @@ ingestion, or household writes are added.
 Stop the previous loopback-only streamer with Ctrl-C, then run:
 
 ```sh
-uv run --extra vision python -m home_cortex.vision.edge --source mac --host 0.0.0.0 --port 8088
+uv run --extra vision python -m home_cortex.vision.edge --source mac
 ```
 
-The default `127.0.0.1` bind is reachable only on the Mac itself. The server needs
-a LAN listener. Allow the process through the Mac firewall if prompted. This
+The CLI defaults to `0.0.0.0:8088` so the Cortex server can connect over the LAN.
+Use `--host 127.0.0.1` for local-only access. The address `0.0.0.0` is a bind
+address; configure the Mac’s actual LAN IP on the server. Allow the process
+through the Mac firewall if prompted. This
 existing development streamer is unauthenticated on the LAN; keep it on a trusted
 network. Use `--source synthetic` for a hardware-free test.
 

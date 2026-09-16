@@ -136,6 +136,9 @@ def test_cli_help_and_synthetic_main(capsys) -> None:
     parser = build_parser()
     args = parser.parse_args(["--source", "synthetic", "--port", "0"])
     assert args.source == "synthetic"
+    assert args.host == "0.0.0.0"
+    assert parser.parse_args([]).host == "0.0.0.0"
+    assert parser.parse_args(["--host", "127.0.0.1"]).host == "127.0.0.1"
     # Do not run main() here: it loops until interrupt.
 
 
