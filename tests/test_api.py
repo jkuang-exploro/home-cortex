@@ -1128,3 +1128,37 @@ def test_conversation_access_is_isolated_by_owner(
 def _assert_request_id(response: Any) -> None:
     request_id = response.headers["X-Request-ID"]
     assert re.fullmatch(r"[0-9a-f]{32}", request_id)
+
+
+def test_vision_shell(api_client: tuple[TestClient, FakeAgent]) -> None:
+    client, agent = api_client
+    response = client.get("/vision")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert response.headers["cache-control"] == "no-store"
+    _assert_request_id(response)
+    for section in (
+        "live-view", "recent-observations", "selected-observation",
+        "evidence-clip", "label-enroll",
+    ):
+        assert f'<section id="{section}"' in response.text
+        assert f'href="#{section}"' in response.text
+    assert '<fieldset disabled' in response.text
+    assert 'id="confirm-enrollment" type="button"' in response.text
+    assert "Stream unavailable" in response.text
+    assert "No observations available" in response.text
+    assert "Not requested" in response.text
+    assert agent.calls == []
+
+
+def test_vision_uses_existing_api_auth(api_client: tuple[TestClient, FakeAgent]) -> None:
+    client, _ = api_client
+    app.state.settings.cortex_api_key = "test-key"
+    for headers in ({}, {"Authorization": "Bearer wrong-key"}):
+        response = client.get("/vision", headers=headers)
+        assert response.status_code == 401
+        assert "authentication_required" in response.text
+        assert '<section' not in response.text
+    response = client.get("/vision", headers={"Authorization": "Bearer test-key"})
+    assert response.status_code == 200
+    assert '<h1>Vision</h1>' in response.text

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vision · Home Cortex</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #182b35; background: #f3f6f7; }
+    body { max-width: 1120px; margin: auto; padding: 24px; line-height: 1.5; }
+    h1, h2 { line-height: 1.2; }
+    h2 { font-size: 1.2rem; }
+    nav { display: flex; flex-wrap: wrap; gap: 16px; margin: 24px 0; }
+    a { color: #075e70; }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    section { background: white; border: 1px solid #ccd8dd; border-radius: 12px; padding: 20px; }
+    .empty { padding: 28px 16px; background: #edf2f4; border-radius: 8px; }
+    label { display: block; margin-top: 12px; }
+    input, button { box-sizing: border-box; max-width: 100%; padding: 10px; font: inherit; }
+    input { width: 100%; }
+    button { margin-top: 16px; }
+    fieldset { border: 0; padding: 0; margin: 0; }
+    footer { margin-top: 24px; }
+    @media (max-width: 700px) { main { grid-template-columns: 1fr; } body { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <p>HOME CORTEX</p>
+    <h1>Vision</h1>
+    <p>UI shell — live streams and observation services are not connected yet.</p>
+  </header>
+  <nav aria-label="Vision sections">
+    <a href="#live-view">Live View</a>
+    <a href="#recent-observations">Recent Observations</a>
+    <a href="#selected-observation">Selected Observation</a>
+    <a href="#evidence-clip">Evidence Clip</a>
+    <a href="#label-enroll">Label / Enroll</a>
+  </nav>
+  <main>
+    <section id="live-view" aria-labelledby="live-heading">
+      <h2 id="live-heading">Live View</h2>
+      <div class="empty" role="status">Stream unavailable — no source connected.</div>
+      <p>Live playback will appear here when a source is available.</p>
+    </section>
+    <section id="recent-observations" aria-labelledby="recent-heading">
+      <h2 id="recent-heading">Recent Observations</h2>
+      <p role="status">No observations available. Observation ingestion is not connected.</p>
+      <ul id="observation-list" aria-label="Recent observations"></ul>
+    </section>
+    <section id="selected-observation" aria-labelledby="selected-heading">
+      <h2 id="selected-heading">Selected Observation</h2>
+      <p>No observation selected.</p>
+      <p>Source, capture time, category, confidence, and available evidence will appear here.</p>
+    </section>
+    <section id="evidence-clip" aria-labelledby="clip-heading">
+      <h2 id="clip-heading">Evidence Clip</h2>
+      <p id="clip-state" role="status">Not requested — no observation selected.</p>
+      <p>Future clip states: pending, available, or failed. Clips are independent of observations.</p>
+    </section>
+    <section id="label-enroll" aria-labelledby="enroll-heading">
+      <h2 id="enroll-heading">Label / Enroll</h2>
+      <p id="enroll-help">Controls become available when observation review and enrollment services are connected. Nothing is saved by this shell.</p>
+      <fieldset disabled aria-describedby="enroll-help">
+        <legend>Human confirmation</legend>
+        <label for="observation-label">Label</label>
+        <input id="observation-label" type="text" placeholder="Observation label">
+        <label for="household-item">Existing household item</label>
+        <input id="household-item" type="search" placeholder="Search household items">
+        <button id="save-label" type="button">Save label</button>
+        <button id="confirm-enrollment" type="button">Confirm enrollment</button>
+      </fieldset>
+    </section>
+  </main>
+  <footer>Served by the Home Cortex API. No Open WebUI integration required.</footer>
+</body>
+</html>

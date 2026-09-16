@@ -34,6 +34,50 @@ labeled ontology; older loaders reject the typed fields. See the
 [before/after report](../artifacts/condition-rendering/REPORT.md)
 for validation and presentation limitations.
 
+## Vision shell
+
+The standalone `GET /vision` page runs in this API process, independently of
+Open WebUI. It contains Live View, Recent Observations, Selected Observation,
+Evidence Clip state, and disabled Label / Enroll controls. It does not capture
+video, ingest observations, poll services, or save labels/enrollments. Navigation
+links work without JavaScript; HTML and CSS ship inside the Python package.
+
+From the repository root on `home-cortex-0`, with the existing Compose environment
+and dependencies configured, rebuild and restart only the API:
+
+```sh
+docker compose -f docker/cortex/docker-compose.yml up -d --build --no-deps cortex-api
+curl -i http://home-cortex-0:8001/vision
+```
+
+Open <http://home-cortex-0:8001/vision> and verify all five sections and the empty
+states. Compose maps external port 8001 to API port 8000; no Open WebUI rebuild
+is needed. The API retains its existing startup dependencies, including SurrealDB.
+For a local process using the existing configured environment:
+
+```sh
+uv run uvicorn home_cortex.api:app --host 0.0.0.0 --port 8001
+```
+
+With no `CORTEX_API_KEY`, the page opens directly. When a key is configured,
+`/vision` uses the existing bearer authentication and a plain browser request
+returns 401. Use an authenticated reverse proxy that supplies the bearer header
+for browser access. For command-line verification, use:
+
+```sh
+curl -i -H "Authorization: Bearer ${CORTEX_API_KEY}" http://home-cortex-0:8001/vision
+```
+
+Do not put the key in the URL or page. No household identity is needed for this
+empty shell; future enrollment must bind a trusted mapped person server-side.
+
+Follow-up hooks are specified in [Vision frontend architecture](home_cortex/vision/FRONTEND.md):
+source discovery and browser playback descriptors, bounded observation feed and
+detail reads, clip status/artifact access, and candidate promotion/item search/
+human enrollment. The section IDs in the HTML provide attachment points for a
+future controller. Those endpoints and a persistent label contract are not
+implemented by this shell; no synthetic observations are presented as real data.
+
 ## Endpoints
 
 - `GET /health` checks SurrealDB and does not require a Cortex API key.

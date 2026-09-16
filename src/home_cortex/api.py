@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.responses import JSONResponse, StreamingResponse
+from starlette.responses import FileResponse, JSONResponse, StreamingResponse
 
 from . import __version__
 from .agent_service import AgentLimitError, AgentService, AgentStreamingError
@@ -301,6 +301,17 @@ async def unexpected_error_handler(
         500,
         "internal_server_error",
         "An unexpected server error occurred",
+    )
+
+
+@app.get("/vision", response_class=FileResponse, include_in_schema=False)
+async def vision_page(request: Request) -> FileResponse:
+    """Serve the build-free Vision shell using the existing API authentication."""
+    _authenticate_request(request)
+    return FileResponse(
+        Path(__file__).parent / "vision" / "web" / "index.html",
+        media_type="text/html",
+        headers={"Cache-Control": "no-store"},
     )
 
 
