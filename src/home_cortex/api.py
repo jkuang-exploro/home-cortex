@@ -305,9 +305,8 @@ async def unexpected_error_handler(
 
 
 @app.get("/vision", response_class=FileResponse, include_in_schema=False)
-async def vision_page(request: Request) -> FileResponse:
-    """Serve the build-free Vision shell using the existing API authentication."""
-    _authenticate_request(request)
+async def vision_page() -> FileResponse:
+    """Serve the public, data-free shell; data endpoints retain authentication."""
     return FileResponse(
         Path(__file__).parent / "vision" / "web" / "index.html",
         media_type="text/html",

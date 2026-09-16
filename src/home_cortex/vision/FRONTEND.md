@@ -1,5 +1,13 @@
 # Vision frontend architecture
 
+## Current shell scope
+
+The current `/vision` HTML shell is public so a normal browser can open it on
+port 8001. It contains only placeholders and disabled controls, with no household
+data or media. The authenticated page and data flows below describe the future
+connected UI. Add browser authentication before connecting sensitive services;
+existing API authentication is unchanged.
+
 ## Decision
 
 V1 is one build-free `/vision` page served with the Home Cortex API assets. It

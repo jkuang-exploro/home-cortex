@@ -59,17 +59,13 @@ For a local process using the existing configured environment:
 uv run uvicorn home_cortex.api:app --host 0.0.0.0 --port 8001
 ```
 
-With no `CORTEX_API_KEY`, the page opens directly. When a key is configured,
-`/vision` uses the existing bearer authentication and a plain browser request
-returns 401. Use an authenticated reverse proxy that supplies the bearer header
-for browser access. For command-line verification, use:
-
-```sh
-curl -i -H "Authorization: Bearer ${CORTEX_API_KEY}" http://home-cortex-0:8001/vision
-```
-
-Do not put the key in the URL or page. No household identity is needed for this
-empty shell; future enrollment must bind a trusted mapped person server-side.
+The empty `/vision` shell is public and opens directly in a browser even when
+`CORTEX_API_KEY` is configured. It contains no household data, media, or credentials.
+Existing data APIs retain their bearer authentication; keep the configured key.
+Future observation/media endpoints must require authentication, and enrollment
+must bind a trusted mapped person server-side. Browser authentication for those
+services must be implemented before connecting them to the shell. Do not put the
+API key in the URL or page.
 
 Follow-up hooks are specified in [Vision frontend architecture](home_cortex/vision/FRONTEND.md):
 source discovery and browser playback descriptors, bounded observation feed and

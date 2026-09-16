@@ -1151,14 +1151,18 @@ def test_vision_shell(api_client: tuple[TestClient, FakeAgent]) -> None:
     assert agent.calls == []
 
 
-def test_vision_uses_existing_api_auth(api_client: tuple[TestClient, FakeAgent]) -> None:
+def test_vision_is_public_but_api_remains_protected(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
     client, _ = api_client
     app.state.settings.cortex_api_key = "test-key"
-    for headers in ({}, {"Authorization": "Bearer wrong-key"}):
-        response = client.get("/vision", headers=headers)
-        assert response.status_code == 401
-        assert "authentication_required" in response.text
-        assert '<section' not in response.text
-    response = client.get("/vision", headers={"Authorization": "Bearer test-key"})
+    response = client.get("/vision")
     assert response.status_code == 200
     assert '<h1>Vision</h1>' in response.text
+    assert "test-key" not in response.text
+    for headers in ({}, {"Authorization": "Bearer wrong-key"}):
+        response = client.get("/v1/models", headers=headers)
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "authentication_required"
+    response = client.get("/v1/models", headers={"Authorization": "Bearer test-key"})
+    assert response.status_code == 200
