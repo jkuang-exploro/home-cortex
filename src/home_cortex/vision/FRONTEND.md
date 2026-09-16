@@ -3,8 +3,9 @@
 ## Current shell scope
 
 The current `/vision` HTML shell is public so a normal browser can open it on
-port 8001. It contains only placeholders and disabled controls, with no household
-data or media. The authenticated page and data flows below describe the future
+port 8001. It offers an explicit, browser-local MJPEG URL connection and disabled review
+controls. No source URL is published by the API or saved in browser storage;
+media loads directly from the user-selected source. Observations remain empty. The authenticated page and data flows below describe the future
 connected UI. Add browser authentication before connecting sensitive services;
 existing API authentication is unchanged.
 

@@ -1166,3 +1166,18 @@ def test_vision_is_public_but_api_remains_protected(
         assert response.json()["error"]["code"] == "authentication_required"
     response = client.get("/v1/models", headers={"Authorization": "Bearer test-key"})
     assert response.status_code == 200
+
+
+def test_vision_player_asset(api_client: tuple[TestClient, FakeAgent]) -> None:
+    client, _ = api_client
+    app.state.settings.cortex_api_key = "test-key"
+    page = client.get("/vision")
+    assert 'id="stream-url"' in page.text
+    assert 'id="stream-disconnect"' in page.text
+    assert 'src="/vision/assets/vision.js"' in page.text
+    script = client.get("/vision/assets/vision.js")
+    assert script.status_code == 200
+    assert script.headers["content-type"].startswith("text/javascript")
+    assert script.headers["cache-control"] == "no-store"
+    assert "test-key" not in script.text
+    assert client.get("/vision/assets/contracts.py").status_code == 404

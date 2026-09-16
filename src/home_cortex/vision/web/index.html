@@ -20,6 +20,7 @@
     button { margin-top: 16px; }
     fieldset { border: 0; padding: 0; margin: 0; }
     footer { margin-top: 24px; }
+    #stream-player img { display: block; width: 100%; border-radius: 8px; margin-top: 16px; }
     @media (max-width: 700px) { main { grid-template-columns: 1fr; } body { padding: 16px; } }
   </style>
 </head>
@@ -27,7 +28,7 @@
   <header>
     <p>HOME CORTEX</p>
     <h1>Vision</h1>
-    <p>UI shell — live streams and observation services are not connected yet.</p>
+    <p>Connect a live preview. Observation and enrollment services are not connected yet.</p>
   </header>
   <nav aria-label="Vision sections">
     <a href="#live-view">Live View</a>
@@ -39,8 +40,18 @@
   <main>
     <section id="live-view" aria-labelledby="live-heading">
       <h2 id="live-heading">Live View</h2>
-      <div class="empty" role="status">Stream unavailable — no source connected.</div>
-      <p>Live playback will appear here when a source is available.</p>
+      <form id="stream-form">
+        <label for="stream-url">MJPEG stream URL</label>
+        <input id="stream-url" type="url" required placeholder="Paste the stream URL printed by EdgeVision"
+               aria-describedby="stream-help" autocomplete="off">
+        <button type="submit">Connect</button>
+        <button id="stream-disconnect" type="button" disabled>Disconnect</button>
+      </form>
+      <p id="stream-help">Use the camera stream URL, ending in /live.mjpg, not the viewer page.
+        A loopback address (127.0.0.1) works only when this browser runs on the camera computer.</p>
+      <p id="stream-status" role="status" aria-live="polite">Stream unavailable — enter a source URL and connect.</p>
+      <div id="stream-player"></div>
+      <noscript>Enable JavaScript to connect the live preview.</noscript>
     </section>
     <section id="recent-observations" aria-labelledby="recent-heading">
       <h2 id="recent-heading">Recent Observations</h2>
@@ -72,5 +83,6 @@
     </section>
   </main>
   <footer>Served by the Home Cortex API. No Open WebUI integration required.</footer>
+  <script src="/vision/assets/vision.js" defer></script>
 </body>
 </html>

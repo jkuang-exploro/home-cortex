@@ -40,7 +40,8 @@ The standalone `GET /vision` page runs in this API process, independently of
 Open WebUI. It contains Live View, Recent Observations, Selected Observation,
 Evidence Clip state, and disabled Label / Enroll controls. It does not capture
 video, ingest observations, poll services, or save labels/enrollments. Navigation
-links work without JavaScript; HTML and CSS ship inside the Python package.
+links work without JavaScript; the live preview uses a small plain JavaScript player.
+All assets ship inside the Python package, with no frontend build step.
 
 From the repository root on `home-cortex-0`, with the existing Compose environment
 and dependencies configured, rebuild and restart only the API:
@@ -59,13 +60,47 @@ For a local process using the existing configured environment:
 uv run uvicorn home_cortex.api:app --host 0.0.0.0 --port 8001
 ```
 
-The empty `/vision` shell is public and opens directly in a browser even when
-`CORTEX_API_KEY` is configured. It contains no household data, media, or credentials.
+The `/vision` page and player script are public and opens directly in a browser even when
+`CORTEX_API_KEY` is configured. The API serves no household data, media, or credentials through these routes.
 Existing data APIs retain their bearer authentication; keep the configured key.
 Future observation/media endpoints must require authentication, and enrollment
 must bind a trusted mapped person server-side. Browser authentication for those
 services must be implemented before connecting them to the shell. Do not put the
 API key in the URL or page.
+
+### Connect the Mac camera preview
+
+On the Mac with the camera, run from the repository root and leave it running:
+
+```sh
+uv run --extra vision python -m home_cortex.vision.edge --source mac
+```
+
+Open <http://home-cortex-0:8001/vision> **in a browser on that same Mac**.
+Paste `http://127.0.0.1:8088/live.mjpg` into **MJPEG stream URL** and click
+**Connect**. Allow local network access if prompted by your browser. The image
+loads directly from the Mac; the API does not proxy video. **Disconnect** stops
+the browser preview; Ctrl-C in the streamer terminal stops capture. URLs are
+not persisted or automatically connected on page load.
+
+For a hardware-free check, start the streamer with `--source synthetic` instead.
+Verify the preview appears, Disconnect removes it, and a stopped or unreachable
+stream shows an error within 15 seconds when connecting. Multipart streams may
+leave the last frame visible if capture later stops; use Connect again to retry.
+Observations, clips, and enrollment remain placeholders independent of playback.
+
+To view from another device, start EdgeVision with `--host 0.0.0.0` and enter
+`http://<MAC-LAN-IP>:8088/live.mjpg` in that device's browser. This development
+streamer has no authentication: binding to all interfaces exposes the camera to
+reachable devices, so use it only on a trusted network. The default loopback bind
+keeps it local. An HTTPS Vision page needs an HTTPS media endpoint; the player
+rejects mixed-content HTTP URLs and URLs containing embedded credentials.
+
+Player behavior tests use Node's built-in test runner (no npm install/build):
+
+```sh
+node --test tests/vision_player.test.cjs
+```
 
 Follow-up hooks are specified in [Vision frontend architecture](home_cortex/vision/FRONTEND.md):
 source discovery and browser playback descriptors, bounded observation feed and

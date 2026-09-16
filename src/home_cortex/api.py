@@ -314,6 +314,16 @@ async def vision_page() -> FileResponse:
     )
 
 
+@app.get("/vision/assets/vision.js", response_class=FileResponse, include_in_schema=False)
+async def vision_script() -> FileResponse:
+    """Serve the build-free player without exposing arbitrary package files."""
+    return FileResponse(
+        Path(__file__).parent / "vision" / "web" / "vision.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/health")
 async def health(request: Request) -> dict[str, Any]:
     try:
