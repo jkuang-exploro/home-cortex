@@ -1,13 +1,15 @@
 # Vision frontend architecture
 
-## Current shell scope
+## Current implementation scope
 
-The current `/vision` HTML shell is public so a normal browser can open it on
-port 8001. It offers an explicit, browser-local MJPEG URL connection and disabled review
-controls. No source URL is published by the API or saved in browser storage;
-media loads directly from the user-selected source. Observations remain empty. The authenticated page and data flows below describe the future
-connected UI. Add browser authentication before connecting sensitive services;
-existing API authentication is unchanged.
+The public `/vision` page uses a fixed server-configured `VISION_STREAM_URL` via
+`GET /vision/stream`. Media is relayed by the API for reliable same-origin browser
+access. This supersedes the direct browser-to-Mac playback recommendation below
+for the current MJPEG development preview. It does not implement source discovery.
+`POST /vision/session` exchanges the existing bearer key for a signed, short-lived
+HttpOnly cookie scoped to Vision; media routes retain API authentication.
+Observation and enrollment controls remain placeholders. Future gateway adapters
+may avoid relaying video through the API, but must provide authenticated access.
 
 ## Decision
 

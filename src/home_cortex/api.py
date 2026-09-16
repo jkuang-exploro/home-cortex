@@ -43,6 +43,7 @@ from .retrieval import RetrievalService
 from .calendar import calendar_service_from_settings
 from .tools import ToolDispatcher
 from .writing import ItemWritingService
+from .vision.relay import COOKIE_NAME, SESSION_SECONDS, open_relay, session_token, valid_session
 
 DEFAULT_AGENT_ID = "steward"
 VIRTUAL_MODEL = get_agent(DEFAULT_AGENT_ID).display_name
@@ -322,6 +323,40 @@ async def vision_script() -> FileResponse:
         media_type="text/javascript",
         headers={"Cache-Control": "no-store"},
     )
+
+
+def _authenticate_vision(request: Request) -> None:
+    key = _request_settings(request).cortex_api_key
+    if key and valid_session(request.cookies.get(COOKIE_NAME, ""), key):
+        return
+    _authenticate_request(request)
+
+
+def _vision_stream_url(request: Request) -> str:
+    url = getattr(_request_settings(request), "vision_stream_url", None)
+    if not url:
+        raise APIError(503, "vision_not_configured", "Set VISION_STREAM_URL on the Home Cortex server")
+    return str(url)
+
+
+@app.post("/vision/session", include_in_schema=False)
+async def vision_session(request: Request) -> JSONResponse:
+    _authenticate_vision(request)
+    _vision_stream_url(request)
+    response = JSONResponse({"stream_url": "/vision/stream"}, headers={"Cache-Control": "no-store"})
+    key = _request_settings(request).cortex_api_key
+    if key:
+        response.set_cookie(
+            COOKIE_NAME, session_token(key), max_age=SESSION_SECONDS,
+            httponly=True, secure=request.url.scheme == "https", samesite="strict", path="/vision",
+        )
+    return response
+
+
+@app.get("/vision/stream", include_in_schema=False)
+async def vision_stream(request: Request) -> StreamingResponse:
+    _authenticate_vision(request)
+    return await open_relay(_vision_stream_url(request))
 
 
 @app.get("/health")

@@ -34,80 +34,105 @@ labeled ontology; older loaders reject the typed fields. See the
 [before/after report](../artifacts/condition-rendering/REPORT.md)
 for validation and presentation limitations.
 
-## Vision shell
+## Vision live preview
 
-The standalone `GET /vision` page runs in this API process, independently of
-Open WebUI. It contains Live View, Recent Observations, Selected Observation,
-Evidence Clip state, and disabled Label / Enroll controls. It does not capture
-video, ingest observations, poll services, or save labels/enrollments. Navigation
-links work without JavaScript; the live preview uses a small plain JavaScript player.
-All assets ship inside the Python package, with no frontend build step.
+`GET /vision` is a build-free page hosted by this API, independent of Open WebUI.
+The live preview uses a fixed server-side MJPEG relay:
 
-From the repository root on `home-cortex-0`, with the existing Compose environment
-and dependencies configured, rebuild and restart only the API:
-
-```sh
-docker compose -f docker/cortex/docker-compose.yml up -d --build --no-deps cortex-api
-curl -i http://home-cortex-0:8001/vision
+```text
+Browser -> home-cortex-0:8001/vision/stream -> 192.168.68.65:8088/live.mjpg
 ```
 
-Open <http://home-cortex-0:8001/vision> and verify all five sections and the empty
-states. Compose maps external port 8001 to API port 8000; no Open WebUI rebuild
-is needed. The API retains its existing startup dependencies, including SurrealDB.
-For a local process using the existing configured environment:
+The browser never connects to the Mac directly. No CORS or browser private-network
+permission is needed for the camera connection. The API streams chunks without
+buffering the full response or decoding video. Recent Observations, Selected
+Observation, Evidence Clip, and Label / Enroll remain placeholders; no detector,
+ingestion, or household writes are added.
+
+### Launch on the Mac
+
+Stop the previous loopback-only streamer with Ctrl-C, then run:
 
 ```sh
-uv run uvicorn home_cortex.api:app --host 0.0.0.0 --port 8001
+uv run --extra vision python -m home_cortex.vision.edge --source mac --host 0.0.0.0 --port 8088
 ```
 
-The `/vision` page and player script are public and opens directly in a browser even when
-`CORTEX_API_KEY` is configured. The API serves no household data, media, or credentials through these routes.
-Existing data APIs retain their bearer authentication; keep the configured key.
-Future observation/media endpoints must require authentication, and enrollment
-must bind a trusted mapped person server-side. Browser authentication for those
-services must be implemented before connecting them to the shell. Do not put the
-API key in the URL or page.
+The default `127.0.0.1` bind is reachable only on the Mac itself. The server needs
+a LAN listener. Allow the process through the Mac firewall if prompted. This
+existing development streamer is unauthenticated on the LAN; keep it on a trusted
+network. Use `--source synthetic` for a hardware-free test.
 
-### Connect the Mac camera preview
+### Configure and launch on home-cortex-0
 
-On the Mac with the camera, run from the repository root and leave it running:
+Set this in `docker/cortex/.env` (update it if the Mac's address changes):
+
+```dotenv
+VISION_STREAM_URL=http://192.168.68.65:8088/live.mjpg
+```
+
+From the updated repository root:
 
 ```sh
-uv run --extra vision python -m home_cortex.vision.edge --source mac
+docker compose --env-file docker/cortex/.env -f docker/cortex/docker-compose.yml up -d --build --no-deps cortex-api
 ```
 
-Open <http://home-cortex-0:8001/vision> **in a browser on that same Mac**.
-Paste `http://127.0.0.1:8088/live.mjpg` into **MJPEG stream URL** and click
-**Connect**. Allow local network access if prompted by your browser. The image
-loads directly from the Mac; the API does not proxy video. **Disconnect** stops
-the browser preview; Ctrl-C in the streamer terminal stops capture. URLs are
-not persisted or automatically connected on page load.
+This passes the configured URL into the API container. `VISION_STREAM_URL` is
+optional; an unset value gives a clear 503 response. The relay accepts only that
+server-configured HTTP(S) source, never a browser-supplied target, credentials in
+the source URL, or upstream redirects. Existing API startup dependencies remain.
+For a local API process, set the same environment variable and launch with
+`uv run uvicorn home_cortex.api:app --host 0.0.0.0 --port 8001`.
 
-For a hardware-free check, start the streamer with `--source synthetic` instead.
-Verify the preview appears, Disconnect removes it, and a stopped or unreachable
-stream shows an error within 15 seconds when connecting. Multipart streams may
-leave the last frame visible if capture later stops; use Connect again to retry.
-Observations, clips, and enrollment remain placeholders independent of playback.
+Open <http://home-cortex-0:8001/vision> from any device that can reach Home Cortex.
+If `CORTEX_API_KEY` is configured, enter it in the password field and click
+**Connect**. It is sent once in an Authorization header to `/vision/session`,
+cleared from the input, and replaced by a signed, one-hour HttpOnly, SameSite
+cookie scoped to `/vision` (Secure on HTTPS). The key is never placed in a URL,
+HTML response, or browser storage. Use HTTPS for access outside a trusted LAN.
+Existing valid sessions can reconnect without re-entering the key. The Vision
+cookie does not authorize other APIs; normal bearer authorization still works.
+The public page and script contain no media; `/vision/stream` requires API auth
+or a valid Vision session when a key is configured. No-key development remains
+supported. Future enrollment still requires a trusted mapped human identity.
 
-To view from another device, start EdgeVision with `--host 0.0.0.0` and enter
-`http://<MAC-LAN-IP>:8088/live.mjpg` in that device's browser. This development
-streamer has no authentication: binding to all interfaces exposes the camera to
-reachable devices, so use it only on a trusted network. The default loopback bind
-keeps it local. An HTTPS Vision page needs an HTTPS media endpoint; the player
-rejects mixed-content HTTP URLs and URLs containing embedded credentials.
+**Disconnect** releases the viewer's relay connection; Ctrl-C on the Mac stops
+capture. Each viewer gets its own upstream connection, with a 3-second connect
+and 10-second idle read timeout. Initial connection/type failures return 502;
+midstream failures close playback. A browser may retain its last decoded frame
+when the source stops; reconnect if the picture freezes.
 
-Player behavior tests use Node's built-in test runner (no npm install/build):
+### Verify from the server
+
+Run on `home-cortex-0` first, to check Mac reachability:
 
 ```sh
-node --test tests/vision_player.test.cjs
+curl --connect-timeout 3 --max-time 5 http://192.168.68.65:8088/health
 ```
 
-Follow-up hooks are specified in [Vision frontend architecture](home_cortex/vision/FRONTEND.md):
-source discovery and browser playback descriptors, bounded observation feed and
-detail reads, clip status/artifact access, and candidate promotion/item search/
-human enrollment. The section IDs in the HTML provide attachment points for a
-future controller. Those endpoints and a persistent label contract are not
-implemented by this shell; no synthetic observations are presented as real data.
+Check from inside the API container too:
+
+```sh
+docker compose --env-file docker/cortex/.env -f docker/cortex/docker-compose.yml exec cortex-api python -c 'import os, urllib.request; r=urllib.request.urlopen(os.environ["VISION_STREAM_URL"], timeout=5); print(r.status, r.headers["Content-Type"]); print(r.read(100))'
+```
+
+Then verify actual JPEG bytes through the relay (export the configured key in
+this shell; omit the header for no-key development):
+
+```sh
+curl --max-time 3 -D /tmp/vision-headers.txt -H "Authorization: Bearer ${CORTEX_API_KEY}" http://home-cortex-0:8001/vision/stream -o /tmp/vision-preview.mjpg
+```
+
+A timeout after 3 seconds is expected for an endless live stream. The headers
+should show HTTP 200 and `multipart/x-mixed-replace; boundary=...`, and the output
+file should contain JPEG frames. A 401 means the key is missing/wrong; 503 means
+configuration is missing; 502 means the server cannot receive a valid stream.
+Ensure the URL ends in `/live.mjpg` without a trailing comma.
+
+Tests: `python -m pytest -q` includes an actual HTTP integration test from a
+synthetic camera through the Cortex server, plus auth and upstream failure tests.
+Run `node --test tests/vision_player.test.cjs` for player lifecycle checks.
+Follow-up observation/clip/enrollment contracts are in
+[Vision frontend architecture](home_cortex/vision/FRONTEND.md).
 
 ## Endpoints
 

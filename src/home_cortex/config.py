@@ -7,6 +7,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    HttpUrl,
     SecretStr,
     field_validator,
     model_validator,
@@ -61,6 +62,7 @@ class Settings(BaseSettings):
     data_dir: Path = Path("/app/data")
     edge_schema_dir: Path = Path("/app/schemas/edge")
     retrieval_limit: int = Field(default=100, ge=1, le=1000)
+    vision_stream_url: HttpUrl | None = None
     cortex_api_key: str | None = None
     cortex_identity_map: dict[str, str] = Field(default_factory=dict)
     google_calendar_client_id: str | None = None
@@ -71,6 +73,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "cortex_api_key",
+        "vision_stream_url",
         "google_calendar_client_id",
         "openrouter_http_referer",
         "openrouter_model",
@@ -93,6 +96,13 @@ class Settings(BaseSettings):
     def normalize_optional_secret(cls, value: object) -> object:
         if isinstance(value, str):
             return value.strip() or None
+        return value
+
+    @field_validator("vision_stream_url")
+    @classmethod
+    def validate_vision_stream_url(cls, value: HttpUrl | None) -> HttpUrl | None:
+        if value is not None and (value.username or value.password or value.fragment):
+            raise ValueError("vision_stream_url must not contain credentials or a fragment")
         return value
 
     @field_validator("calendar_timezone")

@@ -5,33 +5,29 @@ const path = require('node:path');
 const vm = require('node:vm');
 const script = fs.readFileSync(path.join(__dirname, '../src/home_cortex/vision/web/vision.js'), 'utf8');
 
-function setup(protocol = 'http:') {
-  const elements = {};
-  const timers = new Map();
-  let clock = 0;
-  let timerId = 0;
+function setup(fetcher = async () => ({ok: true})) {
+  const elements = {}, timers = new Map(), requests = [];
+  let clock = 0, timerId = 0;
   const element = () => ({
-    handlers: {}, children: [], naturalWidth: 0, disabled: true,
+    handlers: {}, children: [], naturalWidth: 0, disabled: true, value: '',
     addEventListener(name, fn) { this.handlers[name] = fn; },
     replaceChildren(...children) { this.children = children; },
     removeAttribute(name) { delete this[name]; },
   });
-  for (const id of ['stream-form', 'stream-url', 'stream-status', 'stream-player', 'stream-disconnect']) {
-    elements[id] = element();
-  }
+  for (const id of ['stream-form', 'vision-key', 'stream-status', 'stream-player', 'stream-disconnect']) elements[id] = element();
   const window = element();
   vm.runInNewContext(script, {
-    document: { getElementById: id => elements[id], createElement: element },
-    location: { protocol }, window, URL,
+    document: { getElementById: id => elements[id], createElement: element }, window, AbortController,
+    fetch: (url, options) => { requests.push({url, ...options, headers: {...options.headers}}); return fetcher(url, options); },
     Date: { now: () => clock },
     setInterval: fn => { timers.set(++timerId, fn); return timerId; },
     clearInterval: id => timers.delete(id),
   });
   return {
-    elements, timers, window,
-    connect(url = 'http://127.0.0.1:8088/live.mjpg') {
-      elements['stream-url'].value = url;
-      elements['stream-form'].handlers.submit({ preventDefault() {} });
+    elements, timers, window, requests,
+    async connect(key = '') {
+      elements['vision-key'].value = key;
+      await elements['stream-form'].handlers.submit({ preventDefault() {} });
       return elements['stream-player'].children[0];
     },
     tick(ms) { clock += ms; for (const fn of [...timers.values()]) fn(); },
@@ -39,12 +35,13 @@ function setup(protocol = 'http:') {
   };
 }
 
-test('explicit connect detects first MJPEG frame without a load event; disconnect releases it', () => {
+test('connect uses only same-origin session and media, clears key, detects first frame', async () => {
   const app = setup();
-  assert.equal(app.elements['stream-player'].children.length, 0);
-  const image = app.connect();
-  assert.equal(image.src, 'http://127.0.0.1:8088/live.mjpg');
-  assert.match(app.status(), /Connecting/);
+  const image = await app.connect('test-key');
+  assert.equal(app.requests[0].url, '/vision/session');
+  assert.equal(app.requests[0].headers.Authorization, 'Bearer test-key');
+  assert.equal(app.elements['vision-key'].value, '');
+  assert.equal(image.src, '/vision/stream');
   image.naturalWidth = 640;
   app.tick(250);
   assert.match(app.status(), /Preview connected/);
@@ -52,44 +49,48 @@ test('explicit connect detects first MJPEG frame without a load event; disconnec
   app.elements['stream-disconnect'].handlers.click();
   assert.equal(image.src, undefined);
   assert.equal(app.elements['stream-player'].children.length, 0);
-  assert.equal(app.elements['stream-disconnect'].disabled, true);
 });
 
-test('errors and first-frame timeout clean up and allow retry', () => {
+test('session errors prevent media load and show actionable messages', async () => {
+  for (const [status, message] of [[401, /API key/], [503, /VISION_STREAM_URL/]]) {
+    const app = setup(async () => ({ok: false, status}));
+    assert.equal(await app.connect(), undefined);
+    assert.match(app.status(), message);
+    assert.equal(app.timers.size, 0);
+  }
+  const app = setup(async () => { throw new Error('offline'); });
+  assert.equal(await app.connect(), undefined);
+  assert.match(app.status(), /Cannot reach Home Cortex/);
+});
+
+test('upstream failure and first-frame timeout clean up and permit retry', async () => {
   const app = setup();
-  const first = app.connect();
+  const first = await app.connect();
   first.onerror();
-  assert.match(app.status(), /Stream unavailable/);
+  assert.match(app.status(), /Home Cortex could not load/);
   assert.equal(first.src, undefined);
-  app.connect();
+  await app.connect();
   app.tick(15000);
   assert.match(app.status(), /Stream unavailable/);
   assert.equal(app.timers.size, 0);
-  assert.ok(app.connect());
+  assert.ok(await app.connect());
 });
 
-test('reconnect ignores stale image callbacks and page exit releases playback', () => {
+test('stale callbacks and an aborted session cannot resurrect playback', async () => {
   const app = setup();
-  const first = app.connect();
+  const first = await app.connect();
   const staleError = first.onerror;
-  const second = app.connect('http://camera.local:8088/live.mjpg');
+  const second = await app.connect();
   staleError();
   assert.equal(app.elements['stream-player'].children[0], second);
-  assert.equal(first.src, undefined);
   app.window.handlers.pagehide();
   assert.equal(second.src, undefined);
-  assert.equal(app.timers.size, 0);
-});
-
-test('invalid protocols, credential URLs, and mixed content never start playback', () => {
-  for (const url of ['not-a-url', 'javascript:alert(1)', 'file:///tmp/image', 'http://user:secret@camera/live.mjpg']) {
-    const app = setup();
-    assert.equal(app.connect(url), undefined);
-    assert.match(app.status(), /without embedded credentials/);
-    assert.equal(app.timers.size, 0);
-  }
-  const app = setup('https:');
-  assert.equal(app.connect(), undefined);
-  assert.match(app.status(), /HTTPS stream/);
-  assert.ok(app.connect('https://camera.example/live.mjpg'));
+  let resolve;
+  const pending = setup(() => new Promise(done => { resolve = done; }));
+  const connecting = pending.connect();
+  pending.elements['stream-disconnect'].handlers.click();
+  resolve({ok: true});
+  await connecting;
+  assert.equal(pending.elements['stream-player'].children.length, 0);
+  assert.equal(pending.requests[0].signal.aborted, true);
 });
