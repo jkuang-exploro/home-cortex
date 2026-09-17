@@ -20,7 +20,7 @@ services:
 
   home-gui:
     build:
-      context: ../../src/home_gui
+      context: ../src/home_gui
       dockerfile: Dockerfile
     image: home-cortex/gui:0.1.0
     restart: unless-stopped
@@ -39,7 +39,7 @@ services:
 
   cortex-api:
     build:
-      context: ../..
+      context: ..
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
@@ -70,8 +70,8 @@ services:
       CALENDAR_TIMEZONE: ${CALENDAR_TIMEZONE:-America/Los_Angeles}
       CALENDAR_BINDINGS: '${CALENDAR_BINDINGS:-[]}'
     volumes:
-      - ../../data:/app/data:ro
-      - ../../tmp/db-export:/app/export
+      - ../data:/app/data:ro
+      - ../tmp/db-export:/app/export
     depends_on:
       - surrealdb
       - ollama
