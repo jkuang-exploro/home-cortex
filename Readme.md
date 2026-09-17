@@ -85,3 +85,7 @@ home-cortex-semantic-planner-benchmark \
 
 The implementation findings and local-model measurements are recorded in
 [`docs/semantic-planner-authority-report.md`](docs/semantic-planner-authority-report.md).
+
+```bash
+docker compose -p cortex --env-file .env up -d --build --no-deps cortex-api home-gui proxy
+```
