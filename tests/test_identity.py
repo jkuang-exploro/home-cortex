@@ -27,6 +27,27 @@ def test_resolves_email_case_insensitively() -> None:
     assert entity_id == "person:jian_kuang"
 
 
+def test_session_email_is_used_when_headers_are_absent() -> None:
+    entity_id = resolve_user_entity_id(
+        {},
+        {"email:jian@example.com": "person:jian_kuang"},
+        email="Jian@Example.com",
+    )
+    assert entity_id == "person:jian_kuang"
+
+
+def test_headers_win_over_session_kwargs() -> None:
+    entity_id = resolve_user_entity_id(
+        {"X-OpenWebUI-User-Id": "user-123"},
+        {
+            "id:user-123": "person:from_header",
+            "email:jian@example.com": "person:from_session",
+        },
+        email="jian@example.com",
+    )
+    assert entity_id == "person:from_header"
+
+
 def test_unknown_openwebui_user_is_not_resolved() -> None:
     assert (
         resolve_user_entity_id(

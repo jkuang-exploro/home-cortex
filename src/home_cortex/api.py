@@ -4,7 +4,6 @@ import logging
 import os
 import secrets
 import time
-from collections import OrderedDict
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict
@@ -12,6 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field
@@ -37,7 +37,19 @@ from .text import latest_user_message
 from .greetings import GreetingService
 from .export import export_directory
 from .ingestion import ingest_directory
-from .identity import resolve_user_entity_id
+from .conversations import ConversationStore, SurrealConversationStore
+from .gui_session import (
+    COOKIE_NAME as GUI_COOKIE_NAME,
+    SESSION_SECONDS as GUI_SESSION_SECONDS,
+    parse_session,
+    session_token as gui_session_token,
+    valid_session as valid_gui_session,
+)
+from .identity import (
+    OPENWEBUI_USER_EMAIL_HEADER,
+    OPENWEBUI_USER_ID_HEADER,
+    resolve_user_entity_id,
+)
 from .ollama import language_model_from_settings
 from .retrieval import RetrievalService
 from .calendar import calendar_service_from_settings
@@ -96,38 +108,21 @@ class ConversationCreateRequest(BaseModel):
         max_length=35,
         pattern=r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
     )
+    model: str | None = Field(default=None, min_length=1, max_length=256)
 
 
-class ConversationStore:
-    """Keep bounded conversation initialization state for this API process."""
+class ConversationMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-    def __init__(self, maximum: int = 1_000) -> None:
-        self.maximum = maximum
-        self._items: OrderedDict[str, dict[str, Any]] = OrderedDict()
+    content: str = Field(min_length=1, max_length=32_000)
+    stream: bool = True
 
-    def create(
-        self,
-        *,
-        agent_id: str,
-        person_id: str | None,
-        language: str,
-        greeting: str,
-    ) -> dict[str, Any]:
-        conversation = {
-            "id": uuid4().hex,
-            "agent_id": agent_id,
-            "person_id": person_id,
-            "language": language,
-            "greeting": greeting,
-        }
-        self._items[conversation["id"]] = conversation
-        while len(self._items) > self.maximum:
-            self._items.popitem(last=False)
-        return dict(conversation)
 
-    def get(self, conversation_id: str) -> dict[str, Any] | None:
-        conversation = self._items.get(conversation_id)
-        return dict(conversation) if conversation is not None else None
+class SessionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: str | None = Field(default=None, min_length=3, max_length=320)
+    user_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 @asynccontextmanager
@@ -154,7 +149,7 @@ async def lifespan(app: FastAPI):
     writing = ItemWritingService(database, schema_catalog, edge_registry)
     app.state.writing = writing
     app.state.greetings = GreetingService(retrieval)
-    app.state.conversations = ConversationStore()
+    app.state.conversations = SurrealConversationStore(database)
     calendar = calendar_service_from_settings(settings)
     app.state.calendar = calendar
     runtimes: dict[str, AgentService] = {}
@@ -359,6 +354,68 @@ async def vision_stream(request: Request) -> StreamingResponse:
     return await open_relay(_vision_stream_url(request))
 
 
+@app.post("/session")
+async def create_session(body: SessionRequest, request: Request) -> JSONResponse:
+    _authenticate_bearer(request)
+    settings = _request_settings(request)
+    kind, value = _session_identity(body, settings)
+    payload: dict[str, Any] = {"object": "session"}
+    if kind == "email":
+        payload["email"] = value
+    elif kind == "id":
+        payload["user_id"] = value
+    response = JSONResponse(payload)
+    key = settings.cortex_api_key
+    if key:
+        response.set_cookie(
+            GUI_COOKIE_NAME,
+            gui_session_token(key, kind, value),
+            max_age=GUI_SESSION_SECONDS,
+            httponly=True,
+            secure=request.url.scheme == "https",
+            samesite="strict",
+            path="/",
+        )
+    return response
+
+
+@app.get("/session")
+async def read_session(request: Request) -> dict[str, Any]:
+    _authenticate_request(request)
+    settings = _request_settings(request)
+    key = settings.cortex_api_key
+    parsed = parse_session(request.cookies.get(GUI_COOKIE_NAME, ""), key) if key else None
+    payload: dict[str, Any] = {"object": "session"}
+    if parsed is None:
+        if key is None:
+            payload["anonymous"] = True
+            return payload
+        user_id = request.headers.get(OPENWEBUI_USER_ID_HEADER)
+        email = request.headers.get(OPENWEBUI_USER_EMAIL_HEADER)
+        if user_id:
+            payload["user_id"] = user_id
+        if email:
+            payload["email"] = email
+        if not user_id and not email:
+            payload["anonymous"] = True
+        return payload
+    kind, value = parsed
+    if kind == "email":
+        payload["email"] = value
+    elif kind == "id":
+        payload["user_id"] = value
+    else:
+        payload["anonymous"] = True
+    return payload
+
+
+@app.delete("/session")
+async def delete_session() -> JSONResponse:
+    response = JSONResponse({"status": "ok"})
+    response.delete_cookie(GUI_COOKIE_NAME, path="/")
+    return response
+
+
 @app.get("/health")
 async def health(request: Request) -> dict[str, Any]:
     try:
@@ -451,8 +508,9 @@ async def create_agent_conversation(
         body.language,
     )
     person_id = user_entity.get("id") if user_entity is not None else None
-    conversation = _conversation_store(request).create(
+    conversation = await _conversation_store(request).create(
         agent_id=definition.id,
+        model=definition.display_name,
         person_id=person_id if isinstance(person_id, str) else None,
         language=greeting.language,
         greeting=greeting.text,
@@ -470,11 +528,149 @@ async def get_agent_conversation(
     user_entity = await _resolve_identity(request)
     person_id = user_entity.get("id") if user_entity is not None else None
     conversation = _authorize_conversation_access(
-        _conversation_store(request).get(conversation_id),
+        await _conversation_store(request).get(conversation_id),
         agent_id=definition.id,
         person_id=person_id if isinstance(person_id, str) else None,
     )
     return _conversation_response(conversation, definition)
+
+
+@app.get("/conversations")
+async def list_conversations(request: Request) -> dict[str, Any]:
+    user_entity = await _resolve_identity(request)
+    person_id = user_entity.get("id") if user_entity is not None else None
+    items = await _conversation_store(request).list_for_person(
+        person_id if isinstance(person_id, str) else None
+    )
+    return {"object": "list", "data": items}
+
+
+@app.post("/conversations", status_code=201)
+async def create_conversation(
+    body: ConversationCreateRequest,
+    request: Request,
+) -> dict[str, Any]:
+    user_entity = await _resolve_identity(request)
+    person_id = user_entity.get("id") if user_entity is not None else None
+    model_id = (body.model or VIRTUAL_MODEL).strip()
+    agent = _agent_for_model(model_id)
+    if agent is not None:
+        greeting = await _greeting_service(request).resolve(
+            agent,
+            user_entity,
+            body.language,
+        )
+        conversation = await _conversation_store(request).create(
+            agent_id=agent.id,
+            model=agent.display_name,
+            person_id=person_id if isinstance(person_id, str) else None,
+            language=greeting.language,
+            greeting=greeting.text,
+        )
+        return _transcript_response(conversation, messages=conversation.get("messages", []))
+    await _require_bare_model(request, model_id)
+    conversation = await _conversation_store(request).create(
+        agent_id=None,
+        model=model_id,
+        person_id=person_id if isinstance(person_id, str) else None,
+        language=body.language,
+        greeting=None,
+    )
+    return _transcript_response(conversation, messages=[])
+
+
+@app.get("/conversations/{conversation_id}")
+async def get_conversation(conversation_id: str, request: Request) -> dict[str, Any]:
+    conversation = await _owned_conversation(request, conversation_id)
+    return _transcript_response(conversation, messages=conversation.get("messages", []))
+
+
+@app.delete("/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str, request: Request) -> dict[str, Any]:
+    await _owned_conversation(request, conversation_id)
+    await _conversation_store(request).delete(conversation_id)
+    return {"status": "ok", "id": conversation_id}
+
+
+@app.post("/conversations/{conversation_id}/messages")
+async def post_conversation_message(
+    conversation_id: str,
+    body: ConversationMessageRequest,
+    request: Request,
+):
+    conversation = await _owned_conversation(request, conversation_id)
+    store = _conversation_store(request)
+    content = body.content.strip()
+    if not content:
+        raise APIError(422, "invalid_request", "Provide a non-empty 'content'")
+    await store.append_message(conversation_id, role="user", content=content)
+    conversation = await _owned_conversation(request, conversation_id)
+    messages = [
+        {"role": item["role"], "content": item["content"]}
+        for item in conversation.get("messages", [])
+        if item.get("role") in {"user", "assistant"} and item.get("content")
+    ]
+    model_id = str(conversation.get("model") or VIRTUAL_MODEL)
+    created = int(time.time())
+    completion_id = f"chatcmpl-{uuid4().hex}"
+
+    async def persist(answer: str) -> None:
+        if answer:
+            await store.append_message(conversation_id, role="assistant", content=answer)
+
+    agent = _agent_for_model(model_id) if conversation.get("agent_id") else None
+    if agent is not None:
+        user_entity = await _resolve_identity(request)
+        answer_stream = _agent_runtime(request, agent).stream_answer_messages(
+            messages,
+            request_id=_request_id(request),
+            user_entity=user_entity,
+            conversation_id=conversation_id,
+        )
+        if body.stream:
+            return StreamingResponse(
+                _stream_and_persist(
+                    completion_id,
+                    created,
+                    answer_stream,
+                    persist,
+                    request,
+                    model=agent.display_name,
+                ),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+        answer = "".join([chunk async for chunk in answer_stream])
+        await persist(answer)
+        return _chat_completion_response(completion_id, created, agent.display_name, answer)
+
+    language_model = _bare_language_model(request, model_id)
+    if body.stream:
+        return StreamingResponse(
+            _stream_and_persist(
+                completion_id,
+                created,
+                language_model.stream_chat(messages),
+                persist,
+                request,
+                model=model_id,
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    collected: list[str] = []
+    async for chunk in language_model.stream_chat(messages):
+        if chunk:
+            collected.append(chunk)
+    answer = "".join(collected)
+    await persist(answer)
+    return _chat_completion_response(completion_id, created, model_id, answer)
 
 
 async def _agent_chat(
@@ -487,7 +683,7 @@ async def _agent_chat(
     if not isinstance(question, str) or not question.strip():
         raise APIError(422, "invalid_request", "Provide a non-empty 'message'")
     user_entity = await _resolve_identity(request)
-    conversation_id = _chat_conversation_id(request, definition.id, user_entity, body.get("conversation_id"))
+    conversation_id = await _chat_conversation_id(request, definition.id, user_entity, body.get("conversation_id"))
     try:
         result = await _agent_runtime(request, definition).answer(
             question,
@@ -512,18 +708,29 @@ async def _agent_chat(
 @app.get("/v1/models")
 async def models(request: Request) -> dict[str, Any]:
     _authenticate_request(request)
-    return {
-        "object": "list",
-        "data": [
-            {
-                "id": definition.display_name,
-                "object": "model",
-                "created": MODEL_CREATED,
-                "owned_by": "home-cortex",
-            }
-            for definition in list_agents()
-        ],
-    }
+    agents = [
+        {
+            "id": definition.display_name,
+            "object": "model",
+            "created": MODEL_CREATED,
+            "owned_by": "home-cortex",
+            "kind": "agent",
+        }
+        for definition in list_agents()
+    ]
+    agent_ids = {item["id"] for item in agents}
+    bare = [
+        {
+            "id": item["id"],
+            "object": "model",
+            "created": MODEL_CREATED,
+            "owned_by": item["owned_by"],
+            "kind": "model",
+        }
+        for item in await _list_bare_models(request)
+        if item["id"] not in agent_ids
+    ]
+    return {"object": "list", "data": [*agents, *bare]}
 
 
 @app.post("/v1/chat/completions")
@@ -540,7 +747,7 @@ async def chat_completions(
             "model_not_found",
             f"Model {body.model!r} was not found",
         )
-    conversation_id = _chat_conversation_id(request, definition.id, user_entity, body.conversation_id)
+    conversation_id = await _chat_conversation_id(request, definition.id, user_entity, body.conversation_id)
     agent = _agent_runtime(request, definition)
     completion_id = f"chatcmpl-{uuid4().hex}"
     created = int(time.time())
@@ -841,12 +1048,8 @@ def _request_settings(request: Request) -> Settings:
     return getattr(request.app.state, "settings", None) or get_settings()
 
 
-def _authenticate_request(request: Request) -> None:
-    """Verify the shared household API key when one is configured.
-
-    V1 uses a single household key. It proves the caller is a trusted
-    client (typically the Open WebUI proxy), not which person they are.
-    """
+def _authenticate_bearer(request: Request) -> None:
+    """Require the household API key in the Authorization header."""
     expected_key = _request_settings(request).cortex_api_key
     if expected_key is None:
         return
@@ -863,26 +1066,57 @@ def _authenticate_request(request: Request) -> None:
         )
 
 
+def _authenticate_request(request: Request) -> None:
+    """Verify the shared household API key when one is configured.
+
+    V1 uses a single household key. It proves the caller is a trusted
+    client (GUI session cookie or Authorization bearer), not which person
+    they are.
+    """
+    expected_key = _request_settings(request).cortex_api_key
+    if expected_key is None:
+        return
+    if valid_gui_session(request.cookies.get(GUI_COOKIE_NAME, ""), expected_key):
+        return
+    _authenticate_bearer(request)
+
+
 def _mapped_person_id(request: Request) -> str | None:
-    """Map trusted Open WebUI headers through CORTEX_IDENTITY_MAP.
+    """Map trusted user id/email through CORTEX_IDENTITY_MAP.
 
     A client-supplied person record ID is not consulted. Anyone holding
-    the household API key can present any mapped Open WebUI user header;
-    per-person credentials are out of scope for V1.
+    the household API key can present any mapped user header; per-person
+    credentials are out of scope for V1. A GUI session stores the same
+    map keys, not a person record ID.
     """
     settings = _request_settings(request)
     _authenticate_request(request)
     if not settings.cortex_identity_map:
         return None
+    session_user_id = None
+    session_email = None
+    if settings.cortex_api_key:
+        parsed = parse_session(
+            request.cookies.get(GUI_COOKIE_NAME, ""),
+            settings.cortex_api_key,
+        )
+        if parsed is not None:
+            kind, value = parsed
+            if kind == "id":
+                session_user_id = value
+            elif kind == "email":
+                session_email = value
     entity_id = resolve_user_entity_id(
         request.headers,
         settings.cortex_identity_map,
+        user_id=session_user_id,
+        email=session_email,
     )
     if entity_id is None:
         raise APIError(
             403,
             "identity_not_mapped",
-            "The authenticated Open WebUI user is not mapped to a home-graph person",
+            "The authenticated user is not mapped to a home-graph person",
         )
     return entity_id
 
@@ -920,13 +1154,16 @@ async def _resolve_identity(request: Request) -> dict[str, Any] | None:
     }
 
 
-def _chat_conversation_id(request: Request, agent_id: str, user_entity: Mapping[str, Any] | None, value: Any) -> str | None:
+async def _chat_conversation_id(request: Request, agent_id: str, user_entity: Mapping[str, Any] | None, value: Any) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or not value or len(value) > 128:
         raise APIError(422, "invalid_request", "Invalid conversation_id")
-    _authorize_conversation_access(_conversation_store(request).get(value), agent_id=agent_id,
-                                   person_id=str(user_entity["id"]) if user_entity else None)
+    _authorize_conversation_access(
+        await _conversation_store(request).get(value),
+        agent_id=agent_id,
+        person_id=str(user_entity["id"]) if user_entity else None,
+    )
     return value
 
 
@@ -980,9 +1217,9 @@ def _greeting_service(request: Request) -> GreetingService:
 
 def _conversation_store(request: Request) -> ConversationStore:
     store = getattr(request.app.state, "conversations", None)
-    if isinstance(store, ConversationStore):
-        return store
-    raise RuntimeError("Conversation store is not initialized")
+    if store is None or not hasattr(store, "create"):
+        raise RuntimeError("Conversation store is not initialized")
+    return store
 
 
 def _conversation_response(
@@ -999,6 +1236,167 @@ def _conversation_response(
         "language": conversation["language"],
         "greeting": conversation["greeting"],
     }
+
+
+def _transcript_response(
+    conversation: dict[str, Any],
+    *,
+    messages: list[dict[str, Any]],
+) -> dict[str, Any]:
+    payload = {
+        "id": conversation["id"],
+        "object": "conversation",
+        "model": conversation.get("model"),
+        "agent_id": conversation.get("agent_id"),
+        "language": conversation.get("language"),
+        "greeting": conversation.get("greeting"),
+        "title": conversation.get("title") or "",
+        "created_at": conversation.get("created_at"),
+        "updated_at": conversation.get("updated_at"),
+        "messages": [
+            {
+                "id": item.get("id"),
+                "role": item.get("role"),
+                "content": item.get("content"),
+                "created_at": item.get("created_at"),
+            }
+            for item in messages
+        ],
+    }
+    return payload
+
+
+async def _owned_conversation(request: Request, conversation_id: str) -> dict[str, Any]:
+    user_entity = await _resolve_identity(request)
+    person_id = user_entity.get("id") if user_entity is not None else None
+    conversation = await _conversation_store(request).get(conversation_id)
+    if conversation is None or conversation.get("person_id") != person_id:
+        raise APIError(404, "conversation_not_found", "Conversation was not found")
+    return conversation
+
+
+def _agent_for_model(model_id: str) -> AgentDefinition | None:
+    try:
+        return get_agent_by_display_name(model_id)
+    except UnknownAgentError:
+        try:
+            return get_agent(model_id)
+        except UnknownAgentError:
+            return None
+
+
+def _session_identity(body: SessionRequest, settings: Settings) -> tuple[Any, str]:
+    email = body.email.strip() if body.email else None
+    user_id = body.user_id.strip() if body.user_id else None
+    if email and user_id:
+        raise APIError(422, "invalid_request", "Provide email or user_id, not both")
+    if not settings.cortex_identity_map:
+        if email:
+            return "email", email
+        if user_id:
+            return "id", user_id
+        return "none", ""
+    entity_id = resolve_user_entity_id(
+        {},
+        settings.cortex_identity_map,
+        user_id=user_id,
+        email=email,
+    )
+    if entity_id is None:
+        raise APIError(
+            403,
+            "identity_not_mapped",
+            "The authenticated user is not mapped to a home-graph person",
+        )
+    if email:
+        return "email", email
+    if user_id:
+        return "id", user_id
+    raise APIError(422, "invalid_request", "Provide a mapped email or user_id")
+
+
+async def _list_bare_models(request: Request) -> list[dict[str, str]]:
+    listed = getattr(request.app.state, "bare_models", None)
+    if listed is not None:
+        return [dict(item) for item in listed]
+    settings = _request_settings(request)
+    provider = getattr(settings, "llm_provider", "ollama")
+    if provider == "openrouter":
+        name = getattr(settings, "openrouter_model", None)
+        return [{"id": name, "owned_by": "openrouter"}] if name else []
+    configured = getattr(settings, "ollama_model", None)
+    url = getattr(settings, "ollama_url", None)
+    models: list[dict[str, str]] = []
+    if url:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                response = await client.get(f"{str(url).rstrip('/')}/api/tags")
+                response.raise_for_status()
+                for item in response.json().get("models") or []:
+                    name = item.get("name") if isinstance(item, dict) else None
+                    if name:
+                        models.append({"id": str(name), "owned_by": "ollama"})
+        except Exception:
+            models = []
+    if configured and not any(item["id"] == configured for item in models):
+        models.insert(0, {"id": configured, "owned_by": "ollama"})
+    return models
+
+
+async def _require_bare_model(request: Request, model_id: str) -> None:
+    names = {item["id"] for item in await _list_bare_models(request)}
+    if model_id not in names:
+        raise APIError(404, "model_not_found", f"Model {model_id!r} was not found")
+
+
+def _bare_language_model(request: Request, model_id: str):
+    cached = getattr(request.app.state, "bare_language_models", None)
+    if not isinstance(cached, dict):
+        cached = {}
+        request.app.state.bare_language_models = cached
+    if model_id in cached:
+        return cached[model_id]
+    settings = _request_settings(request)
+    language_model = language_model_from_settings(settings, model_id)
+    cached[model_id] = language_model
+    return language_model
+
+
+async def _stream_and_persist(
+    completion_id: str,
+    created: int,
+    answer_stream: AsyncIterator[str],
+    persist,
+    request: Request,
+    *,
+    model: str,
+) -> AsyncIterator[str]:
+    collected: list[str] = []
+
+    async def wrapped() -> AsyncIterator[str]:
+        try:
+            async for chunk in answer_stream:
+                if chunk:
+                    collected.append(chunk)
+                    yield chunk
+        finally:
+            close = getattr(answer_stream, "aclose", None)
+            if close is not None:
+                with suppress(asyncio.CancelledError, Exception):
+                    await close()
+            answer = "".join(collected)
+            if answer:
+                with suppress(Exception):
+                    await persist(answer)
+
+    async for event in _stream_chat_completion(
+        completion_id,
+        created,
+        wrapped(),
+        request,
+        model=model,
+    ):
+        yield event
 
 
 def _error_response(

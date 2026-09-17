@@ -17,24 +17,13 @@ update cortex-api
 -- curl -sS -X POST http://localhost:8001/admin/ingest \
   -H 'Authorization: Bearer replace-with-a-long-random-secret' | jq
 
-Connect Open WebUI to Cortex
+Connect the household GUI to Cortex
 
-The Compose configuration keeps the direct Ollama connection for debugging and
-adds Cortex as an OpenAI-compatible connection. Open WebUI reaches Cortex over
-the internal Compose network at `http://cortex-api:8000/v1`; port `8001` is the
-host-side mapping and must not be used between containers.
+Compose publishes the GUI at port 3000 through an independent nginx proxy.
+The GUI container serves static files; Cortex owns sessions, transcripts, and
+answers. Port `8001` remains the host mapping for curl.
 
-For a new Open WebUI data volume, the connection is seeded by these environment
-variables:
-
-```yaml
-ENABLE_OPENAI_API: "true"
-ENABLE_FORWARD_USER_INFO_HEADERS: "true"
-OPENAI_API_BASE_URLS: http://cortex-api:8000/v1
-OPENAI_API_KEYS: ${CORTEX_API_KEY}
-```
-
-Set a shared API key and map the email used by your Open WebUI account in
+Set a shared API key and map the email used to sign in in
 `docker/cortex/.env`:
 
 ```dotenv
@@ -42,10 +31,10 @@ CORTEX_API_KEY=replace-with-a-long-random-secret
 CORTEX_IDENTITY_MAP={"email:your-login@example.com":"person:jian_kuang"}
 ```
 
-You can instead use the immutable Open WebUI user ID as the map key:
+You can instead use a stable user id as the map key:
 
 ```dotenv
-CORTEX_IDENTITY_MAP={"id:open-webui-user-uuid":"person:jian_kuang"}
+CORTEX_IDENTITY_MAP={"id:household-user-uuid":"person:jian_kuang"}
 ```
 
 For each chat request, Cortex resolves the mapped Person before calling the
@@ -91,54 +80,15 @@ The OpenAI-compatible endpoint also detects a first turn as one user message
 with no previous assistant message. Its first answer includes the deterministic
 greeting; later requests carrying chat history do not repeat it.
 
-Open WebUI persists connection settings. If the existing volume already has an
-OpenAI configuration, sign in as an administrator and add or update an
-OpenAI-compatible connection with:
+Open http://localhost:3000 and sign in with the mapped email plus
+`CORTEX_API_KEY`. The GUI stores a session cookie, not the key. Select `老管家`
+for the steward or a bare Ollama/OpenRouter model to test the underlying LLM.
 
-```text
-Base URL: http://cortex-api:8000/v1
-API key: the value of CORTEX_API_KEY
-```
-
-Recreate Open WebUI without deleting its data volume:
+Rebuild the GUI after frontend changes:
 
 ```sh
-docker compose build open-webui
-docker compose up -d --force-recreate --no-deps open-webui
-```
-
-Select `老管家` in the model picker. Selecting `qwen3:8b` or another raw
-Ollama model bypasses Cortex, SurrealDB retrieval, and the agent tools.
-
-The Compose file builds a small customization on top of the pinned Open WebUI
-v0.9.5 image. On a blank new chat, selecting `老管家` calls Cortex's steward
-conversation endpoint and inserts the returned greeting as the first assistant
-message. No user prompt is required. The greeting is saved in normal Open WebUI
-chat history and is included in the first later request, so Cortex does not
-greet twice.
-
-The browser authenticates only to Open WebUI. A same-origin Open WebUI backend
-route forwards the verified user's immutable ID and email to Cortex and adds
-`CORTEX_API_KEY` on the server. The Cortex API key is never sent to browser
-JavaScript.
-
-Compose sets `CORTEX_GREETING_LANGUAGE: zh`, so the proactive initial greeting
-is always Chinese even when Open WebUI itself is displayed in English. Later
-answers continue to follow the language of the user's request.
-
-After changing the Open WebUI customization, rebuild it explicitly:
-
-```sh
-docker compose build --no-cache open-webui
-docker compose up -d --force-recreate --no-deps open-webui
-docker compose logs --tail=100 open-webui
-```
-
-Verify the Cortex model endpoint from the Compose network:
-
-```sh
-docker compose exec open-webui python -c \
-  'import os, requests; print(requests.get("http://cortex-api:8000/v1/models", headers={"Authorization": "Bearer " + os.environ["OPENAI_API_KEYS"]}).json())'
+docker compose build home-gui
+docker compose up -d --force-recreate --no-deps home-gui proxy
 ```
 
 Then ask `Where do I live?` using `老管家` and compare the
@@ -152,7 +102,7 @@ curl -sS -X POST http://localhost:8001/v1/chat/completions \
   -d '{"model":"老管家","stream":false,"messages":[{"role":"user","content":"Where do I live?"}]}' | jq
 ```
 
-Open WebUI normally requests streaming responses. Verify its request shape with:
+Streaming:
 
 ```sh
 curl -N -sS -X POST http://localhost:8001/v1/chat/completions \
@@ -165,9 +115,6 @@ curl -N -sS -X POST http://localhost:8001/v1/chat/completions \
 Cortex keeps tool-selection responses internal and forwards each final-answer
 chunk from Ollama as an OpenAI-compatible SSE event. The stream ends with a
 chunk whose `finish_reason` is `stop`, followed by `data: [DONE]`.
-
-User ID obtaining
-curl -sS   'http://localhost:3000/api/v1/users/?query=example@email.com&page=1'   -H "Authorization: Bearer $OPEN_WEBUI_TOKEN"   | jq -r '.users[] | select(.email == "example@email.com") | .id'
 
 Checking user access
 curl -sS -X POST \

@@ -22,3 +22,8 @@ artifacts/qwen35-semantic-contract/baseline-relevant-rows.json
 
 # Reproducible, locally frozen evaluation packages; manifests/reports stay tracked.
 artifacts/generic-contracts/*.tar.gz
+
+# Home Cortex GUI build
+src/home_gui/node_modules/
+src/home_gui/dist/
+src/home_gui/.env

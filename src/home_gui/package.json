@@ -1,0 +1,21 @@
+{
+  "name": "home-gui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host --port 4173"
+  },
+  "dependencies": {
+    "dompurify": "^3.2.6",
+    "marked": "^15.0.12"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
+    "svelte": "^5.39.6",
+    "typescript": "^5.9.2",
+    "vite": "^6.3.6"
+  }
+}

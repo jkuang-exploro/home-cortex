@@ -49,6 +49,32 @@ class OpenRouterService:
     ) -> ChatResponse:
         return await self._complete(messages, tools=None, stream=False)
 
+    async def stream_chat(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+    ) -> AsyncIterator[str]:
+        """Stream one ordinary chat response without tools or Cortex agents."""
+        body: dict[str, Any] = {
+            "model": self.model,
+            "messages": _openai_messages(messages),
+            "stream": True,
+        }
+        async with self.client.stream(
+            "POST",
+            f"{self.base_url}/chat/completions",
+            headers=self._headers(),
+            json=body,
+        ) as response:
+            await _raise_for_status(response)
+            async for event in _iter_sse_json(response):
+                observe_usage(event)
+                delta = _choice_delta(event)
+                if delta is None:
+                    continue
+                content = delta.get("content") or ""
+                if content:
+                    yield str(content)
+
     async def chat_with_tools(
         self,
         messages: Sequence[Mapping[str, Any]],

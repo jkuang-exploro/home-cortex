@@ -7,29 +7,25 @@ services:
     environment:
       OLLAMA_KEEP_ALIVE: 24h
 
-  open-webui:
-    build:
-      context: ../..
-      dockerfile: docker/cortex/open-webui/Dockerfile
-    image: home-cortex/open-webui:v0.9.5-greeting
+  proxy:
+    image: nginx:alpine
     restart: unless-stopped
     ports:
-      - "3000:8080"
-    environment:
-      OLLAMA_BASE_URL: http://ollama:11434
-      ENABLE_OPENAI_API: "true"
-      ENABLE_FORWARD_USER_INFO_HEADERS: "true"
-      OPENAI_API_BASE_URLS: http://cortex-api:8000/v1
-      OPENAI_API_KEYS: ${CORTEX_API_KEY:-unused}
-      CORTEX_INTERNAL_URL: http://cortex-api:8000
-      CORTEX_API_KEY: ${CORTEX_API_KEY:-}
-      CORTEX_GREETING_AGENT: steward
-      CORTEX_GREETING_LANGUAGE: zh
+      - "3000:80"
     volumes:
-      - open-webui-data:/app/backend/data
+      - ./proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - ollama
+      - home-gui
       - cortex-api
+
+  home-gui:
+    build:
+      context: ../../src/home_gui
+      dockerfile: Dockerfile
+    image: home-cortex/gui:0.1.0
+    restart: unless-stopped
+    expose:
+      - "4173"
 
   surrealdb:
     image: surrealdb/surrealdb:v3.0.5
@@ -82,5 +78,4 @@ services:
 
 volumes:
   ollama-data:
-  open-webui-data:
   surrealdb-data:

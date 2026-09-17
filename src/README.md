@@ -36,7 +36,7 @@ for validation and presentation limitations.
 
 ## Vision live preview
 
-`GET /vision` is a build-free page hosted by this API, independent of Open WebUI.
+`GET /vision` is a build-free page hosted by this API, independent of the chat GUI.
 The live preview uses a fixed server-side MJPEG relay:
 
 ```text
@@ -158,21 +158,27 @@ Follow-up observation/clip/enrollment contracts are in
   one deterministic, relationship-aware greeting.
 - `GET /agent/steward/conversations/{id}` reloads that initialization record
   without generating another greeting.
-- `GET /v1/models` advertises `老管家` to OpenAI-compatible clients.
+- `GET /v1/models` advertises household agents (`老管家`) and bare language models
+  from the configured provider.
+- `POST /conversations` creates a transcript. Steward chats store a greeting as
+  the first assistant message; bare-model chats do not.
+- `POST /conversations/{id}/messages` appends a user turn, runs the steward or
+  the bare LLM, persists the assistant reply, and can stream OpenAI-compatible SSE.
+- `POST /session` exchanges the household API key and a mapped email for an
+  HttpOnly GUI cookie. Curl can still send `Authorization` plus identity headers.
 - `POST /v1/chat/completions` provides an OpenAI-compatible chat endpoint backed
-  by the agent loop. It supports ordinary JSON responses and token-streamed SSE
-responses for clients such as Open WebUI.
+  by the agent loop. It supports ordinary JSON responses and token-streamed SSE.
 
 ## Authentication and identity
 
 `GET /health` is public. When `CORTEX_API_KEY` is set, every other route
 requires `Authorization: Bearer <key>`.
 
-V1 uses one household API key. The key authenticates the client (typically
-the Open WebUI server-side proxy); it does not identify a person. Person
-identity comes only from `X-OpenWebUI-User-Id` / `X-OpenWebUI-User-Email`
+V1 uses one household API key. The key authenticates the client; it does not
+identify a person. Person identity comes from `X-OpenWebUI-User-Id` /
+`X-OpenWebUI-User-Email`, or from a GUI session that stores the same map keys,
 through `CORTEX_IDENTITY_MAP`. Cortex never treats a client-supplied
-`person:` record ID as identity.
+`person:` record ID as identity. The GUI cookie is not a person record.
 
 Mapped Person records and the configured home are loaded by exact record ID.
 Fuzzy entity search is not used for identity or authorization. A mapped ID
@@ -182,8 +188,8 @@ Conversation records are owner-only. A caller who knows another person's
 conversation ID receives the same `conversation_not_found` response as for
 an unknown ID.
 
-Anyone holding the household API key can present any mapped Open WebUI user
-header. Per-person credentials are out of scope for V1.
+Anyone holding the household API key can present any mapped user header or
+create a session for a mapped email. Per-person passwords are out of scope for V1.
 
 ## Relationship-aware greetings
 
@@ -498,21 +504,19 @@ The resolver reloads bound identities from authoritative storage. Assistant pros
 is neither replayed nor used as evidence. A plural focus cannot silently become
 a singular antecedent; unsuccessful and non-fact turns have no focus.
 
-For persistent discourse, create a conversation using the existing
-`POST /agent/steward/conversations` endpoint, then send its `id` as
-`conversation_id` on `/agent/steward/chat`, `/v1/chat`, or
-`/v1/chat/completions` (including streaming). The Open WebUI integration carries
-that ID through its persisted `params.custom_params`, which the OpenAI-compatible
-provider path emits as the top-level `conversation_id`. The API checks ownership.
-The semantic coordinator scopes state by conversation, speaker, household and agent,
-serializes concurrent turns, and retains eight user turns in at most 1,000
-process-local sessions. Discourse eviction loses focus and requires clarification.
-A full server restart or authorization-registry eviction also invalidates the ID
-(`404 conversation_not_found`); create a fresh conversation and restate the referent.
-Requests without an ID interpret the current turn once, then re-ground only the
-earlier user turns explicitly referenced by its discourse plan. Clients that send
-only the latest message need a conversation ID for cross-request references.
-Unauthenticated requests never persist discourse state.
+For persistent discourse, create a conversation using
+`POST /agent/steward/conversations` or `POST /conversations`, then send its `id`
+as `conversation_id` on `/agent/steward/chat`, `/v1/chat`, or
+`/v1/chat/completions`, or post turns to `/conversations/{id}/messages`.
+The API checks ownership. Transcripts persist in SurrealDB (`gui_conversation`,
+`gui_message`); they are not household graph facts. The semantic coordinator
+scopes pronoun focus by conversation, speaker, household and agent, serializes
+concurrent turns, and retains eight user turns in at most 1,000 process-local
+sessions. Discourse eviction or API restart loses focus and requires
+clarification; the stored transcript remains. Requests without an ID interpret
+the current turn once, then re-ground only the earlier user turns explicitly
+referenced by its discourse plan. Unauthenticated requests never persist
+discourse state.
 
 
 The ingestion endpoint rejects unknown relationship files, invalid endpoint
@@ -618,17 +622,17 @@ Copy `.env.example` to `.env`, then set `SURREAL_PASS`, `CORTEX_API_KEY`, and
 language-model backend (`ollama` by default, or `openrouter`). For Ollama, set
 `OLLAMA_MODEL`. For OpenRouter, set `OPENROUTER_API_KEY` and `OPENROUTER_MODEL`
 to a model id such as `anthropic/claude-sonnet-4`. Map the email used to sign
-in to Open WebUI to Jian's graph record:
+in to the household GUI to Jian's graph record:
 
 ```dotenv
 CORTEX_API_KEY=replace-with-a-long-random-secret
 CORTEX_IDENTITY_MAP={"email:your-login@example.com":"person:jian_kuang"}
 ```
 
-An Open WebUI user ID is a stronger mapping key when it is known:
+A stable user id is a stronger mapping key when it is known:
 
 ```dotenv
-CORTEX_IDENTITY_MAP={"id:open-webui-user-uuid":"person:jian_kuang"}
+CORTEX_IDENTITY_MAP={"id:household-user-uuid":"person:jian_kuang"}
 ```
 
 ```sh
@@ -658,40 +662,25 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 Open the interactive API documentation at
 `http://192.168.68.59:8001/docs`.
 
-## Open WebUI
+## Household GUI
 
-The Compose stack configures two model paths:
+Compose runs three application containers behind an independent nginx reverse
+proxy on port 3000: `home-gui` (static Svelte client), `cortex-api` (this
+package), and the proxy. The GUI is stateless. Chat transcripts, greetings, and
+identity live in Cortex.
 
-- Direct Ollama at `http://ollama:11434` for model debugging.
-- The OpenAI-compatible Cortex API at `http://cortex-api:8000/v1` for grounded
-  graph answers.
+Open http://localhost:3000 and sign in with a mapped email plus `CORTEX_API_KEY`.
+The key is exchanged for an HttpOnly cookie at `POST /session`; it is not kept
+in JavaScript storage. Select `老管家` for the steward (tools and graph facts)
+or a bare Ollama/OpenRouter model to test the underlying LLM without Cortex
+tools. New steward chats show the relationship-aware greeting before the first
+user turn. Switching models starts a new conversation.
 
-Select `老管家` in Open WebUI to use the steward and its SurrealDB tools.
-The agent refers to itself as `the butler` in English and `老管家` in Chinese.
-Selecting a raw Ollama model bypasses Cortex. Open WebUI persists its
-connection settings, so an existing deployment may require adding the Cortex
-connection once in the administrator connection settings with API key
-matching `CORTEX_API_KEY`.
+Local GUI development: from `src/home_gui`, `npm install && npm run dev` (Vite
+proxies API paths to uvicorn on port 8001).
 
-The Compose deployment builds the pinned Open WebUI v0.9.5 source with the
-small patch in `docker/cortex/open-webui`. When `老管家` is selected in a blank
-new chat, the UI creates a steward conversation and persists Cortex's
-relationship-aware greeting as the first assistant message—before the user
-sends anything. The browser calls an authenticated Open WebUI proxy; only that
-server-side proxy receives `CORTEX_API_KEY` and forwards the verified Open
-WebUI user ID and email to Cortex.
-
-The proactive greeting language is controlled by
-`CORTEX_GREETING_LANGUAGE`; Compose sets it to `zh`. This affects only the
-initial greeting, not the language used for later answers.
-
-Compose enables Open WebUI's authenticated user-info forwarding. Cortex maps
-the forwarded user ID or email to a stable `person:` record, resolves it before
-the first model call, and supplies only its `id`, `name`, and `address_as` as
-trusted context. Other private fields still require an intentional semantic fact lookup.
-User-written messages cannot change this mapping. If identity mappings are
-configured, an unknown Open WebUI user receives an `identity_not_mapped` error
-instead of being treated as somebody else.
+Curl still uses `Authorization` and `X-OpenWebUI-User-Email` / `X-OpenWebUI-User-Id`.
+If identity mappings are configured, an unknown email receives `identity_not_mapped`.
 
 ## Agent runtime architecture
 

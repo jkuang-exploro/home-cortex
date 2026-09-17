@@ -37,12 +37,14 @@ class FakeAgent:
         request_id: str = "-",
         user_entity_id: str | None = None,
         user_entity: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> SimpleNamespace:
         return await self.answer_messages(
             [{"role": "user", "content": question}],
             request_id=request_id,
             user_entity_id=user_entity_id,
             user_entity=user_entity,
+            **kwargs,
         )
 
     async def answer_messages(
@@ -52,6 +54,7 @@ class FakeAgent:
         request_id: str = "-",
         user_entity_id: str | None = None,
         user_entity: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> SimpleNamespace:
         self.calls.append(messages)
         self.request_ids.append(request_id)
@@ -71,6 +74,7 @@ class FakeAgent:
         request_id: str = "-",
         user_entity_id: str | None = None,
         user_entity: dict[str, Any] | None = None,
+        **kwargs: Any,
     ):
         self.calls.append(messages)
         self.request_ids.append(request_id)
@@ -1123,6 +1127,130 @@ def test_conversation_access_is_isolated_by_owner(
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "conversation_not_found"
     assert other_user.json()["error"]["message"] == missing.json()["error"]["message"]
+
+
+class FakeBareModel:
+    def __init__(self) -> None:
+        self.calls: list[list[dict[str, Any]]] = []
+
+    async def stream_chat(self, messages: list[dict[str, Any]]):
+        self.calls.append(messages)
+        yield "bare "
+        yield "answer"
+
+
+def test_transcript_greeting_then_first_message_keeps_conversation(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+    created = client.post(
+        "/conversations",
+        json={"language": "zh", "model": VIRTUAL_MODEL},
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["object"] == "conversation"
+    assert body["model"] == VIRTUAL_MODEL
+    assert body["greeting"]
+    assert body["messages"][0]["role"] == "assistant"
+    assert body["messages"][0]["content"] == body["greeting"]
+    conversation_id = body["id"]
+
+    sent = client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"content": "Where do I live?", "stream": False},
+    )
+    assert sent.status_code == 200
+    assert sent.json()["choices"][0]["message"]["content"] == (
+        "Jian and Pu reside at Fort Cerritos."
+    )
+    loaded = client.get(f"/conversations/{conversation_id}")
+    assert loaded.status_code == 200
+    roles = [item["role"] for item in loaded.json()["messages"]]
+    assert roles == ["assistant", "user", "assistant"]
+    listed = client.get("/conversations")
+    assert listed.status_code == 200
+    assert listed.json()["data"][0]["id"] == conversation_id
+    assert agent.calls[-1][-1]["content"] == "Where do I live?"
+
+
+def test_abandoned_conversation_does_not_receive_later_turns(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, _ = api_client
+    abandoned = client.post(
+        "/conversations",
+        json={"language": "en", "model": VIRTUAL_MODEL},
+    )
+    current = client.post(
+        "/conversations",
+        json={"language": "en", "model": VIRTUAL_MODEL},
+    )
+    abandoned_id = abandoned.json()["id"]
+    current_id = current.json()["id"]
+    assert abandoned_id != current_id
+    sent = client.post(
+        f"/conversations/{current_id}/messages",
+        json={"content": "Hello there", "stream": False},
+    )
+    assert sent.status_code == 200
+    leftover = client.get(f"/conversations/{abandoned_id}")
+    assert [item["role"] for item in leftover.json()["messages"]] == ["assistant"]
+
+
+def test_bare_model_skips_greeting_and_agent(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+    bare = FakeBareModel()
+    app.state.bare_models = [{"id": "test-llm", "owned_by": "ollama"}]
+    app.state.bare_language_models = {"test-llm": bare}
+    created = client.post(
+        "/conversations",
+        json={"language": "en", "model": "test-llm"},
+    )
+    assert created.status_code == 201
+    assert created.json()["greeting"] is None
+    assert created.json()["messages"] == []
+    assert created.json()["agent_id"] is None
+    sent = client.post(
+        f"/conversations/{created.json()['id']}/messages",
+        json={"content": "ping", "stream": False},
+    )
+    assert sent.status_code == 200
+    assert sent.json()["choices"][0]["message"]["content"] == "bare answer"
+    assert agent.calls == []
+    assert bare.calls[0][-1] == {"role": "user", "content": "ping"}
+    models = client.get("/v1/models")
+    ids = [item["id"] for item in models.json()["data"]]
+    assert VIRTUAL_MODEL in ids
+    assert "test-llm" in ids
+
+
+def test_session_cookie_maps_email_without_openwebui_headers(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, _ = api_client
+    app.state.settings = SimpleNamespace(
+        cortex_api_key="test-cortex-key",
+        cortex_identity_map={"email:jian@example.com": "person:jian_kuang"},
+    )
+    created = client.post(
+        "/session",
+        headers={"Authorization": "Bearer test-cortex-key"},
+        json={"email": "jian@example.com"},
+    )
+    assert created.status_code == 200
+    assert created.json()["email"] == "jian@example.com"
+    listed = client.get("/conversations")
+    assert listed.status_code == 200
+    denied = client.post(
+        "/session",
+        headers={"Authorization": "Bearer test-cortex-key"},
+        json={"email": "nobody@example.com"},
+    )
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "identity_not_mapped"
 
 
 def _assert_request_id(response: Any) -> None:

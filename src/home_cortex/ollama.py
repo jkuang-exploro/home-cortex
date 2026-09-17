@@ -314,6 +314,30 @@ class OllamaService:
             options={"num_ctx": OLLAMA_NUM_CTX},
         )
 
+    async def stream_chat(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+    ) -> AsyncIterator[str]:
+        """Stream one ordinary chat response without tools or Cortex agents."""
+        response = await self._chat(
+            model=self.model,
+            messages=messages,
+            stream=True,
+            think=False,
+            keep_alive=OLLAMA_KEEP_ALIVE,
+            options={"num_ctx": OLLAMA_NUM_CTX},
+        )
+        stream = cast(AsyncIterator[ChatResponse], response)
+        try:
+            async for chunk in stream:
+                content = getattr(getattr(chunk, "message", None), "content", None)
+                if content:
+                    yield content
+        finally:
+            close = getattr(stream, "aclose", None)
+            if close is not None:
+                await close()
+
     async def chat_with_tools(
         self,
         messages: Sequence[Mapping[str, Any]],
