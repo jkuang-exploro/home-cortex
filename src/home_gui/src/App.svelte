@@ -27,6 +27,7 @@
   let activeId = $state<string | null>(null);
   let messages = $state<ChatMessage[]>([]);
   let pending = $state(false);
+  let sendError = $state('');
   let creating: Promise<string> | null = null;
 
   const copy = $derived(t(language));
@@ -138,21 +139,27 @@
   }
 
   async function send(text: string) {
-    pending = true;
-    const conversationId = await ensureConversation();
-    if (activeId !== conversationId) return;
+    sendError = '';
     const user: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: text };
     const assistant: ChatMessage = { id: crypto.randomUUID(), role: 'assistant', content: '' };
     messages = [...messages, user, assistant];
+    pending = true;
     try {
+      const conversationId = activeId ?? (await ensureConversation());
+      if (!activeId) activeId = conversationId;
       for await (const delta of streamMessage(conversationId, text)) {
-        if (activeId !== conversationId) return;
         assistant.content += delta;
+        messages = [...messages];
+      }
+      if (!assistant.content) {
+        assistant.content = sendError || 'No reply';
         messages = [...messages];
       }
       conversations = await listConversations();
     } catch (error) {
-      assistant.content = error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : String(error);
+      sendError = message;
+      assistant.content = message;
       messages = [...messages];
     } finally {
       pending = false;
@@ -189,6 +196,7 @@
       {model}
       {messages}
       {pending}
+      error={sendError}
       onmodel={changeModel}
       onlanguage={(next) => (language = next)}
       onsend={send}

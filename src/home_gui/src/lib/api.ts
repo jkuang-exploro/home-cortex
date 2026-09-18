@@ -69,10 +69,13 @@ export async function* streamMessage(
   const response = await fetch(`/conversations/${conversationId}/messages`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    },
     body: JSON.stringify({ content, stream: true }),
   });
-  if (!response.ok || !response.body) {
+  if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     const error = payload.error ?? {};
     throw new ApiError(
@@ -80,6 +83,9 @@ export async function* streamMessage(
       error.code || `http_${response.status}`,
       error.message || response.statusText,
     );
+  }
+  if (!response.body) {
+    throw new ApiError(502, 'stream_unavailable', 'The browser did not expose the reply stream');
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -93,14 +99,22 @@ export async function* streamMessage(
     for (const part of parts) {
       const line = part.split('\n').find((item) => item.startsWith('data: '));
       if (!line) continue;
-      const data = line.slice(6);
-      if (data === '[DONE]') return;
-      const event = JSON.parse(data);
+      const data = line.slice(6).trim();
+      if (!data || data === '[DONE]') {
+        if (data === '[DONE]') return;
+        continue;
+      }
+      let event: { error?: { code?: string; message?: string }; choices?: { delta?: { content?: string } }[] };
+      try {
+        event = JSON.parse(data);
+      } catch {
+        continue;
+      }
       if (event.error) {
-        throw new ApiError(502, event.error.code || 'stream_error', event.error.message);
+        throw new ApiError(502, event.error.code || 'stream_error', event.error.message || 'Stream failed');
       }
       const delta = event.choices?.[0]?.delta?.content;
-      if (delta) yield delta as string;
+      if (delta) yield delta;
     }
   }
 }

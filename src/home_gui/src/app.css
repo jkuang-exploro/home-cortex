@@ -162,6 +162,12 @@ select {
 .bubble pre { overflow: auto; background: #102027; color: #e8f3f5; padding: 12px; border-radius: 8px; }
 .empty { text-align: center; color: var(--muted); padding: 20vh 16px; }
 
+.main > .error, .main > .help {
+  max-width: 44rem;
+  margin: 0 auto 8px;
+  padding: 0 24px;
+}
+
 .composer {
   padding: 16px 24px 24px;
 }

@@ -929,7 +929,9 @@ async def _stream_chat_completion(
     model: str = VIRTUAL_MODEL,
 ) -> AsyncIterator[str]:
     try:
-        yield _sse_data(
+        # Pad past common proxy buffers so the browser sees the stream start
+        # before the steward's first language-model token.
+        yield f":{ ' ' * 2048}\n\n" + _sse_data(
             _chat_completion_chunk(
                 completion_id,
                 created,

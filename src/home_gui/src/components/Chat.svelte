@@ -10,6 +10,7 @@
     model,
     messages,
     pending = false,
+    error = '',
     onmodel,
     onlanguage,
     onsend,
@@ -19,6 +20,7 @@
     model: string;
     messages: ChatMessage[];
     pending?: boolean;
+    error?: string;
     onmodel: (id: string) => void;
     onlanguage: (language: Language) => void;
     onsend: (text: string) => void;
@@ -60,9 +62,15 @@
       <p class="empty">{copy.empty}</p>
     {:else}
       {#each messages as message (message.id)}
-        <Message {message} pending={pending && message === messages[messages.length - 1] && !message.content} />
+        <Message
+          {message}
+          pending={pending && message.role === 'assistant' && message === messages[messages.length - 1] && !message.content}
+          thinking={copy.thinking}
+        />
       {/each}
     {/if}
   </div>
+  {#if error}<p class="error">{error}</p>{/if}
+  {#if pending}<p class="help">{copy.thinking}</p>{/if}
   <Composer {language} disabled={pending} {onsend} />
 </section>

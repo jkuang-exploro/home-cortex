@@ -20,10 +20,10 @@
   }
 
   function onkeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      (event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
-    }
+    if (event.key !== 'Enter' || event.shiftKey) return;
+    if (event.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    (event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
   }
 </script>
 
