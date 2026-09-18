@@ -29,6 +29,17 @@
   const copy = $derived(t(language));
   const agents = $derived(models.filter((item) => item.kind !== 'model'));
   const bare = $derived(models.filter((item) => item.kind === 'model'));
+
+  let scroller: HTMLDivElement | undefined;
+
+  $effect(() => {
+    messages.length;
+    messages.at(-1)?.content;
+    pending;
+    queueMicrotask(() => {
+      scroller?.scrollTo({ top: scroller.scrollHeight });
+    });
+  });
 </script>
 
 <section class="main">
@@ -57,7 +68,7 @@
       <option value="en">English</option>
     </select>
   </header>
-  <div class="messages">
+  <div class="messages" bind:this={scroller}>
     {#if messages.length === 0}
       <p class="empty">{copy.empty}</p>
     {:else}
