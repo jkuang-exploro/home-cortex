@@ -36,8 +36,9 @@
     messages.length;
     messages.at(-1)?.content;
     pending;
-    queueMicrotask(() => {
-      scroller?.scrollTo({ top: scroller.scrollHeight });
+    requestAnimationFrame(() => {
+      if (!scroller) return;
+      scroller.scrollTop = scroller.scrollHeight;
     });
   });
 </script>
