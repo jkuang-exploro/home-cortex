@@ -32,6 +32,15 @@
 
   const copy = $derived(t(language));
 
+  function newId(): string {
+    try {
+      if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
+    } catch {
+      /* http origins are not a secure context */
+    }
+    return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+  }
+
   onMount(() => {
     void bootstrap();
   });
@@ -140,8 +149,8 @@
 
   async function send(text: string) {
     sendError = '';
-    const user: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: text };
-    const assistant: ChatMessage = { id: crypto.randomUUID(), role: 'assistant', content: '' };
+    const user: ChatMessage = { id: newId(), role: 'user', content: text };
+    const assistant: ChatMessage = { id: newId(), role: 'assistant', content: '' };
     messages = [...messages, user, assistant];
     pending = true;
     try {

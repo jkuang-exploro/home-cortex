@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow" />
     <title>Home Cortex</title>
+    <script>
+      (function () {
+        if (!navigator.serviceWorker) return;
+        var controlled = !!navigator.serviceWorker.controller;
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
+        }).then(function () {
+          if (!window.caches) return;
+          return caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+          });
+        }).then(function () {
+          if (controlled) location.reload();
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>
