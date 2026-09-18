@@ -10,6 +10,12 @@
 
   const copy = $derived(t(language));
   let draft = $state('');
+  let field: HTMLTextAreaElement | undefined;
+
+  $effect(() => {
+    if (disabled) return;
+    requestAnimationFrame(() => field?.focus());
+  });
 
   function send() {
     const text = draft.trim();
@@ -29,6 +35,7 @@
 <div class="composer">
   <div class="composer-box">
     <textarea
+      bind:this={field}
       bind:value={draft}
       placeholder={copy.placeholder}
       {disabled}
