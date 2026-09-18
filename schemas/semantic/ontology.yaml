@@ -276,12 +276,14 @@ reference_concepts:
     path:
       - relation: spouse
   wife:
+    label: {en: wife, zh: 妻子}
     aliases: [老婆, 妻子, wife]
     path:
       - relation: spouse
         filters:
           - {property: gender, value: female}
   husband:
+    label: {en: husband, zh: 丈夫}
     aliases: [老公, 丈夫, husband]
     path:
       - relation: spouse
@@ -293,12 +295,14 @@ reference_concepts:
     path:
       - relation: child
   son:
+    label: {en: son, zh: 儿子}
     aliases: [儿子, 公子, 男性子女, 男孩后代, son, male child]
     path:
       - relation: child
         filters:
           - {property: gender, value: male}
   daughter:
+    label: {en: daughter, zh: 女儿}
     aliases: [女儿, 千金, 女性子女, daughter]
     path:
       - relation: child
@@ -310,12 +314,14 @@ reference_concepts:
     path:
       - relation: parent
   father:
+    label: {en: father, zh: 父亲}
     aliases: [爸爸, 父亲, 男性家长, father]
     path:
       - relation: parent
         filters:
           - {property: gender, value: male}
   mother:
+    label: {en: mother, zh: 母亲}
     aliases: [妈妈, 母亲, mother]
     path:
       - relation: parent
@@ -366,6 +372,7 @@ reference_concepts:
           - {property: gender, value: male}
           - {property: birth_date, operator: lt, value_from: anchor}
   father_in_law:
+    label: {en: father-in-law, zh: 岳父}
     aliases: [岳父, 公公, father-in-law, father in law]
     path:
       - relation: spouse
@@ -373,6 +380,7 @@ reference_concepts:
         filters:
           - {property: gender, value: male}
   mother_in_law:
+    label: {en: mother-in-law, zh: 岳母}
     aliases: [岳母, 婆婆, mother-in-law, mother in law]
     path:
       - relation: spouse

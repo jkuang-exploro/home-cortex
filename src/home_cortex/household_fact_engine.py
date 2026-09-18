@@ -25,6 +25,8 @@ from .semantic_ir import (
     FactStatus,
     SemanticFactRequest,
     SemanticFilter,
+    SemanticReference,
+    SemanticRelationStep,
     _FactFailure,
     _entity_type,
     _last_relation,
@@ -270,6 +272,14 @@ class HouseholdFactEngine:
             )
             if isinstance(singular, FactResult):
                 return singular
+            concept = await self._speaker_relative_concept(
+                str(singular.get("id") or ""),
+                request,
+                context,
+                execution,
+            )
+            if concept:
+                evidence = replace(evidence, reference_concept=concept)
             return FactResult("found", singular, evidence, shape="entity")
         if request.operation == "same_entity":
             left = await self._singular(
@@ -442,6 +452,83 @@ class HouseholdFactEngine:
             and isinstance(value, Mapping) and value.get("id") else "scalar"
         )
         return FactResult("found", value, evidence, unit=_result_unit(request), shape=shape)
+
+    async def _speaker_relative_concept(
+        self,
+        target_id: str,
+        request: SemanticFactRequest,
+        context: AgentRequestContext,
+        execution: "_FactExecution",
+    ) -> str | None:
+        """Most specific declared kinship concept from the speaker to this person."""
+        if (
+            request.property is not None
+            or request.subject.path
+            or request.filters
+            or request.other is not None
+            or request.subject.kind not in {"named_entity", "entity_id"}
+        ):
+            return None
+        speaker = context.caller_entity_id
+        if not target_id or not speaker or speaker == target_id:
+            return None
+        kinship = frozenset({"spouse", "parent", "child"})
+        matches: list[tuple[int, int, str]] = []
+        for concept in self.schema.ontology.reference_concepts.values():
+            if not concept.path:
+                continue
+            if not all(step.relation in kinship for step in concept.path):
+                continue
+            try:
+                reference = SemanticReference(
+                    kind="self",
+                    entity_type="person",
+                    path=tuple(
+                        SemanticRelationStep(
+                            relation=step.relation,
+                            filters=tuple(
+                                SemanticFilter(
+                                    property=item.property,
+                                    operator=item.operator,  # type: ignore[arg-type]
+                                    value=item.value,
+                                    source=item.source,  # type: ignore[arg-type]
+                                    value_from=item.value_from if item.value_from == "anchor" else None,
+                                    value_property=item.value_property,
+                                )
+                                for item in step.filters
+                            ),
+                        )
+                        for step in concept.path
+                    ),
+                )
+            except (ValueError, TypeError):
+                continue
+            resolution = await self.resolver.resolve(
+                reference,
+                context,
+                execution,
+                allow_empty_collection=True,
+                expect_many=True,
+            )
+            if isinstance(resolution, FactResult):
+                continue
+            if target_id not in resolution.entity_ids:
+                continue
+            matches.append(
+                (
+                    len(concept.path),
+                    sum(len(step.filters) for step in concept.path),
+                    concept.name,
+                )
+            )
+        if not matches:
+            return None
+        matches.sort(reverse=True)
+        best = matches[0]
+        tied = [item for item in matches if item[:2] == best[:2]]
+        if len(tied) != 1:
+            return None
+        return best[2]
 
     async def _filter_collection(
         self,

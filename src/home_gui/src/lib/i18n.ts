@@ -22,6 +22,7 @@ const copy = {
     needKey: 'A Cortex API key is required.',
     mapped: 'That email is not mapped to a household person.',
     thinking: 'Thinking…',
+    you: 'You',
   },
   zh: {
     product: 'Home Cortex',
@@ -44,6 +45,7 @@ const copy = {
     needKey: '需要 Cortex API 密钥。',
     mapped: '该邮箱未映射到家庭成员。',
     thinking: '正在思考…',
+    you: '您',
   },
 } as const;
 

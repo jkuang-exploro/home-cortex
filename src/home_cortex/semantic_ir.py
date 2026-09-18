@@ -276,6 +276,7 @@ class FactEvidence:
     relationship: str | None = None
     semantic_property: str | None = None
     relationships: tuple[FactRelationshipEvidence, ...] = ()
+    reference_concept: str | None = None
 
 
 @dataclass(frozen=True)

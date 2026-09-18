@@ -373,6 +373,11 @@ class FactRenderer:
         name = _name(result.value, "zh")
         if request.subject.kind == "self" and not request.subject.path:
             return f"您是{name}。"
+        if result.evidence.reference_concept:
+            phrase = SemanticDisplay(self.ontology, "zh").concept_phrase(
+                result.evidence.reference_concept
+            )
+            return f"{name}是您的{phrase}。"
         return f"{_subject_nominative(request.subject)}是{name}。"
 
     def _en(
@@ -461,6 +466,11 @@ class FactRenderer:
             return "Yes." if result.value else "No."
         if request.subject.kind == "assistant":
             return f"I am {context.assistant_display_name}, the Home Cortex household assistant."
+        if result.evidence.reference_concept:
+            phrase = SemanticDisplay(self.ontology, "en").concept_phrase(
+                result.evidence.reference_concept
+            )
+            return f"{_name(result.value, 'en')} is your {phrase}."
         return f"The resolved person is {_name(result.value, 'en')}."
 
 

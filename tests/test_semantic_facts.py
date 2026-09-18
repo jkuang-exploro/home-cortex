@@ -1819,6 +1819,22 @@ async def test_all_core_plans_require_interpretation(
 
 
 @pytest.mark.asyncio
+async def test_named_person_identity_uses_speaker_relative_concept(
+    dispatcher: JsonGraphDispatcher,
+    context: AgentRequestContext,
+    service: SemanticFactService,
+) -> None:
+    request = _resolve(_named("巴志刚"))
+    result, _ = await _execute(service, request, context)
+    assert result.status == "found"
+    assert result.value["id"] == "person:zhigang_ba"
+    assert result.evidence.reference_concept == "father_in_law"
+    assert service.renderer.render(request, result, context) == "巴志刚是您的岳父。"
+    english = service.renderer.render(request, result, replace(context, locale="en"))
+    assert english == "Zhigang Ba is your father-in-law."
+
+
+@pytest.mark.asyncio
 async def test_semantic_planner_rejects_model_originated_entity_id(
     context: AgentRequestContext,
 ) -> None:

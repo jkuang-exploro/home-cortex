@@ -35,6 +35,18 @@ class SemanticDisplay:
         definition = self.ontology.properties.get(name)
         return self.label(definition.label if definition else (), name)
 
+    def concept_phrase(self, name: str) -> str:
+        concept = self.ontology.reference_concepts.get(name)
+        if concept is None:
+            return _text(name)
+        if concept.label:
+            return self.label(concept.label, name)
+        for alias in concept.aliases:
+            chinese = any("\u4e00" <= char <= "\u9fff" for char in alias)
+            if self.zh == chinese:
+                return _text(alias)
+        return _text(concept.aliases[0] if concept.aliases else name)
+
     def relation(self, name: str) -> str:
         # Only an unfiltered, one-hop concept can label a base relation.
         # Never collapse a filtered or multi-hop concept into a broader noun.

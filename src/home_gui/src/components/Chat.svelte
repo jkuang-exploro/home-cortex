@@ -78,6 +78,8 @@
           {message}
           pending={pending && message.role === 'assistant' && message === messages[messages.length - 1] && !message.content}
           thinking={copy.thinking}
+          speaker={copy.you}
+          assistant={model || copy.tagline}
         />
       {/each}
     {/if}
