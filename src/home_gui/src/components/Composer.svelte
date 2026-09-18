@@ -11,24 +11,23 @@
   const copy = $derived(t(language));
   let draft = $state('');
 
-  function submit(event: SubmitEvent) {
-    event.preventDefault();
+  function send() {
     const text = draft.trim();
     if (!text || disabled) return;
-    onsend(text);
     draft = '';
+    onsend(text);
   }
 
   function onkeydown(event: KeyboardEvent) {
     if (event.key !== 'Enter' || event.shiftKey) return;
     if (event.isComposing || event.keyCode === 229) return;
     event.preventDefault();
-    (event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
+    send();
   }
 </script>
 
 <div class="composer">
-  <form onsubmit={submit}>
+  <div class="composer-box">
     <textarea
       bind:value={draft}
       placeholder={copy.placeholder}
@@ -36,6 +35,6 @@
       onkeydown={onkeydown}
       rows="2"
     ></textarea>
-    <button class="primary" type="submit" {disabled}>{copy.send}</button>
-  </form>
+    <button class="primary" type="button" {disabled} onclick={send}>{copy.send}</button>
+  </div>
 </div>

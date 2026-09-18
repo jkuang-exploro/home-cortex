@@ -172,7 +172,7 @@ select {
   padding: 16px 24px 24px;
 }
 
-.composer form {
+.composer-box {
   max-width: 44rem;
   margin: auto;
   display: grid;
