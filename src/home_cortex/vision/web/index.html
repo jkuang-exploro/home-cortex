@@ -41,14 +41,20 @@
     <section id="live-view" aria-labelledby="live-heading">
       <h2 id="live-heading">Live View</h2>
       <form id="stream-form">
+        <label for="vision-source">Camera address</label>
+        <input id="vision-source" type="text"
+               placeholder="192.168.68.65 or http://192.168.68.65:8088/live.mjpg"
+               aria-describedby="stream-help" autocomplete="off">
         <label for="vision-key">Cortex API key (if configured)</label>
         <input id="vision-key" type="password" placeholder="Enter once to unlock live view"
-               aria-describedby="stream-help" autocomplete="off">
+               autocomplete="off">
         <button type="submit">Connect</button>
         <button id="stream-disconnect" type="button" disabled>Disconnect</button>
       </form>
-      <p id="stream-help">Video is relayed through Home Cortex. Configure VISION_STREAM_URL on
-        the server with the Mac camera URL. The key is cleared after use; access lasts one hour.</p>
+      <p id="stream-help">Video is relayed through Home Cortex. Enter the Mac's LAN IP; Home Cortex
+        fills <code>:8088/live.mjpg</code> if you only type the host. The address is stored in the
+        Vision session cookie, not in the server env file. The API key is cleared after use;
+        access lasts one hour.</p>
       <p id="stream-status" role="status" aria-live="polite">Stream unavailable — click Connect to start the server preview.</p>
       <div id="stream-player"></div>
       <noscript>Enable JavaScript to connect the live preview.</noscript>

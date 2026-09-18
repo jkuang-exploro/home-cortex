@@ -46,6 +46,15 @@ def test_session_protects_media_without_changing_other_api_auth(client, monkeypa
     assert 'test-key' not in response.headers['set-cookie']
     assert client.get('/vision/stream?url=http://other-host/secret').content == b'frame'
     assert calls == ['http://camera:8088/live.mjpg']
+    calls.clear()
+    chosen = client.post(
+        '/vision/session',
+        headers={'Authorization': 'Bearer test-key', 'Content-Type': 'application/json'},
+        json={'source': '192.168.68.65'},
+    )
+    assert chosen.status_code == 200
+    assert client.get('/vision/stream?url=http://other-host/secret').content == b'frame'
+    assert calls == ['http://192.168.68.65:8088/live.mjpg']
     assert client.get('/v1/models').status_code == 401
     assert client.post('/vision/session').status_code == 200
     app.state.settings.cortex_api_key = 'rotated-key'
@@ -59,12 +68,16 @@ def test_missing_config_and_no_key_development(client):
     assert client.get('/vision/stream').status_code == 503
     app.state.settings.vision_stream_url = 'http://camera/live.mjpg'
     assert client.post('/vision/session').status_code == 200
+    app.state.settings.vision_stream_url = None
+    chosen = client.post('/vision/session', json={'source': '10.0.0.8'})
+    assert chosen.status_code == 200
+    assert client.post('/vision/session', json={'source': 'file:///tmp/x'}).status_code == 422
 
 
 def test_cookie_expiry_tampering_and_secure_flag(client):
     key = 'test-key'
     assert relay.valid_session(relay.session_token(key), key)
-    assert not relay.valid_session(relay.session_token(key, int(time.time()) - 1), key)
+    assert not relay.valid_session(relay.session_token(key, expires=int(time.time()) - 1), key)
     assert not relay.valid_session(relay.session_token(key) + 'x', key)
     assert not relay.valid_session('invalid', key)
     response = client.post('https://testserver/vision/session', headers={'Authorization': 'Bearer test-key'})
@@ -75,6 +88,24 @@ def test_cookie_expiry_tampering_and_secure_flag(client):
 def test_source_validation(url):
     with pytest.raises(ValueError):
         Settings(_env_file=None, vision_stream_url=url)
+
+
+@pytest.mark.parametrize(
+    'raw, expected',
+    [
+        ('192.168.68.65', 'http://192.168.68.65:8088/live.mjpg'),
+        ('10.0.0.8:9000', 'http://10.0.0.8:9000/live.mjpg'),
+        ('http://cam.local:8088/live.mjpg', 'http://cam.local:8088/live.mjpg'),
+    ],
+)
+def test_session_source_normalization(raw, expected):
+    assert relay.normalize_stream_source(raw) == expected
+
+
+@pytest.mark.parametrize('raw', ['file:///tmp/x', 'http://user:pass@camera/live', 'http://camera/live#x', '169.254.169.254'])
+def test_session_source_rejects_unsafe_targets(raw):
+    with pytest.raises(ValueError):
+        relay.normalize_stream_source(raw)
 
 
 class Chunks(httpx.AsyncByteStream):

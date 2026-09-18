@@ -1301,6 +1301,7 @@ def test_vision_player_asset(api_client: tuple[TestClient, FakeAgent]) -> None:
     app.state.settings.cortex_api_key = "test-key"
     page = client.get("/vision")
     assert 'id="vision-key"' in page.text
+    assert 'id="vision-source"' in page.text
     assert 'id="stream-disconnect"' in page.text
     assert 'src="/vision/assets/vision.js"' in page.text
     script = client.get("/vision/assets/vision.js")

@@ -55,7 +55,15 @@ from .retrieval import RetrievalService
 from .calendar import calendar_service_from_settings
 from .tools import ToolDispatcher
 from .writing import ItemWritingService
-from .vision.relay import COOKIE_NAME, SESSION_SECONDS, open_relay, session_token, valid_session
+from .vision.relay import (
+    COOKIE_NAME,
+    SESSION_SECONDS,
+    normalize_stream_source,
+    open_relay,
+    session_source,
+    session_token,
+    valid_session,
+)
 
 DEFAULT_AGENT_ID = "steward"
 VIRTUAL_MODEL = get_agent(DEFAULT_AGENT_ID).display_name
@@ -320,6 +328,10 @@ async def vision_script() -> FileResponse:
     )
 
 
+def _vision_signing_key(request: Request) -> str:
+    return _request_settings(request).cortex_api_key or "home-cortex-vision"
+
+
 def _authenticate_vision(request: Request) -> None:
     key = _request_settings(request).cortex_api_key
     if key and valid_session(request.cookies.get(COOKIE_NAME, ""), key):
@@ -327,24 +339,47 @@ def _authenticate_vision(request: Request) -> None:
     _authenticate_request(request)
 
 
-def _vision_stream_url(request: Request) -> str:
+def _vision_stream_url(request: Request, *, source: str | None = None) -> str:
+    if source and source.strip():
+        try:
+            return normalize_stream_source(source)
+        except ValueError as error:
+            raise APIError(422, "invalid_stream_source", str(error)) from error
+    key = _vision_signing_key(request)
+    bound = session_source(request.cookies.get(COOKIE_NAME, ""), key)
+    if bound:
+        return bound
     url = getattr(_request_settings(request), "vision_stream_url", None)
-    if not url:
-        raise APIError(503, "vision_not_configured", "Set VISION_STREAM_URL on the Home Cortex server")
-    return str(url)
+    if url:
+        return str(url)
+    raise APIError(
+        503,
+        "vision_not_configured",
+        "Provide the camera IP or URL when connecting",
+    )
 
 
 @app.post("/vision/session", include_in_schema=False)
 async def vision_session(request: Request) -> JSONResponse:
     _authenticate_vision(request)
-    _vision_stream_url(request)
+    payload: dict[str, Any] = {}
+    content_type = request.headers.get("content-type", "")
+    if content_type.startswith("application/json"):
+        with suppress(Exception):
+            body = await request.json()
+            if isinstance(body, dict):
+                payload = body
+    url = _vision_stream_url(request, source=payload.get("source") if isinstance(payload.get("source"), str) else None)
     response = JSONResponse({"stream_url": "/vision/stream"}, headers={"Cache-Control": "no-store"})
-    key = _request_settings(request).cortex_api_key
-    if key:
-        response.set_cookie(
-            COOKIE_NAME, session_token(key), max_age=SESSION_SECONDS,
-            httponly=True, secure=request.url.scheme == "https", samesite="strict", path="/vision",
-        )
+    response.set_cookie(
+        COOKIE_NAME,
+        session_token(_vision_signing_key(request), url),
+        max_age=SESSION_SECONDS,
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="strict",
+        path="/vision",
+    )
     return response
 
 

@@ -14,7 +14,7 @@ function setup(fetcher = async () => ({ok: true})) {
     replaceChildren(...children) { this.children = children; },
     removeAttribute(name) { delete this[name]; },
   });
-  for (const id of ['stream-form', 'vision-key', 'stream-status', 'stream-player', 'stream-disconnect']) elements[id] = element();
+  for (const id of ['stream-form', 'vision-source', 'vision-key', 'stream-status', 'stream-player', 'stream-disconnect']) elements[id] = element();
   const window = element();
   vm.runInNewContext(script, {
     document: { getElementById: id => elements[id], createElement: element }, window, AbortController,
@@ -25,8 +25,9 @@ function setup(fetcher = async () => ({ok: true})) {
   });
   return {
     elements, timers, window, requests,
-    async connect(key = '') {
+    async connect(key = '', source = '192.168.68.65') {
       elements['vision-key'].value = key;
+      elements['vision-source'].value = source;
       await elements['stream-form'].handlers.submit({ preventDefault() {} });
       return elements['stream-player'].children[0];
     },
@@ -40,6 +41,7 @@ test('connect uses only same-origin session and media, clears key, detects first
   const image = await app.connect('test-key');
   assert.equal(app.requests[0].url, '/vision/session');
   assert.equal(app.requests[0].headers.Authorization, 'Bearer test-key');
+  assert.match(app.requests[0].body, /192\.168\.68\.65/);
   assert.equal(app.elements['vision-key'].value, '');
   assert.equal(image.src, '/vision/stream');
   image.naturalWidth = 640;
@@ -52,7 +54,7 @@ test('connect uses only same-origin session and media, clears key, detects first
 });
 
 test('session errors prevent media load and show actionable messages', async () => {
-  for (const [status, message] of [[401, /API key/], [503, /VISION_STREAM_URL/]]) {
+  for (const [status, message] of [[401, /API key/], [503, /camera IP/], [422, /Camera address/]]) {
     const app = setup(async () => ({ok: false, status}));
     assert.equal(await app.connect(), undefined);
     assert.match(app.status(), message);

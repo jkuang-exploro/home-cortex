@@ -1,7 +1,8 @@
 "use strict";
 
-// The browser only talks to Home Cortex; the server owns the fixed upstream URL.
+// The browser only talks to Home Cortex. The camera address is bound to the Vision session.
 const form = document.getElementById("stream-form");
+const sourceInput = document.getElementById("vision-source");
 const input = document.getElementById("vision-key");
 const status = document.getElementById("stream-status");
 const player = document.getElementById("stream-player");
@@ -33,20 +34,27 @@ form.addEventListener("submit", async (event) => {
   const version = attempt;
   const controller = new AbortController();
   pending = controller;
-  const headers = {};
+  const headers = { "Content-Type": "application/json" };
   if (input.value.trim()) headers.Authorization = `Bearer ${input.value.trim()}`;
+  const source = sourceInput ? sourceInput.value.trim() : "";
   input.value = "";
   disconnect.disabled = false;
   status.textContent = "Connecting through Home Cortex…";
   try {
     const response = await fetch("/vision/session", {
-      method: "POST", headers, credentials: "same-origin", signal: controller.signal,
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      signal: controller.signal,
+      body: JSON.stringify({ source }),
     });
     if (version !== attempt) return;
     if (!response.ok) {
       const message = response.status === 401
         ? "Enter your Cortex API key to unlock the camera preview."
-        : "Stream unavailable — configure VISION_STREAM_URL on the Home Cortex server.";
+        : response.status === 422
+          ? "Camera address is not valid. Use a LAN IP such as 192.168.68.65."
+          : "Stream unavailable — enter the camera IP and reconnect.";
       stopStream();
       status.textContent = message;
       return;
@@ -69,7 +77,7 @@ form.addEventListener("submit", async (event) => {
   const failed = () => {
     if (currentImage !== image) return;
     stopStream();
-    status.textContent = "Stream unavailable — Home Cortex could not load the camera. Check VISION_STREAM_URL and start EdgeVision with --host 0.0.0.0. If your session expired, enter the API key and reconnect.";
+    status.textContent = "Stream unavailable — Home Cortex could not load the camera. Check the camera IP, start EdgeVision with --host 0.0.0.0, and reconnect. If your session expired, enter the API key again.";
   };
   const ready = () => {
     if (currentImage !== image || image.naturalWidth === 0) return;

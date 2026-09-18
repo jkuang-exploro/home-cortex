@@ -1,10 +1,12 @@
-"""Fixed-source MJPEG relay and short-lived, Vision-only browser credentials."""
+"""MJPEG relay and short-lived Vision credentials. Source URL is session-bound."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import time
 from email.message import Message
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 from fastapi import HTTPException
@@ -12,22 +14,85 @@ from starlette.responses import StreamingResponse
 
 COOKIE_NAME = "cortex_vision_session"
 SESSION_SECONDS = 3600
+DEFAULT_STREAM_PORT = 8088
+DEFAULT_STREAM_PATH = "/live.mjpg"
+BLOCKED_HOSTS = frozenset({"0.0.0.0", "169.254.169.254", "metadata.google.internal"})
 
 
-def session_token(key: str, expires: int | None = None) -> str:
-    expiry = str(expires if expires is not None else int(time.time()) + SESSION_SECONDS)
-    signature = hmac.new(key.encode(), f"vision:{expiry}".encode(), hashlib.sha256).hexdigest()
+def _b64(value: str) -> str:
+    return base64.urlsafe_b64encode(value.encode()).decode().rstrip("=")
+
+
+def _unb64(value: str) -> str:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(f"{value}{padding}").decode()
+
+
+def normalize_stream_source(value: str) -> str:
+    """Accept an IP, host:port, or http(s) URL. Never credentials, fragments, or metadata hosts."""
+    raw = value.strip()
+    if not raw:
+        raise ValueError("Camera address is required")
+    if "://" not in raw:
+        hostport = raw.split("/", 1)[0]
+        if hostport.count(":") == 1:
+            raw = f"http://{hostport}{DEFAULT_STREAM_PATH}"
+        else:
+            raw = f"http://{hostport}:{DEFAULT_STREAM_PORT}{DEFAULT_STREAM_PATH}"
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("Camera URL must be http or https")
+    if parsed.username or parsed.password:
+        raise ValueError("Camera URL must not contain credentials")
+    if parsed.fragment or parsed.query:
+        raise ValueError("Camera URL must not contain a query or fragment")
+    host = (parsed.hostname or "").casefold()
+    if not host or host in BLOCKED_HOSTS or host.startswith("169.254."):
+        raise ValueError("Camera address is not allowed")
+    path = parsed.path if parsed.path and parsed.path != "/" else DEFAULT_STREAM_PATH
+    netloc = host
+    if parsed.port:
+        netloc = f"{host}:{parsed.port}"
+    return urlunparse((parsed.scheme, netloc, path, "", "", ""))
+
+
+def session_token(key: str, source: str = "", *, expires: int | None = None) -> str:
+    expiry = expires if expires is not None else int(time.time()) + SESSION_SECONDS
+    payload = f"vision:{expiry}:{source}"
+    signature = hmac.new(key.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    if source:
+        return f"{expiry}.{_b64(source)}.{signature}"
     return f"{expiry}.{signature}"
 
 
-def valid_session(token: str, key: str) -> bool:
+def parse_session(token: str, key: str) -> str | None:
     try:
-        expiry, _ = token.split(".", 1)
-        if not int(time.time()) < int(expiry) <= int(time.time()) + SESSION_SECONDS:
-            return False
-        return hmac.compare_digest(token, session_token(key, int(expiry)))
-    except (ValueError, TypeError):
-        return False
+        parts = token.split(".")
+        if len(parts) == 2:
+            expiry_text, _signature = parts
+            source = ""
+        elif len(parts) == 3:
+            expiry_text, encoded, _signature = parts
+            source = _unb64(encoded)
+        else:
+            return None
+        expiry = int(expiry_text)
+        if not int(time.time()) < expiry <= int(time.time()) + SESSION_SECONDS:
+            return None
+        expected = session_token(key, source, expires=expiry)
+        if not hmac.compare_digest(token, expected):
+            return None
+        return source
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return None
+
+
+def valid_session(token: str, key: str) -> bool:
+    return parse_session(token, key) is not None
+
+
+def session_source(token: str, key: str) -> str:
+    return parse_session(token, key) or ""
 
 
 class RelayResponse(StreamingResponse):
