@@ -92,10 +92,9 @@ export async function* streamMessage(
   let buffer = '';
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
     const parts = buffer.split('\n\n');
-    buffer = parts.pop() ?? '';
+    buffer = done ? '' : (parts.pop() ?? '');
     for (const part of parts) {
       const line = part.split('\n').find((item) => item.startsWith('data: '));
       if (!line) continue;
@@ -116,5 +115,6 @@ export async function* streamMessage(
       const delta = event.choices?.[0]?.delta?.content;
       if (delta) yield delta;
     }
+    if (done) break;
   }
 }

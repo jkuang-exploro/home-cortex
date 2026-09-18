@@ -147,29 +147,39 @@
     await ensureConversation();
   }
 
+  function setLastAssistant(content: string) {
+    const last = messages.at(-1);
+    if (!last || last.role !== 'assistant') {
+      messages = [...messages, { id: newId(), role: 'assistant', content }];
+      return;
+    }
+    messages = [...messages.slice(0, -1), { ...last, content }];
+  }
+
   async function send(text: string) {
     sendError = '';
-    const user: ChatMessage = { id: newId(), role: 'user', content: text };
-    const assistant: ChatMessage = { id: newId(), role: 'assistant', content: '' };
-    messages = [...messages, user, assistant];
+    messages = [
+      ...messages,
+      { id: newId(), role: 'user', content: text },
+      { id: newId(), role: 'assistant', content: '' },
+    ];
     pending = true;
     try {
       const conversationId = activeId ?? (await ensureConversation());
       if (!activeId) activeId = conversationId;
+      let reply = '';
       for await (const delta of streamMessage(conversationId, text)) {
-        assistant.content += delta;
-        messages = [...messages];
+        reply += delta;
+        setLastAssistant(reply);
       }
-      if (!assistant.content) {
-        assistant.content = sendError || 'No reply';
-        messages = [...messages];
-      }
+      const latest = await getConversation(conversationId);
+      if (latest.messages?.length) messages = latest.messages;
+      else if (!reply) setLastAssistant(sendError || 'No reply');
       conversations = await listConversations();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       sendError = message;
-      assistant.content = message;
-      messages = [...messages];
+      setLastAssistant(message);
     } finally {
       pending = false;
     }
