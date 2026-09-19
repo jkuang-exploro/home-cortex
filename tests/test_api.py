@@ -924,7 +924,7 @@ def test_admin_ingest_accepts_household_api_key(
     )
 
     with patch(
-        "home_cortex.api.ingest_directory",
+        "home_cortex.http.routes.system.run_ingest",
         new_callable=AsyncMock,
         return_value=ingested,
     ) as ingest:
@@ -953,7 +953,7 @@ def test_admin_export_requires_explicit_target_and_accepts_household_api_key(
     )
 
     with patch(
-        "home_cortex.api.export_directory",
+        "home_cortex.http.routes.system.run_export",
         new_callable=AsyncMock,
         return_value=exported,
     ) as export:

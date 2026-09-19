@@ -32,23 +32,24 @@ def prefix_info(previous, current):
 
 
 async def build_traffic(root, ordering):
-    import home_cortex.ollama as module
+    import home_cortex.ollama as provider_module
+    import home_cortex.semantic_prompt as prompt_module
     from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
     service, context = build_json_fact_service(
         root / 'benchmarks/fixtures/semantic-contract', root / 'schemas/edge', None,
     )
     capabilities = service.engine.schema.planner_capability_payload()
-    original = module.planner_system_prompt
+    original = prompt_module.planner_system_prompt
     if ordering == 'native':
-        module.planner_system_prompt = lambda caps: module._PLANNER_INSTRUCTIONS + '\nCapabilities:\n' + compact(caps)
+        prompt_module.planner_system_prompt = lambda caps: prompt_module._PLANNER_INSTRUCTIONS + '\nCapabilities:\n' + compact(caps)
 
     class Capture:
         async def chat(self, **kwargs):
             self.body = kwargs
-            return module.ChatResponse(message={'role': 'assistant', 'content': '{}'})
+            return provider_module.ChatResponse(message={'role': 'assistant', 'content': '{}'})
 
     capture = Capture()
-    model = module.OllamaService('http://unused', MODEL, client=capture)
+    model = provider_module.OllamaService('http://unused', MODEL, client=capture)
     now = context.current_time.isoformat()
     async def plan(users, clock=now):
         await model.plan_semantic_fact(
@@ -86,7 +87,7 @@ async def build_traffic(root, ordering):
             'alternating_chat_varied': [('planner', first), ('chat', chat), ('planner', varied[0]), ('chat', chat)],
         }
     finally:
-        module.planner_system_prompt = original
+        prompt_module.planner_system_prompt = original
 
 
 def run(client, traffic, repeats, warmup):
@@ -143,7 +144,7 @@ def main():
                 raise RuntimeError('Requires an already resident model with verified 8192 context')
         for ordering in (['canonical', 'native'] if args.reverse else ['native', 'canonical']):
             traffic = asyncio.run(build_traffic(args.root, ordering))
-            from home_cortex.ollama import _semantic_planner_examples
+            from home_cortex.semantic_prompt import _semantic_planner_examples
             static_count = 1 + len(_semantic_planner_examples())
             for name, sequence in traffic.items():
                 entry = {'ordering': ordering, 'traffic': name,

@@ -1,4 +1,3 @@
-import base64
 import json
 from dataclasses import dataclass
 from datetime import date
@@ -14,6 +13,7 @@ from .record_ids import (
     TABLE_NAME_RE,
     as_record_id,
     canonical_record_id,
+    implicit_edge_component,
 )
 from .schema_catalog import node_table_sources
 from .spatial.contracts import (
@@ -135,14 +135,6 @@ def parse_record_id(value: str, *, source: Path) -> RecordID:
         raise ValueError(
             f"Invalid record ID {value!r} in {source}; expected table:record_id"
         ) from error
-
-
-def implicit_edge_component(record_id: RecordID) -> str:
-    canonical = canonical_record_id(record_id)
-    if ":" not in str(record_id.id):
-        return canonical.replace(":", "_", 1)
-    encoded = base64.urlsafe_b64encode(canonical.encode()).decode().rstrip("=")
-    return f"b64_{encoded}"
 
 
 def implicit_edge_record_id(

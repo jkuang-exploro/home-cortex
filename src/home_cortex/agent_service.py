@@ -26,7 +26,7 @@ from .model_loop import (
     AgentStreamingError,
     ModelLoop,
 )
-from .ollama import OllamaService
+from .model_provider import ModelProvider
 from .schema_catalog import RuntimeSchemaCatalog
 from .semantic_ir import FactAnswer, AgentRequestContext, SemanticMutationIntent
 from .household_fact_engine import HouseholdFactEngine
@@ -54,7 +54,7 @@ class AgentService:
 
     def __init__(
         self,
-        ollama: OllamaService,
+        ollama: ModelProvider,
         dispatcher: ToolDispatcher,
         *,
         system_prompt: str,
@@ -108,6 +108,7 @@ class AgentService:
         )
 
         self.semantic_conversations = SemanticConversationService(self.semantic_facts)
+        self.mutations = getattr(dispatcher, "mutations", None)
 
     async def answer(
         self,
@@ -239,12 +240,11 @@ class AgentService:
         )
         mutation_text = None
         if isinstance(semantic_answer, SemanticMutationIntent):
-            response = await self.model_loop._dispatch(
-                "write_item", semantic_answer.mutation.model_dump(mode="json"),
-                caller_entity_id=context.caller_entity_id,
-                planned_mutation=True,
-                request_context=context,
-            ) if self._mutation_enabled else {"ok": False}
+            response = (
+                await self.mutations.execute(semantic_answer.mutation, context)
+                if self._mutation_enabled and self.mutations is not None
+                else {"ok": False}
+            )
             mutation_text = render_mutation_result(
                 semantic_answer.mutation, response, language,
                 self.semantic_facts.engine.schema.ontology,

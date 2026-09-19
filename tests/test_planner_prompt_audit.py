@@ -1,7 +1,8 @@
 """Prompt accounting and experiment isolation, independent of model behavior."""
 import pytest
 
-from home_cortex import ollama as prompts
+from home_cortex import semantic_prompt as prompts
+from home_cortex.ollama import OLLAMA_NUM_CTX
 from scripts.profiling.planner_prompt_audit import prompt_components
 from scripts.benchmarks.planner_prompt_experiment import reduced_examples
 
@@ -49,7 +50,7 @@ def test_performance_budget_is_distinct_from_context_safety():
     checks = budget_checks(rows, 8500)
     assert checks['normal_exceeded'] == 1
     assert checks['context_exceeded'] == 0
-    rows[0]['model_calls'][0]['prompt_tokens'] = prompts.OLLAMA_NUM_CTX - prompts.PLANNER_NUM_PREDICT + 1
+    rows[0]['model_calls'][0]['prompt_tokens'] = OLLAMA_NUM_CTX - prompts.PLANNER_NUM_PREDICT + 1
     assert budget_checks(rows, 8500)['context_exceeded'] == 1
     assert not budget_checks([], 8500)['all_counts_available']
 

@@ -14,7 +14,7 @@ from scripts import PROJECT_ROOT
 from time import perf_counter
 
 from ollama import ChatResponse
-from home_cortex import ollama as prompts
+from home_cortex import semantic_prompt as prompts
 from home_cortex.ollama import OllamaService
 from home_cortex.request_tracing import trace_request
 from home_cortex.semantic_conversation import SemanticConversationService

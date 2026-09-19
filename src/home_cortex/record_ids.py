@@ -1,3 +1,4 @@
+import base64
 import re
 from typing import Any
 
@@ -37,3 +38,12 @@ def as_record_id(value: str):
 
     table, record_id = split_record_id(value)
     return RecordID(table, record_id)
+
+
+def implicit_edge_component(record_id: Any) -> str:
+    """Encode one endpoint for deterministic implicit relationship IDs."""
+    canonical = canonical_record_id(record_id)
+    if ":" not in str(record_id.id):
+        return canonical.replace(":", "_", 1)
+    encoded = base64.urlsafe_b64encode(canonical.encode()).decode().rstrip("=")
+    return f"b64_{encoded}"

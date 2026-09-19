@@ -1,4 +1,4 @@
-"""Pure surveyed-anchor localization. No detector, ROS, or graph traversal."""
+"""Pure surveyed-anchor pose math. No device loop, detector, ROS, or graph I/O."""
 from __future__ import annotations
 
 import math
@@ -36,7 +36,7 @@ def localize_from_fiducials(
     camera_in_body: Pose,
     timestamp: str | None = None,
 ) -> LocalizationSolution:
-    """Solve MicroDuck body pose in ``space`` from surveyed + observed anchors.
+    """Solve an embodied agent pose in ``space`` from surveyed observations.
 
     Each observation is the anchor pose in the camera frame. ``camera_in_body``
     is the camera pose in the robot body. The duck's start pose is not an input.

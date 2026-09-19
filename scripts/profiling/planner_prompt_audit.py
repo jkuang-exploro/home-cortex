@@ -12,7 +12,8 @@ import json
 from pathlib import Path
 
 from ollama import AsyncClient
-from home_cortex import ollama as prompts
+from home_cortex import semantic_prompt as prompts
+from home_cortex.ollama import OLLAMA_KEEP_ALIVE, OLLAMA_NUM_CTX
 from home_cortex.mutation_ir import read_plan_schema
 from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
 from scripts import PROJECT_ROOT
@@ -89,13 +90,13 @@ async def run(args):
                     rows[key]['raw_tokens'] = 0
                     continue
                 response = await client.generate(model=args.model, prompt=value, raw=True, think=False,
-                    keep_alive=prompts.OLLAMA_KEEP_ALIVE,
-                    options={'num_ctx': prompts.OLLAMA_NUM_CTX, 'num_predict': 1, 'temperature': 0, 'seed': 0})
+                    keep_alive=OLLAMA_KEEP_ALIVE,
+                    options={'num_ctx': OLLAMA_NUM_CTX, 'num_predict': 1, 'temperature': 0, 'seed': 0})
                 rows[key]['raw_tokens'] = response.prompt_eval_count
         finally:
             await client.close()
     report = {'method': 'Exact UTF-8 message content; optional model-native raw generate counts exclude chat framing and are not additive.',
-              'model': args.model, 'num_ctx': prompts.OLLAMA_NUM_CTX, 'output_budget': prompts.PLANNER_NUM_PREDICT,
+              'model': args.model, 'num_ctx': OLLAMA_NUM_CTX, 'output_budget': prompts.PLANNER_NUM_PREDICT,
               'content_bytes': total, 'wire_messages_bytes': len(compact(built).encode()),
               'messages_sha256': hashlib.sha256(compact(built).encode()).hexdigest(),
               'schema_format_bytes_separate': len(compact(read_plan_schema(schema.planner_output_schema())).encode()),

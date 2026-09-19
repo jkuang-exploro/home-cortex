@@ -15,7 +15,8 @@ import json
 from pathlib import Path
 from time import perf_counter
 
-from home_cortex import ollama as prompts
+from home_cortex import semantic_prompt as prompts
+from home_cortex.ollama import OLLAMA_NUM_CTX, OllamaService
 from home_cortex.semantic_ir import SemanticFactRequest
 from scripts import PROJECT_ROOT
 from scripts.profiling.planner_prompt_audit import compact, prompt_components
@@ -88,12 +89,12 @@ def budget_checks(rows, normal_token_budget):
         'normal_token_budget': normal_token_budget,
         'all_counts_available': bool(calls) and all(call['prompt_tokens'] is not None for call in calls),
         'normal_exceeded': sum(call['prompt_tokens'] > normal_token_budget for call in normal if call['prompt_tokens'] is not None),
-        'context_exceeded': sum(call['prompt_tokens'] + prompts.PLANNER_NUM_PREDICT > prompts.OLLAMA_NUM_CTX for call in calls if call['prompt_tokens'] is not None),
+        'context_exceeded': sum(call['prompt_tokens'] + prompts.PLANNER_NUM_PREDICT > OLLAMA_NUM_CTX for call in calls if call['prompt_tokens'] is not None),
         'length_stops': sum(call['done_reason'] == 'length' for call in calls),
     }
 
 
-class MeasuredOllama(prompts.OllamaService):
+class MeasuredOllama(OllamaService):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.calls = []

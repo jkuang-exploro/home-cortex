@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from home_cortex.config import Settings
-from home_cortex.ollama import language_model_from_settings
+from home_cortex.model_provider import model_provider_from_settings
 from home_cortex.openrouter import OpenRouterService
 from home_cortex.tools import TOOLS
 
@@ -38,7 +38,7 @@ async def test_language_model_factory_selects_openrouter() -> None:
         openrouter_api_key="sk-or-test",
         openrouter_model="anthropic/claude-sonnet-4",
     )
-    service = language_model_from_settings(settings)
+    service = model_provider_from_settings(settings)
     try:
         assert isinstance(service, OpenRouterService)
         assert service.model == "anthropic/claude-sonnet-4"

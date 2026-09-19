@@ -96,6 +96,7 @@ class FakeDispatcher:
         }
         self.delay = delay
         self.calls: list[tuple[str, Any]] = []
+        self.mutations = self
 
     async def dispatch(
         self, tool_name: str, arguments: Any, **_: Any
@@ -106,6 +107,14 @@ class FakeDispatcher:
         return self.result
 
     dispatch_internal = dispatch
+
+    async def execute(self, request: Any, context: Any) -> dict[str, Any]:
+        arguments = request.model_dump(mode="json")
+        return await self.dispatch(
+            "write_item",
+            arguments,
+            caller_entity_id=context.caller_entity_id,
+        )
 
 
 def _chat_response(

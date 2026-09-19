@@ -10,7 +10,7 @@ import httpx
 from ollama import ChatResponse
 
 from .request_tracing import model_call, observe_usage, stream_model_call
-from .ollama import PLANNER_NUM_PREDICT, PLANNER_SEED, planner_chat_messages
+from .semantic_prompt import PLANNER_NUM_PREDICT, PLANNER_SEED, planner_chat_messages
 from .mutation_ir import MutationDecision, mutation_messages, read_plan_schema, attribute_output_schema
 
 DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1"

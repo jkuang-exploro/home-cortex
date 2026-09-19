@@ -28,12 +28,12 @@ from surrealdb.errors import NotFoundError
 
 from .db import Database
 from .edge_schema import EdgeSchemaRegistry
-from .ingestion import implicit_edge_component
 from .record_ids import (
     RECORD_ID_PATTERN,
     RECORD_ID_RE,
     as_record_id,
     canonical_record_id,
+    implicit_edge_component,
     split_record_id,
 )
 from .schema_catalog import RuntimeSchemaCatalog

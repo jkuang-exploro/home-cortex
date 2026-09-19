@@ -18,7 +18,7 @@ from home_cortex.agents import get_agent
 from home_cortex.config import get_settings
 from home_cortex.db import Database
 from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.ollama import language_model_from_settings
+from home_cortex.model_provider import model_provider_from_settings
 from home_cortex.retrieval import RetrievalService
 from home_cortex.schema_catalog import (
     RuntimeSchemaCatalog,
@@ -111,7 +111,7 @@ async def benchmark_runtime(
         )
         dispatcher = ToolDispatcher(retrieval, ())
         schema = SemanticSchemaRegistry(catalog)
-        llm = language_model_from_settings(settings)
+        llm = model_provider_from_settings(settings)
         service = SemanticFactService(
             HouseholdFactEngine(
                 dispatcher,
@@ -158,7 +158,7 @@ async def benchmark_json(
     dispatcher = JsonGraphDispatcher(data_dir, edge_registry)
     schema = SemanticSchemaRegistry(catalog)
     settings = get_settings()
-    llm = language_model_from_settings(settings)
+    llm = model_provider_from_settings(settings)
     service = SemanticFactService(
         HouseholdFactEngine(dispatcher, schema),
         planner=SemanticFactPlanner(llm, schema),
