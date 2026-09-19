@@ -60,6 +60,25 @@ Target: deliver high-level intents in **<3–4 seconds** on modest always-on har
 
 ### Architecture Sketch
 
+Runtime ownership is split across three independent projects:
+
+```text
+home_cortex_client  -- HTTP / serialized evidence contracts -->  home_cortex
+home_cortex         -- backend API ---------------------------->  home_gui
+```
+
+- `home_cortex` owns the server, household semantics, persistence, spatial
+  primitives, and validation of normalized visual evidence.
+- `home_gui` owns browser interaction and depends only on backend/browser-facing
+  APIs.
+- `home_cortex_client` owns edge-device identity, camera capture, local media
+  handling, and stream/observation publication.
+
+Vision execution is paused pending MicroDuck hardware. The current Mac client is
+an isolated development adapter; replacing it with MicroDuck must not change
+backend semantic contracts. The experimental Tapo path is not part of this
+architecture.
+
 ### Household fact benchmark
 
 Run the semantic fact suite against the source JSON. All questions pass

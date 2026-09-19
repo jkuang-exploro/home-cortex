@@ -1,8 +1,8 @@
 # Canonical V1 vision domain boundary
 
-Live stream adapters (HTTP MJPEG and in-process Tapo) live under
-`vision/camera/` and `vision/relay.py`. They do not create `VisualObservation`
-records, clips, or identity writes.
+This package contains backend/domain authority only. Device capture and live
+stream execution live in the independent sibling project `home_cortex_client`.
+The backend does not import that package; the boundary is serialized records.
 
 ## Decision
 
@@ -212,14 +212,14 @@ The following invariants are mandatory:
 10. Vision records remain outside the household semantic ontology. Household
     writes require a separate explicit reconciliation action.
 
-## Implementation guidance for Grok
+## Future implementation guidance
 
 1. Treat [`contracts.py`](contracts.py) as the only input boundary. Add one adapter
    per detector/runtime and discard native fields after conversion. Do not add a
    detector-specific optional field to `VisualObservation`.
-2. Keep the Mac and MicroDuck capture implementations behind the same source and
-   artifact-store interfaces. Their output differs only in source IDs and
-   producer-profile references.
+2. Keep Mac and future MicroDuck capture implementations in `home_cortex_client`.
+   Their serialized output differs only in source IDs and producer-profile
+   references.
 3. Persist observations only after contract validation and admission-policy
    selection. Make observation rows immutable after insertion.
 4. Keep the tracker inside the edge process. Serialize only `TrackReference` on

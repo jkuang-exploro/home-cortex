@@ -34,12 +34,14 @@ labeled ontology; older loaders reject the typed fields. See the
 [before/after report](../artifacts/condition-rendering/REPORT.md)
 for validation and presentation limitations.
 
-## Paused Vision prototype
+## Vision contracts and client boundary
 
-Vision is not part of the default chat application. The API exposes no `/vision`
-routes, loads no camera modules, and accepts no Vision environment settings. The
-prototype remains under `home_cortex.vision` as dormant reference code until
-MicroDuck establishes the next hardware and streaming boundary.
+Vision execution is paused pending MicroDuck hardware. The API exposes no
+`/vision` routes, loads no camera modules, and accepts no device configuration.
+`home_cortex.vision` retains only backend evidence contracts, validation,
+transport-neutral ingestion interfaces, and artifact metadata/storage concerns.
+Camera capture and live-stream execution are owned by the independent sibling
+project `home_cortex_client`; Home Cortex never imports it.
 
 ## Endpoints
 
@@ -178,7 +180,7 @@ observations and a camera-in-body transform. The start pose is not an input.
 Detectors must emit `spatial.observation` records; they do not define the
 ontology.
 
-The paused visual-evidence prototype remains a separate bounded package
+The paused visual-evidence backend remains a separate bounded package
 (`home_cortex.vision`) and is not imported by the chat application. Its
 [domain boundary](home_cortex/vision/README.md) distinguishes detector category
 belief, persistent visual candidates, human-confirmed enrollments, and household
@@ -200,14 +202,12 @@ The [Vision page architecture](home_cortex/vision/FRONTEND.md) defines a minimal
 live view, polled observation feed, asynchronous clip review, and existing-item
 enrollment workflow without introducing a frontend framework.
 
-The dormant Mac EdgeVision runtime (`python -m home_cortex.vision.edge`) is a separate
-process from the semantic API. It captures the built-in camera through a
-replaceable `CameraSource` and serves an encoded MJPEG-over-HTTP preview
-(`http://127.0.0.1:8088/live.mjpg`). Its Tapo codec requires an external FFmpeg
-installation; the default chat image does not install it. JPEG is encoded, and a browser or
-VLC can view it. Frame timestamps are timezone-aware ISO-8601. Identity is
-`device:dev_macbook` / `camera:built_in`. Use `--source synthetic` without a
-camera. Mac capture needs `pip install 'home-cortex[vision]'`.
+The Mac development runtime now lives in the sibling `home_cortex_client`
+project. It owns device identity/configuration, OpenCV capture, and its encoded
+MJPEG preview. The former Tapo authentication, FFmpeg relay, and embedded player
+prototype were removed rather than transferred. A future MicroDuck adapter will
+replace the client-side capture implementation without changing backend evidence,
+spatial, ingestion, or reconciliation semantics.
 
 Store each fact once. Model an addressable home as an Address, its physical
 house as an Item located at that Address, and its rooms as Spaces hosted by the

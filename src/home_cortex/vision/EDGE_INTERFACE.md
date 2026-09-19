@@ -7,12 +7,13 @@ camera source. It may expose live video, publish compact observations, and creat
 evidence clips at the same time. Each capability can start, fail, reconnect, or
 be disabled without changing the other two.
 
-Home Cortex consumes the contracts in [`contracts.py`](contracts.py) through the
-transport-neutral ports in [`ports.py`](ports.py). The Mac development runtime
-and future MicroDuck runtime must use those same ports. Replacing
-`MacCameraSource` with `MicroDuckCameraSource` changes deployment configuration,
-device credentials, and producer profile records; it does not change observation,
-clip, ingestion, candidate, enrollment, or household contracts.
+Home Cortex consumes serialized records defined by [`contracts.py`](contracts.py)
+through transport-neutral backend ports in [`ports.py`](ports.py). The independent
+`home_cortex_client` project must implement equivalent wire behavior without
+importing these Python modules. Replacing its Mac capture adapter with a future
+MicroDuck adapter changes deployment configuration, device credentials, and
+producer profile records; it does not change observation, clip, ingestion,
+candidate, enrollment, or household contracts.
 
 ```mermaid
 flowchart LR
@@ -63,7 +64,7 @@ endpoint, and optional expiry. A client connects to the edge endpoint directly.
 Home Cortex does not proxy media, terminate WebRTC, transcode frames, or own viewer
 sessions.
 
-The existing Mac MJPEG server is one development implementation. MicroDuck may
+The Mac MJPEG server in `home_cortex_client` is one development implementation. MicroDuck may
 advertise RTSP, WebRTC, or another encoded transport without changing channels B
 or C. If deployment networking later requires a gateway, that gateway implements
 the live-media path and directory contract; it does not enter the visual domain.
@@ -220,14 +221,15 @@ under an existing ID returns `conflict`. A replay package should register its
 referenced immutable producer profiles before observations, but the observation
 path itself is identical to live ingestion.
 
-## Exact implementation seams for Grok
+## Exact future implementation seams
 
 Implement these seams without importing transport libraries into
 `vision.contracts` or `vision.ports`:
 
-### EdgeVision
+### home_cortex_client
 
-1. Keep `CameraSource.open/read/close`; implement `MicroDuckCameraSource` with the
+1. Keep the client-local `CameraSource.open/read/close`; implement a future
+   `MicroDuckCameraSource` with the
    same `CameraFrame(captured_at, width, height, jpeg)` output.
 2. Add a detector adapter that accepts native results and emits validated
    `VisualObservation`. Generate the stable ID before spooling and set

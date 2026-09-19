@@ -1,4 +1,4 @@
-"""Visual evidence contracts and local media artifacts. No camera or detector."""
+"""Backend visual-evidence contracts and storage ports. No device runtime."""
 
 from .artifacts import ArtifactStore
 from .contracts import (

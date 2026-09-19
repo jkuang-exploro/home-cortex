@@ -1,4 +1,5 @@
-"""Import and dependency guards for the edge/backend vision boundary."""
+"""Import and dependency guards for the backend/client Vision boundary."""
+import ast
 import json
 from pathlib import Path
 import subprocess
@@ -39,15 +40,9 @@ def test_vision_domain_import_does_not_load_edge_or_household_adapters(module) -
         "home_cortex.db",
         "home_cortex.retrieval",
         "home_cortex.writing",
-        "home_cortex.vision.edge",
+        "home_cortex_client",
     }
     assert forbidden.isdisjoint(loaded)
-
-
-def test_edge_package_import_does_not_eagerly_load_opencv() -> None:
-    loaded = _loaded_after_import("home_cortex.vision.edge")
-    assert "cv2" not in loaded
-    assert "ultralytics" not in loaded
 
 
 def test_chat_api_import_does_not_load_vision() -> None:
@@ -57,13 +52,46 @@ def test_chat_api_import_does_not_load_vision() -> None:
     assert "ultralytics" not in loaded
 
 
-def test_edge_camera_dependency_remains_optional() -> None:
+def test_backend_has_no_device_runtime_dependencies() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    dependencies = project["project"]["dependencies"]
-    vision = project["project"]["optional-dependencies"]["vision"]
+    groups = [project["project"]["dependencies"]]
+    groups.extend(project["project"].get("optional-dependencies", {}).values())
+    dependencies = [item.lower() for group in groups for item in group]
+    assert not any(
+        item.startswith(("opencv-python", "ultralytics", "cryptography"))
+        for item in dependencies
+    )
 
-    assert not any(name.startswith("opencv-python") for name in dependencies)
-    assert not any(name.startswith("ultralytics") for name in dependencies)
-    assert not any(name.startswith("cryptography") for name in dependencies)
-    assert any(name.startswith("opencv-python") for name in vision)
-    assert any(name.startswith("cryptography") for name in vision)
+
+def test_backend_has_no_device_runtime_modules() -> None:
+    vision = ROOT / "src" / "home_cortex" / "vision"
+    assert not (vision / "edge").exists()
+    assert not (vision / "camera").exists()
+    assert not (vision / "relay.py").exists()
+    assert not (vision / "web").exists()
+
+
+def test_backend_does_not_import_client_package() -> None:
+    imports: list[tuple[Path, str]] = []
+    for path in (ROOT / "src" / "home_cortex").rglob("*.py"):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imports.extend((path, alias.name) for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imports.append((path, node.module))
+    assert not [
+        (path, name)
+        for path, name in imports
+        if name == "home_cortex_client" or name.startswith("home_cortex_client.")
+    ]
+
+
+def test_gui_does_not_depend_on_client_package() -> None:
+    gui = ROOT / "src" / "home_gui"
+    checked = [gui / "package.json", *(gui / "src").rglob("*")]
+    assert not any(
+        "home_cortex_client" in path.read_text(errors="ignore")
+        for path in checked
+        if path.is_file()
+    )
