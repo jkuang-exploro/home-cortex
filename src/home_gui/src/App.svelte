@@ -48,9 +48,7 @@
   async function bootstrap() {
     try {
       await readSession();
-      await loadWorkspace();
-      if (conversations[0]) await selectChat(conversations[0].id);
-      else await startNewChat();
+      await openWorkspace();
       needsLogin = false;
     } catch (error) {
       needsLogin = error instanceof ApiError && error.status === 401;
@@ -61,20 +59,28 @@
   }
 
   async function loadWorkspace() {
-    models = await listModels();
+    const [nextModels, nextConversations] = await Promise.all([
+      listModels(),
+      listConversations(),
+    ]);
+    models = nextModels;
     if (!model) {
       model = models.find((item) => item.kind !== 'model')?.id || models[0]?.id || '';
     }
-    conversations = await listConversations();
+    conversations = nextConversations;
+  }
+
+  async function openWorkspace() {
+    await loadWorkspace();
+    if (conversations[0]) await selectChat(conversations[0].id);
+    else await startNewChat();
   }
 
   async function login(email: string, apiKey: string) {
     loginError = '';
     try {
       await createSession(email, apiKey);
-      await loadWorkspace();
-      if (conversations[0]) await selectChat(conversations[0].id);
-      else await startNewChat();
+      await openWorkspace();
       needsLogin = false;
     } catch (error) {
       if (error instanceof ApiError && error.code === 'identity_not_mapped') {
@@ -93,15 +99,7 @@
     const startedFor = model;
     creating = createConversation(model, language)
       .then((conversation) => {
-        const summary = {
-          id: conversation.id,
-          model: conversation.model,
-          agent_id: conversation.agent_id,
-          language: conversation.language,
-          greeting: conversation.greeting,
-          title: conversation.title,
-          updated_at: conversation.updated_at,
-        };
+        const summary = conversationSummary(conversation);
         conversations = [summary, ...conversations.filter((item) => item.id !== conversation.id)];
         if (!activeId && model === startedFor) {
           activeId = conversation.id;
@@ -113,6 +111,25 @@
         creating = null;
       });
     return creating;
+  }
+
+  function conversationSummary(conversation: ConversationSummary): ConversationSummary {
+    return {
+      id: conversation.id,
+      model: conversation.model,
+      agent_id: conversation.agent_id,
+      language: conversation.language,
+      greeting: conversation.greeting,
+      title: conversation.title,
+      updated_at: conversation.updated_at,
+    };
+  }
+
+  function promoteConversation(conversation: ConversationSummary) {
+    conversations = [
+      conversationSummary(conversation),
+      ...conversations.filter((item) => item.id !== conversation.id),
+    ];
   }
 
   async function startNewChat() {
@@ -168,14 +185,21 @@
       const conversationId = activeId ?? (await ensureConversation());
       if (!activeId) activeId = conversationId;
       let reply = '';
+      let paintFrame = 0;
+      const paint = () => {
+        paintFrame = 0;
+        setLastAssistant(reply);
+      };
       for await (const delta of streamMessage(conversationId, text)) {
         reply += delta;
-        setLastAssistant(reply);
+        if (!paintFrame) paintFrame = requestAnimationFrame(paint);
       }
+      if (paintFrame) cancelAnimationFrame(paintFrame);
+      setLastAssistant(reply);
       const latest = await getConversation(conversationId);
       if (latest.messages?.length) messages = latest.messages;
       else if (!reply) setLastAssistant(sendError || 'No reply');
-      conversations = await listConversations();
+      promoteConversation(latest);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       sendError = message;

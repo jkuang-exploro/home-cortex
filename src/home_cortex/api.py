@@ -665,11 +665,22 @@ async def post_conversation_message(
     content = body.content.strip()
     if not content:
         raise APIError(422, "invalid_request", "Provide a non-empty 'content'")
-    await store.append_message(conversation_id, role="user", content=content)
-    conversation = await _owned_conversation(request, conversation_id)
+    first_user = not any(
+        item.get("role") == "user" for item in conversation.get("messages", [])
+    )
+    user_message = await store.append_message(
+        conversation_id,
+        role="user",
+        content=content,
+        first_user=first_user,
+    )
+    if user_message is None:
+        raise APIError(404, "conversation_not_found", "Conversation was not found")
+    conversation_messages = conversation.setdefault("messages", [])
+    conversation_messages.append(user_message)
     messages = [
         {"role": item["role"], "content": item["content"]}
-        for item in conversation.get("messages", [])
+        for item in conversation_messages
         if item.get("role") in {"user", "assistant"} and item.get("content")
     ]
     model_id = str(conversation.get("model") or VIRTUAL_MODEL)

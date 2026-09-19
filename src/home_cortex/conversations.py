@@ -96,6 +96,7 @@ class ConversationStore:
         *,
         role: str,
         content: str,
+        first_user: bool | None = None,
     ) -> dict[str, Any] | None:
         conversation = self._items.get(conversation_id)
         if conversation is None:
@@ -103,9 +104,10 @@ class ConversationStore:
         message = new_message(role, content)
         conversation["messages"].append(message)
         conversation["updated_at"] = message["created_at"]
-        if role == "user" and not any(
+        is_first_user = first_user if first_user is not None else not any(
             item["role"] == "user" for item in conversation["messages"][:-1]
-        ):
+        )
+        if role == "user" and is_first_user:
             conversation["title"] = conversation_title(content)
         self._items.move_to_end(conversation_id)
         return dict(message)
@@ -205,16 +207,20 @@ class SurrealConversationStore:
         *,
         role: str,
         content: str,
+        first_user: bool | None = None,
     ) -> dict[str, Any] | None:
-        conversation = await self.get(conversation_id)
+        conversation = await self._load(conversation_id)
         if conversation is None:
             return None
+        first_user_message = role == "user" and (
+            first_user
+            if first_user is not None
+            else not await self._has_user_message(conversation_id)
+        )
         message = new_message(role, content)
         await self._write_message(conversation_id, message)
         title = conversation["title"]
-        if role == "user" and not any(
-            item["role"] == "user" for item in conversation["messages"]
-        ):
+        if first_user_message:
             title = conversation_title(content)
         await self.database.upsert(
             as_record_id(f"{CONVERSATION_TABLE}:{conversation_id}"),
@@ -230,6 +236,17 @@ class SurrealConversationStore:
             },
         )
         return dict(message)
+
+    async def _has_user_message(self, conversation_id: str) -> bool:
+        result = await self.database.query(
+            f"SELECT VALUE count() FROM {MESSAGE_TABLE} "
+            "WHERE conversation_id = $conversation_id AND role = 'user' GROUP ALL;",
+            {"conversation_id": conversation_id},
+        )
+        normalized = to_json_value(result)
+        while isinstance(normalized, list) and len(normalized) == 1:
+            normalized = normalized[0]
+        return isinstance(normalized, (int, float)) and normalized > 0
 
     async def _load(self, conversation_id: str) -> dict[str, Any] | None:
         result = await self.database.query(
