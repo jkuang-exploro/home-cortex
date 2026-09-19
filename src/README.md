@@ -130,8 +130,45 @@ file should contain JPEG frames. A 401 means the key is missing/wrong; 503 means
 configuration is missing; 502 means the server cannot receive a valid stream.
 Ensure the URL ends in `/live.mjpg` without a trailing comma.
 
+### Tapo C610 (in-process)
+
+The same `cortex-api` process can pull a Tapo C610 over the local Tapo protocol
+on TCP 8800. Do not run go2rtc, a second container, or an RTSP proxy. The
+browser still receives authenticated multipart MJPEG from `/vision/stream`.
+
+```dotenv
+VISION_CAMERA_KIND=tapo
+VISION_CAMERA_HOST=192.168.68.50
+VISION_CAMERA_PORT=8800
+VISION_CAMERA_SUBTYPE=0
+VISION_TAPO_CLOUD_PASSWORD=your-tapo-cloud-password
+```
+
+The cloud password is the Tapo account password, not an RTSP login. It stays in
+server env only: never in git, cookies, JavaScript, API JSON, or logs.
+
+```sh
+# 1. Camera TCP 8800 from the API host
+nc -vz 192.168.68.50 8800
+
+# 2. Start the normal stack
+docker compose --env-file docker/.env -f docker/docker-compose.yml up -d --build --no-deps cortex-api
+
+# 3. Health
+curl -sS http://127.0.0.1:8001/health
+
+# 4. Open http://home-cortex-0:3000/vision (or :8001/vision), sign in, Connect.
+
+# 5. Confirm the password is not logged
+docker logs cortex-cortex-api-1 2>&1 | grep -i password || true
+```
+
+The C610 is battery/solar powered. Leaving `/vision/stream` connected keeps the
+camera awake and will drain the battery faster than motion-only use.
+
 Tests: `python -m pytest -q` includes an actual HTTP integration test from a
 synthetic camera through the Cortex server, plus auth and upstream failure tests.
+Tapo protocol tests use an encrypted fixture stream and never contact a camera.
 Run `node --test tests/vision_player.test.cjs` for player lifecycle checks.
 Follow-up observation/clip/enrollment contracts are in
 [Vision frontend architecture](home_cortex/vision/FRONTEND.md).

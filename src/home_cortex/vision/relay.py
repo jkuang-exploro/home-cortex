@@ -10,7 +10,13 @@ from urllib.parse import urlparse, urlunparse
 
 import httpx
 from fastapi import HTTPException
+from collections.abc import AsyncIterator
+
 from starlette.responses import StreamingResponse
+
+from .camera.errors import CameraError
+from .camera.hub import MJPEG_TYPE, SharedTapoHub
+from .camera.sources import CameraSource
 
 COOKIE_NAME = "cortex_vision_session"
 SESSION_SECONDS = 3600
@@ -117,9 +123,57 @@ class RelayResponse(StreamingResponse):
                 await self.client.aclose()
 
 
-async def open_relay(url: str) -> RelayResponse:
-    # Only a server-configured URL reaches here. Never forward browser credentials,
-    # proxy environment variables, redirects, or arbitrary request query parameters.
+async def open_relay(
+    source: str | CameraSource,
+    *,
+    hub: SharedTapoHub | None = None,
+) -> RelayResponse:
+    if isinstance(source, CameraSource) and source.kind == "tapo":
+        return await _open_tapo(source, hub)
+    url = source if isinstance(source, str) else source.http_url
+    if not url:
+        raise HTTPException(503, "Provide the camera IP or URL when connecting")
+    return await _open_http_mjpeg(url)
+
+
+async def _open_tapo(source: CameraSource, hub: SharedTapoHub | None) -> RelayResponse:
+    session = hub or SharedTapoHub()
+    owned = hub is None
+    chunks = session.subscribe(source)
+    try:
+        first = await anext(chunks)
+    except CameraError:
+        if owned:
+            await session.close()
+        raise
+    except StopAsyncIteration as error:
+        if owned:
+            await session.close()
+        raise HTTPException(502, "Camera stream unreachable or stalled") from error
+
+    async def body() -> AsyncIterator[bytes]:
+        yield first
+        try:
+            async for chunk in chunks:
+                yield chunk
+        finally:
+            aclose = getattr(chunks, "aclose", None)
+            if aclose is not None:
+                await aclose()
+            if owned:
+                await session.close()
+
+    return RelayResponse(body(), MJPEG_TYPE, _NullCloseable(), _NullCloseable())
+
+
+class _NullCloseable:
+    async def aclose(self) -> None:
+        return None
+
+
+async def _open_http_mjpeg(url: str) -> RelayResponse:
+    # Only a validated HTTP(S) MJPEG URL reaches here. Never forward browser
+    # credentials, proxy environment variables, redirects, or query parameters.
     client = httpx.AsyncClient(
         timeout=httpx.Timeout(10.0, connect=3.0),
         follow_redirects=False,

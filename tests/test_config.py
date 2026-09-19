@@ -73,6 +73,20 @@ def test_calendar_bindings_parse_from_environment(monkeypatch: pytest.MonkeyPatc
     assert settings.google_calendar_client_secret is None
 
 
+def test_tapo_kind_requires_host_and_password() -> None:
+    with pytest.raises(ValidationError, match="VISION_CAMERA_HOST"):
+        Settings(_env_file=None, ollama_model="test-model", vision_camera_kind="tapo")
+    settings = Settings(
+        _env_file=None,
+        ollama_model="test-model",
+        vision_camera_kind="tapo",
+        vision_camera_host="192.168.1.20",
+        vision_tapo_cloud_password="secret",
+    )
+    assert settings.vision_camera_port == 8800
+    assert settings.vision_tapo_cloud_password.get_secret_value() == "secret"
+
+
 def test_openrouter_provider_requires_key_and_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

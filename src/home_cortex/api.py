@@ -55,6 +55,9 @@ from .retrieval import RetrievalService
 from .calendar import calendar_service_from_settings
 from .tools import ToolDispatcher
 from .writing import ItemWritingService
+from .vision.camera.errors import CameraError
+from .vision.camera.hub import SharedTapoHub
+from .vision.camera.sources import CameraSource, source_from_settings
 from .vision.relay import (
     COOKIE_NAME,
     SESSION_SECONDS,
@@ -191,9 +194,11 @@ async def lifespan(app: FastAPI):
         )
     app.state.agents = runtimes
     app.state.agent = runtimes[DEFAULT_AGENT_ID]
+    app.state.camera_hub = SharedTapoHub()
     try:
         yield
     finally:
+        await app.state.camera_hub.close()
         for language_model in language_models:
             await language_model.close()
         await database.close()
@@ -369,7 +374,14 @@ async def vision_session(request: Request) -> JSONResponse:
             body = await request.json()
             if isinstance(body, dict):
                 payload = body
-    url = _vision_stream_url(request, source=payload.get("source") if isinstance(payload.get("source"), str) else None)
+    configured = source_from_settings(_request_settings(request))
+    if configured is not None and configured.kind == "tapo":
+        url = ""
+    else:
+        url = _vision_stream_url(
+            request,
+            source=payload.get("source") if isinstance(payload.get("source"), str) else None,
+        )
     response = JSONResponse({"stream_url": "/vision/stream"}, headers={"Cache-Control": "no-store"})
     response.set_cookie(
         COOKIE_NAME,
@@ -386,7 +398,22 @@ async def vision_session(request: Request) -> JSONResponse:
 @app.get("/vision/stream", include_in_schema=False)
 async def vision_stream(request: Request) -> StreamingResponse:
     _authenticate_vision(request)
-    return await open_relay(_vision_stream_url(request))
+    try:
+        return await open_relay(
+            _vision_camera_source(request),
+            hub=getattr(request.app.state, "camera_hub", None),
+        )
+    except CameraError as error:
+        status = 503 if error.code == "vision_not_configured" else 502
+        raise APIError(status, error.code, error.message) from None
+
+
+def _vision_camera_source(request: Request) -> str | CameraSource:
+    settings = _request_settings(request)
+    configured = source_from_settings(settings)
+    if configured is not None and configured.kind == "tapo":
+        return configured
+    return _vision_stream_url(request)
 
 
 @app.post("/session")

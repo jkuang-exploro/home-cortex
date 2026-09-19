@@ -2,12 +2,12 @@
 
 ## Current implementation scope
 
-The public `/vision` page uses a fixed server-configured `VISION_STREAM_URL` via
-`GET /vision/stream`. Media is relayed by the API for reliable same-origin browser
-access. This supersedes the direct browser-to-Mac playback recommendation below
-for the current MJPEG development preview. It does not implement source discovery.
-`POST /vision/session` exchanges the existing bearer key for a signed, short-lived
-HttpOnly cookie scoped to Vision; media routes retain API authentication.
+The public `/vision` page uses `GET /vision/stream`. Media is relayed by the API
+for same-origin browser access. HTTP MJPEG (EdgeVision) and an in-process Tapo
+C610 adapter both terminate as multipart MJPEG. Tapo host and cloud password are
+server configuration, never browser-supplied `tapo://` URLs. `POST /vision/session`
+exchanges the existing bearer key for a signed, short-lived HttpOnly cookie
+scoped to Vision; media routes retain API authentication.
 Observation and enrollment controls remain placeholders. Future gateway adapters
 may avoid relaying video through the API, but must provide authenticated access.
 

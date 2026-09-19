@@ -30,7 +30,7 @@ def client(monkeypatch):
 
 def test_session_protects_media_without_changing_other_api_auth(client, monkeypatch):
     calls = []
-    async def fake_relay(url):
+    async def fake_relay(url, **_kwargs):
         from starlette.responses import Response
         calls.append(url)
         return Response(b'frame', media_type='multipart/x-mixed-replace; boundary=test')

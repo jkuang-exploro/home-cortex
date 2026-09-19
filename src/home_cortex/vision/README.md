@@ -1,5 +1,9 @@
 # Canonical V1 vision domain boundary
 
+Live stream adapters (HTTP MJPEG and in-process Tapo) live under
+`vision/camera/` and `vision/relay.py`. They do not create `VisualObservation`
+records, clips, or identity writes.
+
 ## Decision
 
 Home Cortex owns normalized visual evidence, durable visual identity candidates,
