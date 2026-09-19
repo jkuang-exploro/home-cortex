@@ -95,6 +95,12 @@ and its executor integration. Do not restore the old cross-module re-export faca
 
 ## Workflow
 
+- Before substantial work, inspect recent relevant entries in `.llm/` and verify
+  their material assumptions against the current source.
+- Every meaningful coding, debugging, refactoring, investigation, benchmark,
+  architecture, or review cycle must end with a concise `.llm/` work log. Follow
+  [the repository work-log skill](.agents/skills/persistent-llm-work-log/SKILL.md).
+  The log is part of completion, alongside testing and reporting.
 - Run the deterministic suite locally: `python -m pytest -q`.
 - Real-LLM benchmark runs happen on the production GPU host from an isolated
   package with recorded data/schema/package fingerprints. Do not fabricate LLM

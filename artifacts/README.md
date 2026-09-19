@@ -3,6 +3,10 @@
 **This directory holds generated benchmark results and prose reports. It is NOT
 active source code.**
 
+Engineering session summaries, architecture reviews, handoffs, and refactor logs
+live in `.llm/`. Keep benchmark evidence and its directly supporting report here;
+do not duplicate the same narrative in both locations.
+
 - `qwen35-semantic-contract/` and `tier1-baseline/` contain the output of
   semantic-planner / fact-benchmark runs on real LLMs, plus the investigation
   notes in `REPORT.md`.

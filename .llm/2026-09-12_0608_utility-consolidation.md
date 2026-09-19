@@ -1,3 +1,49 @@
+Date: 2026-09-12 06:08 PDT
+Type: refactor
+Status: completed
+
+## Objective
+
+Move engineering-only benchmark, probe, profiling, and maintenance utilities out
+of the production package while preserving their commands and reproducibility.
+
+## Context
+
+Historical work at commit `b3113c5`. Runtime instrumentation and export libraries
+remained in `src/home_cortex`; standalone orchestration moved under `scripts/`.
+
+## Findings
+
+Discoverability and dependency direction were the useful result. Deleted line count
+was not the measure of success.
+
+## Decisions
+
+Group utilities by benchmarks, profiling, probes, and maintenance. Preserve frozen
+paths and package provenance needed by evaluation tools.
+
+## Changes
+
+Moved engineering utilities, updated package entry points and imports, and documented
+the resulting script structure.
+
+## Validation
+
+Focused suite: 69 passed. Full suite: 730 passed. Sixteen commands passed `--help`;
+wheel build/install and 35/35 deterministic installed-wheel replay passed. No live
+inference, production DB operation, container copy, or deployment was run.
+
+## Remaining Issues
+
+The container-copy workflow still needed validation against a running service.
+
+## Recommended Next Step
+
+Keep new standalone experiments under the matching `scripts/` category and keep
+runtime modules free of script imports.
+
+## Historical Detail
+
 # Engineering utility consolidation
 
 ## Files moved

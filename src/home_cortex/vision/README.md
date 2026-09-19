@@ -251,4 +251,4 @@ household-write boundary are defined in [`ENROLLMENT.md`](ENROLLMENT.md).
 The minimal live-view, observation-feed, clip-polling, and enrollment UI is
 defined in [`FRONTEND.md`](FRONTEND.md).
 The first implementation review is recorded in
-[`artifacts/vision-architecture-review/REPORT.md`](../../../artifacts/vision-architecture-review/REPORT.md).
+[the Vision architecture review work log](../../../.llm/2026-09-15_1020_vision-architecture-review.md).

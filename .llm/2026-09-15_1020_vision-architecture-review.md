@@ -1,3 +1,51 @@
+Date: 2026-09-15 10:20 PDT
+Type: review
+Status: partial
+
+## Objective
+
+Review the available Epic 2 Vision prototype against the intended edge/backend
+boundary and decide whether later recognition work could begin.
+
+## Context
+
+Historical review at commit `6877a61`. The executable path stopped at camera frame
+capture and an MJPEG stream server; the vertical observation workflow was absent.
+
+## Findings
+
+Domain contracts and import boundaries existed, but detection, publication,
+persistence, enrollment, artifact delivery, and the end-to-end workflow were not
+implemented.
+
+## Decisions
+
+Hold later recognition work. Preserve the edge/backend boundary and require a real
+vertical slice before embedding recognition.
+
+## Changes
+
+Added stable edge health, cleanup on startup failure, and import/dependency guards.
+No detector, persistence, enrollment, frontend, or embedding implementation was
+added.
+
+## Validation
+
+Full suite: 930 passed, 1 skipped. Focused domain/port/architecture: 43 passed.
+Edge suite: 8 passed, 1 skipped. `git diff --check` passed.
+
+## Remaining Issues
+
+The vertical Vision workflow and physical-device demonstration were missing. Vision
+has since been paused pending MicroDuck.
+
+## Recommended Next Step
+
+Revalidate the hardware and product boundary when MicroDuck arrives before reviving
+the implementation plan.
+
+## Historical Detail
+
 # Epic 2 architecture review after the available prototype
 
 ## Decision

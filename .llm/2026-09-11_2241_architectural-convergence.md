@@ -1,3 +1,50 @@
+Date: 2026-09-11 22:41 PDT
+Type: refactor
+Status: partial
+
+## Objective
+
+Converge the semantic runtime on one ownership path and assess whether the change
+also reduced prompt size and runtime cost.
+
+## Context
+
+Historical work at commit `2ecec5b`. The report predates the persistent work-log
+convention and is retained below as engineering memory.
+
+## Findings
+
+The runtime boundaries converged, but the measured content reduction was only 94
+bytes and no matched production inference established a latency improvement.
+
+## Decisions
+
+Keep exact-ID authentication separate from semantic resolution, retain
+`SemanticPlan` as the routing envelope, and preserve the deterministic executor and
+renderer boundaries. Do not claim token-efficiency completion without GPU evidence.
+
+## Changes
+
+Removed redundant architecture and tightened ownership across identity, context,
+resolution, retrieval, execution, and rendering. Net production Python change was
+37 fewer lines.
+
+## Validation
+
+Baseline: 702 tests passed. Final: 704 tests passed, including affected retrieval
+and alias tests. No production model run was performed.
+
+## Remaining Issues
+
+Matched GPU inference, prompt ablation, and enabled mutation-routing measurements
+were still required.
+
+## Recommended Next Step
+
+Run isolated matched provider evaluations before making performance claims.
+
+## Historical Detail
+
 # Architectural convergence — 2026-09-11
 
 ## Acceptance status

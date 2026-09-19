@@ -1,3 +1,48 @@
+Date: 2026-09-12 06:32 PDT
+Type: refactor
+Status: partial
+
+## Objective
+
+Remove production-looking offline architecture, converge operation ownership, and
+measure the remaining source/context surface.
+
+## Context
+
+Historical work at commit `3da2c96`. The production package at that point contained
+41 Python files and 14,416 lines.
+
+## Findings
+
+The remaining package size was justified by the supported API, semantic execution,
+mutation, calendar, graph, localization, and provider surfaces. V1/V2 contract
+parallelism remained an intentional evaluation boundary.
+
+## Decisions
+
+Preserve the canonical semantic request path and delay deletion of either contract
+path until the V2 evaluation is accepted or rejected.
+
+## Changes
+
+Removed offline production lookalikes, converged operation ownership, and preserved
+context and dependency boundaries.
+
+## Validation
+
+Coverage run: 757 tests passed. Static compilation and `git diff --check` passed.
+No real-model accuracy run was performed.
+
+## Remaining Issues
+
+The V1/V2 contract decision and isolated production GPU evaluation remained open.
+
+## Recommended Next Step
+
+Resolve the contract evaluation before deleting either compatibility path.
+
+## Historical Detail
+
 # Home Cortex architectural convergence and context-surface cleanup
 
 ## Outcome

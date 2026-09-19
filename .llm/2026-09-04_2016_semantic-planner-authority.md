@@ -1,3 +1,51 @@
+Date: 2026-09-04 20:16 PDT
+Type: investigation
+Status: completed
+
+## Objective
+
+Establish the semantic planner as the authoritative natural-language interpreter
+and measure the former Tier-0 shortcut path separately.
+
+## Context
+
+Historical work at commit `c527bed`. Tier-0 sentence dispatch described in the
+original report was later removed; every natural-language request now uses the
+semantic interpreter.
+
+## Findings
+
+The then-current local model achieved 109/111 semantic-equivalence cases, while the
+deterministic planner/executor path achieved complete plan and execution coverage.
+Planner and shortcut latency measured different systems and did not justify semantic
+fallback.
+
+## Decisions
+
+Semantic validation failures must never fall back to hardcoded question handling.
+Keep model quality separate from deterministic execution correctness.
+
+## Changes
+
+The historical cycle made the planner authoritative while retaining six removable
+Tier-0 shortcuts. Those shortcuts no longer exist in current source.
+
+## Validation
+
+The historical report records a local CPU model run, deterministic CI execution,
+and latency measurements. See the retained detail for exact methodology and limits.
+
+## Remaining Issues
+
+The recorded performance numbers are historical and must not be treated as current.
+
+## Recommended Next Step
+
+Use current benchmark fingerprints and provider configuration for any new planner
+accuracy or latency claim.
+
+## Historical Detail
+
 > **Historical report.** The body below describes the state at the date shown,
 > when the six exact-question Tier-0 shortcuts were still retained (see items 7, 8,
 > and 13). Those shortcuts have since been removed: sentence-based Tier-0 dispatch

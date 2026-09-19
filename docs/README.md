@@ -2,8 +2,8 @@
 
 **Historical / long-form reports. Not the active architecture.**
 
-- `semantic-planner-authority-report.md` is a historical report (see its header
-  note). The current design lives in `src/README.md` and the
+- The historical semantic-planner authority report now lives in
+  [`.llm/`](../.llm/2026-09-04_2016_semantic-planner-authority.md). The current design lives in `src/README.md` and the
   `artifacts/qwen35-semantic-contract/REPORT.md`.
 
 Treat this directory as reference material only. Do not treat its prose as the

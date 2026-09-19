@@ -1,3 +1,50 @@
+Date: 2026-09-12 02:31 PDT
+Type: refactor
+Status: completed
+
+## Objective
+
+Reduce coding-agent context cost by establishing canonical semantic ownership and
+removing obsolete or duplicate production-looking paths.
+
+## Context
+
+Historical work at commit `40a36b0`, following the earlier architectural
+convergence pass.
+
+## Findings
+
+The canonical path is `AgentService -> SemanticFactService -> planner -> engine ->
+resolver/retrieval -> renderer`. Several types that looked similar encode distinct
+and necessary stages and should not be merged merely to reduce file count.
+
+## Decisions
+
+Keep semantic IR independent, keep execution free of planner/renderer dependencies,
+and make `AGENTS.md` the short ownership guide.
+
+## Changes
+
+Removed obsolete architecture, reduced repository context, added import-boundary
+tests, and preserved canonical failure results and evidence across resolver errors.
+
+## Validation
+
+Full suite: 713 passed. Architecture guards and `git diff --check` passed. Prompt,
+schema, examples, and capability fingerprints were unchanged.
+
+## Remaining Issues
+
+Intentional complexity remains in discourse state, concept expansion, evidence,
+ontology binding, and generic operations.
+
+## Recommended Next Step
+
+Begin future semantic work with the owner map in `AGENTS.md` and change only the
+layer that owns the behavior.
+
+## Historical Detail
+
 # Architectural convergence for coding-agent efficiency
 
 Baseline: `379f1e7` (Grok cleanup). This pass targets development context, not runtime tokens. The working tree was clean at the start; preceding changes are not credited here.

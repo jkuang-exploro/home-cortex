@@ -966,7 +966,7 @@ aliases, scoped appellations, ordering, and limits. Authentication remains an
 exact-ID lookup. Alias SQL projects identity metadata rather than full profiles.
 Mutation resolution and rendering use the active ontology.
 
-See [the convergence report](../artifacts/architectural-convergence/REPORT.md)
+See [the convergence work log](../.llm/2026-09-11_2241_architectural-convergence.md)
 for ownership decisions, measured local results, and outstanding GPU acceptance.
-The [context-surface cleanup report](../artifacts/context-surface-cleanup/REPORT.md)
+The [context-surface cleanup work log](../.llm/2026-09-12_0632_context-surface-cleanup.md)
 records the operation/IR audit, branch coverage, and final sizing.

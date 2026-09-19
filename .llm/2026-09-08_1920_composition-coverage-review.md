@@ -1,3 +1,46 @@
+Date: 2026-09-08 19:20 PDT
+Type: review
+Status: review-only
+
+## Objective
+
+Review the proposed composition benchmark coverage, counts, equivalence rules, and
+frozen/development split before fixture generation.
+
+## Context
+
+Historical review at commit `adee6e6` of a benchmark design, not a runtime change.
+
+## Findings
+
+The design covered the required semantic axes but contained incorrect row counts,
+unsafe plan equivalences, duplicate cases, and several missing contrast conditions.
+
+## Decisions
+
+Approve with blocking conditions. Preserve full expanded-plan identity and avoid
+padding the dataset with cases that do not distinguish behavior.
+
+## Changes
+
+No repository changes were made.
+
+## Validation
+
+Reviewed the annotation guide, proposed households, coverage matrix, wording
+separation, arithmetic, and plan equivalence. No test suite was run in this review.
+
+## Remaining Issues
+
+Eight documented issues had to be resolved before dataset generation, including six
+blocking conditions.
+
+## Recommended Next Step
+
+Apply the blocking corrections and recheck final case counts and gold-plan identity.
+
+## Historical Detail
+
 # Ticket 4 coverage review
 
 Verdict: APPROVE WITH CONDITIONS

@@ -1,3 +1,47 @@
+Date: 2026-09-07 10:31 PDT
+Type: architecture
+Status: review-only
+
+## Objective
+
+Define the next compositional semantic work for collection projection, calendar
+offsets, exclusion, and cross-turn reference.
+
+## Context
+
+Historical Chinese-language handoff at commit `740e4f5`. It inspected source and
+existing reports but did not change production code or rerun model benchmarks.
+
+## Findings
+
+The then-current IR could not express per-member scalar projection, a specific
+anniversary offset, or grounded collection exclusion. Conversation history was
+also truncated before interpretation.
+
+## Decisions
+
+Extend generic IR and execution contracts rather than add question-specific
+handlers. Separate local deterministic work from isolated production GPU evaluation.
+
+## Changes
+
+No repository changes were made.
+
+## Validation
+
+Source and existing reports were inspected. No tests or benchmarks were run.
+
+## Remaining Issues
+
+The document's implementation status is historical and must be checked against the
+current semantic pipeline before using its tickets.
+
+## Recommended Next Step
+
+Verify each stated gap against current code and tests before scheduling follow-up.
+
+## Historical Detail
+
 # 集合计算、日历偏移与对话指代：下一轮工作分配
 
 诊断基线：`b0e145c`，2026-09-07。本文是下一轮工作票；本轮仅检查源码与既有报告，没有修改生产代码或重新运行 LLM 基准。
