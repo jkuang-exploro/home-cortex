@@ -34,144 +34,12 @@ labeled ontology; older loaders reject the typed fields. See the
 [before/after report](../artifacts/condition-rendering/REPORT.md)
 for validation and presentation limitations.
 
-## Vision live preview
+## Paused Vision prototype
 
-`GET /vision` is a build-free page hosted by this API, independent of the chat GUI.
-The live preview uses a fixed server-side MJPEG relay:
-
-```text
-Browser -> home-cortex-0:8001/vision/stream -> 192.168.68.65:8088/live.mjpg
-```
-
-The browser never connects to the Mac directly. No CORS or browser private-network
-permission is needed for the camera connection. The API streams chunks without
-buffering the full response or decoding video. Recent Observations, Selected
-Observation, Evidence Clip, and Label / Enroll remain placeholders; no detector,
-ingestion, or household writes are added.
-
-### Launch on the Mac
-
-Stop the previous loopback-only streamer with Ctrl-C, then run:
-
-```sh
-uv run --extra vision python -m home_cortex.vision.edge --source mac
-```
-
-The CLI defaults to `0.0.0.0:8088` so the Cortex server can connect over the LAN.
-Use `--host 127.0.0.1` for local-only access. The address `0.0.0.0` is a bind
-address; configure the Mac’s actual LAN IP on the server. Allow the process
-through the Mac firewall if prompted. This
-existing development streamer is unauthenticated on the LAN; keep it on a trusted
-network. Use `--source synthetic` for a hardware-free test.
-
-### Configure and launch on home-cortex-0
-
-Set this in `docker/cortex/.env` (update it if the Mac's address changes):
-
-```dotenv
-VISION_STREAM_URL=http://192.168.68.65:8088/live.mjpg
-```
-
-From the updated repository root:
-
-```sh
-docker compose --env-file docker/cortex/.env -f docker/cortex/docker-compose.yml up -d --build --no-deps cortex-api
-```
-
-This passes the configured URL into the API container. `VISION_STREAM_URL` is
-optional; an unset value gives a clear 503 response. The relay accepts only that
-server-configured HTTP(S) source, never a browser-supplied target, credentials in
-the source URL, or upstream redirects. Existing API startup dependencies remain.
-For a local API process, set the same environment variable and launch with
-`uv run uvicorn home_cortex.api:app --host 0.0.0.0 --port 8001`.
-
-Open <http://home-cortex-0:8001/vision> from any device that can reach Home Cortex.
-If `CORTEX_API_KEY` is configured, enter it in the password field and click
-**Connect**. It is sent once in an Authorization header to `/vision/session`,
-cleared from the input, and replaced by a signed, one-hour HttpOnly, SameSite
-cookie scoped to `/vision` (Secure on HTTPS). The key is never placed in a URL,
-HTML response, or browser storage. Use HTTPS for access outside a trusted LAN.
-Existing valid sessions can reconnect without re-entering the key. The Vision
-cookie does not authorize other APIs; normal bearer authorization still works.
-The public page and script contain no media; `/vision/stream` requires API auth
-or a valid Vision session when a key is configured. No-key development remains
-supported. Future enrollment still requires a trusted mapped human identity.
-
-**Disconnect** releases the viewer's relay connection; Ctrl-C on the Mac stops
-capture. Each viewer gets its own upstream connection, with a 3-second connect
-and 10-second idle read timeout. Initial connection/type failures return 502;
-midstream failures close playback. A browser may retain its last decoded frame
-when the source stops; reconnect if the picture freezes.
-
-### Verify from the server
-
-Run on `home-cortex-0` first, to check Mac reachability:
-
-```sh
-curl --connect-timeout 3 --max-time 5 http://192.168.68.65:8088/health
-```
-
-Check from inside the API container too:
-
-```sh
-docker compose --env-file docker/cortex/.env -f docker/cortex/docker-compose.yml exec cortex-api python -c 'import os, urllib.request; r=urllib.request.urlopen(os.environ["VISION_STREAM_URL"], timeout=5); print(r.status, r.headers["Content-Type"]); print(r.read(100))'
-```
-
-Then verify actual JPEG bytes through the relay (export the configured key in
-this shell; omit the header for no-key development):
-
-```sh
-curl --max-time 3 -D /tmp/vision-headers.txt -H "Authorization: Bearer ${CORTEX_API_KEY}" http://home-cortex-0:8001/vision/stream -o /tmp/vision-preview.mjpg
-```
-
-A timeout after 3 seconds is expected for an endless live stream. The headers
-should show HTTP 200 and `multipart/x-mixed-replace; boundary=...`, and the output
-file should contain JPEG frames. A 401 means the key is missing/wrong; 503 means
-configuration is missing; 502 means the server cannot receive a valid stream.
-Ensure the URL ends in `/live.mjpg` without a trailing comma.
-
-### Tapo C610 (in-process)
-
-The same `cortex-api` process can pull a Tapo C610 over the local Tapo protocol
-on TCP 8800. Do not run go2rtc, a second container, or an RTSP proxy. The
-browser still receives authenticated multipart MJPEG from `/vision/stream`.
-
-```dotenv
-VISION_CAMERA_KIND=tapo
-VISION_CAMERA_HOST=192.168.68.50
-VISION_CAMERA_PORT=8800
-VISION_CAMERA_SUBTYPE=0
-VISION_TAPO_CLOUD_PASSWORD=your-tapo-cloud-password
-```
-
-The cloud password is the Tapo account password, not an RTSP login. It stays in
-server env only: never in git, cookies, JavaScript, API JSON, or logs.
-
-```sh
-# 1. Camera TCP 8800 from the API host
-nc -vz 192.168.68.50 8800
-
-# 2. Start the normal stack
-docker compose --env-file docker/.env -f docker/docker-compose.yml up -d --build --no-deps cortex-api
-
-# 3. Health
-curl -sS http://127.0.0.1:8001/health
-
-# 4. Open http://home-cortex-0:3000/vision (or :8001/vision), sign in, Connect.
-
-# 5. Confirm the password is not logged
-docker logs cortex-cortex-api-1 2>&1 | grep -i password || true
-```
-
-The C610 is battery/solar powered. Leaving `/vision/stream` connected keeps the
-camera awake and will drain the battery faster than motion-only use.
-
-Tests: `python -m pytest -q` includes an actual HTTP integration test from a
-synthetic camera through the Cortex server, plus auth and upstream failure tests.
-Tapo protocol tests use an encrypted fixture stream and never contact a camera.
-Run `node --test tests/vision_player.test.cjs` for player lifecycle checks.
-Follow-up observation/clip/enrollment contracts are in
-[Vision frontend architecture](home_cortex/vision/FRONTEND.md).
+Vision is not part of the default chat application. The API exposes no `/vision`
+routes, loads no camera modules, and accepts no Vision environment settings. The
+prototype remains under `home_cortex.vision` as dormant reference code until
+MicroDuck establishes the next hardware and streaming boundary.
 
 ## Endpoints
 
@@ -310,7 +178,8 @@ observations and a camera-in-body transform. The start pose is not an input.
 Detectors must emit `spatial.observation` records; they do not define the
 ontology.
 
-Visual evidence is a separate bounded package (`home_cortex.vision`). Its
+The paused visual-evidence prototype remains a separate bounded package
+(`home_cortex.vision`) and is not imported by the chat application. Its
 [domain boundary](home_cortex/vision/README.md) distinguishes detector category
 belief, persistent visual candidates, human-confirmed enrollments, and household
 items. Detector-native types (YOLO xyxy, tensors, class IDs) do not cross that
@@ -331,11 +200,11 @@ The [Vision page architecture](home_cortex/vision/FRONTEND.md) defines a minimal
 live view, polled observation feed, asynchronous clip review, and existing-item
 enrollment workflow without introducing a frontend framework.
 
-The Mac EdgeVision runtime (`python -m home_cortex.vision.edge`) is a separate
+The dormant Mac EdgeVision runtime (`python -m home_cortex.vision.edge`) is a separate
 process from the semantic API. It captures the built-in camera through a
 replaceable `CameraSource` and serves an encoded MJPEG-over-HTTP preview
-(`http://127.0.0.1:8088/live.mjpg`). MJPEG was chosen because ffmpeg/MediaMTX/
-aiortc are not in the current environment; JPEG is encoded, and a browser or
+(`http://127.0.0.1:8088/live.mjpg`). Its Tapo codec requires an external FFmpeg
+installation; the default chat image does not install it. JPEG is encoded, and a browser or
 VLC can view it. Frame timestamps are timezone-aware ISO-8601. Identity is
 `device:dev_macbook` / `camera:built_in`. Use `--source synthetic` without a
 camera. Mac capture needs `pip install 'home-cortex[vision]'`.

@@ -50,9 +50,9 @@ def test_edge_package_import_does_not_eagerly_load_opencv() -> None:
     assert "ultralytics" not in loaded
 
 
-def test_semantic_api_import_does_not_load_edge_runtime() -> None:
+def test_chat_api_import_does_not_load_vision() -> None:
     loaded = _loaded_after_import("home_cortex.api")
-    assert not any(name.startswith("home_cortex.vision.edge") for name in loaded)
+    assert not any(name.startswith("home_cortex.vision") for name in loaded)
     assert "cv2" not in loaded
     assert "ultralytics" not in loaded
 
@@ -64,4 +64,6 @@ def test_edge_camera_dependency_remains_optional() -> None:
 
     assert not any(name.startswith("opencv-python") for name in dependencies)
     assert not any(name.startswith("ultralytics") for name in dependencies)
+    assert not any(name.startswith("cryptography") for name in dependencies)
     assert any(name.startswith("opencv-python") for name in vision)
+    assert any(name.startswith("cryptography") for name in vision)

@@ -13,7 +13,6 @@ export default defineConfig({
       '/agent': api,
       '/v1': api,
       '/health': api,
-      '/vision': api,
     },
   },
   preview: { port: 4173, host: true },

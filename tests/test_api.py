@@ -1258,55 +1258,14 @@ def _assert_request_id(response: Any) -> None:
     assert re.fullmatch(r"[0-9a-f]{32}", request_id)
 
 
-def test_vision_shell(api_client: tuple[TestClient, FakeAgent]) -> None:
-    client, agent = api_client
-    response = client.get("/vision")
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/html")
-    assert response.headers["cache-control"] == "no-store"
-    _assert_request_id(response)
-    for section in (
-        "live-view", "recent-observations", "selected-observation",
-        "evidence-clip", "label-enroll",
-    ):
-        assert f'<section id="{section}"' in response.text
-        assert f'href="#{section}"' in response.text
-    assert '<fieldset disabled' in response.text
-    assert 'id="confirm-enrollment" type="button"' in response.text
-    assert "Stream unavailable" in response.text
-    assert "No observations available" in response.text
-    assert "Not requested" in response.text
-    assert agent.calls == []
-
-
-def test_vision_is_public_but_api_remains_protected(
+def test_vision_routes_are_not_mounted(
     api_client: tuple[TestClient, FakeAgent],
 ) -> None:
     client, _ = api_client
-    app.state.settings.cortex_api_key = "test-key"
-    response = client.get("/vision")
-    assert response.status_code == 200
-    assert '<h1>Vision</h1>' in response.text
-    assert "test-key" not in response.text
-    for headers in ({}, {"Authorization": "Bearer wrong-key"}):
-        response = client.get("/v1/models", headers=headers)
-        assert response.status_code == 401
-        assert response.json()["error"]["code"] == "authentication_required"
-    response = client.get("/v1/models", headers={"Authorization": "Bearer test-key"})
-    assert response.status_code == 200
-
-
-def test_vision_player_asset(api_client: tuple[TestClient, FakeAgent]) -> None:
-    client, _ = api_client
-    app.state.settings.cortex_api_key = "test-key"
-    page = client.get("/vision")
-    assert 'id="vision-key"' in page.text
-    assert 'id="vision-source"' in page.text
-    assert 'id="stream-disconnect"' in page.text
-    assert 'src="/vision/assets/vision.js"' in page.text
-    script = client.get("/vision/assets/vision.js")
-    assert script.status_code == 200
-    assert script.headers["content-type"].startswith("text/javascript")
-    assert script.headers["cache-control"] == "no-store"
-    assert "test-key" not in script.text
-    assert client.get("/vision/assets/contracts.py").status_code == 404
+    for method, path in (
+        (client.get, "/vision"),
+        (client.get, "/vision/assets/vision.js"),
+        (client.post, "/vision/session"),
+        (client.get, "/vision/stream"),
+    ):
+        assert method(path).status_code == 404

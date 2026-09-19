@@ -19,7 +19,6 @@ dependencies = [
     "pytest-asyncio>=1,<2",
     "pytest-cov>=6,<8",
     "httpx2>=2,<3",
-    "cryptography>=43,<47",
 ]
 
 [project.scripts]
@@ -34,8 +33,10 @@ dev = [
     "pytest-asyncio>=1,<2",
     "pytest-cov>=6,<8",
     "httpx2>=2,<3",
+    "cryptography>=43,<47",
 ]
 vision = [
+    "cryptography>=43,<47",
     "opencv-python>=4.8,<5",
 ]
 

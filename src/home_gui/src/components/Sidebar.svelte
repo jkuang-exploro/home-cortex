@@ -30,7 +30,6 @@
   </div>
   <div class="sidebar-actions">
     <button class="primary" type="button" onclick={onnew}>{copy.newChat}</button>
-    <a class="ghost" href="/vision">{copy.vision}</a>
   </div>
   <div class="chat-list" aria-label={copy.chats}>
     {#each conversations as chat (chat.id)}

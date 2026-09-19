@@ -681,7 +681,6 @@ name = "home-cortex"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx2" },
     { name = "jsonschema" },
@@ -697,6 +696,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "cryptography" },
     { name = "httpx2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -704,12 +704,14 @@ dev = [
     { name = "tiktoken" },
 ]
 vision = [
+    { name = "cryptography" },
     { name = "opencv-python" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "cryptography", specifier = ">=43,<47" },
+    { name = "cryptography", marker = "extra == 'dev'", specifier = ">=43,<47" },
+    { name = "cryptography", marker = "extra == 'vision'", specifier = ">=43,<47" },
     { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "httpx2", specifier = ">=2,<3" },
     { name = "httpx2", marker = "extra == 'dev'", specifier = ">=2,<3" },

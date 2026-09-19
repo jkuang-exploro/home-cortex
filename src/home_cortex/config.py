@@ -7,7 +7,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    HttpUrl,
     SecretStr,
     field_validator,
     model_validator,
@@ -62,12 +61,6 @@ class Settings(BaseSettings):
     data_dir: Path = Path("/app/data")
     edge_schema_dir: Path = Path("/app/schemas/edge")
     retrieval_limit: int = Field(default=100, ge=1, le=1000)
-    vision_stream_url: HttpUrl | None = None
-    vision_camera_kind: Literal["http_mjpeg", "tapo"] = "http_mjpeg"
-    vision_camera_host: str | None = None
-    vision_camera_port: int = Field(default=8800, ge=1, le=65535)
-    vision_camera_subtype: int = Field(default=0, ge=0, le=1)
-    vision_tapo_cloud_password: SecretStr | None = None
     cortex_api_key: str | None = None
     cortex_identity_map: dict[str, str] = Field(default_factory=dict)
     google_calendar_client_id: str | None = None
@@ -78,8 +71,6 @@ class Settings(BaseSettings):
 
     @field_validator(
         "cortex_api_key",
-        "vision_stream_url",
-        "vision_camera_host",
         "google_calendar_client_id",
         "openrouter_http_referer",
         "openrouter_model",
@@ -96,20 +87,12 @@ class Settings(BaseSettings):
         "google_calendar_client_secret",
         "google_calendar_refresh_token",
         "openrouter_api_key",
-        "vision_tapo_cloud_password",
         mode="before",
     )
     @classmethod
     def normalize_optional_secret(cls, value: object) -> object:
         if isinstance(value, str):
             return value.strip() or None
-        return value
-
-    @field_validator("vision_stream_url")
-    @classmethod
-    def validate_vision_stream_url(cls, value: HttpUrl | None) -> HttpUrl | None:
-        if value is not None and (value.username or value.password or value.fragment):
-            raise ValueError("vision_stream_url must not contain credentials or a fragment")
         return value
 
     @field_validator("calendar_timezone")
@@ -160,12 +143,6 @@ class Settings(BaseSettings):
             )
         if self.llm_provider == "ollama" and not self.ollama_model:
             raise ValueError("OLLAMA_MODEL is required when LLM_PROVIDER=ollama")
-        if self.vision_camera_kind == "tapo":
-            if not self.vision_camera_host or self.vision_tapo_cloud_password is None:
-                raise ValueError(
-                    "VISION_CAMERA_HOST and VISION_TAPO_CLOUD_PASSWORD are required "
-                    "when VISION_CAMERA_KIND=tapo"
-                )
         if self.llm_provider == "openrouter":
             if self.openrouter_api_key is None:
                 raise ValueError(
