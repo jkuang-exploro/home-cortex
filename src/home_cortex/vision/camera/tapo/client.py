@@ -42,6 +42,27 @@ class TapoClient:
     async def open(self) -> None:
         host, port, subtype = self._source.tapo_endpoint()
         self._http_host = f"{host}:{port}"
+        self._peer = (host, port)
+        try:
+            await self._connect()
+            await asyncio.wait_for(self._handshake(subtype), timeout=HANDSHAKE_TIMEOUT)
+        except TimeoutError as error:
+            await self.close()
+            raise timed_out() from error
+        except CameraError:
+            await self.close()
+            raise
+        except OSError as error:
+            await self.close()
+            raise unreachable() from error
+        except Exception as error:
+            await self.close()
+            raise failed() from error
+        self._open = True
+
+    async def _connect(self) -> None:
+        await self.close()
+        host, port = self._peer
         try:
             self._reader, self._writer = await asyncio.wait_for(
                 asyncio.open_connection(host, port),
@@ -51,21 +72,8 @@ class TapoClient:
             raise timed_out() from error
         except OSError as error:
             raise unreachable() from error
-        try:
-            await asyncio.wait_for(self._handshake(subtype), timeout=HANDSHAKE_TIMEOUT)
-        except TimeoutError as error:
-            await self.close()
-            raise timed_out() from error
-        except CameraError:
-            await self.close()
-            raise
-        except Exception as error:
-            await self.close()
-            raise failed() from error
-        self._open = True
 
     async def _handshake(self, subtype: int) -> None:
-        assert self._reader is not None and self._writer is not None
         await self._write_http(STREAM_URI, extra_headers=())
         challenge = await self._read_http()
         if challenge["status"] != 401:
@@ -86,6 +94,8 @@ class TapoClient:
             opaque=fields.get("opaque"),
             cnonce=self._cnonce,
         )
+        # C610 answers HTTP/1.0 Connection: close on the challenge.
+        await self._connect()
         await self._write_http(STREAM_URI, extra_headers=(f"Authorization: {authorization}",))
         accepted = await self._read_http()
         if accepted["status"] != 200:

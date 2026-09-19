@@ -130,13 +130,16 @@ async def test_tapo_client_auth_key_exchange_ack_and_ts(monkeypatch: pytest.Monk
     acks: list[bytes] = []
 
     async def handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        await reader.readuntil(b"\r\n\r\n")
-        writer.write(_http_message(401, [
-            'WWW-Authenticate: Digest realm="TP", nonce="n1", qop="auth", encrypt_type="3"',
-        ]))
-        await writer.drain()
-        second = await reader.readuntil(b"\r\n\r\n")
-        assert b"Authorization: Digest" in second
+        request = await reader.readuntil(b"\r\n\r\n")
+        if b"Authorization:" not in request:
+            writer.write(_http_message(401, [
+                'WWW-Authenticate: Digest realm="TP", nonce="n1", qop="auth", encrypt_type="3"',
+                "Connection: close",
+            ]))
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+            return
         writer.write(_http_message(200, [
             'Key-Exchange: nonce="session-nonce", encrypt_type="3"',
             "Content-Type: multipart/mixed; boundary=--device-stream-boundary--",
@@ -212,12 +215,16 @@ async def test_tapo_handshake_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_tapo_auth_failure_is_bounded() -> None:
     async def handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        await reader.readuntil(b"\r\n\r\n")
-        writer.write(_http_message(401, [
-            'WWW-Authenticate: Digest realm="TP", nonce="n1", qop="auth"',
-        ]))
-        await writer.drain()
-        await reader.readuntil(b"\r\n\r\n")
+        request = await reader.readuntil(b"\r\n\r\n")
+        if b"Authorization:" not in request:
+            writer.write(_http_message(401, [
+                'WWW-Authenticate: Digest realm="TP", nonce="n1", qop="auth"',
+                "Connection: close",
+            ]))
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+            return
         writer.write(_http_message(401, ['WWW-Authenticate: Digest realm="TP", nonce="n2"']))
         await writer.drain()
         writer.close()
