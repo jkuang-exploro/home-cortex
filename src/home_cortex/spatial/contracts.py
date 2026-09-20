@@ -10,11 +10,15 @@ import math
 from pathlib import Path
 from typing import Any, Mapping
 
-LENGTH_UNIT = "m"
-ANGLE_UNIT = "rad"
-TIME_UNIT = "s"
+from .primitives import (
+    ANGLE_UNIT,
+    LENGTH_UNIT,
+    POSE_FIELDS,
+    TIME_UNIT,
+    SpatialContractError,
+)
+
 SPACE_SPATIAL_FIELDS = frozenset({"accessible", "coordinate", "geometry", "navigable"})
-POSE_FIELDS = frozenset({"orientation", "position"})
 _LENGTH_ALIASES = {
     "m": LENGTH_UNIT,
     "meter": LENGTH_UNIT,
@@ -41,10 +45,6 @@ _IDENTITY_BASIS = {
     "y": [0.0, 1.0, 0.0],
     "z": [0.0, 0.0, 1.0],
 }
-
-
-class SpatialContractError(ValueError):
-    """A stored space or placement value is not a valid spatial contract."""
 
 
 def apply_space_spatial_fields(record: dict[str, Any], *, source: Path | str) -> None:
@@ -128,7 +128,7 @@ def _canonical_coordinate(
         "basis": _canonical_basis(item, source),
     }
     if "anchors" in item:
-        from .anchors import embedded_anchor_as_mapping, parse_embedded_anchors
+        from .localization.anchors import embedded_anchor_as_mapping, parse_embedded_anchors
 
         parsed = parse_embedded_anchors(item["anchors"], space=space_id)
         if parsed:

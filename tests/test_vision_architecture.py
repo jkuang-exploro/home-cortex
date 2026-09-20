@@ -37,9 +37,9 @@ def test_vision_domain_import_does_not_load_edge_or_household_adapters(module) -
         "cv2",
         "ultralytics",
         "surrealdb",
-        "home_cortex.db",
-        "home_cortex.retrieval",
-        "home_cortex.writing",
+        "home_cortex.persistence.db",
+        "home_cortex.persistence.retrieval",
+        "home_cortex.mutation.writing",
         "home_cortex_client",
     }
     assert forbidden.isdisjoint(loaded)

@@ -8,8 +8,8 @@ import json
 from pathlib import Path
 from scripts import PROJECT_ROOT
 
-from home_cortex.ollama import OllamaService
-from home_cortex.semantic_ir import SemanticFactRequest, SemanticPlannerFailure
+from home_cortex.providers.ollama import OllamaService
+from home_cortex.semantic.ir import SemanticFactRequest, SemanticPlannerFailure
 from scripts.benchmarks.semantic_planner_benchmark import (
     build_json_fact_service,
     normalize_semantic_request,

@@ -12,9 +12,9 @@ import json
 from pathlib import Path
 
 from ollama import AsyncClient
-from home_cortex import semantic_prompt as prompts
-from home_cortex.ollama import OLLAMA_KEEP_ALIVE, OLLAMA_NUM_CTX
-from home_cortex.mutation_ir import read_plan_schema
+from home_cortex.semantic import prompt as prompts
+from home_cortex.providers.ollama import OLLAMA_KEEP_ALIVE, OLLAMA_NUM_CTX
+from home_cortex.mutation.ir import read_plan_schema
 from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
 from scripts import PROJECT_ROOT
 

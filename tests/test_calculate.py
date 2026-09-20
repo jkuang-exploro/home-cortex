@@ -1,6 +1,6 @@
 import pytest
 
-from home_cortex.calculate import CalculationError, evaluate_expression
+from home_cortex.capabilities.calculation import CalculationError, evaluate_expression
 
 
 def test_operator_precedence_matches_standard_arithmetic() -> None:

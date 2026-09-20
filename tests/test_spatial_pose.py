@@ -4,7 +4,7 @@ import math
 import pytest
 
 from home_cortex.spatial.contracts import SpatialContractError
-from home_cortex.spatial.pose import (
+from home_cortex.spatial.localization.pose import (
     LOCALIZATION_QUALITY,
     parse_runtime_pose,
     runtime_pose_as_mapping,

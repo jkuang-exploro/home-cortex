@@ -11,7 +11,7 @@ import statistics
 import subprocess
 import time
 
-from home_cortex.ollama import planner_chat_messages, _semantic_planner_examples, _PLANNER_INSTRUCTIONS
+from home_cortex.providers.ollama import planner_chat_messages, _semantic_planner_examples, _PLANNER_INSTRUCTIONS
 from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
 from scripts.profiling.semantic_transport import (
     canonical_json,

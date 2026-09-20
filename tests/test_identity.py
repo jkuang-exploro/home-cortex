@@ -1,4 +1,4 @@
-from home_cortex.identity import resolve_user_entity_id
+from home_cortex.common.identity import resolve_user_entity_id
 
 
 def test_resolves_openwebui_user_id_before_email() -> None:

@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from home_cortex.agents import get_agent
-from home_cortex.calendar import (
+from home_cortex.capabilities.calendar import (
     CalendarBinding,
     CalendarService,
     CalendarUnavailableError,
@@ -17,7 +17,7 @@ from home_cortex.calendar import (
     ProviderEventBatch,
     normalize_google_event,
 )
-from home_cortex.tools import ToolDispatcher
+from home_cortex.capabilities.dispatcher import ToolDispatcher
 from test_agent_service import (
     FakeDispatcher,
     FakeOllamaService,

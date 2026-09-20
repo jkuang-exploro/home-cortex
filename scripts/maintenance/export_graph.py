@@ -6,8 +6,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 from home_cortex.config import get_settings
-from home_cortex.db import Database
-from home_cortex.export import ExportResult, export_directory
+from home_cortex.persistence.db import Database
+from home_cortex.persistence.export import ExportResult, export_directory
 
 
 def main() -> None:

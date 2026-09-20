@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from scripts import PROJECT_ROOT
 
-from home_cortex.ollama import OllamaService, _semantic_planner_examples, planner_system_prompt
+from home_cortex.providers.ollama import OllamaService, _semantic_planner_examples, planner_system_prompt
 from scripts.benchmarks.semantic_planner_benchmark import (
     DEFAULT_EVAL_PATH,
     build_json_fact_service,

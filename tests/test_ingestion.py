@@ -7,9 +7,9 @@ import pytest
 from surrealdb import AsyncSurreal, RecordID
 from surrealdb.errors import NotFoundError
 
-from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.ingestion import _prune_table, ingest_directory
-from home_cortex.schema_catalog import RuntimeSchemaCatalog, node_table_sources
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
+from home_cortex.persistence.ingestion import _prune_table, ingest_directory
+from home_cortex.persistence.schema_catalog import RuntimeSchemaCatalog, node_table_sources
 
 STATIC_TEST_DATA = Path(__file__).parent / "static_test_data"
 

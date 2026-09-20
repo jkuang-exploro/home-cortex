@@ -26,18 +26,18 @@ import home_cortex
 
 from home_cortex.agents import get_agent
 from home_cortex.config import get_settings
-from home_cortex.edge_schema import EdgeSchemaRegistry
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
 from scripts.benchmarks.fact_benchmark import _percentile
 from scripts.benchmarks.json_graph import JsonGraphDispatcher
-from home_cortex.ollama import (
+from home_cortex.providers.ollama import (
     PLANNER_KEEP_ALIVE,
     PLANNER_NUM_CTX,
     PLANNER_NUM_PREDICT,
     PLANNER_SEED,
     OllamaService,
 )
-from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_ir import (
+from home_cortex.persistence.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.semantic.ir import (
     AgentRequestContext,
     FactEvidence,
     FactResult,
@@ -46,10 +46,10 @@ from home_cortex.semantic_ir import (
     SemanticFactRequest,
     SemanticPlannerFailure,
 )
-from home_cortex.household_fact_engine import HouseholdFactEngine
-from home_cortex.semantic_planner import SemanticFactPlanner, planner_input_summary
-from home_cortex.semantic_facts import SemanticFactService
-from home_cortex.semantic_schema import SemanticSchemaRegistry
+from home_cortex.facts.engine import HouseholdFactEngine
+from home_cortex.semantic.planner import SemanticFactPlanner, planner_input_summary
+from home_cortex.semantic.facts import SemanticFactService
+from home_cortex.semantic.schema import SemanticSchemaRegistry
 
 FROZEN_EVAL_TIME = "2026-09-03T12:00:00-07:00"
 SCORING_REVISION = "2026-09-07.2-composition-shapes"

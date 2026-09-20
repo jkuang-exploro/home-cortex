@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from .contracts import POSE_FIELDS
+from .primitives import POSE_FIELDS
 
 # ZYX intrinsic (yaw about +z, then pitch about +y, then roll about +x), z-up.
 _GIMBAL = 1e-9

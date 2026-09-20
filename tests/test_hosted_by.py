@@ -6,8 +6,8 @@ from typing import Any
 import pytest
 from surrealdb import AsyncSurreal
 
-from home_cortex.ingestion import ingest_directory
-from home_cortex.retrieval import RetrievalService
+from home_cortex.persistence.ingestion import ingest_directory
+from home_cortex.persistence.retrieval import RetrievalService
 
 
 STATIC_TEST_DATA = Path(__file__).parent / "static_test_data"

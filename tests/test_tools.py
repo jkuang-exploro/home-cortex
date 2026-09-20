@@ -3,7 +3,8 @@ from typing import Any
 
 import pytest
 
-from home_cortex.tools import TOOLS, ToolDispatcher, get_tool_definitions
+from home_cortex.capabilities.catalog import TOOLS, get_tool_definitions
+from home_cortex.capabilities.dispatcher import ToolDispatcher
 
 
 class FakeRetrievalService:
@@ -361,12 +362,12 @@ async def test_mutations_preserve_trusted_context_across_concurrent_dispatches(m
     from datetime import datetime, timezone
     from pathlib import Path
     from types import SimpleNamespace
-    from home_cortex.semantic_ir import AgentRequestContext
-    from home_cortex.semantic_ontology import SemanticOntology
-    from home_cortex.edge_schema import EdgeSchemaRegistry
-    from home_cortex.schema_catalog import RuntimeSchemaCatalog
-    from home_cortex.semantic_writing import NamedItemWritingService
-    from home_cortex.tools import current_caller_entity_id
+    from home_cortex.semantic.ir import AgentRequestContext
+    from home_cortex.semantic.ontology import SemanticOntology
+    from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
+    from home_cortex.persistence.schema_catalog import RuntimeSchemaCatalog
+    from home_cortex.mutation.semantic import NamedItemWritingService
+    from home_cortex.capabilities.dispatcher import current_caller_entity_id
 
     ontology = SemanticOntology.load_default()
     writer = SimpleNamespace(ontology=ontology, catalog=RuntimeSchemaCatalog.from_data_dir(

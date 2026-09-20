@@ -17,7 +17,7 @@ not active source code.**
   by `tests/test_composition_eval.py` and `scripts.benchmarks.composition_eval`; it does
   not replace `semantic_planner_eval.yaml` or change `SCORING_REVISION`.
 
-These files are read at fixed paths by `src/home_cortex/semantic_planner_benchmark.py`
+These files are read at fixed paths by `scripts/benchmarks/semantic_planner_benchmark.py`
 and by `tests/test_semantic_planner_benchmark.py`, so their paths must stay stable.
 Add new cases here, not in the interpreter prompts. Expected values are semantic IR
 only; benchmark wording must never be copied into `_semantic_planner_examples()`.

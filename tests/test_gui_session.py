@@ -1,4 +1,4 @@
-from home_cortex.gui_session import parse_session, session_token, valid_session
+from home_cortex.conversation.session import parse_session, session_token, valid_session
 
 
 def test_session_roundtrip_keeps_email() -> None:

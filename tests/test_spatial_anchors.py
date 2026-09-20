@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from home_cortex.spatial.anchors import (
+from home_cortex.spatial.localization.anchors import (
     anchors_from_space,
     parse_surveyed_anchor,
     parse_surveyed_anchors,
     surveyed_anchor_as_mapping,
 )
 from home_cortex.spatial.contracts import SpatialContractError, apply_space_spatial_fields
-from home_cortex.spatial.pose import parse_runtime_pose
+from home_cortex.spatial.localization.pose import parse_runtime_pose
 from home_cortex.spatial.units import as_meters
 
 ROOT = Path(__file__).parents[1]

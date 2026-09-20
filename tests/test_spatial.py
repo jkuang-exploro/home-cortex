@@ -7,9 +7,9 @@ from typing import Any
 import pytest
 from surrealdb import AsyncSurreal
 
-from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.export import export_directory
-from home_cortex.ingestion import ingest_directory
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
+from home_cortex.persistence.export import export_directory
+from home_cortex.persistence.ingestion import ingest_directory
 from home_cortex.spatial.contracts import (
     LENGTH_UNIT,
     SpatialContractError,

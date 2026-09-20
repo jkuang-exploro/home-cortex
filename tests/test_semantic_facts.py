@@ -9,15 +9,15 @@ from ollama import ChatResponse
 from pydantic import ValidationError
 from surrealdb import AsyncSurreal
 
-from home_cortex.agent_service import AgentService
+from home_cortex.runtime.agent import AgentService
 from home_cortex.agents import get_agent
-from home_cortex.edge_schema import EdgeSchemaRegistry
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
 from scripts.benchmarks.json_graph import JsonGraphDispatcher
-from home_cortex.ingestion import ingest_directory
-from home_cortex.operator_registry import OPERATORS
-from home_cortex.retrieval import RetrievalService
-from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_ir import (
+from home_cortex.persistence.ingestion import ingest_directory
+from home_cortex.facts.operators import OPERATORS
+from home_cortex.persistence.retrieval import RetrievalService
+from home_cortex.persistence.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.semantic.ir import (
     AgentRequestContext,
     SemanticFactRequest,
     SemanticFilter,
@@ -25,12 +25,13 @@ from home_cortex.semantic_ir import (
     SemanticReference,
     SemanticRelationStep,
 )
-from home_cortex.household_fact_engine import HouseholdFactEngine
-from home_cortex.semantic_planner import SemanticFactPlanner
-from home_cortex.semantic_facts import SemanticFactService
-from home_cortex.semantic_ontology import SemanticOntology
-from home_cortex.semantic_schema import SemanticSchemaRegistry
-from home_cortex.tools import ToolDispatcher, get_tool_definitions
+from home_cortex.facts.engine import HouseholdFactEngine
+from home_cortex.semantic.planner import SemanticFactPlanner
+from home_cortex.semantic.facts import SemanticFactService
+from home_cortex.semantic.ontology import SemanticOntology
+from home_cortex.semantic.schema import SemanticSchemaRegistry
+from home_cortex.capabilities.catalog import get_tool_definitions
+from home_cortex.capabilities.dispatcher import ToolDispatcher
 
 ROOT = Path(__file__).parents[1]
 DATA_DIR = ROOT / "data"

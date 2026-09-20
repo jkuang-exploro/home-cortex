@@ -18,9 +18,9 @@ from home_cortex.api import (
     _stream_chat_completion,
     app,
 )
-from home_cortex.greetings import GreetingService
-from home_cortex.export import ExportResult
-from home_cortex.ingestion import IngestionResult
+from home_cortex.conversation.greetings import GreetingService
+from home_cortex.persistence.export import ExportResult
+from home_cortex.persistence.ingestion import IngestionResult
 
 
 class FakeAgent:
@@ -924,7 +924,7 @@ def test_admin_ingest_accepts_household_api_key(
     )
 
     with patch(
-        "home_cortex.http.routes.system.run_ingest",
+        "home_cortex.api.routes.system.run_ingest",
         new_callable=AsyncMock,
         return_value=ingested,
     ) as ingest:
@@ -953,7 +953,7 @@ def test_admin_export_requires_explicit_target_and_accepts_household_api_key(
     )
 
     with patch(
-        "home_cortex.http.routes.system.run_export",
+        "home_cortex.api.routes.system.run_export",
         new_callable=AsyncMock,
         return_value=exported,
     ) as export:

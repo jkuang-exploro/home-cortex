@@ -10,8 +10,8 @@ import yaml
 
 from scripts import PROJECT_ROOT
 from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service, collect_provenance, summarize_latencies
-from home_cortex.ollama import OllamaService
-from home_cortex.request_tracing import trace_request
+from home_cortex.providers.ollama import OllamaService
+from home_cortex.common.tracing import trace_request
 from scripts.probes.two_stage_semantic_planner import LegacyTwoStagePlanner
 
 

@@ -5,8 +5,8 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from home_cortex.api import VIRTUAL_MODEL, app
-from home_cortex.conversations import ConversationStore
-from home_cortex.greetings import GreetingService
+from home_cortex.conversation.store import ConversationStore
+from home_cortex.conversation.greetings import GreetingService
 
 from test_api import FakeAgent, FakeHealthDatabase, FakeIdentityRetrieval
 

@@ -6,19 +6,36 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from home_cortex.semantic_ir import FactEvidence, FactResult, SemanticFactRequest, SemanticReference
+from home_cortex.semantic.ir import FactEvidence, FactResult, SemanticFactRequest, SemanticReference
 from test_semantic_contract import household
 
 
 @pytest.mark.parametrize("module,forbidden", [
-    ("semantic_ir", {"writing", "db", "retrieval", "tools", "semantic_facts"}),
-    ("household_fact_engine", {"semantic_planner", "fact_renderer", "semantic_facts", "ollama"}),
+    (
+        "semantic.ir",
+        {
+            "home_cortex.mutation.writing",
+            "home_cortex.persistence.db",
+            "home_cortex.persistence.retrieval",
+            "home_cortex.capabilities.dispatcher",
+            "home_cortex.semantic.facts",
+        },
+    ),
+    (
+        "facts.engine",
+        {
+            "home_cortex.semantic.planner",
+            "home_cortex.facts.renderer",
+            "home_cortex.semantic.facts",
+            "home_cortex.providers.ollama",
+        },
+    ),
 ])
 def test_semantic_layers_do_not_import_their_callers(module, forbidden):
     script = (
         f"import home_cortex.{module}; import json, sys; "
-        "print(json.dumps([name.removeprefix('home_cortex.') "
-        "for name in sys.modules if name.startswith('home_cortex.')]))"
+        "print(json.dumps([name for name in sys.modules "
+        "if name.startswith('home_cortex.')]))"
     )
     loaded = json.loads(subprocess.check_output([sys.executable, "-c", script], text=True))
     assert forbidden.isdisjoint(loaded)

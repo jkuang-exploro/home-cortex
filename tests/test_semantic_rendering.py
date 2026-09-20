@@ -8,21 +8,21 @@ from pathlib import Path
 import pytest
 import yaml
 
-from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_display import SemanticDisplay
-from home_cortex.fact_renderer import FactRenderer
-from home_cortex.semantic_ir import (
+from home_cortex.persistence.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.semantic.display import SemanticDisplay
+from home_cortex.facts.renderer import FactRenderer
+from home_cortex.semantic.ir import (
     FactResult,
     SemanticFactRequest,
     SemanticFilter,
     SemanticReference,
     SemanticRelationStep,
 )
-from home_cortex.household_fact_engine import HouseholdFactEngine
-from home_cortex.semantic_planner import SemanticFactPlanner
-from home_cortex.semantic_facts import SemanticFactService
-from home_cortex.semantic_schema import SemanticSchemaRegistry
-from home_cortex.semantic_ontology import SemanticOntology
+from home_cortex.facts.engine import HouseholdFactEngine
+from home_cortex.semantic.planner import SemanticFactPlanner
+from home_cortex.semantic.facts import SemanticFactService
+from home_cortex.semantic.schema import SemanticSchemaRegistry
+from home_cortex.semantic.ontology import SemanticOntology
 from test_semantic_contract import household, ref, step
 
 ONTOLOGY = Path(__file__).parents[1] / 'schemas/semantic/ontology.yaml'

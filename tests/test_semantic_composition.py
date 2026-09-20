@@ -9,11 +9,11 @@ import pytest
 from ollama import ChatResponse
 from pydantic import ValidationError
 
-from home_cortex.agent_service import AgentService
-from home_cortex.tools import get_tool_definitions
-from home_cortex.ollama import OllamaService
-from home_cortex.operator_registry import OperatorInput, OperatorExecutionError, execute_operator
-from home_cortex.semantic_ir import (
+from home_cortex.runtime.agent import AgentService
+from home_cortex.capabilities.catalog import get_tool_definitions
+from home_cortex.providers.ollama import OllamaService
+from home_cortex.facts.operators import OperatorInput, OperatorExecutionError, execute_operator
+from home_cortex.semantic.ir import (
     DiscourseContext,
     SemanticFactRequest,
     SemanticReference,
@@ -21,7 +21,7 @@ from home_cortex.semantic_ir import (
     SemanticFilter,
     SemanticPlannerFailure,
 )
-from home_cortex.fact_renderer import FactRenderer
+from home_cortex.facts.renderer import FactRenderer
 from test_semantic_contract import household, ref, step
 
 

@@ -16,19 +16,19 @@ from zoneinfo import ZoneInfo
 
 from home_cortex.agents import get_agent
 from home_cortex.config import get_settings
-from home_cortex.db import Database
-from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.model_provider import model_provider_from_settings
-from home_cortex.retrieval import RetrievalService
-from home_cortex.schema_catalog import (
+from home_cortex.persistence.db import Database
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
+from home_cortex.providers.base import model_provider_from_settings
+from home_cortex.persistence.retrieval import RetrievalService
+from home_cortex.persistence.schema_catalog import (
     RuntimeSchemaCatalog,
 )
-from home_cortex.semantic_ir import FactAnswer, AgentRequestContext
-from home_cortex.household_fact_engine import HouseholdFactEngine
-from home_cortex.semantic_planner import SemanticFactPlanner
-from home_cortex.semantic_facts import SemanticFactService, _failure_stage
-from home_cortex.semantic_schema import SemanticSchemaRegistry
-from home_cortex.tools import ToolDispatcher
+from home_cortex.semantic.ir import FactAnswer, AgentRequestContext
+from home_cortex.facts.engine import HouseholdFactEngine
+from home_cortex.semantic.planner import SemanticFactPlanner
+from home_cortex.semantic.facts import SemanticFactService, _failure_stage
+from home_cortex.semantic.schema import SemanticSchemaRegistry
+from home_cortex.capabilities.dispatcher import ToolDispatcher
 from scripts.benchmarks.json_graph import JsonGraphDispatcher
 
 QUESTIONS = (

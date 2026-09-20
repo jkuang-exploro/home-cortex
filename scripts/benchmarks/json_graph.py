@@ -5,9 +5,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.retrieval import ENTITY_SUMMARY_FIELDS
-from home_cortex.schema_catalog import matching_named_entities, node_table_sources
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
+from home_cortex.persistence.retrieval import ENTITY_SUMMARY_FIELDS
+from home_cortex.persistence.schema_catalog import matching_named_entities, node_table_sources
 
 
 class JsonGraphDispatcher:
@@ -90,5 +90,4 @@ def _summary(entity: dict[str, Any]) -> dict[str, Any]:
         for field, value in entity.items()
         if field in ENTITY_SUMMARY_FIELDS
     }
-
 

@@ -31,7 +31,7 @@ Default inputs resolve relative to the checkout/frozen archive or `/app` for
 container installations. Installed wheels still need deployment schema/data
 inputs; those are not embedded in the wheel. Explicit path flags remain supported.
 
-`home_cortex.request_tracing` stays in production: it supplies request-scoped
+`home_cortex.common.tracing` stays in production: it supplies request-scoped
 instrumentation to the API, DB, and model clients, not a profiling CLI.
 Historical artifact reports retain the paths used for their original runs.
 The withdrawn compact semantic codec lives beside its offline profiler; it is

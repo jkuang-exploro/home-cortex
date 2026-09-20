@@ -252,7 +252,7 @@ def generate_body(prompt: str, num_predict: int) -> dict[str, Any]:
 
 
 def dump_planner_payload(root: Path, utterance: str) -> dict[str, Any]:
-    from home_cortex.ollama import (  # type: ignore
+    from home_cortex.providers.ollama import (  # type: ignore
         PLANNER_KEEP_ALIVE,
         PLANNER_NUM_CTX,
         PLANNER_NUM_PREDICT,
@@ -303,9 +303,9 @@ def dump_planner_payload(root: Path, utterance: str) -> dict[str, Any]:
 
 
 async def run_cortex_planner(root: Path, url: str, utterance: str, warmup: int, repeat: int) -> dict[str, Any]:
-    from home_cortex.ollama import OllamaService, PLANNER_NUM_CTX  # type: ignore
-    from home_cortex.request_tracing import trace_request  # type: ignore
-    from home_cortex.semantic_conversation import SemanticConversationService  # type: ignore
+    from home_cortex.providers.ollama import OllamaService, PLANNER_NUM_CTX  # type: ignore
+    from home_cortex.common.tracing import trace_request  # type: ignore
+    from home_cortex.semantic.conversation import SemanticConversationService  # type: ignore
     from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service  # type: ignore
 
     if PLANNER_NUM_CTX != NUM_CTX:

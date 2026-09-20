@@ -11,9 +11,9 @@ from typing import Any, Mapping
 
 import yaml
 
-from home_cortex import ollama as prompts
-from home_cortex.mutation_ir import NAMED_WRITE_ADAPTER
-from home_cortex.semantic_ir import SemanticPlannerFailure
+from home_cortex.providers.ollama import OllamaService
+from home_cortex.mutation.ir import NAMED_WRITE_ADAPTER
+from home_cortex.semantic.ir import SemanticPlannerFailure
 from scripts import PROJECT_ROOT
 from scripts.benchmarks.planner_prompt_experiment import (
     answer_signature,
@@ -34,7 +34,7 @@ from scripts.probes.unified_semantic_planner import (
 from scripts.probes.two_stage_semantic_planner import LegacyTwoStagePlanner
 
 
-class ObservedOllama(prompts.OllamaService):
+class ObservedOllama(OllamaService):
     def reset_observations(self):
         self.observations = []
 

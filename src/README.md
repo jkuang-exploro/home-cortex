@@ -25,20 +25,24 @@ browser / OpenAI-compatible client
 
 The important ownership rules are:
 
-- `semantic_ir.py` owns request, context, result, and evidence types.
-- `semantic_ontology.py` and `schemas/semantic/ontology.yaml` define reusable
-  meaning. Storage mappings come from `semantic_schema.py` and edge schemas.
-- `entity_resolver.py` grounds references; `household_fact_engine.py` computes
-  facts; `fact_renderer.py` formats validated results.
-- `model_provider.py` is the provider-neutral contract. `ollama.py` and
-  `openrouter.py` are adapters.
-- `mutation_service.py` is the application boundary for preview and commit.
-  `writing.py` owns deterministic graph mutations.
-- `tool_catalog.py` owns model-facing schemas; `tools.py` validates and dispatches
-  configured capabilities. Household graph primitives are internal to the
-  semantic executor and are not model-facing tools.
-- `http/` owns transport. `api.py` is only a compatibility export for
-  `home_cortex.api:app`.
+- `semantic/` owns semantic IR, ontology, schema binding, planning, and
+  interpretation policy. The declarative vocabulary remains in
+  `schemas/semantic/ontology.yaml`.
+- `facts/` owns reference grounding, deterministic fact execution, operators,
+  and rendering. It has no HTTP or provider-transport responsibility.
+- `providers/base.py` is the provider-neutral contract;
+  `providers/ollama.py` and `providers/openrouter.py` are transport adapters.
+- `mutation/service.py` is the preview/commit application boundary;
+  `mutation/writing.py` owns deterministic transactional graph mutations.
+- `capabilities/catalog.py` owns model-facing schemas and
+  `capabilities/dispatcher.py` validates and dispatches the configured tools.
+  Household graph primitives stay internal to fact execution.
+- `runtime/` coordinates agents and the ordinary model/tool loop;
+  `conversation/` owns transcripts, browser sessions, and greetings.
+- `persistence/` owns SurrealDB access, graph retrieval, edge/schema catalogs,
+  ingestion, and export.
+- `api/` owns transport; its package initializer preserves the deployment entry
+  point `home_cortex.api:app`.
 
 The semantic layers must not inspect utterance text after planning to repair a
 request. Property ownership, predicates, pairwise operands, relationship paths,
@@ -57,6 +61,45 @@ transport-neutral visual evidence contracts, ingestion ports, enrollment
 contracts, and artifact metadata. It has no camera routes, YOLO/OpenCV runtime,
 FFmpeg relay, or Tapo integration. See
 [the Vision boundary](home_cortex/vision/README.md).
+
+## Package map
+
+```text
+home_cortex/
+  api/             HTTP application, schemas, SSE, dependencies, and routes
+  agents/          named agent definitions and registration
+  capabilities/    model-facing calculation/calendar schemas and dispatch
+  common/          identity, display, text, and tracing primitives
+  conversation/    transcript persistence, GUI sessions, and greetings
+  facts/           grounding, deterministic execution, operators, rendering
+  mutation/        mutation IR, semantic intent, service, transactional writes
+  persistence/     database, retrieval, schemas, ingestion, and export
+  providers/       provider protocol and Ollama/OpenRouter adapters
+  runtime/         application coordination and ordinary model loop
+  semantic/        semantic IR, ontology, schema, prompts, and planners
+  spatial/         spatial contracts, units, transforms, and localization math
+  vision/          paused visual-evidence contracts and ingestion policy
+  config.py        process configuration
+```
+
+Package initializers are intentionally small. Import concrete owners directly;
+the two deliberate public surfaces are `home_cortex.api` for deployment/client
+integration and `home_cortex.agents` for the named-agent registry.
+
+## Where does new code go?
+
+- New HTTP routes and transport policy go in `api/` and `api/routes/`.
+- New semantic meaning or planner behavior goes in `semantic/` and, when it is
+  reusable vocabulary, `schemas/semantic/ontology.yaml`.
+- New deterministic household operations, grounding, or rendering go in `facts/`.
+- New write intent or graph mutation behavior goes in `mutation/`.
+- New provider adapters go in `providers/`; generic app coordination goes in
+  `runtime/`.
+- New storage adapters and graph maintenance behavior go in `persistence/`.
+- Pure server-useful geometry stays in `spatial/`; localization-specific math
+  goes in `spatial/localization/`.
+- Camera capture, media, device polling, robot control, and other edge runtime
+  belong in `home_cortex_client`, not this backend.
 
 ## HTTP surface
 

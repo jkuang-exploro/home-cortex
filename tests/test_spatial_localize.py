@@ -5,16 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from home_cortex.spatial.anchors import SurveyedAnchor, anchors_from_space
+from home_cortex.spatial.localization.anchors import SurveyedAnchor, anchors_from_space
 from home_cortex.spatial.contracts import apply_space_spatial_fields
-from home_cortex.spatial.localize import (
+from home_cortex.spatial.localization.solver import (
     LOCALIZED_TRANSLATION_M,
     LOCALIZED_YAW_RAD,
     localize_from_fiducials,
     localize_in_space,
     synthetic_observation,
 )
-from home_cortex.spatial.observation import FiducialObservation
+from home_cortex.spatial.localization.observation import FiducialObservation
 from home_cortex.spatial.transforms import Pose, pose
 from home_cortex.spatial.units import as_meters, normalize_angle
 

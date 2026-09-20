@@ -14,19 +14,22 @@ reasoning*, not a catalog of expected questions.
 ## Active source (edit these)
 
 - `src/home_cortex/` — the Python package. Main pieces:
-  - `semantic_facts.py` — `SemanticFactService`, the utterance-to-answer coordinator.
+  - `semantic/facts.py` — `SemanticFactService`, the utterance-to-answer coordinator.
     Import each concept directly from its owner:
-    - `semantic_ir.py` — request/result types (`SemanticFactRequest`, `FactResult`)
-    - `semantic_schema.py` — `SemanticSchemaRegistry` (vocabulary → catalog)
-    - `semantic_planner.py` — LLM interpreter (`SemanticFactPlanner`)
-    - `entity_resolver.py` — `EntityResolver` (self/name/path grounding)
-    - `household_fact_engine.py` — deterministic executor, independent of planner/rendering
-    - `fact_renderer.py` — answer text (`FactRenderer`)
-  - `semantic_ontology.py` — declarative ontology model + validation.
-  - `ollama.py` — LLM client, interpreter system prompt, and reusable examples.
-  - `operator_registry.py` — deterministic operator/predicate registry.
-  - `request_tracing.py` — reusable, opt-in runtime request/LLM timing.
-  - `api.py`, `agent_service.py`, `agents/` — HTTP and agent layer.
+    - `semantic/ir.py` — request/result types (`SemanticFactRequest`, `FactResult`)
+    - `semantic/schema.py` — `SemanticSchemaRegistry` (vocabulary → catalog)
+    - `semantic/planner.py` — LLM interpreter (`SemanticFactPlanner`)
+    - `facts/resolver.py` — `EntityResolver` (self/name/path grounding)
+    - `facts/engine.py` — deterministic executor, independent of planner/rendering
+    - `facts/renderer.py` — answer text (`FactRenderer`)
+  - `semantic/ontology.py` — declarative ontology model + validation.
+  - `semantic/prompt.py` — interpreter system prompt and reusable examples.
+  - `providers/` — provider contract plus Ollama and OpenRouter adapters.
+  - `facts/operators.py` — deterministic operator/predicate registry.
+  - `common/tracing.py` — reusable, opt-in runtime request/LLM timing.
+  - `api/`, `runtime/`, `agents/` — HTTP, application coordination, and named agents.
+  - `mutation/` — mutation intent, preview/commit service, and transactional writes.
+  - `persistence/` — SurrealDB, retrieval, graph schemas, ingestion, and export.
 - `schemas/` — declarative ontology (`semantic/ontology.yaml`) and edge schemas
   (`edge/*.yaml`). Reusable domain concepts belong here, not in prompts.
 - `scripts/` — importable engineering utilities grouped as `benchmarks/`,
@@ -37,7 +40,7 @@ reasoning*, not a catalog of expected questions.
 
 ## Fast ownership guide
 
-`AgentService` creates `AgentRequestContext` (`semantic_ir.py`); conversation
+`AgentService` creates `AgentRequestContext` (`semantic/ir.py`); conversation
 state adds scoped focus. `SemanticFactService` calls the planner, engine, and
 renderer. `EntityResolver` grounds references; `HouseholdFactEngine` computes
 facts. Both report failures as `FactResult`. `ResolvedEntities` is successful
@@ -45,10 +48,10 @@ grounding with traversal edges, not another answer format. SurrealDB owns facts;
 `RetrievalService` owns graph reads. There is no Tier-0 factual route.
 
 For relationship meaning or a new property, start in `schemas/semantic/ontology.yaml`
-and the relevant edge YAML; `semantic_schema.py` binds these to deployed fields.
-For speaker-relative or containment bugs, start in `entity_resolver.py` and the
+and the relevant edge YAML; `semantic/schema.py` binds these to deployed fields.
+For speaker-relative or containment bugs, start in `facts/resolver.py` and the
 matching `test_entity_alias_resolution.py`, `test_semantic_composition.py`, or
-`test_collapsed_containment.py`. Add a new computation in `operator_registry.py`
+`test_collapsed_containment.py`. Add a new computation in `facts/operators.py`
 and its executor integration. Do not restore the old cross-module re-export facade.
 
 ## Data / generated — do NOT treat as source, do NOT read wholesale

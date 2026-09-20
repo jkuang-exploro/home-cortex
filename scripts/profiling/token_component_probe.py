@@ -12,7 +12,7 @@ from pathlib import Path
 from scripts import PROJECT_ROOT
 
 from ollama import AsyncClient
-from home_cortex.ollama import OLLAMA_NUM_CTX, _PLANNER_INSTRUCTIONS, _semantic_planner_examples
+from home_cortex.providers.ollama import OLLAMA_NUM_CTX, _PLANNER_INSTRUCTIONS, _semantic_planner_examples
 from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
 
 ROOT = PROJECT_ROOT

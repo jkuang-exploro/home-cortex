@@ -4,7 +4,7 @@ import math
 import pytest
 
 from home_cortex.spatial.contracts import SpatialContractError
-from home_cortex.spatial.observation import parse_fiducial_observation, parse_fiducial_observations
+from home_cortex.spatial.localization.observation import parse_fiducial_observation, parse_fiducial_observations
 from home_cortex.spatial.units import as_meters, normalize_angle
 
 ABS = 1e-12

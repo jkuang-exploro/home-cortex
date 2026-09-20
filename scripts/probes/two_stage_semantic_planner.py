@@ -6,18 +6,18 @@ from dataclasses import replace
 from time import perf_counter
 from typing import Any
 
-from home_cortex.semantic_ir import (
+from home_cortex.semantic.ir import (
     AgentRequestContext,
     PlannerDiagnostics,
     SemanticPlan,
     SemanticPlannerOutcome,
 )
-from home_cortex.semantic_planner import (
+from home_cortex.semantic.planner import (
     SemanticFactPlanner,
     _planner_runtime_fields,
     planner_input_summary,
 )
-from home_cortex.semantic_schema import SemanticSchemaRegistry
+from home_cortex.semantic.schema import SemanticSchemaRegistry
 
 
 class LegacyTwoStagePlanner:

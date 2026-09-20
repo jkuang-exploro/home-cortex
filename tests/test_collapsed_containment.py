@@ -5,12 +5,12 @@ from datetime import datetime
 
 import pytest
 
-from home_cortex.edge_schema import EdgeSchemaRegistry
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
 from scripts.benchmarks.json_graph import JsonGraphDispatcher
-from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_ir import AgentRequestContext, SemanticFactRequest
-from home_cortex.household_fact_engine import HouseholdFactEngine
-from home_cortex.semantic_schema import SemanticSchemaRegistry
+from home_cortex.persistence.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.semantic.ir import AgentRequestContext, SemanticFactRequest
+from home_cortex.facts.engine import HouseholdFactEngine
+from home_cortex.semantic.schema import SemanticSchemaRegistry
 
 
 def graph(tmp_path, collapse=True):
@@ -126,7 +126,7 @@ async def test_collapsed_result_composes_with_location_traversal(tmp_path):
 
 @pytest.mark.asyncio
 async def test_household_containment_regression_sequence(tmp_path):
-    from home_cortex.fact_renderer import FactRenderer
+    from home_cortex.facts.renderer import FactRenderer
 
     engine, dispatcher = graph(tmp_path)
     dispatcher.entities['item:cabinet']['name'] = ['冰箱']
@@ -167,7 +167,7 @@ async def test_household_containment_regression_sequence(tmp_path):
 @pytest.mark.asyncio
 async def test_ingestion_supports_optional_boolean_and_nested_hosting(tmp_path):
     from surrealdb import AsyncSurreal
-    from home_cortex.ingestion import ingest_directory
+    from home_cortex.persistence.ingestion import ingest_directory
 
     graph(tmp_path)
     for relation in ('lives_in', 'parent_of', 'spouse_of'):
@@ -193,9 +193,9 @@ async def test_ingestion_supports_optional_boolean_and_nested_hosting(tmp_path):
 async def test_containment_through_ingestion_and_real_dispatcher(tmp_path):
     """Exercise stored metadata and directed traversal, not the JSON simulator."""
     from surrealdb import AsyncSurreal
-    from home_cortex.ingestion import ingest_directory
-    from home_cortex.retrieval import RetrievalService
-    from home_cortex.tools import ToolDispatcher
+    from home_cortex.persistence.ingestion import ingest_directory
+    from home_cortex.persistence.retrieval import RetrievalService
+    from home_cortex.capabilities.dispatcher import ToolDispatcher
 
     graph(tmp_path)
     # Use localized compound names and colon-delimited IDs as in deployed graphs.
@@ -238,7 +238,7 @@ async def test_containment_through_ingestion_and_real_dispatcher(tmp_path):
 
 @pytest.mark.asyncio
 async def test_collapsed_contents_group_by_authoritative_space(tmp_path):
-    from home_cortex.fact_renderer import FactRenderer
+    from home_cortex.facts.renderer import FactRenderer
 
     engine, _ = graph(tmp_path)
     result = await contents(engine)
@@ -277,7 +277,7 @@ async def test_collapsed_contents_group_by_authoritative_space(tmp_path):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('collapse', [True, False, None])
 async def test_hosted_spaces_include_empty_spaces_and_compose(tmp_path, collapse):
-    from home_cortex.fact_renderer import FactRenderer
+    from home_cortex.facts.renderer import FactRenderer
 
     engine, dispatcher = graph(tmp_path, collapse)
     # The lower compartment is empty, but still hosts a nested drawer.

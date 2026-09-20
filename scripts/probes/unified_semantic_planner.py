@@ -6,13 +6,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from home_cortex.semantic_ir import (
+from home_cortex.semantic.ir import (
     AgentRequestContext,
     SemanticPlan,
     SemanticPlannerFailure,
 )
-from home_cortex.semantic_schema import SemanticSchemaRegistry
-from home_cortex.unified_semantic_planner import (
+from home_cortex.semantic.schema import SemanticSchemaRegistry
+from home_cortex.semantic.unified_planner import (
     UnifiedSemanticPlanner,
     unified_chat_messages,
     unified_output_schema,

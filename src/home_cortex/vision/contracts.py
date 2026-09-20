@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping
 
-from ..record_ids import split_record_id
-from ..spatial.pose import (
+from ..persistence.record_ids import split_record_id
+from ..spatial.localization.pose import (
     PoseUncertainty,
     RuntimePose,
     parse_runtime_pose,

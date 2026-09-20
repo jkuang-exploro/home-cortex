@@ -7,13 +7,14 @@ import pytest
 import pytest_asyncio
 from surrealdb import AsyncSurreal, RecordID
 
-from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.ingestion import ingest_directory
-from home_cortex.record_ids import canonical_record_id
-from home_cortex.retrieval import RetrievalService
-from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.tools import ToolDispatcher, get_tool_definitions
-from home_cortex.writing import ItemWritingService, MutationResult
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
+from home_cortex.persistence.ingestion import ingest_directory
+from home_cortex.persistence.record_ids import canonical_record_id
+from home_cortex.persistence.retrieval import RetrievalService
+from home_cortex.persistence.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.capabilities.catalog import get_tool_definitions
+from home_cortex.capabilities.dispatcher import ToolDispatcher
+from home_cortex.mutation.writing import ItemWritingService, MutationResult
 
 
 STATIC_TEST_DATA = Path(__file__).parent / "static_test_data"
@@ -599,9 +600,9 @@ async def test_named_attributes_create_patch_preview_and_read(writing_service):
     assert 'item:' not in json.dumps(result)
     # Updated attributes are available through the existing semantic read executor.
     from datetime import datetime
-    from home_cortex.household_fact_engine import HouseholdFactEngine
-    from home_cortex.semantic_schema import SemanticSchemaRegistry
-    from home_cortex.semantic_ir import SemanticFactRequest, AgentRequestContext
+    from home_cortex.facts.engine import HouseholdFactEngine
+    from home_cortex.semantic.schema import SemanticSchemaRegistry
+    from home_cortex.semantic.ir import SemanticFactRequest, AgentRequestContext
     engine = HouseholdFactEngine(dispatcher, SemanticSchemaRegistry(catalog))
     request = SemanticFactRequest.model_validate({'operation': 'select', 'property': 'color',
         'subject': {'kind': 'named_entity', 'value': 'Invented meter', 'entity_type': 'item'}})
@@ -609,7 +610,7 @@ async def test_named_attributes_create_patch_preview_and_read(writing_service):
         assistant_display_name='Test', current_time=datetime(2026, 9, 10), locale='en')
     result = (await engine.execute(request, context))[0]
     assert result.status == 'found' and result.value == 'blue'
-    from home_cortex.fact_renderer import FactRenderer
+    from home_cortex.facts.renderer import FactRenderer
     inspection = request.model_copy(update={'operation': 'inspect', 'property': None})
     assert engine.schema.validates(inspection)
     result = (await engine.execute(inspection, context))[0]
@@ -671,7 +672,7 @@ async def test_named_create_stores_bilingual_names_and_readable_key(writing_serv
 
 def test_create_requires_bilingual_names_and_rejects_hashed_keys():
     from pydantic import ValidationError
-    from home_cortex.mutation_ir import NamedCreateItem
+    from home_cortex.mutation.ir import NamedCreateItem
 
     NamedCreateItem.model_validate({
         'operation': 'create', 'item_name': '香肠', 'location_name': '冰箱',
@@ -720,7 +721,7 @@ async def test_attribute_update_rejects_stale_snapshot(writing_service):
 
 def test_attribute_generation_schema_is_closed_and_typed():
     from jsonschema import Draft202012Validator
-    from home_cortex.mutation_ir import MutationDecision, attribute_output_schema
+    from home_cortex.mutation.ir import MutationDecision, attribute_output_schema
     schema = attribute_output_schema(MutationDecision.model_json_schema())
     validator = Draft202012Validator(schema)
     def decision(attributes):

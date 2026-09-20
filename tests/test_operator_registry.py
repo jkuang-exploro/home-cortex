@@ -4,7 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pytest
-from home_cortex.operator_registry import (
+from home_cortex.facts.operators import (
     OPERATORS,
     OperatorExecutionError,
     OperatorInput,

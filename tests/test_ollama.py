@@ -1,4 +1,4 @@
-from home_cortex.mutation_ir import read_plan_schema
+from home_cortex.mutation.ir import read_plan_schema
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -7,16 +7,16 @@ from typing import Any
 import pytest
 from ollama import ChatResponse
 
-from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.ollama import (
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
+from home_cortex.providers.ollama import (
     OLLAMA_NUM_CTX,
     PLANNER_NUM_PREDICT,
     OllamaService,
     planner_chat_messages,
 )
-from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_schema import SemanticSchemaRegistry
-from home_cortex.tools import TOOLS
+from home_cortex.persistence.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.semantic.schema import SemanticSchemaRegistry
+from home_cortex.capabilities.catalog import TOOLS
 
 
 class FakeOllamaClient:
@@ -348,7 +348,7 @@ async def test_injected_client_is_not_closed_by_service() -> None:
 
 
 def test_capability_serialization_ignores_mapping_order_preserves_arrays() -> None:
-    from home_cortex.ollama import planner_system_prompt
+    from home_cortex.providers.ollama import planner_system_prompt
     first = {'relations': ['parent', 'spouse'], 'ownership': {'entity': ['age'], 'relationship': ['start']}}
     reordered = {'ownership': {'relationship': ['start'], 'entity': ['age']}, 'relations': ['parent', 'spouse']}
     assert planner_system_prompt(first) == planner_system_prompt(reordered)
@@ -358,7 +358,7 @@ def test_capability_serialization_ignores_mapping_order_preserves_arrays() -> No
 
 
 def test_static_prefix_survives_clock_history_and_identity_notes() -> None:
-    from home_cortex.ollama import planner_chat_messages, _semantic_planner_examples
+    from home_cortex.providers.ollama import planner_chat_messages, _semantic_planner_examples
     count = 1 + len(_semantic_planner_examples())
     first = planner_chat_messages([{'role': 'user', 'content': 'Who am I?'}], {}, household_now='2026-09-08T10:00:00Z')
     other = planner_chat_messages([
@@ -373,7 +373,7 @@ def test_static_prefix_survives_clock_history_and_identity_notes() -> None:
 
 @pytest.mark.asyncio
 async def test_serving_planner_uses_expanded_fact_contract_not_experimental_codec():
-    from home_cortex.semantic_ir import SemanticPlan
+    from home_cortex.semantic.ir import SemanticPlan
     plan = {'requires_fact': True, 'request': {
         'operation': 'select', 'subject': {'kind': 'self'},
         'property': 'birth_date', 'property_source': 'entity',

@@ -8,13 +8,13 @@ from typing import Any
 import pytest
 from surrealdb import AsyncSurreal, RecordID
 
-from home_cortex.export import (
+from home_cortex.persistence.export import (
     _move_directory,
     canonical_json_value,
     export_directory,
 )
-from home_cortex.ingestion import ingest_directory
-from home_cortex.record_ids import canonical_record_id
+from home_cortex.persistence.ingestion import ingest_directory
+from home_cortex.persistence.record_ids import canonical_record_id
 
 STATIC_TEST_DATA = Path(__file__).parent / "static_test_data"
 REGISTERED_EDGES = (

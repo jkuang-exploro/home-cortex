@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from scripts.benchmarks.fact_benchmark import _run_suite, benchmark_json
-from home_cortex.semantic_ir import (
+from home_cortex.semantic.ir import (
     AgentRequestContext,
     FactAnswer,
     FactEvidence,
@@ -73,8 +73,8 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
             }
         return {"requires_fact": True, "request": request}
 
-    from home_cortex.ollama import OllamaService
-    from home_cortex.openrouter import OpenRouterService
+    from home_cortex.providers.ollama import OllamaService
+    from home_cortex.providers.openrouter import OpenRouterService
 
     original = OllamaService.plan_semantic_fact
     original_openrouter = OpenRouterService.plan_semantic_fact

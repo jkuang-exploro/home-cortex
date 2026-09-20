@@ -7,15 +7,15 @@ import sys
 
 import pytest
 
-from home_cortex.semantic_ir import SemanticFactRequest, SemanticPlan
-from home_cortex.mutation_ir import read_plan_schema
-from home_cortex.semantic_schema import SemanticSchemaRegistry
+from home_cortex.semantic.ir import SemanticFactRequest, SemanticPlan
+from home_cortex.mutation.ir import read_plan_schema
+from home_cortex.semantic.schema import SemanticSchemaRegistry
 from scripts.profiling.semantic_transport import (
     SemanticTransport, canonical_json, pack_capabilities, unpack_capabilities,
 )
 from test_semantic_contract import household
-from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
+from home_cortex.persistence.schema_catalog import RuntimeSchemaCatalog
 
 
 def registry():
@@ -24,7 +24,7 @@ def registry():
 
 
 def test_all_reusable_demonstrations_roundtrip(household):
-    from home_cortex.ollama import _semantic_planner_examples
+    from home_cortex.providers.ollama import _semantic_planner_examples
     schema = household[0].schema
     codec = SemanticTransport(schema.planner_output_schema())
     for message in _semantic_planner_examples():
@@ -112,7 +112,7 @@ def test_capability_tables_preserve_order_and_reserved_literals():
 def test_cross_process_determinism():
     script = '''
 from scripts.profiling.semantic_transport import *
-from home_cortex.semantic_ir import SemanticPlan
+from home_cortex.semantic.ir import SemanticPlan
 c=SemanticTransport(SemanticPlan.model_json_schema())
 v={k: {'ordered': [3,1,2], 'set': {'b','a'}} for k in {'beta','alpha'}}
 print(canonical_json(c.schema))
@@ -126,8 +126,8 @@ print(c.encode(SemanticPlan(requires_fact=False)))
 @pytest.mark.asyncio
 async def test_retry_diagnostics_preserve_each_transport_attempt(household):
     from ollama import ChatResponse
-    from home_cortex.ollama import OllamaService
-    from home_cortex.semantic_planner import SemanticFactPlanner
+    from home_cortex.providers.ollama import OllamaService
+    from home_cortex.semantic.planner import SemanticFactPlanner
     engine, context, _ = household
     codec = SemanticTransport(engine.schema.planner_output_schema())
     payload = {'requires_fact': True, 'request': {

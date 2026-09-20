@@ -4,9 +4,9 @@ from typing import Any
 import pytest
 from surrealdb import AsyncSurreal, RecordID
 
-from home_cortex.ingestion import ingest_directory
-from home_cortex.retrieval import RetrievalService, to_json_value
-from home_cortex.schema_catalog import normalize_entity_alias
+from home_cortex.persistence.ingestion import ingest_directory
+from home_cortex.persistence.retrieval import RetrievalService, to_json_value
+from home_cortex.persistence.schema_catalog import normalize_entity_alias
 
 STATIC_TEST_DATA = Path(__file__).parent / "static_test_data"
 

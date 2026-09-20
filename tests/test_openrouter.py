@@ -1,4 +1,4 @@
-from home_cortex.mutation_ir import read_plan_schema
+from home_cortex.mutation.ir import read_plan_schema
 import json
 from typing import Any
 
@@ -6,9 +6,9 @@ import httpx
 import pytest
 
 from home_cortex.config import Settings
-from home_cortex.model_provider import model_provider_from_settings
-from home_cortex.openrouter import OpenRouterService
-from home_cortex.tools import TOOLS
+from home_cortex.providers.base import model_provider_from_settings
+from home_cortex.providers.openrouter import OpenRouterService
+from home_cortex.capabilities.catalog import TOOLS
 
 
 def _completion(
@@ -268,7 +268,7 @@ async def test_openrouter_http_error_does_not_include_the_api_key() -> None:
 
 @pytest.mark.asyncio
 async def test_openrouter_serving_fact_contract_is_expanded():
-    from home_cortex.semantic_ir import SemanticPlan
+    from home_cortex.semantic.ir import SemanticPlan
     plan = {'requires_fact': True, 'request': {
         'operation': 'count', 'subject': {'kind': 'current_household'},
         'property': None, 'property_source': 'entity',

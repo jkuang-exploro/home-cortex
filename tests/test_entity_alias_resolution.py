@@ -10,10 +10,10 @@ import pytest
 
 from surrealdb import RecordID
 
-from home_cortex.edge_schema import EdgeSchemaRegistry
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
 from scripts.benchmarks.json_graph import JsonGraphDispatcher
-from home_cortex.retrieval import RetrievalService
-from home_cortex.schema_catalog import record_aliases
+from home_cortex.persistence.retrieval import RetrievalService
+from home_cortex.persistence.schema_catalog import record_aliases
 from test_retrieval import FakeDatabase
 
 ROOT = Path(__file__).parents[1]

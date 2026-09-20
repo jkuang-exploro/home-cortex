@@ -15,14 +15,15 @@ from uuid import uuid4
 
 import httpx
 from surrealdb import RecordID
-from home_cortex.agent_service import AgentService
+from home_cortex.runtime.agent import AgentService
 from home_cortex.api import app
 from home_cortex.config import Settings
-from home_cortex.db import Database
-from home_cortex.ollama import OllamaService
-from home_cortex.request_tracing import trace_request
-from home_cortex.retrieval import RetrievalService
-from home_cortex.tools import ToolDispatcher, get_tool_definitions
+from home_cortex.persistence.db import Database
+from home_cortex.providers.ollama import OllamaService
+from home_cortex.common.tracing import trace_request
+from home_cortex.persistence.retrieval import RetrievalService
+from home_cortex.capabilities.catalog import get_tool_definitions
+from home_cortex.capabilities.dispatcher import ToolDispatcher
 from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service, load_probe_dataset, summarize_latencies
 from scripts.profiling.token_latency_audit import exclusive
 

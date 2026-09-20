@@ -15,9 +15,9 @@ import json
 from pathlib import Path
 from time import perf_counter
 
-from home_cortex import semantic_prompt as prompts
-from home_cortex.ollama import OLLAMA_NUM_CTX, OllamaService
-from home_cortex.semantic_ir import SemanticFactRequest
+from home_cortex.semantic import prompt as prompts
+from home_cortex.providers.ollama import OLLAMA_NUM_CTX, OllamaService
+from home_cortex.semantic.ir import SemanticFactRequest
 from scripts import PROJECT_ROOT
 from scripts.profiling.planner_prompt_audit import compact, prompt_components
 from scripts.benchmarks.semantic_planner_benchmark import (

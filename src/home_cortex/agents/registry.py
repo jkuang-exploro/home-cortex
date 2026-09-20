@@ -5,7 +5,7 @@ from typing import Any, Mapping
 
 import yaml
 
-from ..tools import get_tool_definitions
+from ..capabilities.catalog import get_tool_definitions
 
 
 class UnknownAgentError(LookupError):

@@ -1,8 +1,8 @@
 """Prompt accounting and experiment isolation, independent of model behavior."""
 import pytest
 
-from home_cortex import semantic_prompt as prompts
-from home_cortex.ollama import OLLAMA_NUM_CTX
+from home_cortex.semantic import prompt as prompts
+from home_cortex.providers.ollama import OLLAMA_NUM_CTX
 from scripts.profiling.planner_prompt_audit import prompt_components
 from scripts.benchmarks.planner_prompt_experiment import reduced_examples
 

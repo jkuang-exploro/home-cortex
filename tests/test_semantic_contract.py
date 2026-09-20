@@ -11,13 +11,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from home_cortex.edge_schema import EdgeSchemaRegistry
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
 from scripts.benchmarks.json_graph import JsonGraphDispatcher
-from home_cortex.ollama import _semantic_planner_examples
-from home_cortex.schema_catalog import EntityTypeSchema, RuntimeSchemaCatalog
-from home_cortex.semantic_contracts import SemanticType
-from home_cortex.semantic_ontology import SemanticOntology
-from home_cortex.semantic_ir import (
+from home_cortex.providers.ollama import _semantic_planner_examples
+from home_cortex.persistence.schema_catalog import EntityTypeSchema, RuntimeSchemaCatalog
+from home_cortex.semantic.contracts import SemanticType
+from home_cortex.semantic.ontology import SemanticOntology
+from home_cortex.semantic.ir import (
     AgentRequestContext,
     DiscourseContext,
     SemanticFactRequest,
@@ -26,11 +26,11 @@ from home_cortex.semantic_ir import (
     SemanticFilter,
     SemanticPlannerFailure,
 )
-from home_cortex.household_fact_engine import HouseholdFactEngine
-from home_cortex.fact_renderer import FactRenderer
-from home_cortex.semantic_facts import SemanticFactService
-from home_cortex.semantic_planner import SemanticFactPlanner
-from home_cortex.semantic_schema import SemanticSchemaRegistry
+from home_cortex.facts.engine import HouseholdFactEngine
+from home_cortex.facts.renderer import FactRenderer
+from home_cortex.semantic.facts import SemanticFactService
+from home_cortex.semantic.planner import SemanticFactPlanner
+from home_cortex.semantic.schema import SemanticSchemaRegistry
 from scripts.benchmarks.semantic_planner_benchmark import (
     load_semantic_eval_cases,
     normalize_semantic_request,
@@ -378,7 +378,7 @@ def test_concepts_cannot_override_meaning_and_base_paths_are_not_repaired(househ
 
 def test_heldout_phrasing_is_not_used_by_interpreter():
     from scripts.benchmarks.semantic_planner_benchmark import load_probe_dataset
-    from home_cortex.ollama import _PLANNER_INSTRUCTIONS
+    from home_cortex.providers.ollama import _PLANNER_INSTRUCTIONS
     root=Path(__file__).parents[1]/'benchmarks'
     resources=_PLANNER_INSTRUCTIONS+json.dumps(_semantic_planner_examples(),ensure_ascii=False)
     known={case.utterance for case in load_semantic_eval_cases()}
@@ -417,7 +417,7 @@ def test_evaluation_alternative_is_limited_to_final_child_list():
 ])
 def test_wife_father_accepted_name_representation_still_requires_correct_person(entity,names,correct):
     from scripts.benchmarks.semantic_planner_benchmark import load_probe_dataset, score_structured_result
-    from home_cortex.semantic_ir import FactResult, FactEvidence
+    from home_cortex.semantic.ir import FactResult, FactEvidence
     case=next(c for c in load_probe_dataset().cases if c.case_id=='wife_father_given_name')
     result=FactResult('found',names,FactEvidence(entity_ids=(entity,)))
     assert score_structured_result(result,case) is correct
@@ -776,7 +776,7 @@ def test_absent_bindings_disable_complete_concepts_and_bad_kinds_fail(household)
 
 def test_fingerprint_is_stable_across_processes():
     program = ("from pathlib import Path; from scripts.benchmarks.composition_eval import household_engine; "
-               "from home_cortex.semantic_schema import SemanticSchemaRegistry; "
+               "from home_cortex.semantic.schema import SemanticSchemaRegistry; "
                "print(SemanticSchemaRegistry(household_engine('alpha')[0].schema.catalog).contracts.fingerprint)")
     outputs = [subprocess.check_output([sys.executable, '-c', program], env={**os.environ, 'PYTHONHASHSEED': seed}, text=True) for seed in ('1', '77')]
     assert outputs[0] == outputs[1]

@@ -7,9 +7,9 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError as JSONSchemaValidationError
 from ollama import ChatResponse
 
-from home_cortex.ollama import OllamaService
-from home_cortex.semantic_ir import AgentRequestContext, SemanticPlan
-from home_cortex.unified_semantic_planner import (
+from home_cortex.providers.ollama import OllamaService
+from home_cortex.semantic.ir import AgentRequestContext, SemanticPlan
+from home_cortex.semantic.unified_planner import (
     UnifiedSemanticPlanner,
     unified_chat_messages,
     unified_output_schema,

@@ -3,10 +3,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from home_cortex.edge_schema import EdgeSchemaRegistry
-from home_cortex.schema_catalog import RuntimeSchemaCatalog
-from home_cortex.semantic_schema import SemanticSchemaRegistry
-from home_cortex.semantic_ontology import SemanticOntology
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
+from home_cortex.persistence.schema_catalog import RuntimeSchemaCatalog
+from home_cortex.semantic.schema import SemanticSchemaRegistry
+from home_cortex.semantic.ontology import SemanticOntology
 
 ROOT = Path(__file__).parents[1]
 ONTOLOGY_PATH = ROOT / "schemas" / "semantic" / "ontology.yaml"

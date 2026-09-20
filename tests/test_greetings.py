@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from home_cortex.agents import AgentDefinition, ModelConfiguration, get_agent
-from home_cortex.greetings import GreetingResolver, GreetingService
+from home_cortex.conversation.greetings import GreetingResolver, GreetingService
 
 HOUSEHOLD = {
     "id": "address:fort_cerritos",

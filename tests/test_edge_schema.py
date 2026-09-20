@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from home_cortex.edge_schema import EdgeSchemaRegistry, UnknownEdgeSchemaError
+from home_cortex.persistence.edge_schema import EdgeSchemaRegistry, UnknownEdgeSchemaError
 
 SCHEMA_DIR = Path(__file__).parents[1] / "schemas" / "edge"
 

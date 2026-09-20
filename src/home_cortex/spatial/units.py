@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from typing import Any, Mapping
 
-from .contracts import ANGLE_UNIT, LENGTH_UNIT
+from .primitives import ANGLE_UNIT, LENGTH_UNIT
 
 # Exact International Yard and Pound definitions.
 _INCH_METERS = 0.0254

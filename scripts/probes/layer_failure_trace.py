@@ -18,7 +18,7 @@ from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
-from home_cortex.ollama import (
+from home_cortex.providers.ollama import (
     PLANNER_KEEP_ALIVE,
     PLANNER_NUM_CTX,
     PLANNER_NUM_PREDICT,
@@ -26,9 +26,9 @@ from home_cortex.ollama import (
     OllamaService,
     planner_chat_messages,
 )
-from home_cortex.semantic_conversation import SemanticConversationService
-from home_cortex.fact_renderer import FactRenderer
-from home_cortex.semantic_ir import SemanticFactRequest, SemanticPlannerFailure
+from home_cortex.semantic.conversation import SemanticConversationService
+from home_cortex.facts.renderer import FactRenderer
+from home_cortex.semantic.ir import SemanticFactRequest, SemanticPlannerFailure
 from scripts.benchmarks.semantic_planner_benchmark import (
     build_json_fact_service,
     normalize_semantic_request,

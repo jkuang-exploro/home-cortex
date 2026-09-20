@@ -32,8 +32,8 @@ def prefix_info(previous, current):
 
 
 async def build_traffic(root, ordering):
-    import home_cortex.ollama as provider_module
-    import home_cortex.semantic_prompt as prompt_module
+    import home_cortex.providers.ollama as provider_module
+    import home_cortex.semantic.prompt as prompt_module
     from scripts.benchmarks.semantic_planner_benchmark import build_json_fact_service
     service, context = build_json_fact_service(
         root / 'benchmarks/fixtures/semantic-contract', root / 'schemas/edge', None,
@@ -70,7 +70,7 @@ async def build_traffic(root, ordering):
             await plan(['Who is my spouse?', 'How old are they?']),
         ]
         from home_cortex.agents.registry import get_agent
-        from home_cortex.agent_service import _clock_context
+        from home_cortex.runtime.agent import _clock_context
         definition = get_agent('steward')
         await model.chat_with_tools([{'role': 'system', 'content': definition.prompt},
                           *_clock_context('America/Los_Angeles', context.current_time),
@@ -144,7 +144,7 @@ def main():
                 raise RuntimeError('Requires an already resident model with verified 8192 context')
         for ordering in (['canonical', 'native'] if args.reverse else ['native', 'canonical']):
             traffic = asyncio.run(build_traffic(args.root, ordering))
-            from home_cortex.semantic_prompt import _semantic_planner_examples
+            from home_cortex.semantic.prompt import _semantic_planner_examples
             static_count = 1 + len(_semantic_planner_examples())
             for name, sequence in traffic.items():
                 entry = {'ordering': ordering, 'traffic': name,

@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from home_cortex.display import (
+from home_cortex.common.display import (
     DisplayNameResolver,
     DisplayTextStream,
     internal_ids_requested,

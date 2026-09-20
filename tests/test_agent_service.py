@@ -6,9 +6,9 @@ from typing import Any
 import pytest
 from ollama import ChatResponse
 
-from home_cortex.agent_service import AgentLimitError, AgentService
+from home_cortex.runtime.agent import AgentLimitError, AgentService
 from home_cortex.agents import get_agent
-from home_cortex.schema_catalog import EntityTypeSchema, RuntimeSchemaCatalog
+from home_cortex.persistence.schema_catalog import EntityTypeSchema, RuntimeSchemaCatalog
 
 STEWARD = get_agent("steward")
 EMPTY_CATALOG = RuntimeSchemaCatalog(
@@ -412,8 +412,8 @@ async def test_unplanned_native_write_is_blocked_even_if_dispatcher_allows_it():
 
 @pytest.mark.asyncio
 async def test_semantic_mutation_intent_is_side_effect_free_during_replay():
-    from home_cortex.semantic_ir import AgentRequestContext, SemanticMutationIntent
-    from home_cortex.semantic_conversation import SemanticConversationService
+    from home_cortex.semantic.ir import AgentRequestContext, SemanticMutationIntent
+    from home_cortex.semantic.conversation import SemanticConversationService
 
     args = {'operation': 'delete', 'item_name': 'Compass', 'mode': 'commit'}
     ollama = FakeOllamaService([])
@@ -463,7 +463,7 @@ async def test_multi_intent_executes_nothing_and_asks_for_one_instruction(
 
 def test_query_and_mutation_cannot_share_one_semantic_plan():
     from pydantic import ValidationError
-    from home_cortex.semantic_ir import SemanticPlan
+    from home_cortex.semantic.ir import SemanticPlan
     with pytest.raises(ValidationError, match='cannot both query facts and mutate'):
         SemanticPlan.model_validate({'requires_fact': True,
             'request': {'operation': 'resolve_reference', 'subject': {'kind': 'self'}},
@@ -471,7 +471,7 @@ def test_query_and_mutation_cannot_share_one_semantic_plan():
 
 
 def test_write_enabled_agent_uses_unified_planner_without_preclassifier():
-    from home_cortex.unified_semantic_planner import UnifiedSemanticPlanner
+    from home_cortex.semantic.unified_planner import UnifiedSemanticPlanner
 
     agent = _agent(FakeOllamaService([]), FakeDispatcher())
     assert isinstance(agent.semantic_facts.planner, UnifiedSemanticPlanner)

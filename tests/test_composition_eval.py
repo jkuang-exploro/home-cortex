@@ -20,8 +20,8 @@ from scripts.benchmarks.composition_eval import (
     request_context,
     sha256_file,
 )
-from home_cortex.ollama import _PLANNER_INSTRUCTIONS, _semantic_planner_examples
-from home_cortex.semantic_ir import DiscourseContext, SemanticFactRequest
+from home_cortex.providers.ollama import _PLANNER_INSTRUCTIONS, _semantic_planner_examples
+from home_cortex.semantic.ir import DiscourseContext, SemanticFactRequest
 from scripts.benchmarks.semantic_planner_benchmark import (
     DEFAULT_EVAL_PATH,
     SCORING_REVISION,
