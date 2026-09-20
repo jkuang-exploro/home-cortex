@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Chat from './components/Chat.svelte';
   import Login from './components/Login.svelte';
+  import Media from './components/Media.svelte';
   import Sidebar from './components/Sidebar.svelte';
   import {
     createConversation,
@@ -29,6 +30,7 @@
   let pending = $state(false);
   let sendError = $state('');
   let creating: Promise<string> | null = null;
+  let page = $state<'chat' | 'media'>(window.location.pathname === '/media' ? 'media' : 'chat');
 
   const copy = $derived(t(language));
 
@@ -42,13 +44,16 @@
   }
 
   onMount(() => {
+    const handlePopState = () => void showPage(window.location.pathname === '/media' ? 'media' : 'chat', false);
+    window.addEventListener('popstate', handlePopState);
     void bootstrap();
+    return () => window.removeEventListener('popstate', handlePopState);
   });
 
   async function bootstrap() {
     try {
       await readSession();
-      await openWorkspace();
+      if (page === 'chat') await openWorkspace();
       needsLogin = false;
     } catch (error) {
       needsLogin = error instanceof ApiError && error.status === 401;
@@ -76,11 +81,26 @@
     else await startNewChat();
   }
 
+  async function showPage(next: 'chat' | 'media', push = true) {
+    if (push) history.pushState({}, '', next === 'media' ? '/media' : '/');
+    page = next;
+    if (next === 'chat' && conversations.length === 0) await openWorkspace();
+  }
+
+  async function newChatFromAnywhere() {
+    if (page !== 'chat') {
+      history.pushState({}, '', '/');
+      page = 'chat';
+      await loadWorkspace();
+    }
+    await startNewChat();
+  }
+
   async function login(email: string, apiKey: string) {
     loginError = '';
     try {
       await createSession(email, apiKey);
-      await openWorkspace();
+      if (page === 'chat') await openWorkspace();
       needsLogin = false;
     } catch (error) {
       if (error instanceof ApiError && error.code === 'identity_not_mapped') {
@@ -228,21 +248,28 @@
       {language}
       {conversations}
       {activeId}
-      onnew={startNewChat}
+      {page}
+      onnew={newChatFromAnywhere}
+      onchat={() => showPage('chat')}
+      onmedia={() => showPage('media')}
       onselect={selectChat}
       ondelete={removeChat}
       onsignout={signOut}
     />
-    <Chat
-      {language}
-      {models}
-      {model}
-      {messages}
-      {pending}
-      error={sendError}
-      onmodel={changeModel}
-      onlanguage={(next) => (language = next)}
-      onsend={send}
-    />
+    {#if page === 'media'}
+      <Media onauthrequired={() => (needsLogin = true)} />
+    {:else}
+      <Chat
+        {language}
+        {models}
+        {model}
+        {messages}
+        {pending}
+        error={sendError}
+        onmodel={changeModel}
+        onlanguage={(next) => (language = next)}
+        onsend={send}
+      />
+    {/if}
   </div>
 {/if}

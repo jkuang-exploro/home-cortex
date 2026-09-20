@@ -67,12 +67,25 @@ home_cortex_client  -- HTTP / serialized evidence contracts -->  home_cortex
 home_cortex         -- backend API ---------------------------->  home_gui
 ```
 
+Household media browsing is a fourth, independent deployment component. Nginx
+presents one browser origin while keeping cognition and deterministic media
+storage separate:
+
+```text
+home_gui -> nginx -> home_cortex
+                  -> home_media -> /media/photo:ro
+                                -> /media/video:ro
+                                -> /data (derived index/cache)
+```
+
 - `home_cortex` owns the server, household semantics, persistence, spatial
   primitives, and validation of normalized visual evidence.
 - `home_gui` owns browser interaction and depends only on backend/browser-facing
   APIs.
 - `home_cortex_client` owns edge-device identity, camera capture, local media
   handling, and stream/observation publication.
+- `home_media` owns read-only browsing of already-stored photos and videos. It
+  does not import `home_cortex` and contains no Vision or AI pipeline.
 
 Vision execution is paused pending MicroDuck hardware. The current Mac client is
 an isolated development adapter; replacing it with MicroDuck must not change
@@ -106,5 +119,12 @@ The implementation findings and local-model measurements are recorded in
 [the historical semantic-planner authority work log](.llm/2026-09-04_2016_semantic-planner-authority.md).
 
 ```bash
-docker compose -p cortex --env-file .env up -d --build --no-deps cortex-api home-gui proxy
+docker compose -p cortex --env-file .env -f docker/docker-compose.yml up -d --build
 ```
+
+After signing in, open `http://home-cortex-0/media` and use **Refresh library**
+to build or update the media index. Compose mounts `/opt/data/photo` and
+`/opt/data/video` read-only; the rebuildable SQLite index and derivative cache
+live under `/opt/data/home-media-cache`. See
+[`home_media/README.md`](home_media/README.md) for the API, stable-ID,
+timestamp, and security contracts.

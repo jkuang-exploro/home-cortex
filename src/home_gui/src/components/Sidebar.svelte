@@ -6,7 +6,10 @@
     language,
     conversations,
     activeId,
+    page,
     onnew,
+    onchat,
+    onmedia,
     onselect,
     ondelete,
     onsignout,
@@ -14,7 +17,10 @@
     language: Language;
     conversations: ConversationSummary[];
     activeId: string | null;
+    page: 'chat' | 'media';
     onnew: () => void;
+    onchat: () => void;
+    onmedia: () => void;
     onselect: (id: string) => void;
     ondelete: (id: string) => void;
     onsignout: () => void;
@@ -30,8 +36,10 @@
   </div>
   <div class="sidebar-actions">
     <button class="primary" type="button" onclick={onnew}>{copy.newChat}</button>
+    <button class="ghost" class:active={page === 'chat'} type="button" onclick={onchat}>Chat</button>
+    <button class="ghost" class:active={page === 'media'} type="button" onclick={onmedia}>Media</button>
   </div>
-  <div class="chat-list" aria-label={copy.chats}>
+  <div class="chat-list" class:hidden={page === 'media'} aria-label={copy.chats}>
     {#each conversations as chat (chat.id)}
       <div class="chat-item" class:active={chat.id === activeId}>
         <button type="button" onclick={() => onselect(chat.id)}>

@@ -17,6 +17,7 @@ services:
     depends_on:
       - home-gui
       - cortex-api
+      - home_media
 
   home-gui:
     build:
@@ -26,6 +27,25 @@ services:
     restart: unless-stopped
     expose:
       - "3000"
+
+  home_media:
+    build:
+      context: ../home_media
+      dockerfile: Dockerfile
+    image: home-cortex/media:0.1.0
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      HOME_MEDIA_PHOTO_ROOT: /media/photo
+      HOME_MEDIA_VIDEO_ROOT: /media/video
+      HOME_MEDIA_DATA_ROOT: /data
+      HOME_MEDIA_THUMBNAIL_SIZE: ${HOME_MEDIA_THUMBNAIL_SIZE:-500}
+      HOME_MEDIA_PAGE_SIZE: ${HOME_MEDIA_PAGE_SIZE:-100}
+    volumes:
+      - /opt/data/photo:/media/photo:ro
+      - /opt/data/video:/media/video:ro
+      - /opt/data/home-media-cache:/data
 
   surrealdb:
     image: surrealdb/surrealdb:v3.0.5
