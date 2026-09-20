@@ -19,12 +19,13 @@ update cortex-api
 
 Connect the household GUI to Cortex
 
-Compose publishes the GUI at port 3000 through an independent nginx proxy.
-The GUI container serves static files; Cortex owns sessions, transcripts, and
-answers. Port `8001` remains the host mapping for curl.
+Compose publishes nginx on standard HTTP port 80. Open the GUI at
+`http://home-cortex-0/`; the GUI container itself is internal-only. Cortex owns
+sessions, transcripts, and answers. Port `8001` is bound to host loopback only
+for local maintenance and development commands.
 
 Set a shared API key and map the email used to sign in in
-`docker/cortex/.env`:
+the repository-root `.env`:
 
 ```dotenv
 CORTEX_API_KEY=replace-with-a-long-random-secret
@@ -80,7 +81,7 @@ The OpenAI-compatible endpoint also detects a first turn as one user message
 with no previous assistant message. Its first answer includes the deterministic
 greeting; later requests carrying chat history do not repeat it.
 
-Open http://localhost:3000 and sign in with the mapped email plus
+Open http://home-cortex-0/ and sign in with the mapped email plus
 `CORTEX_API_KEY`. The GUI stores a session cookie, not the key. Select `老管家`
 for the steward or a bare Ollama/OpenRouter model to test the underlying LLM.
 
@@ -115,30 +116,3 @@ curl -N -sS -X POST http://localhost:8001/v1/chat/completions \
 Cortex keeps tool-selection responses internal and forwards each final-answer
 chunk from Ollama as an OpenAI-compatible SSE event. The stream ends with a
 chunk whose `finish_reason` is `stop`, followed by `data: [DONE]`.
-
-Checking user access
-curl -sS -X POST \
-  "http://localhost:3000/api/v1/users $user_id/update" -H "Authorization: Bearer $OPEN_WEBUI_TOKEN" -H 'Content-Type: application/json' -d '{"role":"user"}' jq '{id,email,role}'
-
-Granting Butler Access
-User_ID='xxxxxx'
-
-jq -n \
-  --arg user_id "$User_ID" \
-  '{
-    id: "老管家",
-    name: "老管家",
-    access_grants: [
-      {
-        principal_type: "user",
-        principal_id: $user_id,
-        permission: "read"
-      }
-    ]
-  }' \
-| curl --fail-with-body -sS -X POST \
-    'http://localhost:3000/api/v1/models/model/access/update' \
-    -H "Authorization: Bearer $OPEN_WEBUI_TOKEN" \
-    -H 'Content-Type: application/json' \
-    --data-binary @- \
-| jq '{id, name, is_active, access_grants}'

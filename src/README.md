@@ -180,7 +180,7 @@ person. Credentials and provider tokens never enter prompts or tool results.
 
 ## First run
 
-From `docker/cortex`, copy `.env.example` to `.env` and set at least:
+At the repository root, create `.env` and set at least:
 
 ```dotenv
 SURREAL_PASS=replace-me
@@ -194,11 +194,11 @@ For OpenRouter, set `LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, and
 `OPENROUTER_MODEL` instead.
 
 ```sh
-docker compose up -d --build
-curl http://localhost:8001/health
-curl -X POST http://localhost:8001/admin/ingest \
+docker compose --env-file .env -f docker/docker-compose.yml up -d --build
+curl http://home-cortex-0/health
+curl -X POST http://home-cortex-0/admin/ingest \
   -H 'Authorization: Bearer replace-with-a-long-random-secret'
-curl -X POST http://localhost:8001/v1/chat \
+curl -X POST http://home-cortex-0/v1/chat \
   -H 'Authorization: Bearer replace-with-a-long-random-secret' \
   -H 'X-OpenWebUI-User-Email: your-login@example.com' \
   -H 'Content-Type: application/json' \
@@ -206,12 +206,14 @@ curl -X POST http://localhost:8001/v1/chat \
 ```
 
 The base Compose file supports macOS and CPU-only hosts. On Linux with NVIDIA
-Container Toolkit, add `docker-compose.gpu.yml`. Interactive API documentation is
-served at `/docs`.
+Container Toolkit, also pass `-f docker/docker-compose.gpu.yml`. Interactive API
+documentation is served at `/docs`.
 
-The GUI is available through the Compose proxy on port 3000. For local frontend
-development, run `npm install && npm run dev` in `src/home_gui`; Vite proxies API
-paths to port 8001.
+The GUI is available at `http://home-cortex-0/` through nginx on standard HTTP
+port 80. The GUI container is not published directly. The API's port 8001 binding
+is restricted to host loopback for local maintenance and development. For local
+frontend development, run `npm install && npm run dev` in `src/home_gui`; Vite
+proxies API paths to that loopback-only development endpoint.
 
 ## Development
 
