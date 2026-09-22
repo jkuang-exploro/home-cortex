@@ -35,6 +35,7 @@ def format_run_report(run: Mapping[str, Any], summary: Mapping[str, Any]) -> str
         f"Config fingerprint: {fingerprints.get('config')}",
         f"Cache state: {run.get('cache_state')}",
         f"Results: {run.get('results_path')}",
+        f"Progress: {run.get('results_path')}/progress.log",
         "",
         "Semantic results",
     ]

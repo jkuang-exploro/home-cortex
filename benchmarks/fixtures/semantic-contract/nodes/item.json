@@ -1,0 +1,4 @@
+[
+  {"id": "item:house", "name": "house", "item_type": "house"},
+  {"id": "item:box", "name": "box", "item_type": "unknown"}
+]

@@ -155,6 +155,7 @@ async def benchmark_json(
     *,
     ollama_url: str | None = None,
     model: str | None = None,
+    on_progress: Any | None = None,
 ) -> dict[str, Any]:
     """JSON-graph fact benchmark. ``model`` selects Ollama; the default path is unchanged.
 
@@ -196,6 +197,7 @@ async def benchmark_json(
             mode=mode,
             questions=questions,
             speaker_cases=(SPEAKER_CASES if tuple(questions) == QUESTIONS else ()),
+            on_progress=on_progress,
         )
     finally:
         await llm.close()
@@ -210,6 +212,7 @@ async def _run_suite(
     mode: BenchmarkMode,
     questions: Sequence[str] = QUESTIONS,
     speaker_cases: Sequence[BenchmarkCase] = SPEAKER_CASES,
+    on_progress: Any | None = None,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     latencies: list[float] = []
@@ -217,7 +220,11 @@ async def _run_suite(
         *(BenchmarkCase(context.caller_entity_id or "", question) for question in questions),
         *speaker_cases,
     )
-    for case in cases:
+    total = len(cases)
+    for index, case in enumerate(cases, start=1):
+        label = case.utterance if case.speaker_id == (context.caller_entity_id or "") else f"{case.speaker_id}: {case.utterance}"
+        if on_progress is not None:
+            on_progress({"index": index, "total": total, "case_id": label, "state": "start"})
         case_context = replace(context, caller_entity_id=case.speaker_id or None)
         latest = None
         samples: list[float] = []
@@ -235,6 +242,16 @@ async def _run_suite(
             samples.append(latest.timings.total_ms)
             latencies.append(latest.timings.total_ms)
         assert latest is not None
+        if on_progress is not None:
+            on_progress({
+                "index": index,
+                "total": total,
+                "case_id": label,
+                "state": "done",
+                "passed": latest.result.status != "semantic_plan_unsupported",
+                "latency_ms": statistics.median(samples),
+                "detail": latest.result.status if latest.result.status != "found" else None,
+            })
         references = (latest.request.subject,) + (
             (latest.request.other,) if latest.request.other is not None else ()
         )

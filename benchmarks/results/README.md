@@ -8,6 +8,7 @@
   summary.json
   cases.jsonl
   stdout.log
+  progress.log
 ```
 
 Named baselines live in `baselines.json` in this directory. Promotion is explicit

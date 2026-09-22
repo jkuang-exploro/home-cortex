@@ -163,6 +163,18 @@ def isolated_registry():
     reset_registry()
 
 
+def test_progress_lines_show_a_case_start_and_its_result() -> None:
+    from home_cortex.benchmark.progress import format_case_done, format_case_start
+
+    assert format_case_start("planner", 2, 119, "self_identity::我是谁") == (
+        "[planner] 2/119 self_identity::我是谁 ..."
+    )
+    assert format_case_done(
+        "planner", 2, 119, "self_identity::我是谁",
+        passed=False, latency_ms=1518.4, detail="OPERATION_MISMATCH",
+    ) == "[planner] 2/119 self_identity::我是谁 fail 1518ms OPERATION_MISMATCH"
+
+
 def test_run_id_uses_local_clock_and_suffix() -> None:
     assert make_run_id(datetime(2026, 9, 21, 22, 5, 1), "ab12") == "20260921-220501-ab12"
 
@@ -346,6 +358,7 @@ def test_run_writes_immutable_records_and_marks_a_dirty_tree(
     cases = (runs[0] / "cases.jsonl").read_text(encoding="utf-8").strip().splitlines()
     assert json.loads(cases[0])["case_id"] == "fact-042"
     assert (runs[0] / "stdout.log").read_text(encoding="utf-8") == printed
+    assert run["run_id"] in (runs[0] / "progress.log").read_text(encoding="utf-8")
     with pytest.raises(FileExistsError):
         write_run(runs[0], run, summary, [], "again")
 

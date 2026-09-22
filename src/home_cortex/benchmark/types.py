@@ -86,6 +86,7 @@ class RunContext:
     verified_cold: bool
     allow_nonstandard_host: bool
     digest_cache: dict[str, str] = field(default_factory=dict)
+    progress: Any = None
 
 
 @dataclass

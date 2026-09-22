@@ -1010,6 +1010,7 @@ async def run_semantic_planner_benchmark(
     service: SemanticFactService,
     context: AgentRequestContext,
     cases: Sequence[SemanticEvalCase],
+    on_progress: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     planner_latencies: list[float] = []
@@ -1020,8 +1021,21 @@ async def run_semantic_planner_benchmark(
         service.engine.schema.capability_payload()
     )
 
-    for case in cases:
+    total = len(cases)
+    for index, case in enumerate(cases, start=1):
+        if on_progress is not None:
+            on_progress({"index": index, "total": total, "case_id": case.case_id, "state": "start"})
         row = await evaluate_planner_case(service, context, case)
+        if on_progress is not None:
+            on_progress({
+                "index": index,
+                "total": total,
+                "case_id": case.case_id,
+                "state": "done",
+                "passed": bool(row["plan_match"]),
+                "latency_ms": row.get("planner_latency_ms"),
+                "detail": None if row["plan_match"] else row.get("planner_failure_reason"),
+            })
         planner_correct = bool(row["plan_match"])
         category_totals[case.category] += 1
         if planner_correct:
@@ -1066,6 +1080,7 @@ async def run_tier1_probe(
     repeat: int = 5,
     verified_cold: bool = False,
     on_result: Callable[[Mapping[str, Any]], None] | None = None,
+    on_progress: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     if warmup < 0 or repeat < 1:
         raise ValueError("warmup must be >= 0 and repeat must be >= 1")
@@ -1080,8 +1095,26 @@ async def run_tier1_probe(
     )
     rows: list[dict[str, Any]] = []
     request_index = 0
+    planned = warmup + repeat * len(cases)
+
+    def _notify(case: SemanticEvalCase, state: str, row: Mapping[str, Any] | None = None) -> None:
+        if on_progress is None:
+            return
+        payload: dict[str, Any] = {
+            "index": request_index + (0 if state == "done" else 1),
+            "total": planned,
+            "case_id": case.case_id,
+            "state": state,
+        }
+        if row is not None:
+            payload["passed"] = bool(row.get("plan_match"))
+            payload["latency_ms"] = row.get("planner_latency_ms")
+            payload["detail"] = None if row.get("plan_match") else row.get("phase") or row.get("planner_failure_reason")
+        on_progress(payload)
+
     for _ in range(warmup):
         case = cases[request_index % len(cases)]
+        _notify(case, "start")
         row = await evaluate_planner_case(
             service,
             frozen_context,
@@ -1092,11 +1125,13 @@ async def run_tier1_probe(
             sample_index=-1,
         )
         rows.append(row)
+        request_index += 1
+        _notify(case, "done", row)
         if on_result is not None:
             on_result(row)
-        request_index += 1
     for sample_index in range(repeat):
         for case in cases:
+            _notify(case, "start")
             row = await evaluate_planner_case(
                 service,
                 frozen_context,
@@ -1105,9 +1140,10 @@ async def run_tier1_probe(
                 sample_index=sample_index,
             )
             rows.append(row)
+            request_index += 1
+            _notify(case, "done", row)
             if on_result is not None:
                 on_result(row)
-            request_index += 1
     measured = [row for row in rows if row["phase"] == "measured"]
     first_pass = [row for row in measured if row["sample_index"] == 0]
     planner_samples = [

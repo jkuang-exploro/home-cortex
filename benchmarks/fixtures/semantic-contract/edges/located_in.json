@@ -1,0 +1,4 @@
+[
+  {"from": "item:house", "to": "address:fictional"},
+  {"from": "item:box", "to": "space:room"}
+]

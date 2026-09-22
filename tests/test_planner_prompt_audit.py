@@ -99,7 +99,10 @@ def test_normal_fixture_prompt_byte_budget():
     from scripts import PROJECT_ROOT
     service, context = build_json_fact_service(PROJECT_ROOT / 'benchmarks/fixtures/semantic-contract', PROJECT_ROOT / 'schemas/edge', None)
     parts, _ = prompt_components([{'role': 'user', 'content': '家里有几个人'}], service.engine.schema.planner_capability_payload(), household_now=context.current_time.isoformat())
-    assert sum(len(v.encode()) for v in parts.values()) <= 32000
+    # Item and space records let location, room, and contents concepts expand.
+    # Declared item attributes come with any item entity, so this bound sits
+    # above that surface. It is still a creep alarm, not a token budget.
+    assert sum(len(v.encode()) for v in parts.values()) <= 36000
 
 
 def test_fixed_acceptance_cases_expand_through_canonical_ontology():

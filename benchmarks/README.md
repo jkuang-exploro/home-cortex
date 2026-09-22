@@ -14,7 +14,8 @@ The YAML files here stay the scoring inputs. `hc-bench` does not replace them.
   sequences, and stress utterances. Used by `tests/test_semantic_planner_bilingual.py`
   and `scripts/probes/bilingual_planner_probe.py`; not a serving phrase table.
 - `fixtures/semantic-contract/` — invented household graph records referenced by
-  the synthetic probe.
+  the synthetic probe. Item and space records are included so location, room,
+  and contents concepts expand for the bilingual probe.
 - `composition/` — Ticket 4 compositional generalization set (annotation guide,
   coverage matrix, invented households, development vs frozen YAML). Loaded only
   by `tests/test_composition_eval.py` and `scripts.benchmarks.composition_eval`; it does

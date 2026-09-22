@@ -185,12 +185,20 @@ async def plan_case(service, context, schema, case: dict[str, Any], history: lis
     latency_ms = (perf_counter() - started) * 1000
     ignore = bool(case.get("ignore_named_value"))
     expected = None
+    expected_error = None
     if case.get("requires_fact") is False:
         match = requires_fact is False and actual is None
     else:
-        expected = canonical(schema, case["expected"], ignore_named_value=ignore)
-        compared = strip_named_values(actual) if ignore and actual is not None else actual
-        match = compared == expected
+        try:
+            expected = canonical(schema, case["expected"], ignore_named_value=ignore)
+        except ValueError as error:
+            # Gold that the loaded catalog cannot expand is a harness problem.
+            # It must not discard the cases already planned.
+            expected_error = str(error)
+            match = False
+        else:
+            compared = strip_named_values(actual) if ignore and actual is not None else actual
+            match = compared == expected
     forbidden = []
     raw_request = raw.get("request") if isinstance(raw, dict) else None
     raw_subject = raw_request.get("subject") if isinstance(raw_request, dict) else {}
@@ -216,6 +224,7 @@ async def plan_case(service, context, schema, case: dict[str, Any], history: lis
         "language": case["language"],
         "utterance": case["utterance"],
         "match": bool(match),
+        "expected_error": expected_error,
         "requires_fact": requires_fact,
         "validation": validation,
         "actual": actual,
@@ -300,14 +309,38 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     bounded = isinstance(limit, int) and not isinstance(limit, bool) and limit > 0
     if bounded:
         cases = cases[:limit]
+    progress = getattr(args, "on_progress", None)
+    discourse_turns = 0 if bounded else sum(len(sequence["turns"]) for sequence in dataset["discourse"])
+    negative_count = 0 if bounded else len(dataset["negatives"])
+    planned = 1 + args.warmup + args.repeat * (len(cases) + discourse_turns + negative_count)
+    step = 1
+
+    def _notify(label: str, state: str, **extra: Any) -> None:
+        if progress is not None:
+            progress({"index": step, "total": planned, "case_id": label, "state": state, **extra})
+
+    _notify("prompt components", "start")
     prompt = await measure_prompt_components(args.ollama_url, args.model, service)
+    _notify("prompt components", "done", passed=True)
     rows: list[dict[str, Any]] = []
     try:
         for _ in range(args.warmup):
+            step += 1
+            _notify(cases[0]["id"], "start")
             await plan_case(service, context, schema, cases[0], [])
+            _notify(cases[0]["id"], "done", passed=None, detail="warmup")
         for sample in range(args.repeat):
             for case in cases:
-                rows.append({**await plan_case(service, context, schema, case, []), "sample_index": sample})
+                step += 1
+                _notify(case["id"], "start")
+                row = {**await plan_case(service, context, schema, case, []), "sample_index": sample}
+                rows.append(row)
+                _notify(
+                    case["id"], "done",
+                    passed=bool(row.get("match")) and not row.get("expected_error"),
+                    latency_ms=row.get("wall_ms"),
+                    detail=row.get("expected_error") or row.get("validation"),
+                )
             if not bounded:
                 for sequence in dataset["discourse"]:
                     history: list[str] = []
@@ -323,9 +356,17 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                             "ignore_named_value": False,
                             "requires_fact": True,
                         }
+                        step += 1
+                        _notify(case["id"], "start")
                         row = await plan_case(service, context, schema, case, history)
                         row["sample_index"] = sample
                         rows.append(row)
+                        _notify(
+                            case["id"], "done",
+                            passed=bool(row.get("match")) and not row.get("expected_error"),
+                            latency_ms=row.get("wall_ms"),
+                            detail=row.get("validation"),
+                        )
                         history.append(turn["utterance"])
                 for item in dataset["negatives"]:
                     case = {
@@ -345,9 +386,17 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                         "ignore_named_value": False,
                         "requires_fact": True,
                     }
+                    step += 1
+                    _notify(case["id"], "start")
                     row = await plan_case(service, context, schema, case, [])
                     row["sample_index"] = sample
                     rows.append(row)
+                    _notify(
+                        case["id"], "done",
+                        passed=bool(row.get("match")) and not row.get("expected_error"),
+                        latency_ms=row.get("wall_ms"),
+                        detail=row.get("validation"),
+                    )
     finally:
         await ollama.close()
 

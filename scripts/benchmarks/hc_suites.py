@@ -18,6 +18,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
+from home_cortex.benchmark.progress import format_case_done, format_case_start
 from home_cortex.benchmark.environment import (
     cached_tree_hash,
     semantic_prompt_fingerprint,
@@ -370,7 +371,9 @@ async def _run_planner(context: RunContext) -> SuiteResult:
         service, request_context = build_json_fact_service(
             context.data_dir, context.schema_dir, client
         )
-        report = await run_semantic_planner_benchmark(service, request_context, cases)
+        report = await run_semantic_planner_benchmark(
+            service, request_context, cases, on_progress=_on_progress(context, "planner"),
+        )
         prompt = semantic_prompt_fingerprint(service.engine.schema)
     finally:
         await client.close()
@@ -403,6 +406,7 @@ async def _run_fact(context: RunContext) -> SuiteResult:
         questions,
         ollama_url=context.ollama_url,
         model=context.model,
+        on_progress=_on_progress(context, "fact"),
     )
     prompt = _prompt_for(context)
     queries = report["queries"]
@@ -488,6 +492,7 @@ async def _run_latency(context: RunContext) -> SuiteResult:
             warmup=warmup,
             repeat=repetitions,
             verified_cold=context.verified_cold,
+            on_progress=_on_progress(context, "latency"),
         )
         prompt = semantic_prompt_fingerprint(service.engine.schema)
     finally:
@@ -530,6 +535,7 @@ async def _run_bilingual(context: RunContext) -> SuiteResult:
         warmup=0,
         repeat=1,
         limit=context.limit,
+        on_progress=_on_progress(context, "bilingual"),
     )
     report = await run(args)
     prompt = _prompt_for(context, data_dir=FIXTURE, schema_dir=SCHEMA)
@@ -635,6 +641,7 @@ async def _experiment_group(run: Any, context: RunContext, group: str) -> dict[s
             repeat=1,
             utterance=utterances,
             output=output,
+            on_progress=_on_progress(context, suite.name),
         )
         with contextlib.redirect_stdout(io.StringIO()):
             await run(args)
@@ -667,7 +674,9 @@ def _limited_utterances(context: RunContext, group: str) -> list[str]:
 def _bilingual_case(row: Mapping[str, Any]) -> CaseRecord:
     forbidden = row.get("forbidden") or []
     validation = row.get("validation")
-    if forbidden or row.get("match") is not True:
+    if row.get("expected_error"):
+        failure = "benchmark_harness_failure"
+    elif forbidden or row.get("match") is not True:
         if validation == "MALFORMED_OUTPUT" or "MALFORMED" in str(validation or ""):
             failure = "malformed_structured_output"
         elif validation not in {None, "VALID", "NOT_A_FACT"}:
@@ -779,6 +788,32 @@ def _tokens(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         output = diagnostics.get("eval_count", row.get("eval_count", row.get("output_tokens")))
         normalized.append({"prompt_eval_count": prompt, "eval_count": output})
     return token_totals(normalized)
+
+
+def _on_progress(context: RunContext, suite: str):
+    progress = context.progress
+    if progress is None:
+        return None
+
+    def callback(event: Mapping[str, Any]) -> None:
+        index = int(event["index"])
+        total = int(event["total"])
+        case_id = event.get("case_id")
+        if event.get("state") == "start":
+            progress.line(format_case_start(suite, index, total, case_id))
+            return
+        detail = event.get("detail")
+        progress.line(format_case_done(
+            suite,
+            index,
+            total,
+            case_id,
+            passed=event.get("passed"),
+            latency_ms=event.get("latency_ms"),
+            detail=str(detail) if detail and event.get("passed") is not True else None,
+        ))
+
+    return callback
 
 
 def _refuse_total_outage(cases: list[CaseRecord], url: str) -> None:

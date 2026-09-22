@@ -214,6 +214,12 @@ async def run(args):
     service.planner = LegacyTwoStagePlanner(client, service.engine.schema)
     unified = UnifiedShadowPlanner(client, service.engine.schema)
     rows = []
+    progress = getattr(args, "on_progress", None)
+
+    def _notify(index: int, total: int, label: str, state: str, **extra: Any) -> None:
+        if progress is not None:
+            progress({"index": index, "total": total, "case_id": label, "state": state, **extra})
+
     try:
         if args.group == "reads":
             cases = regression_cases(service, context)
@@ -226,11 +232,20 @@ async def run(args):
             for case in cases:
                 result, _, _, _ = await service.engine.execute(case.expected, context)
                 gold[case.case_id] = serialize_fact_result(result)
+            planned = 2 + 2 * args.repeat * len(cases)
+            step = 1
+            _notify(step, planned, "warmup existing", "start")
             await _existing(client, service, context, cases[0].utterance)
+            _notify(step, planned, "warmup existing", "done", passed=None)
+            step += 1
+            _notify(step, planned, "warmup unified", "start")
             await _unified(unified, context, cases[0].utterance)
+            _notify(step, planned, "warmup unified", "done", passed=None)
             for route in ("existing", "unified"):
                 for sample in range(args.repeat):
                     for case in cases:
+                        step += 1
+                        _notify(step, planned, f"{route} {case.case_id}", "start")
                         invocation = (
                             await _existing(client, service, context, case.utterance)
                             if route == "existing"
@@ -240,6 +255,13 @@ async def run(args):
                             route, sample, case, invocation, service, context,
                             gold[case.case_id],
                         ))
+                        row = rows[-1]
+                        _notify(
+                            step, planned, f"{route} {case.case_id}", "done",
+                            passed=bool(row.get("plan_correct")) and row.get("answer_correct") is not False,
+                            latency_ms=row.get("latency_ms"),
+                            detail=None if row.get("plan_correct") else row.get("validation_error"),
+                        )
         else:
             categories = ("write", "mixed", "ambiguous")
             if args.utterance:
@@ -251,35 +273,59 @@ async def run(args):
                 missing = set(args.utterance) - available
                 if missing:
                     raise ValueError(f"Unknown intent utterances: {sorted(missing)}")
+            selected = [
+                (category, utterance)
+                for category in categories
+                for utterance in dataset[category]
+                if not args.utterance or utterance in args.utterance
+            ]
+            planned = 2 + 2 * args.repeat * len(selected)
+            step = 1
             first = dataset["write"][0]
+            _notify(step, planned, "warmup existing", "start")
             await _existing(client, service, context, first)
+            _notify(step, planned, "warmup existing", "done", passed=None)
+            step += 1
+            _notify(step, planned, "warmup unified", "start")
             await _unified(unified, context, first)
+            _notify(step, planned, "warmup unified", "done", passed=None)
             for route in ("existing", "unified"):
                 for sample in range(args.repeat):
-                    for category in categories:
+                    for category, utterance in selected:
+                        step += 1
+                        _notify(step, planned, f"{route} {category}", "start")
                         gold_map = dataset.get(f"{category}_gold", {})
-                        for utterance in dataset[category]:
-                            if args.utterance and utterance not in args.utterance:
-                                continue
-                            expected = (
-                                NAMED_WRITE_ADAPTER.validate_python(gold_map[utterance]).model_dump(mode="json")
-                                if utterance in gold_map else None
-                            )
-                            expected_kind = (
-                                "mutation" if category == "write"
-                                else "multi_intent" if category == "mixed"
-                                else None
-                            )
-                            invocation = (
-                                await _existing(client, service, context, utterance)
-                                if route == "existing"
-                                else await _unified(unified, context, utterance)
-                            )
-                            rows.append(_intent_row(
-                                route, sample, category, utterance, invocation,
-                                expected, expected_kind,
-                            ))
-                            rows[-1]["expected_mutation"] = expected
+                        expected = (
+                            NAMED_WRITE_ADAPTER.validate_python(gold_map[utterance]).model_dump(mode="json")
+                            if utterance in gold_map else None
+                        )
+                        expected_kind = (
+                            "mutation" if category == "write"
+                            else "multi_intent" if category == "mixed"
+                            else None
+                        )
+                        invocation = (
+                            await _existing(client, service, context, utterance)
+                            if route == "existing"
+                            else await _unified(unified, context, utterance)
+                        )
+                        rows.append(_intent_row(
+                            route, sample, category, utterance, invocation,
+                            expected, expected_kind,
+                        ))
+                        rows[-1]["expected_mutation"] = expected
+                        row = rows[-1]
+                        ok = row.get("validation_error") is None and (
+                            (category == "write" and row.get("classification_correct") is True and row.get("payload_correct") is True)
+                            or (category == "mixed" and row.get("decision_kind") == "multi_intent" and row.get("partial_plan") is not True)
+                            or (category == "ambiguous" and row.get("decision_kind") != "mutation")
+                        )
+                        _notify(
+                            step, planned, f"{route} {category}", "done",
+                            passed=ok,
+                            latency_ms=row.get("latency_ms"),
+                            detail=row.get("validation_error") or row.get("decision_kind"),
+                        )
     finally:
         await client.close()
 

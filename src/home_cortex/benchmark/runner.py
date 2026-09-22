@@ -21,6 +21,7 @@ from .environment import (
     stable_digest,
 )
 from .present import format_run_report
+from .progress import ProgressLog
 from .records import (
     allocate_run_dir,
     build_summary,
@@ -47,10 +48,17 @@ class CompositeSuite:
 
     def run(self, context: RunContext) -> SuiteResult:
         parts: list[SuiteResult] = []
+        progress = getattr(context, "progress", None)
         for child in self.children:
+            if progress is not None:
+                progress.line(f"[{self.name}] component {child.name}")
             try:
                 parts.append(child.run(context))
             except Exception as error:
+                if progress is not None:
+                    progress.line(
+                        f"[{child.name}] stopped {type(error).__name__}: {error}"
+                    )
                 failed = harness_failure_result(child.name, error)
                 failed.notes.append(traceback.format_exc()[-4000:])
                 parts.append(failed)
@@ -102,6 +110,7 @@ def execute(
     root = repo_root()
     started = datetime.now().astimezone()
     run_id, directory = allocate_run_dir(results_root(request.results_dir))
+    progress = ProgressLog(directory / "progress.log")
     data_dir = request.data_dir or (root / "data")
     schema_dir = request.schema_dir or (root / "schemas" / "edge")
     try:
@@ -136,59 +145,69 @@ def execute(
         limit=request.limit,
         verified_cold=request.verified_cold,
         allow_nonstandard_host=request.allow_nonstandard_host,
+        progress=progress,
+    )
+    progress.line(
+        f"[hc-bench] run {run_id} suite={request.suite} model={request.model} "
+        f"url={ollama_url}"
     )
     harness_trace = ""
     try:
-        result = suite.run(context)
-    except Exception as error:
-        result = harness_failure_result(suite.name, error)
-        harness_trace = traceback.format_exc()
-    finished = datetime.now().astimezone()
-    fingerprints = _fingerprints(result, request)
-    summary = build_summary(result, cache_state=request.cache_state)
-    if harness_trace:
-        summary["notes"] = [*summary.get("notes", []), harness_trace[-4000:]]
-    ollama = dict(environment.get("ollama") or {})
-    options = dict(ollama.get("options") or planner_options(request.num_ctx))
-    if request.num_ctx is not None:
-        options["num_ctx"] = request.num_ctx
-    ollama["options"] = options
-    ollama["requested_num_ctx"] = options.get("num_ctx")
-    ollama["base_url"] = ollama_url
-    if endpoint_note:
-        ollama["endpoint_note"] = endpoint_note
-    run = {
-        "run_id": run_id,
-        "label": request.label,
-        "started_at": started.isoformat(timespec="seconds"),
-        "finished_at": finished.isoformat(timespec="seconds"),
-        "home_cortex": {
-            **(environment.get("git") or {}),
-            "planner_mode": environment.get("planner_mode", "semantic_interpreter"),
-        },
-        "ollama": ollama,
-        "environment": environment.get("hardware") or {},
-        "suites": [request.suite],
-        "components": list(result.components or (request.suite,)),
-        "requirements": {
-            "requires_real_model": suite.requires_real_model,
-            "requires_gpu_host": suite.requires_gpu_host,
-        },
-        "fingerprints": fingerprints,
-        "nonstandard_environment": nonstandard,
-        "cache_state": request.cache_state,
-        "requested_repetitions": {
-            "warmup": request.warmup,
-            "repetitions": request.repetitions,
-            "verified_cold": request.verified_cold,
-            "limit": request.limit,
-        },
-        "results_path": str(directory),
-        "timing_policy": result.timing_policy,
-    }
-    report = format_run_report(run, summary)
-    write_run(directory, run, summary, result.cases, report)
-    print(report, end="" if report.endswith("\n") else "\n")
+        try:
+            result = suite.run(context)
+        except Exception as error:
+            result = harness_failure_result(suite.name, error)
+            harness_trace = traceback.format_exc()
+            progress.line(f"[{request.suite}] stopped {type(error).__name__}: {error}")
+        finished = datetime.now().astimezone()
+        fingerprints = _fingerprints(result, request)
+        summary = build_summary(result, cache_state=request.cache_state)
+        if harness_trace:
+            summary["notes"] = [*summary.get("notes", []), harness_trace[-4000:]]
+        ollama = dict(environment.get("ollama") or {})
+        options = dict(ollama.get("options") or planner_options(request.num_ctx))
+        if request.num_ctx is not None:
+            options["num_ctx"] = request.num_ctx
+        ollama["options"] = options
+        ollama["requested_num_ctx"] = options.get("num_ctx")
+        ollama["base_url"] = ollama_url
+        if endpoint_note:
+            ollama["endpoint_note"] = endpoint_note
+        run = {
+            "run_id": run_id,
+            "label": request.label,
+            "started_at": started.isoformat(timespec="seconds"),
+            "finished_at": finished.isoformat(timespec="seconds"),
+            "home_cortex": {
+                **(environment.get("git") or {}),
+                "planner_mode": environment.get("planner_mode", "semantic_interpreter"),
+            },
+            "ollama": ollama,
+            "environment": environment.get("hardware") or {},
+            "suites": [request.suite],
+            "components": list(result.components or (request.suite,)),
+            "requirements": {
+                "requires_real_model": suite.requires_real_model,
+                "requires_gpu_host": suite.requires_gpu_host,
+            },
+            "fingerprints": fingerprints,
+            "nonstandard_environment": nonstandard,
+            "cache_state": request.cache_state,
+            "requested_repetitions": {
+                "warmup": request.warmup,
+                "repetitions": request.repetitions,
+                "verified_cold": request.verified_cold,
+                "limit": request.limit,
+            },
+            "results_path": str(directory),
+            "timing_policy": result.timing_policy,
+        }
+        report = format_run_report(run, summary)
+        write_run(directory, run, summary, result.cases, report)
+        print(report, end="" if report.endswith("\n") else "\n")
+        progress.line(f"[hc-bench] finished {run_id}")
+    finally:
+        progress.close()
     gate_failed = any(gate.get("status") == "fail" for gate in summary.get("gates") or [])
     harness_failed = (summary.get("failure_counts") or {}).get("benchmark_harness_failure", 0) > 0
     if gate_failed:

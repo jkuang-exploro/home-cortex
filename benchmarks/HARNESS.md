@@ -60,9 +60,13 @@ benchmarks/results/<run-id>/
   summary.json
   cases.jsonl
   stdout.log
+  progress.log
 ```
 
-The printed report is rendered from `summary.json` and `run.json`. There is no
+While a run is in progress, each case is logged to stderr and to
+`progress.log` in the run directory (`...` when the model call starts, then
+pass or fail and the latency when it returns). The printed report is rendered
+from `summary.json` and `run.json`. There is no
 second scoring pass and no single aggregate score. Plan correctness, answer
 correctness, mutation payload, preview, commit, rejection, and multi-intent
 stay separate. A faster model that breaks preview or commit exits 3.
