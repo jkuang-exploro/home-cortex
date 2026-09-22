@@ -23,6 +23,10 @@ deployment hostname.
   the last successful render, which was the loading state.
 - The client also had no timeout, so a genuinely stalled proxy could produce the
   same permanent loading symptom.
+- Deployment `docker ps` evidence confirmed the mismatch: `home_media` and
+  `home-gui` were created about 50 minutes earlier, while `cortex-proxy-1` was
+  created 13 hours earlier. The running nginx process therefore never loaded the
+  new bind-mounted configuration.
 
 ## Decisions
 
@@ -36,6 +40,8 @@ deployment hostname.
 - Updated `src/home_gui/src/lib/media.ts` with request timeout handling, JSON
   content-type checks, error-envelope parsing, and list/refresh payload validation.
 - Extended the frontend boundary guard for the timeout and invalid-response checks.
+- No additional repository changes were needed after the container-age evidence;
+  recreating the deployed proxy is the required operational correction.
 
 ## Validation
 
@@ -46,10 +52,10 @@ deployment hostname.
 
 ## Remaining Issues
 
-- The deployment must rebuild/recreate `home_media`, `home-gui`, and `proxy`; the
-  currently running proxy does not have the `/media-api/` route.
+- The deployment must recreate `proxy`; the running proxy predates the
+  `/media-api/` configuration.
 
 ## Recommended Next Step
 
-On `home-cortex-0`, run the Compose build/up command for `home_media`, `home-gui`,
-and `proxy`, then verify `/media-api/health` returns JSON before refreshing `/media`.
+On `home-cortex-0`, force-recreate `proxy`, confirm `nginx -T` contains the media
+location, then verify the internal service health and reload `/media`.

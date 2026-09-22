@@ -17,7 +17,7 @@ services:
     depends_on:
       - home-gui
       - cortex-api
-      - home_media
+      - home-media
 
   home-gui:
     build:
@@ -28,9 +28,9 @@ services:
     expose:
       - "3000"
 
-  home_media:
+  home-media:
     build:
-      context: ../home_media
+      context: ../home-media
       dockerfile: Dockerfile
     image: home-cortex/media:0.1.0
     restart: unless-stopped

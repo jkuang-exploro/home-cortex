@@ -69,7 +69,7 @@ async function mediaRequest(
       );
     }
     throw mediaError(
-      'The media API returned the web app instead of JSON. Rebuild and restart nginx and home_media together.',
+      'The media API returned the web app instead of JSON. Rebuild and restart nginx and home-media together.',
       502,
       'invalid_media_response',
     );
@@ -97,7 +97,7 @@ export async function listMedia(type: MediaFilter, offset = 0, limit = 100): Pro
   const payload = await mediaRequest(`/items?${query}`);
   if (!isMediaPage(payload)) {
     throw mediaError(
-      'The media API returned an invalid item list. Rebuild and restart nginx and home_media together.',
+      'The media API returned an invalid item list. Rebuild and restart nginx and home-media together.',
       502,
       'invalid_media_response',
     );

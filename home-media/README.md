@@ -1,9 +1,10 @@
-# home_media
+# home-media
 
-`home_media` is the independent, read-only photo and video service used by the
+`home-media` is the independent, read-only photo and video service used by the
 Home Cortex web application. It recursively indexes configured source roots into
 a rebuildable SQLite database and generates thumbnails or video posters lazily.
-It has no Python dependency on `home_cortex`.
+Its import package remains `home_media`, because Python identifiers cannot contain
+hyphens. It has no Python dependency on `home_cortex`.
 
 ## Runtime contract
 
@@ -43,9 +44,9 @@ network and has no published host port.
 ## Local development
 
 ```bash
-uv sync --project home_media --extra dev
-uv run --project home_media --extra dev pytest
-uv run --project home_media uvicorn home_media.app:app --reload --port 8002
+uv sync --project home-media --extra dev
+uv run --project home-media --extra dev pytest
+uv run --project home-media uvicorn home_media.app:app --reload --port 8002
 ```
 
 All source-media operations are reads. V1 deliberately has no upload, delete,

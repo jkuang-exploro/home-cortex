@@ -15,12 +15,13 @@ GUI_DOCKERFILE = ROOT / "src" / "home_gui" / "Dockerfile"
 def test_nginx_is_the_only_lan_facing_web_entrypoint() -> None:
     services = yaml.safe_load(COMPOSE.read_text())["services"]
 
+    assert "home_media" not in services
     assert services["proxy"]["ports"] == ["80:80"]
     assert "ports" not in services["home-gui"]
     assert services["home-gui"]["expose"] == ["3000"]
-    assert "ports" not in services["home_media"]
-    assert services["home_media"]["expose"] == ["8000"]
-    assert services["home_media"]["volumes"] == [
+    assert "ports" not in services["home-media"]
+    assert services["home-media"]["expose"] == ["8000"]
+    assert services["home-media"]["volumes"] == [
         "/opt/data/photo:/media/photo:ro",
         "/opt/data/video:/media/video:ro",
         "/opt/data/home-media-cache:/data",
@@ -37,7 +38,7 @@ def test_nginx_routes_gui_and_api_over_the_compose_network() -> None:
     assert "resolver 127.0.0.11" in config
     assert "server home-gui:3000 resolve;" in config
     assert "server cortex-api:8000 resolve;" in config
-    assert "server home_media:8000 resolve;" in config
+    assert "server home-media:8000 resolve;" in config
     assert len(re.findall(r"^\s*location / \{", config, re.MULTILINE)) == 1
     for route in (
         "/session",
@@ -53,7 +54,7 @@ def test_nginx_routes_gui_and_api_over_the_compose_network() -> None:
         assert route in config
     assert "location /media-api/" in config
     assert "auth_request /_media_auth;" in config
-    assert "proxy_pass http://home_media/;" in config
+    assert "proxy_pass http://home-media/;" in config
     assert "proxy_pass http://cortex_api/session;" in config
     assert "proxy_method GET;" in config
 
