@@ -4,12 +4,15 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MEDIA_SOURCE = ROOT / "home-media" / "src" / "home_media"
+MEDIA_PROJECT = ROOT / "src" / "home_media"
+MEDIA_SOURCE = MEDIA_PROJECT / "src" / "home_media"
 GUI_SOURCE = ROOT / "src" / "home_gui" / "src"
 
 
 def test_media_and_cortex_python_packages_do_not_import_each_other() -> None:
+    assert not (ROOT / "home-media").exists()
     assert not (ROOT / "home_media").exists()
+    assert MEDIA_PROJECT.is_dir()
     assert MEDIA_SOURCE.is_dir()
     media_text = "\n".join(path.read_text() for path in MEDIA_SOURCE.glob("*.py"))
     cortex_text = "\n".join(

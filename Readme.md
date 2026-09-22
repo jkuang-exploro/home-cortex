@@ -126,5 +126,5 @@ After signing in, open `http://home-cortex-0/media` and use **Refresh library**
 to build or update the media index. Compose mounts `/opt/data/photo` and
 `/opt/data/video` read-only; the rebuildable SQLite index and derivative cache
 live under `/opt/data/home-media-cache`. See
-[`home-media/README.md`](home-media/README.md) for the API, stable-ID,
+[`src/home_media/README.md`](src/home_media/README.md) for the API, stable-ID,
 timestamp, and security contracts.

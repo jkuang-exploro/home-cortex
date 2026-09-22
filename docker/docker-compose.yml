@@ -30,7 +30,7 @@ services:
 
   home-media:
     build:
-      context: ../home-media
+      context: ../src/home_media
       dockerfile: Dockerfile
     image: home-cortex/media:0.1.0
     restart: unless-stopped

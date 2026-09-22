@@ -44,9 +44,9 @@ network and has no published host port.
 ## Local development
 
 ```bash
-uv sync --project home-media --extra dev
-uv run --project home-media --extra dev pytest
-uv run --project home-media uvicorn home_media.app:app --reload --port 8002
+uv sync --project src/home_media --extra dev
+uv run --project src/home_media --extra dev pytest
+uv run --project src/home_media uvicorn home_media.app:app --reload --port 8002
 ```
 
 All source-media operations are reads. V1 deliberately has no upload, delete,
