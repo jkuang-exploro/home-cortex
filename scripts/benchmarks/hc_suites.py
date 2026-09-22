@@ -602,7 +602,7 @@ async def _run_unified(suite: UnifiedSuite, context: RunContext) -> SuiteResult:
         files["bilingual"] = PROJECT_ROOT / "benchmarks" / "semantic_planner_bilingual.yaml"
         files["eval"] = PROJECT_ROOT / "benchmarks" / "semantic_planner_eval.yaml"
     for group in suite.groups:
-        report = await _experiment_group(run, context, group)
+        report = await _experiment_group(run, context, group, suite.name)
         routes[group] = report.get("summary")
         rows = report.get("rows") or []
         cases.extend(mutation_cases(rows, suite=suite.name))
@@ -627,7 +627,9 @@ async def _run_unified(suite: UnifiedSuite, context: RunContext) -> SuiteResult:
     )
 
 
-async def _experiment_group(run: Any, context: RunContext, group: str) -> dict[str, Any]:
+async def _experiment_group(
+    run: Any, context: RunContext, group: str, suite_name: str,
+) -> dict[str, Any]:
     utterances = _limited_utterances(context, group)
     with tempfile.TemporaryDirectory() as tmp:
         output = Path(tmp) / "report.json"
@@ -641,7 +643,7 @@ async def _experiment_group(run: Any, context: RunContext, group: str) -> dict[s
             repeat=1,
             utterance=utterances,
             output=output,
-            on_progress=_on_progress(context, suite.name),
+            on_progress=_on_progress(context, suite_name),
         )
         with contextlib.redirect_stdout(io.StringIO()):
             await run(args)

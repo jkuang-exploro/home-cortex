@@ -32,7 +32,7 @@ from home_cortex.benchmark.registry import registry, reset_registry
 from home_cortex.benchmark.runner import CompositeSuite, execute, plan_matrix
 from home_cortex.benchmark.stats import percentile
 from home_cortex.benchmark.taxonomy import classify_planner_failure
-from home_cortex.benchmark.types import CaseRecord, Metric, RunRequest, SuiteResult
+from home_cortex.benchmark.types import CaseRecord, Metric, RunContext, RunRequest, SuiteResult
 from scripts.benchmarks.fact_benchmark import _percentile
 from scripts.benchmarks.hc_suites import mutation_metrics, planner_metrics, register
 
@@ -161,6 +161,40 @@ def isolated_registry():
     reset_registry()
     yield registry()
     reset_registry()
+
+
+def test_mutation_progress_callback_is_bound(tmp_path: Path) -> None:
+    import asyncio
+
+    from home_cortex.benchmark.progress import ProgressLog
+    from scripts.benchmarks.hc_suites import _experiment_group
+
+    async def fake_run(args: object) -> None:
+        callback = args.on_progress  # type: ignore[attr-defined]
+        callback({"index": 1, "total": 4, "case_id": "warmup existing", "state": "start"})
+        args.output.write_text('{"rows": [], "summary": {}}', encoding="utf-8")  # type: ignore[attr-defined]
+
+    progress = ProgressLog(tmp_path / "progress.log")
+    context = RunContext(
+        model="widget:test",
+        ollama_url="http://127.0.0.1:9",
+        label=None,
+        data_dir=tmp_path,
+        schema_dir=tmp_path,
+        results_dir=tmp_path,
+        cache_state="unknown",
+        warmup=None,
+        repetitions=None,
+        num_ctx=None,
+        limit=1,
+        verified_cold=False,
+        allow_nonstandard_host=True,
+        progress=progress,
+    )
+    asyncio.run(_experiment_group(fake_run, context, "intents", "mutation"))
+    progress.close()
+    text = (tmp_path / "progress.log").read_text(encoding="utf-8")
+    assert "[mutation] 1/4 warmup existing ..." in text
 
 
 def test_progress_lines_show_a_case_start_and_its_result() -> None:
