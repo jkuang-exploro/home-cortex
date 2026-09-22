@@ -67,6 +67,14 @@ second scoring pass and no single aggregate score. Plan correctness, answer
 correctness, mutation payload, preview, commit, rejection, and multi-intent
 stay separate. A faster model that breaks preview or commit exits 3.
 
+## Ollama address
+
+The project default is `http://ollama:11434`, the Compose service. That name
+resolves inside the API container. On the GPU host the port is not published,
+so `hc-bench` checks localhost and then the running Ollama container's bridge
+address. It prints the address it actually used. `--ollama-url` is never
+replaced. If nothing answers, the command exits without recording model scores.
+
 ## Host policy
 
 Real-model suites declare `requires_gpu_host`. Off `home-cortex-0` the run

@@ -375,9 +375,11 @@ async def _run_planner(context: RunContext) -> SuiteResult:
     finally:
         await client.close()
     rows = report["queries"]
+    cases = planner_cases(rows, suite="planner")
+    _refuse_total_outage(cases, context.ollama_url)
     return _result(
         "planner",
-        planner_cases(rows, suite="planner"),
+        cases,
         planner_metrics(report, suite="planner"),
         _fingerprint(context, prompt, {"eval": eval_path}, scoring=SCORING_REVISION, warmup=0, repetitions=1),
         _tokens(rows),
@@ -403,8 +405,14 @@ async def _run_fact(context: RunContext) -> SuiteResult:
         model=context.model,
     )
     prompt = _prompt_for(context)
+    queries = report["queries"]
+    if queries and all(row.get("result_status") == "semantic_plan_unsupported" for row in queries):
+        raise RuntimeError(
+            "Every fact case failed before a plan was produced "
+            f"at {context.ollama_url}. Those rows are not model scores."
+        )
     cases = []
-    for row in report["queries"]:
+    for row in queries:
         cases.append(
             CaseRecord(
                 suite="fact",
@@ -485,9 +493,11 @@ async def _run_latency(context: RunContext) -> SuiteResult:
     finally:
         await client.close()
     rows = report["queries"]
+    cases = planner_cases(rows, suite="latency")
+    _refuse_total_outage(cases, context.ollama_url)
     return _result(
         "latency",
-        planner_cases(rows, suite="latency"),
+        cases,
         planner_metrics(
             report,
             suite="latency",
@@ -769,6 +779,17 @@ def _tokens(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         output = diagnostics.get("eval_count", row.get("eval_count", row.get("output_tokens")))
         normalized.append({"prompt_eval_count": prompt, "eval_count": output})
     return token_totals(normalized)
+
+
+def _refuse_total_outage(cases: list[CaseRecord], url: str) -> None:
+    """A dead endpoint is not a model score of zero."""
+
+    scoring = [case for case in cases if case.metrics.get("counts_toward_score", True)]
+    if scoring and all(case.failure_type == "ollama_runtime_error" for case in scoring):
+        raise RuntimeError(
+            f"Every scored case failed to reach Ollama at {url}. "
+            "This run was not scored as a model result."
+        )
 
 
 def _ignored_repeat_note(context: RunContext) -> list[str]:

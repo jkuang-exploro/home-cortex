@@ -19,6 +19,7 @@ def format_run_report(run: Mapping[str, Any], summary: Mapping[str, Any]) -> str
         f"Label: {run.get('label') or '-'}",
         f"Suite: {', '.join(run.get('suites') or [])}",
         f"Model: {ollama.get('model')}",
+        f"Ollama URL: {ollama.get('base_url') or 'unknown'}",
         f"Ollama version: {ollama.get('version') or 'unavailable'}",
         f"Model tag: {ollama.get('tag') or '-'}",
         f"Model digest: {ollama.get('digest') or 'unavailable'}",

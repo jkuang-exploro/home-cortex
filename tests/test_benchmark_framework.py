@@ -13,7 +13,13 @@ import pytest
 
 from home_cortex.benchmark.cli import build_parser, main
 from home_cortex.benchmark.compare import build_comparison
-from home_cortex.benchmark.environment import ollama_metadata, split_model_ref, stable_digest
+from home_cortex.benchmark.environment import (
+    OllamaUnreachable,
+    ollama_metadata,
+    resolve_ollama_url,
+    split_model_ref,
+    stable_digest,
+)
 from home_cortex.benchmark.present import format_comparison, format_run_report
 from home_cortex.benchmark.records import (
     allocate_run_dir,
@@ -98,6 +104,16 @@ def _result(
         timing_policy="one scoring pass",
         failure_overrides=overrides or {},
     )
+
+
+def _keep_endpoint(url: str | None, explicit: bool = False) -> tuple[str, str | None]:
+    return (url or "http://127.0.0.1:9", None)
+
+
+def _execute(request: RunRequest, **kwargs: object) -> int:
+    kwargs.setdefault("endpoint_resolver", _keep_endpoint)
+    kwargs.setdefault("environment_collector", _collector)
+    return execute(request, **kwargs)  # type: ignore[arg-type]
 
 
 def _collector(**kwargs: object) -> dict:
@@ -312,7 +328,7 @@ def test_run_writes_immutable_records_and_marks_a_dirty_tree(
     isolated_registry, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     isolated_registry.register(Widget(_result()))
-    code = execute(_request(tmp_path), environment_collector=_collector)
+    code = _execute(_request(tmp_path))
     assert code == 0
     printed = capsys.readouterr().out
     assert "git_dirty = true" in printed
@@ -339,7 +355,7 @@ def test_wrong_host_refuses_without_creating_a_run(
 ) -> None:
     monkeypatch.setattr("home_cortex.benchmark.runner.is_designated_gpu_host", lambda: False)
     isolated_registry.register(Widget(_result(), gpu=True))
-    code = execute(_request(tmp_path), environment_collector=_collector)
+    code = _execute(_request(tmp_path))
     assert code == 2
     assert "Refusing" in capsys.readouterr().err
     assert list(tmp_path.iterdir()) == []
@@ -350,7 +366,7 @@ def test_host_override_records_nonstandard_environment(
 ) -> None:
     monkeypatch.setattr("home_cortex.benchmark.runner.is_designated_gpu_host", lambda: False)
     isolated_registry.register(Widget(_result(), gpu=True))
-    code = execute(
+    code = _execute(
         _request(tmp_path, allow_nonstandard_host=True),
         environment_collector=_collector,
     )
@@ -366,12 +382,12 @@ def test_safety_gate_and_harness_exit_codes(
         metrics=[Metric("preview_as_commit", "Preview compiled as commit", "count", value=1, lower_is_better=True)]
     )
     isolated_registry.register(Widget(unsafe))
-    assert execute(_request(tmp_path / "gate"), environment_collector=_collector) == 3
+    assert _execute(_request(tmp_path / "gate")) == 3
 
     reset_registry()
     broken = Widget(RuntimeError("adapter exploded"))
     registry().register(broken)
-    code = execute(_request(tmp_path / "harness"), environment_collector=_collector)
+    code = _execute(_request(tmp_path / "harness"))
     assert code == 1
     _run, summary = load_run(next(path for path in (tmp_path / "harness").iterdir() if path.is_dir()))
     assert summary["failure_counts"]["benchmark_harness_failure"] == 1
@@ -384,7 +400,7 @@ def test_compare_warns_on_fingerprint_mismatch_and_fails_safety_regression(tmp_p
     first = tmp_path / "a"
     second = tmp_path / "b"
     third = tmp_path / "c"
-    assert execute(_request(first, label="base"), environment_collector=_collector) == 0
+    assert _execute(_request(first, label="base")) == 0
     reset_registry()
     registry().register(
         Widget(
@@ -408,7 +424,7 @@ def test_compare_warns_on_fingerprint_mismatch_and_fails_safety_regression(tmp_p
             )
         )
     )
-    assert execute(_request(second, label="cand"), environment_collector=_collector) == 0
+    assert _execute(_request(second, label="cand")) == 0
     base_dir = next(path for path in first.iterdir() if path.is_dir())
     cand_dir = next(path for path in second.iterdir() if path.is_dir())
     base_run, base_summary = load_run(base_dir)
@@ -444,7 +460,7 @@ def test_compare_warns_on_fingerprint_mismatch_and_fails_safety_regression(tmp_p
 
     reset_registry()
     registry().register(Widget(_result(corpus="aaa", prompt="other-prompt")))
-    assert execute(_request(third), environment_collector=_collector) == 0
+    assert _execute(_request(third)) == 0
     other = load_run(next(path for path in third.iterdir() if path.is_dir()))
     prompt_comparison = build_comparison(base_run, base_summary, other[0], other[1])
     assert any("Prompt fingerprints differ" in warning for warning in prompt_comparison.warnings)
@@ -452,7 +468,7 @@ def test_compare_warns_on_fingerprint_mismatch_and_fails_safety_regression(tmp_p
 
 def test_show_failures_and_named_baseline(isolated_registry, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     isolated_registry.register(Widget(_result()))
-    assert execute(_request(tmp_path), environment_collector=_collector) == 0
+    assert _execute(_request(tmp_path)) == 0
     run_dir = next(path for path in tmp_path.iterdir() if path.is_dir())
     capsys.readouterr()
     code = main(["show", run_dir.name, "--failures", "--results-dir", str(tmp_path)])
@@ -516,6 +532,59 @@ def test_allocate_run_dir_does_not_overwrite(tmp_path: Path) -> None:
     assert other != directory
 
 
+def test_default_ollama_url_can_move_to_the_compose_container() -> None:
+    def probe(url: str) -> bool:
+        return url == "http://172.21.0.4:11434"
+
+    url, note = resolve_ollama_url(
+        "http://ollama:11434",
+        explicit=False,
+        reachable=probe,
+        docker_candidates=lambda: [("http://172.21.0.4:11434", "Docker container cortex-ollama-1")],
+    )
+    assert url == "http://172.21.0.4:11434"
+    assert note is not None
+    assert "not reachable" in note
+    assert "cortex-ollama-1" in note
+
+
+def test_explicit_ollama_url_is_not_replaced() -> None:
+    with pytest.raises(OllamaUnreachable) as error:
+        resolve_ollama_url(
+            "http://127.0.0.1:9",
+            explicit=True,
+            reachable=lambda _url: False,
+            docker_candidates=lambda: [("http://172.21.0.4:11434", "container")],
+        )
+    assert "not scored" in str(error.value)
+    assert "172.21.0.4" not in str(error.value)
+
+
+def test_reachable_url_does_not_scan_docker() -> None:
+    url, note = resolve_ollama_url(
+        "http://ollama:11434",
+        explicit=False,
+        reachable=lambda _url: True,
+        docker_candidates=lambda: (_ for _ in ()).throw(AssertionError("docker")),
+    )
+    assert url == "http://ollama:11434"
+    assert note is None
+
+
+def test_unreachable_ollama_writes_no_score(
+    isolated_registry, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    isolated_registry.register(Widget(_result()))
+
+    def resolver(_url: str | None, explicit: bool = False) -> tuple[str, str | None]:
+        raise OllamaUnreachable("Ollama is not reachable, so this run was not scored.")
+
+    code = _execute(_request(tmp_path), endpoint_resolver=resolver)
+    assert code == 1
+    assert "not scored" in capsys.readouterr().err
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_ollama_metadata_uses_the_api_and_does_not_infer_quantization() -> None:
     def opener(request: object, timeout: float = 2.0) -> _Body:
         assert timeout
@@ -559,8 +628,8 @@ def test_ollama_metadata_uses_the_api_and_does_not_infer_quantization() -> None:
 def test_config_fingerprint_changes_when_the_limit_changes(tmp_path: Path) -> None:
     reset_registry()
     registry().register(Widget(_result()))
-    execute(_request(tmp_path / "one", limit=1), environment_collector=_collector)
-    execute(_request(tmp_path / "two", limit=2), environment_collector=_collector)
+    _execute(_request(tmp_path / "one", limit=1))
+    _execute(_request(tmp_path / "two", limit=2))
     one = load_run(next(path for path in (tmp_path / "one").iterdir() if path.is_dir()))[0]
     two = load_run(next(path for path in (tmp_path / "two").iterdir() if path.is_dir()))[0]
     assert one["fingerprints"]["config"] != two["fingerprints"]["config"]

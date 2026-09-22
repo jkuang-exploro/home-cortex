@@ -10,12 +10,14 @@ from typing import Any, Callable, Mapping
 
 from .environment import (
     CACHE_STATES,
+    OllamaUnreachable,
     collect_environment,
     designated_gpu_hosts,
     instruction_prompt_fingerprint,
     is_designated_gpu_host,
     planner_options,
     repo_root,
+    resolve_ollama_url,
     stable_digest,
 )
 from .present import format_run_report
@@ -65,6 +67,7 @@ def execute(
     request: RunRequest,
     *,
     environment_collector: EnvironmentCollector = collect_environment,
+    endpoint_resolver: Callable[..., tuple[str, str | None]] = resolve_ollama_url,
 ) -> int:
     """Run one suite. Returns 0, 1 (harness), 2 (usage or host), or 3 (safety gate)."""
 
@@ -86,6 +89,16 @@ def execute(
             file=sys.stderr,
         )
         return 2
+    try:
+        ollama_url, endpoint_note = endpoint_resolver(
+            request.ollama_url, explicit=request.ollama_url_explicit,
+        )
+    except OllamaUnreachable as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    if endpoint_note:
+        print(endpoint_note)
+    request.ollama_url = ollama_url
     root = repo_root()
     started = datetime.now().astimezone()
     run_id, directory = allocate_run_dir(results_root(request.results_dir))
@@ -141,6 +154,9 @@ def execute(
         options["num_ctx"] = request.num_ctx
     ollama["options"] = options
     ollama["requested_num_ctx"] = options.get("num_ctx")
+    ollama["base_url"] = ollama_url
+    if endpoint_note:
+        ollama["endpoint_note"] = endpoint_note
     run = {
         "run_id": run_id,
         "label": request.label,

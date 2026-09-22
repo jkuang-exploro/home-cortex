@@ -86,8 +86,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--label", help="Human label stored with the run. Not a run id")
     run.add_argument(
         "--ollama-url",
-        default=DEFAULT_OLLAMA_URL,
-        help=f"Ollama base URL (default: {DEFAULT_OLLAMA_URL}). Compose uses http://ollama:11434",
+        default=None,
+        help=(
+            "Ollama base URL. The default is the project OLLAMA_URL "
+            f"({DEFAULT_OLLAMA_URL}). If that name is not reachable from this "
+            "host, hc-bench uses localhost or the Compose container address. "
+            "An explicit value is never replaced."
+        ),
     )
     run.add_argument("--results-dir", type=Path, help="Directory that holds run ids")
     run.add_argument("--data-dir", type=Path, help="Household JSON graph used by fact and planner suites")
@@ -150,7 +155,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the models and context lengths in a YAML file, one after another",
     )
     matrix.add_argument("path", type=Path, help="Matrix YAML. See benchmarks/matrix.example.yaml")
-    matrix.add_argument("--ollama-url", default=DEFAULT_OLLAMA_URL)
+    matrix.add_argument("--ollama-url", default=None)
     matrix.add_argument("--results-dir", type=Path)
     matrix.add_argument("--data-dir", type=Path)
     matrix.add_argument("--schema-dir", type=Path)
@@ -266,6 +271,7 @@ def _request_from_args(args: argparse.Namespace, *, suite: str, model: str, labe
         suite=suite,
         model=model,
         ollama_url=args.ollama_url,
+        ollama_url_explicit=args.ollama_url is not None,
         label=label,
         results_dir=args.results_dir,
         data_dir=getattr(args, "data_dir", None),

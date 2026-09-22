@@ -94,7 +94,8 @@ class RunRequest:
 
     suite: str
     model: str
-    ollama_url: str
+    ollama_url: str | None = None
+    ollama_url_explicit: bool = False
     label: str | None = None
     results_dir: Path | None = None
     data_dir: Path | None = None

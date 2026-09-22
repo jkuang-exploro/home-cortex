@@ -19,7 +19,10 @@ from typing import Any, Callable, Mapping
 
 DESIGNATED_GPU_HOSTS = frozenset({"home-cortex-0"})
 CACHE_STATES = ("warm", "cold", "unchanged", "unknown")
-DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
+# Compose service name. The API container uses this. The host often cannot
+# resolve it, because the Ollama port is not published.
+DEFAULT_OLLAMA_URL = "http://ollama:11434"
+LOCAL_OLLAMA_URL = "http://127.0.0.1:11434"
 
 Opener = Callable[..., Any]
 
@@ -252,6 +255,121 @@ def ollama_metadata(
         "options": planner_options(num_ctx),
         "requested_num_ctx": (num_ctx if num_ctx is not None else planner_options()["num_ctx"]),
     }
+
+
+class OllamaUnreachable(RuntimeError):
+    """The scoring run must not start. The endpoint never answered."""
+
+
+def configured_ollama_url() -> str:
+    """Project setting, then the Compose default. Does not open a connection."""
+
+    try:
+        from home_cortex.config import get_settings
+
+        configured = get_settings().ollama_url.strip()
+    except Exception:
+        configured = ""
+    return configured or DEFAULT_OLLAMA_URL
+
+
+def ollama_reachable(url: str, *, timeout: float = 2.0, opener: Opener = urllib.request.urlopen) -> bool:
+    version = _get_json(f"{url.rstrip('/')}/api/version", opener=opener, timeout=timeout)
+    return isinstance(version, Mapping) and bool(version.get("version"))
+
+
+def docker_ollama_candidates(
+    runner: Callable[..., str] | None = None,
+) -> list[tuple[str, str]]:
+    """Host-reachable addresses of a local Ollama container, if Docker can see one.
+
+    Compose does not publish port 11434. From the GPU host the container bridge
+    address is what answers. Each item is ``(url, why)``.
+    """
+
+    command = runner or _docker_output
+    try:
+        names = [
+            name.strip()
+            for name in command(
+                ["docker", "ps", "--filter", "name=ollama", "--format", "{{.Names}}"]
+            ).splitlines()
+            if "ollama" in name.lower()
+        ]
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return []
+    found: list[tuple[str, str]] = []
+    for name in names:
+        try:
+            raw = command(
+                [
+                    "docker", "inspect", "-f",
+                    "{{range .NetworkSettings.Networks}}{{.IPAddress}}\n{{end}}",
+                    name,
+                ]
+            )
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            continue
+        for address in raw.split():
+            if address and ":" not in address:
+                found.append((f"http://{address}:11434", f"Docker container {name}"))
+    return found
+
+
+def resolve_ollama_url(
+    url: str | None,
+    *,
+    explicit: bool,
+    reachable: Callable[[str], bool] | None = None,
+    docker_candidates: Callable[[], list[tuple[str, str]]] | None = None,
+) -> tuple[str, str | None]:
+    """Pick an endpoint that answers ``/api/version``.
+
+    An explicit ``--ollama-url`` is never replaced. The default may move from
+    the Compose hostname to localhost or to the container address.
+    """
+
+    probe = reachable or ollama_reachable
+    lookup = docker_candidates or docker_ollama_candidates
+    chosen = (url or configured_ollama_url()).rstrip("/")
+    if probe(chosen):
+        return chosen, None
+    if explicit:
+        raise OllamaUnreachable(_unreachable_message([chosen]))
+    tried = [chosen]
+    fallbacks: list[tuple[str, str]] = []
+    if chosen != LOCAL_OLLAMA_URL.rstrip("/"):
+        fallbacks.append((LOCAL_OLLAMA_URL, "localhost"))
+    fallbacks.extend(lookup())
+    for candidate, why in fallbacks:
+        candidate = candidate.rstrip("/")
+        if candidate in tried:
+            continue
+        tried.append(candidate)
+        if probe(candidate):
+            return candidate, (
+                f"{chosen} is not reachable from this host. "
+                f"Using {candidate} ({why})."
+            )
+    raise OllamaUnreachable(_unreachable_message(tried))
+
+
+def _unreachable_message(tried: list[str]) -> str:
+    lines = [
+        "Ollama is not reachable, so this run was not scored.",
+        "Tried:",
+        *(f"  {item}" for item in tried),
+        "On home-cortex-0, Ollama is the Compose container and its port is not",
+        "published on localhost. hc-bench uses that container's address when",
+        "Docker can see it. Pass --ollama-url to choose a different endpoint.",
+    ]
+    return "\n".join(lines)
+
+
+def _docker_output(args: list[str]) -> str:
+    return subprocess.check_output(
+        args, text=True, stderr=subprocess.DEVNULL, timeout=3,
+    )
 
 
 def collect_environment(
