@@ -341,6 +341,7 @@ class PlannerDiagnostics:
     eval_duration_ms: float = 0
     load_duration_ms: float = 0
     transport: Mapping[str, Any] | None = None
+    done_reason: str | None = None
 
 
 @dataclass(frozen=True)

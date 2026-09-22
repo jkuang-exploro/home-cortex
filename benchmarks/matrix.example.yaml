@@ -1,0 +1,13 @@
+# Sequential model matrix. hc-bench does not download models or upgrade Ollama.
+# Run: hc-bench matrix benchmarks/matrix.example.yaml
+suite: standard
+
+models:
+  - qwen3.5:9b
+
+context_lengths:
+  - 8192
+  - 16384
+
+cache_state: unknown
+label: matrix

@@ -236,8 +236,9 @@ python -m pytest -q tests/test_semantic_composition.py tests/test_semantic_facts
 
 Real-model accuracy runs belong on the production GPU host from an isolated,
 fingerprinted package. Do not treat deterministic replay as model accuracy or
-fabricate benchmark numbers. Benchmark entry points and data are documented in
-`scripts/README.md` and the relevant `artifacts/*/REPORT.md`.
+fabricate benchmark numbers. Compare models with `hc-bench`
+(`benchmarks/HARNESS.md`). Other benchmark entry points and data are documented
+in `scripts/README.md` and the relevant `artifacts/*/REPORT.md`.
 
 Set `CORTEX_PROFILE_REQUESTS=1` to emit bounded request-stage and provider timing
 without prompts, results, identities, or graph values. `X-Request-ID` connects HTTP

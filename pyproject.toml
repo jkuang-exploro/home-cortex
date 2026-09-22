@@ -18,9 +18,13 @@ dependencies = [
 ]
 
 [project.scripts]
+hc-bench = "scripts.benchmarks.hc_bench:main"
 home-cortex-fact-benchmark = "scripts.benchmarks.fact_benchmark:main"
 home-cortex-semantic-planner-benchmark = "scripts.benchmarks.semantic_planner_benchmark:main"
 home-cortex-db-export = "scripts.maintenance.export_graph:main"
+
+[project.entry-points."home_cortex.benchmark_suites"]
+builtin = "scripts.benchmarks.hc_suites:register"
 
 [project.optional-dependencies]
 dev = [

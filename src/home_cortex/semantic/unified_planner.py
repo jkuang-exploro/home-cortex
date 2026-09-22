@@ -618,10 +618,16 @@ def _sum_runtime(runtimes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "eval_duration_ms",
         "load_duration_ms",
     )
-    return {
+    totals = {
         key: sum(float(runtime.get(key, 0) or 0) for runtime in runtimes)
         for key in keys
     }
+    for runtime in reversed(runtimes):
+        done = runtime.get("done_reason")
+        if isinstance(done, str) and done:
+            totals["done_reason"] = done
+            break
+    return totals
 
 
 def _validation_code(error: Exception | None) -> PlannerValidationCode:

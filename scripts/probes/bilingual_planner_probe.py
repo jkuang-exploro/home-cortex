@@ -296,6 +296,10 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     schema = service.engine.schema
     dataset = load_bilingual_dataset(DATASET)
     cases = iter_cases(dataset)
+    limit = getattr(args, "limit", None)
+    bounded = isinstance(limit, int) and not isinstance(limit, bool) and limit > 0
+    if bounded:
+        cases = cases[:limit]
     prompt = await measure_prompt_components(args.ollama_url, args.model, service)
     rows: list[dict[str, Any]] = []
     try:
@@ -304,45 +308,46 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         for sample in range(args.repeat):
             for case in cases:
                 rows.append({**await plan_case(service, context, schema, case, []), "sample_index": sample})
-            for sequence in dataset["discourse"]:
-                history: list[str] = []
-                for index, turn in enumerate(sequence["turns"]):
+            if not bounded:
+                for sequence in dataset["discourse"]:
+                    history: list[str] = []
+                    for index, turn in enumerate(sequence["turns"]):
+                        case = {
+                            "id": f"{sequence['id']}:t{index}",
+                            "pair_id": sequence["id"],
+                            "kind": "discourse",
+                            "category": sequence["category"],
+                            "language": classify(turn["utterance"]),
+                            "utterance": turn["utterance"],
+                            "expected": turn["expected"],
+                            "ignore_named_value": False,
+                            "requires_fact": True,
+                        }
+                        row = await plan_case(service, context, schema, case, history)
+                        row["sample_index"] = sample
+                        rows.append(row)
+                        history.append(turn["utterance"])
+                for item in dataset["negatives"]:
                     case = {
-                        "id": f"{sequence['id']}:t{index}",
-                        "pair_id": sequence["id"],
-                        "kind": "discourse",
-                        "category": sequence["category"],
-                        "language": classify(turn["utterance"]),
-                        "utterance": turn["utterance"],
-                        "expected": turn["expected"],
+                        "id": item["id"],
+                        "pair_id": item["id"],
+                        "kind": "negative",
+                        "category": "negative",
+                        "language": classify(item["utterance"]),
+                        "utterance": item["utterance"],
+                        "expected": item.get("expected") or {
+                            "operation": "resolve_reference",
+                            "subject": {
+                                "kind": item.get("expected_subject_kind", "self"),
+                                "entity_type": "person",
+                            },
+                        },
                         "ignore_named_value": False,
                         "requires_fact": True,
                     }
-                    row = await plan_case(service, context, schema, case, history)
+                    row = await plan_case(service, context, schema, case, [])
                     row["sample_index"] = sample
                     rows.append(row)
-                    history.append(turn["utterance"])
-            for item in dataset["negatives"]:
-                case = {
-                    "id": item["id"],
-                    "pair_id": item["id"],
-                    "kind": "negative",
-                    "category": "negative",
-                    "language": classify(item["utterance"]),
-                    "utterance": item["utterance"],
-                    "expected": item.get("expected") or {
-                        "operation": "resolve_reference",
-                        "subject": {
-                            "kind": item.get("expected_subject_kind", "self"),
-                            "entity_type": "person",
-                        },
-                    },
-                    "ignore_named_value": False,
-                    "requires_fact": True,
-                }
-                row = await plan_case(service, context, schema, case, [])
-                row["sample_index"] = sample
-                rows.append(row)
     finally:
         await ollama.close()
 

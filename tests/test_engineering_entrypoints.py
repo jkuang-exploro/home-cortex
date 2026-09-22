@@ -20,6 +20,7 @@ def test_runtime_has_no_engineering_dependencies():
 
 @pytest.mark.parametrize("module", [
     "benchmarks.fact_benchmark", "benchmarks.semantic_planner_benchmark",
+    "benchmarks.hc_bench",
     "benchmarks.tier1_latency_bench", "profiling.token_latency_audit",
     "profiling.token_component_probe", "profiling.http_latency_audit",
     "profiling.profile_semantic_transport", "probes.ollama_prefix_reuse_probe",

@@ -645,6 +645,7 @@ def serialize_diagnostics(diagnostics: Any | None) -> dict[str, Any] | None:
         "eval_count": getattr(diagnostics, "eval_count", None),
         "eval_duration_ms": getattr(diagnostics, "eval_duration_ms", None),
         "load_duration_ms": getattr(diagnostics, "load_duration_ms", None),
+        "done_reason": getattr(diagnostics, "done_reason", None),
         "transport": jsonable(getattr(diagnostics, "transport", None)),
         "output_raw": jsonable(getattr(diagnostics, "output_raw", None)),
         "normalized_plan": jsonable(getattr(diagnostics, "normalized_plan", None)),

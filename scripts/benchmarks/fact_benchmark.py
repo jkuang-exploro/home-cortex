@@ -19,6 +19,7 @@ from home_cortex.config import get_settings
 from home_cortex.persistence.db import Database
 from home_cortex.persistence.edge_schema import EdgeSchemaRegistry
 from home_cortex.providers.base import model_provider_from_settings
+from home_cortex.providers.ollama import OllamaService
 from home_cortex.persistence.retrieval import RetrievalService
 from home_cortex.persistence.schema_catalog import (
     RuntimeSchemaCatalog,
@@ -151,14 +152,28 @@ async def benchmark_json(
     schema_dir: Path,
     mode: BenchmarkMode = "semantic",
     questions: Sequence[str] = QUESTIONS,
+    *,
+    ollama_url: str | None = None,
+    model: str | None = None,
 ) -> dict[str, Any]:
+    """JSON-graph fact benchmark. ``model`` selects Ollama; the default path is unchanged.
+
+    This never opens the household database. ``benchmark_runtime`` is the separate
+    SurrealDB path and is not used by ``hc-bench``.
+    """
+
     steward = get_agent("steward")
     edge_registry = EdgeSchemaRegistry.from_directory(schema_dir)
     catalog = RuntimeSchemaCatalog.from_data_dir(data_dir, edge_registry)
     dispatcher = JsonGraphDispatcher(data_dir, edge_registry)
     schema = SemanticSchemaRegistry(catalog)
-    settings = get_settings()
-    llm = model_provider_from_settings(settings)
+    if model is not None:
+        if not ollama_url:
+            raise ValueError("ollama_url is required when model is set")
+        llm = OllamaService(ollama_url, model)
+    else:
+        settings = get_settings()
+        llm = model_provider_from_settings(settings)
     service = SemanticFactService(
         HouseholdFactEngine(dispatcher, schema),
         planner=SemanticFactPlanner(llm, schema),

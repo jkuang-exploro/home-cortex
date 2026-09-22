@@ -3,6 +3,9 @@
 **Dataset inputs for the semantic-planner and fact benchmarks. These are data,
 not active source code.**
 
+Model runs go through `hc-bench`, documented in `benchmarks/HARNESS.md`.
+The YAML files here stay the scoring inputs. `hc-bench` does not replace them.
+
 - `semantic_planner_eval.yaml` — the fixed planner suite (expected semantic IR
   per utterance).
 - `semantic_planner_heldout.yaml` and `semantic_planner_synthetic.yaml` —

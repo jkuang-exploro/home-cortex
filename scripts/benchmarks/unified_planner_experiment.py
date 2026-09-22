@@ -209,9 +209,8 @@ async def run(args):
     dataset = yaml.safe_load(args.routing_eval.read_text())
     client = ObservedOllama(args.ollama_url, args.model)
     client.reset_observations()
-    service, context = build_json_fact_service(
-        args.data_dir, PROJECT_ROOT / "schemas/edge", client
-    )
+    schema_dir = getattr(args, "schema_dir", None) or (PROJECT_ROOT / "schemas/edge")
+    service, context = build_json_fact_service(args.data_dir, schema_dir, client)
     service.planner = LegacyTwoStagePlanner(client, service.engine.schema)
     unified = UnifiedShadowPlanner(client, service.engine.schema)
     rows = []

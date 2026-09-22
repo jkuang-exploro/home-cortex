@@ -23,6 +23,10 @@ artifacts/qwen35-semantic-contract/baseline-relevant-rows.json
 # Reproducible, locally frozen evaluation packages; manifests/reports stay tracked.
 artifacts/generic-contracts/*.tar.gz
 
+# Generated hc-bench runs. The directory README stays tracked.
+benchmarks/results/*
+!benchmarks/results/README.md
+
 # Home Cortex GUI build
 src/home_gui/node_modules/
 src/home_gui/dist/

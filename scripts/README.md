@@ -10,7 +10,25 @@ engineering commands and their shared support; runtime modules never import them
 - `maintenance/`: package freezing, graph export, context auditing, container
   copying, and explicit composition-dataset regeneration (`emit_composition.py`).
 
-Install with `pip install -e '.[dev]'`, then run from the repository root:
+Install with `pip install -e '.[dev]'`, then run from the repository root.
+
+`hc-bench` is the model-comparison command. It records a run and compares two
+runs. Scoring still happens in the benchmark modules below; the command is a
+registry, provenance record, and comparison over those runners. See
+`benchmarks/HARNESS.md`.
+
+```sh
+hc-bench list
+hc-bench run --suite standard --model qwen3.5:9b
+hc-bench compare <baseline-run-id> <candidate-run-id>
+```
+
+Without the console script installed:
+
+```sh
+python -m home_cortex.benchmark list
+python -m scripts.benchmarks.hc_bench run --help
+```
 
 ```sh
 python -m scripts.benchmarks.fact_benchmark --help

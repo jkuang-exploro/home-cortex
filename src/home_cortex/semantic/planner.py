@@ -382,6 +382,7 @@ def _planner_runtime_fields(runtime: Mapping[str, Any]) -> dict[str, Any]:
         "eval_count": int(number("eval_count")),
         "eval_duration_ms": float(number("eval_duration_ms")),
         "load_duration_ms": float(number("load_duration_ms")),
+        **({"done_reason": str(runtime["done_reason"])} if isinstance(runtime.get("done_reason"), str) and runtime.get("done_reason") else {}),
         "transport": {key: runtime[key] for key in (
             "codec_version", "schema_fingerprint", "compact_output_bytes",
             "expanded_output_bytes", "transport_parse_success", "transport_parse_ms",
