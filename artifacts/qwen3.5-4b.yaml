@@ -1,0 +1,45 @@
+Semantic results
+  Plan correctness: 98/119
+  Answer correctness: n/a
+  Mutation classify: 16/21
+  Mutation payload: 9/14
+  Preview correctness: 3/5
+  Commit correctness: 6/9
+  Rejection correctness: 6/8
+  Multi-intent handling: 3/7
+  Fact pipeline completed: 38/38
+  Latency-sample plan correctness: 14/20
+  Latency-sample answer correctness: 14/20
+  Bilingual plan match: 56/59
+  Bilingual parity: 10/10
+  Cases passed: 224/265
+
+Latency
+  count: 334
+  min: 731.569
+  p50: 1306.947
+  p95: 2692.978
+  max: 5053.342
+  bilingual p50/p95: 1312.526 / 1515.812 ms
+  fact p50/p95: 1277.585 / 1477.988 ms
+  latency p50/p95: 1309.985 / 2567.48 ms
+  mutation p50/p95: 1348.247 / 4182.423 ms
+  planner p50/p95: 1308.25 / 2649.418 ms
+  cold model load: 4.053979
+
+Failures
+  semantic_mismatch: 34
+  validation_failure: 7
+  malformed_structured_output: 0
+  timeout: 0
+  context_overflow: 0
+  ollama_runtime_error: 0
+  provider_error: 0
+  tool_failure: 0
+  benchmark_harness_failure: 0
+
+Tokens
+  prompt: 2307913
+  output: 13006
+  total: 2320919
+  estimated: false

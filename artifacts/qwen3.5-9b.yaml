@@ -1,0 +1,68 @@
+Home Cortex Benchmark
+Run ID: 20260922-072048-5b48
+Label: -
+Suite: full
+Model: qwen3.5:9b
+Ollama URL: http://172.21.0.2:11434
+Ollama version: 0.34.2
+Model tag: 9b
+Model digest: 6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7
+Quantization: Q4_K_M
+Context length: 262144
+Requested num_ctx: 16384
+Home Cortex commit: 66e33d1d7a5696c2482639bac35fb02497bbcbe1
+Branch: master
+git_dirty = true
+nonstandard_environment = false
+Prompt fingerprint: 673683aa7f7da599868c02c72c0613e95637491c158825e8bf5e750d2268e966
+Corpus fingerprint: 9c507ba8de0af559bde72cd588c0be2ecd529bd25eb67dc59191d73a5e9bb88a
+Config fingerprint: 716da25ac3655d1c7ad376b110a38b9ba9c7625ef771da18e26126db1f5d0eec
+Cache state: unknown
+Results: /home/jkuang/Workspace/home-cortex/benchmarks/results/20260922-072048-5b48
+Progress: /home/jkuang/Workspace/home-cortex/benchmarks/results/20260922-072048-5b48/progress.log
+
+Semantic results
+  Plan correctness: 108/119
+  Answer correctness: n/a
+  Mutation classify: 21/21
+  Mutation payload: 12/14
+  Preview correctness: 3/5
+  Commit correctness: 9/9
+  Rejection correctness: 8/8
+  Multi-intent handling: 7/7
+  Fact pipeline completed: 38/38
+  Latency-sample plan correctness: 17/20
+  Latency-sample answer correctness: 17/20
+  Bilingual plan match: 57/59
+  Bilingual parity: 10/10
+  Cases passed: 247/265
+
+Latency
+  count: 334
+  min: 739.078
+  p50: 1451.383
+  p95: 2380.935
+  max: 7532.81
+  bilingual p50/p95: 1477.733 / 1963.826 ms
+  fact p50/p95: 1425.552 / 1674.563 ms
+  latency p50/p95: 1457.554 / 1785.197 ms
+  mutation p50/p95: 1431.17 / 3216.151 ms
+  planner p50/p95: 1444.207 / 1711.568 ms
+  cold model load: 3.415913
+
+Failures
+  semantic_mismatch: 16
+  validation_failure: 2
+  malformed_structured_output: 0
+  timeout: 0
+  context_overflow: 0
+  ollama_runtime_error: 0
+  provider_error: 0
+  tool_failure: 0
+  benchmark_harness_failure: 0
+
+Tokens
+  prompt: 2296209
+  output: 12767
+  total: 2308976
+  estimated: false
