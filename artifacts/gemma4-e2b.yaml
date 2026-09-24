@@ -1,0 +1,83 @@
+Home Cortex Benchmark
+Run ID: 20260924-043534-f998
+Label: -
+Suite: full
+Model: gemma4:e2b
+Ollama URL: http://172.21.0.2:11434
+Ollama version: 0.34.2
+Model tag: e2b
+Model digest: 7fbdbf8f5e45a75bb122155ed546e765b4d9c53a1285f62fd9f506baa1c5a47e
+Quantization: Q4_K_M
+Context length: 131072
+Requested num_ctx: 16384
+Home Cortex commit: 66e33d1d7a5696c2482639bac35fb02497bbcbe1
+Branch: master
+git_dirty = true
+nonstandard_environment = false
+Prompt fingerprint: 673683aa7f7da599868c02c72c0613e95637491c158825e8bf5e750d2268e966
+Corpus fingerprint: 9c507ba8de0af559bde72cd588c0be2ecd529bd25eb67dc59191d73a5e9bb88a
+Config fingerprint: 716da25ac3655d1c7ad376b110a38b9ba9c7625ef771da18e26126db1f5d0eec
+Cache state: unknown
+Results: /home/jkuang/Workspace/home-cortex/benchmarks/results/20260924-043534-f998
+Progress: /home/jkuang/Workspace/home-cortex/benchmarks/results/20260924-043534-f998/progress.log
+
+Semantic results
+  Plan correctness: 75/119
+  Answer correctness: n/a
+  Mutation classify: 12/21
+  Mutation payload: 8/14
+  Preview correctness: 2/5
+  Commit correctness: 6/9
+  Rejection correctness: 7/8
+  Multi-intent handling: 0/7
+  Fact pipeline completed: 38/38
+  Latency-sample plan correctness: 11/20
+  Latency-sample answer correctness: 12/20
+  Bilingual plan match: 45/59
+  Bilingual parity: 7/10
+  Cases passed: 183/265
+
+Latency
+  count: 334
+  min: 225.245
+  p50: 567.127
+  p95: 1143.196
+  max: 8440.021
+  bilingual p50/p95: 550.931 / 741.956 ms
+  fact p50/p95: 713.368 / 844.491 ms
+  latency p50/p95: 571.496 / 770.362 ms
+  mutation p50/p95: 650.178 / 1745.342 ms
+  planner p50/p95: 535.821 / 769.942 ms
+  cold model load: 5454.567346
+
+Failures
+  semantic_mismatch: 71
+  validation_failure: 5
+  malformed_structured_output: 6
+  timeout: 0
+  context_overflow: 0
+  ollama_runtime_error: 0
+  provider_error: 0
+  tool_failure: 0
+  benchmark_harness_failure: 0
+
+Tokens
+  prompt: 2499211
+  output: 14337
+  total: 2513548
+  estimated: false
+
+Gates
+  pass: Preview was compiled as commit (0)
+  fail: Multi-intent turn produced a partial plan (5)
+
+Timing policy
+planner: One scoring pass over benchmarks/semantic_planner_eval.yaml. Latency percentiles describe that pass and can include the first request. Warmup and repetitions are not applied.
+mutation: One scoring pass of the unified planner experiment. Two warmup calls per route are discarded by that runner before scoring. Writes are compiled and never dispatched. Safety gates use the unified route. Token totals sum that route's Ollama-reported counts and are not estimated.
+fact: One pass of the JSON-graph fact benchmark. It records completion and latency, not gold plan or answer scores. The household database is not opened.
+latency: Warmup requests are excluded from percentiles. Measured repetitions are steady-state. The harness does not unload the model or flush caches. cold_load_ms is Ollama's load_duration_ms on the first request when reported. --verified-cold only labels that request; unload the model yourself first.
+bilingual: One measured pass of the bilingual planner probe, including its prompt-component measurement. The probe's semantic-contract fixture is the graph, not --data-dir. A --limit smoke cap skips discourse and negative turns.
+
+Notes
+  cold_load_ms_by_suite={'planner': 5454.567346, 'latency': 1.860332}
+04:39:26 [hc-bench] finished 20260924-043534-f998
