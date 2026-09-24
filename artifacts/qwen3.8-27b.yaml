@@ -1,12 +1,12 @@
 Home Cortex Benchmark
-Run ID: 20260924-025024-38af
+Run ID: 20260923-193829-7c87
 Label: -
 Suite: full
-Model: qwen3.5:4b
+Model: qwen3.8:27b
 Ollama URL: http://172.21.0.2:11434
 Ollama version: 0.34.2
-Model tag: 4b
-Model digest: 2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd
+Model tag: 27b
+Model digest: 22130167c4c20e20c7b71454612966ca8e8171e9b3cc8ab6ce8aa6cbfec79643
 Quantization: Q4_K_M
 Context length: 262144
 Requested num_ctx: 16384
@@ -18,41 +18,41 @@ Prompt fingerprint: 673683aa7f7da599868c02c72c0613e95637491c158825e8bf5e750d2268
 Corpus fingerprint: 9c507ba8de0af559bde72cd588c0be2ecd529bd25eb67dc59191d73a5e9bb88a
 Config fingerprint: 716da25ac3655d1c7ad376b110a38b9ba9c7625ef771da18e26126db1f5d0eec
 Cache state: unknown
-Results: /home/jkuang/Workspace/home-cortex/benchmarks/results/20260924-025024-38af
-Progress: /home/jkuang/Workspace/home-cortex/benchmarks/results/20260924-025024-38af/progress.log
+Results: /home/jkuang/Workspace/home-cortex/benchmarks/results/20260923-193829-7c87
+Progress: /home/jkuang/Workspace/home-cortex/benchmarks/results/20260923-193829-7c87/progress.log
 
 Semantic results
-  Plan correctness: 98/119
+  Plan correctness: 111/119
   Answer correctness: n/a
-  Mutation classify: 16/21
-  Mutation payload: 9/14
-  Preview correctness: 3/5
-  Commit correctness: 6/9
-  Rejection correctness: 7/8
-  Multi-intent handling: 3/7
+  Mutation classify: 21/21
+  Mutation payload: 14/14
+  Preview correctness: 5/5
+  Commit correctness: 9/9
+  Rejection correctness: 4/8
+  Multi-intent handling: 7/7
   Fact pipeline completed: 38/38
-  Latency-sample plan correctness: 14/20
-  Latency-sample answer correctness: 14/20
+  Latency-sample plan correctness: 17/20
+  Latency-sample answer correctness: 19/20
   Bilingual plan match: 56/59
   Bilingual parity: 10/10
-  Cases passed: 225/265
+  Cases passed: 247/265
 
 Latency
   count: 334
-  min: 756.639
-  p50: 1312.755
-  p95: 2677.496
-  max: 5079.13
-  bilingual p50/p95: 1312.877 / 1516.808 ms
-  fact p50/p95: 1275.001 / 1503.04 ms
-  latency p50/p95: 1312.126 / 2583.965 ms
-  mutation p50/p95: 1319.289 / 4217.708 ms
-  planner p50/p95: 1321.777 / 2639.609 ms
-  cold model load: 3.860865
+  min: 6144.806
+  p50: 14756.624
+  p95: 57743.801
+  max: 72514.124
+  bilingual p50/p95: 14600.579 / 58018.951 ms
+  fact p50/p95: 14635.887 / 58350.142 ms
+  latency p50/p95: 14622.737 / 17894.669 ms
+  mutation p50/p95: 14068.406 / 39442.301 ms
+  planner p50/p95: 14790.98 / 57803.029 ms
+  cold model load: 4.43197
 
 Failures
-  semantic_mismatch: 33
-  validation_failure: 7
+  semantic_mismatch: 18
+  validation_failure: 0
   malformed_structured_output: 0
   timeout: 0
   context_overflow: 0
@@ -62,14 +62,14 @@ Failures
   benchmark_harness_failure: 0
 
 Tokens
-  prompt: 2307913
-  output: 12966
-  total: 2320879
+  prompt: 2330830
+  output: 12765
+  total: 2343595
   estimated: false
 
 Gates
   pass: Preview was compiled as commit (0)
-  fail: Multi-intent turn produced a partial plan (4)
+  pass: Multi-intent turn produced a partial plan (0)
 
 Timing policy
 planner: One scoring pass over benchmarks/semantic_planner_eval.yaml. Latency percentiles describe that pass and can include the first request. Warmup and repetitions are not applied.
@@ -79,5 +79,4 @@ latency: Warmup requests are excluded from percentiles. Measured repetitions are
 bilingual: One measured pass of the bilingual planner probe, including its prompt-component measurement. The probe's semantic-contract fixture is the graph, not --data-dir. A --limit smoke cap skips discourse and negative turns.
 
 Notes
-  cold_load_ms_by_suite={'planner': 3.860865, 'latency': 2.590415}
-02:58:39 [hc-bench] finished 20260924-025024-38af
+  cold_load_ms_by_suite={'planner': 4.43197, 'latency': 2.644743}

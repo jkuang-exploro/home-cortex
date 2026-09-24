@@ -1,5 +1,5 @@
 Home Cortex Benchmark
-Run ID: 20260922-072048-5b48
+Run ID: 20260924-022915-4063
 Label: -
 Suite: full
 Model: qwen3.5:9b
@@ -18,8 +18,8 @@ Prompt fingerprint: 673683aa7f7da599868c02c72c0613e95637491c158825e8bf5e750d2268
 Corpus fingerprint: 9c507ba8de0af559bde72cd588c0be2ecd529bd25eb67dc59191d73a5e9bb88a
 Config fingerprint: 716da25ac3655d1c7ad376b110a38b9ba9c7625ef771da18e26126db1f5d0eec
 Cache state: unknown
-Results: /home/jkuang/Workspace/home-cortex/benchmarks/results/20260922-072048-5b48
-Progress: /home/jkuang/Workspace/home-cortex/benchmarks/results/20260922-072048-5b48/progress.log
+Results: /home/jkuang/Workspace/home-cortex/benchmarks/results/20260924-022915-4063
+Progress: /home/jkuang/Workspace/home-cortex/benchmarks/results/20260924-022915-4063/progress.log
 
 Semantic results
   Plan correctness: 108/119
@@ -39,16 +39,16 @@ Semantic results
 
 Latency
   count: 334
-  min: 739.078
-  p50: 1451.383
-  p95: 2380.935
-  max: 7532.81
-  bilingual p50/p95: 1477.733 / 1963.826 ms
-  fact p50/p95: 1425.552 / 1674.563 ms
-  latency p50/p95: 1457.554 / 1785.197 ms
-  mutation p50/p95: 1431.17 / 3216.151 ms
-  planner p50/p95: 1444.207 / 1711.568 ms
-  cold model load: 3.415913
+  min: 742.746
+  p50: 1462.417
+  p95: 2350.052
+  max: 7680.886
+  bilingual p50/p95: 1493.489 / 1984.581 ms
+  fact p50/p95: 1415.836 / 1593.949 ms
+  latency p50/p95: 1449.707 / 1765.668 ms
+  mutation p50/p95: 1419.089 / 3221.88 ms
+  planner p50/p95: 1464.786 / 1792.371 ms
+  cold model load: 3.072764
 
 Failures
   semantic_mismatch: 16
@@ -66,3 +66,18 @@ Tokens
   output: 12767
   total: 2308976
   estimated: false
+
+Gates
+  pass: Preview was compiled as commit (0)
+  pass: Multi-intent turn produced a partial plan (0)
+
+Timing policy
+planner: One scoring pass over benchmarks/semantic_planner_eval.yaml. Latency percentiles describe that pass and can include the first request. Warmup and repetitions are not applied.
+mutation: One scoring pass of the unified planner experiment. Two warmup calls per route are discarded by that runner before scoring. Writes are compiled and never dispatched. Safety gates use the unified route. Token totals sum that route's Ollama-reported counts and are not estimated.
+fact: One pass of the JSON-graph fact benchmark. It records completion and latency, not gold plan or answer scores. The household database is not opened.
+latency: Warmup requests are excluded from percentiles. Measured repetitions are steady-state. The harness does not unload the model or flush caches. cold_load_ms is Ollama's load_duration_ms on the first request when reported. --verified-cold only labels that request; unload the model yourself first.
+bilingual: One measured pass of the bilingual planner probe, including its prompt-component measurement. The probe's semantic-contract fixture is the graph, not --data-dir. A --limit smoke cap skips discourse and negative turns.
+
+Notes
+  cold_load_ms_by_suite={'planner': 3.072764, 'latency': 1.747016}
+02:38:14 [hc-bench] finished 20260924-022915-4063
