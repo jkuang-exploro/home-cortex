@@ -20,6 +20,7 @@ from ..persistence.db import Database
 from ..persistence.edge_schema import EdgeSchemaRegistry
 from ..conversation.greetings import GreetingService
 from ..providers.base import model_provider_from_settings
+from ..providers.ir import ModelProviderError
 from ..common.tracing import RequestTraceMiddleware
 from ..persistence.retrieval import RetrievalService
 from ..persistence.schema_catalog import RuntimeSchemaCatalog
@@ -27,6 +28,7 @@ from ..capabilities.dispatcher import ToolDispatcher
 from ..mutation.writing import ItemWritingService
 from .errors import (
     http_error_handler,
+    model_provider_error_handler,
     logger,
     unexpected_error_handler,
     validation_error_handler,
@@ -138,6 +140,7 @@ def create_app() -> FastAPI:
     )
     application.add_exception_handler(StarletteHTTPException, http_error_handler)
     application.add_exception_handler(RequestValidationError, validation_error_handler)
+    application.add_exception_handler(ModelProviderError, model_provider_error_handler)
     application.add_exception_handler(Exception, unexpected_error_handler)
     for router in (
         sessions.router,

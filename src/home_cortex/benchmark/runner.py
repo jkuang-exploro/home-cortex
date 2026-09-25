@@ -12,12 +12,17 @@ from .environment import (
     CACHE_STATES,
     OllamaUnreachable,
     collect_environment,
+    configured_runtime,
     designated_gpu_hosts,
     instruction_prompt_fingerprint,
     is_designated_gpu_host,
+    git_metadata,
+    hardware_metadata,
+    llamacpp_metadata,
     planner_options,
     repo_root,
     resolve_ollama_url,
+    resolve_llamacpp_url,
     stable_digest,
 )
 from .present import format_run_report
@@ -97,10 +102,23 @@ def execute(
             file=sys.stderr,
         )
         return 2
+    runtime = request.runtime or configured_runtime()
+    if runtime not in {"ollama", "llamacpp"}:
+        print(f"Unsupported benchmark runtime: {runtime}", file=sys.stderr)
+        return 2
+    if runtime == "llamacpp" and request.num_ctx is not None:
+        print("llama.cpp context length is set by LLAMA_CTX_SIZE when the server starts", file=sys.stderr)
+        return 2
     try:
-        ollama_url, endpoint_note = endpoint_resolver(
-            request.ollama_url, explicit=request.ollama_url_explicit,
-        )
+        if runtime == "llamacpp":
+            ollama_url, endpoint_note = resolve_llamacpp_url(
+                request.base_url, explicit=request.base_url is not None,
+            )
+        else:
+            ollama_url, endpoint_note = endpoint_resolver(
+                request.base_url or request.ollama_url,
+                explicit=request.base_url is not None or request.ollama_url_explicit,
+            )
     except OllamaUnreachable as error:
         print(str(error), file=sys.stderr)
         return 1
@@ -114,11 +132,14 @@ def execute(
     data_dir = request.data_dir or (root / "data")
     schema_dir = request.schema_dir or (root / "schemas" / "edge")
     try:
-        environment = environment_collector(
-            ollama_url=request.ollama_url,
-            model=request.model,
-            num_ctx=request.num_ctx,
-            root=root,
+        environment = (
+            {"git": git_metadata(root), "hardware": hardware_metadata(),
+             "llamacpp": llamacpp_metadata(ollama_url, request.model),
+             "planner_mode": "semantic_interpreter"}
+            if runtime == "llamacpp" else environment_collector(
+                ollama_url=request.ollama_url, model=request.model,
+                num_ctx=request.num_ctx, root=root,
+            )
         )
     except Exception as error:
         environment = {
@@ -145,6 +166,7 @@ def execute(
         limit=request.limit,
         verified_cold=request.verified_cold,
         allow_nonstandard_host=request.allow_nonstandard_host,
+        runtime=runtime,
         progress=progress,
     )
     progress.line(
@@ -165,14 +187,15 @@ def execute(
         if harness_trace:
             summary["notes"] = [*summary.get("notes", []), harness_trace[-4000:]]
         ollama = dict(environment.get("ollama") or {})
-        options = dict(ollama.get("options") or planner_options(request.num_ctx))
-        if request.num_ctx is not None:
-            options["num_ctx"] = request.num_ctx
-        ollama["options"] = options
-        ollama["requested_num_ctx"] = options.get("num_ctx")
-        ollama["base_url"] = ollama_url
-        if endpoint_note:
-            ollama["endpoint_note"] = endpoint_note
+        if runtime == "ollama":
+            options = dict(ollama.get("options") or planner_options(request.num_ctx))
+            if request.num_ctx is not None:
+                options["num_ctx"] = request.num_ctx
+            ollama["options"] = options
+            ollama["requested_num_ctx"] = options.get("num_ctx")
+            ollama["base_url"] = ollama_url
+            if endpoint_note:
+                ollama["endpoint_note"] = endpoint_note
         run = {
             "run_id": run_id,
             "label": request.label,
@@ -182,7 +205,8 @@ def execute(
                 **(environment.get("git") or {}),
                 "planner_mode": environment.get("planner_mode", "semantic_interpreter"),
             },
-            "ollama": ollama,
+            **({"ollama": ollama} if runtime == "ollama" else {}),
+            "runtime": (environment.get("llamacpp") if runtime == "llamacpp" else {"type": "ollama", **ollama}),
             "environment": environment.get("hardware") or {},
             "suites": [request.suite],
             "components": list(result.components or (request.suite,)),
@@ -246,6 +270,8 @@ def plan_matrix(spec: Mapping[str, Any], base: RunRequest) -> list[RunRequest]:
                     suite=suite,
                     model=model,
                     ollama_url=base.ollama_url,
+                    runtime=base.runtime,
+                    base_url=base.base_url,
                     label="-".join(bits),
                     results_dir=base.results_dir,
                     data_dir=base.data_dir,

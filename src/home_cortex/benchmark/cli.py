@@ -82,7 +82,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run.add_argument("--suite", required=True, help="Suite name from `hc-bench list`")
-    run.add_argument("--model", required=True, help="Ollama model name, including tag")
+    run.add_argument("--model", required=True, help="Logical model name")
+    run.add_argument("--runtime", choices=("ollama", "llamacpp"), help="Local model runtime; defaults to deployment configuration")
+    run.add_argument("--base-url", help="Explicit runtime API base URL")
     run.add_argument("--label", help="Human label stored with the run. Not a run id")
     run.add_argument(
         "--ollama-url",
@@ -156,6 +158,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     matrix.add_argument("path", type=Path, help="Matrix YAML. See benchmarks/matrix.example.yaml")
     matrix.add_argument("--ollama-url", default=None)
+    matrix.add_argument("--runtime", choices=("ollama", "llamacpp"))
+    matrix.add_argument("--base-url")
     matrix.add_argument("--results-dir", type=Path)
     matrix.add_argument("--data-dir", type=Path)
     matrix.add_argument("--schema-dir", type=Path)
@@ -272,6 +276,8 @@ def _request_from_args(args: argparse.Namespace, *, suite: str, model: str, labe
         model=model,
         ollama_url=args.ollama_url,
         ollama_url_explicit=args.ollama_url is not None,
+        runtime=getattr(args, "runtime", None),
+        base_url=getattr(args, "base_url", None),
         label=label,
         results_dir=args.results_dir,
         data_dir=getattr(args, "data_dir", None),

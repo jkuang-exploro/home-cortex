@@ -753,9 +753,14 @@ def collect_provenance(
     verified_cold: bool,
     data_dir: Path | None = None,
     schema_dir: Path | None = None,
+    runtime: str = "ollama",
 ) -> dict[str, Any]:
     git = _git_provenance(root)
-    ollama = _ollama_provenance(ollama_url, ollama_model)
+    ollama = _ollama_provenance(ollama_url, ollama_model) if runtime == "ollama" else {}
+    local_runtime = None
+    if runtime == "llamacpp":
+        from home_cortex.benchmark.environment import llamacpp_metadata
+        local_runtime = llamacpp_metadata(ollama_url, ollama_model)
     package_path = Path(home_cortex.__file__).resolve()
     return {
         "git_commit": git.get("commit", "unavailable"),
@@ -776,6 +781,7 @@ def collect_provenance(
         "model_name": ollama_model,
         "model_digest": ollama.get("digest", "unavailable"),
         "ollama_version": ollama.get("version", "unavailable"),
+        "runtime": local_runtime or {"type": "ollama", **ollama},
         "hardware": {
             "platform": platform.platform(),
             "machine": platform.machine(),

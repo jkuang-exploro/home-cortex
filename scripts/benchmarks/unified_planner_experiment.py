@@ -12,6 +12,7 @@ from typing import Any, Mapping
 import yaml
 
 from home_cortex.providers.ollama import OllamaService
+from home_cortex.providers.llamacpp import LlamaCppService
 from home_cortex.mutation.ir import NAMED_WRITE_ADAPTER
 from home_cortex.semantic.ir import SemanticPlannerFailure
 from scripts import PROJECT_ROOT
@@ -34,7 +35,7 @@ from scripts.probes.unified_semantic_planner import (
 from scripts.probes.two_stage_semantic_planner import LegacyTwoStagePlanner
 
 
-class ObservedOllama(OllamaService):
+class _ObservedModel:
     def reset_observations(self):
         self.observations = []
 
@@ -47,6 +48,14 @@ class ObservedOllama(OllamaService):
         result = await super().plan_semantic_fact(*args, **kwargs)
         self.observations.append({"stage": "fact", **self.last_planner_runtime})
         return result
+
+
+class ObservedOllama(_ObservedModel, OllamaService):
+    pass
+
+
+class ObservedLlamaCpp(_ObservedModel, LlamaCppService):
+    pass
 
 
 def _compact(value):
@@ -207,7 +216,8 @@ def _summary(rows):
 
 async def run(args):
     dataset = yaml.safe_load(args.routing_eval.read_text())
-    client = ObservedOllama(args.ollama_url, args.model)
+    provider = ObservedLlamaCpp if getattr(args, "runtime", "ollama") == "llamacpp" else ObservedOllama
+    client = provider(args.ollama_url, args.model)
     client.reset_observations()
     schema_dir = getattr(args, "schema_dir", None) or (PROJECT_ROOT / "schemas/edge")
     service, context = build_json_fact_service(args.data_dir, schema_dir, client)
@@ -361,6 +371,7 @@ async def run(args):
             verified_cold=False,
             data_dir=args.data_dir,
             schema_dir=PROJECT_ROOT / "schemas",
+            runtime=getattr(args, "runtime", "ollama"),
         ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

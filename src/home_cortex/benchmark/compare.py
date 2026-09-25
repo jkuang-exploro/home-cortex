@@ -207,6 +207,16 @@ def _warnings(baseline: Mapping[str, Any], candidate: Mapping[str, Any]) -> list
         warnings.append("At least one run has nonstandard_environment = true.")
     if _differ(baseline.get("cache_state"), candidate.get("cache_state")):
         warnings.append("Cache states differ. Latency deltas may include cache effects.")
+    base_runtime = _section(baseline, "runtime")
+    cand_runtime = _section(candidate, "runtime")
+    if _differ(base_runtime.get("type"), cand_runtime.get("type")):
+        warnings.append("Model runtimes differ.")
+    base_model = base_runtime.get("model") if isinstance(base_runtime.get("model"), Mapping) else {}
+    cand_model = cand_runtime.get("model") if isinstance(cand_runtime.get("model"), Mapping) else {}
+    base_hash = base_model.get("sha256") or _section(baseline, "ollama").get("digest")
+    cand_hash = cand_model.get("sha256") or _section(candidate, "ollama").get("digest")
+    if _differ(base_hash, cand_hash):
+        warnings.append("Model artifact hashes differ; model conversion may affect parity.")
     return warnings
 
 

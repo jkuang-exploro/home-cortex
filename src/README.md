@@ -31,7 +31,9 @@ The important ownership rules are:
 - `facts/` owns reference grounding, deterministic fact execution, operators,
   and rendering. It has no HTTP or provider-transport responsibility.
 - `providers/base.py` is the provider-neutral contract;
-  `providers/ollama.py` and `providers/openrouter.py` are transport adapters.
+  `providers/llamacpp.py`, `providers/ollama.py`, and
+  `providers/openrouter.py` are transport adapters. The local and hosted
+  OpenAI-compatible adapters share one HTTP implementation.
 - `mutation/service.py` is the preview/commit application boundary;
   `mutation/writing.py` owns deterministic transactional graph mutations.
 - `capabilities/catalog.py` owns model-facing schemas and
@@ -165,8 +167,9 @@ and must not be copied into model prompt examples.
 
 ## Model providers and agents
 
-`LLM_PROVIDER` selects `ollama` (default) or `openrouter`. The steward definition
-under `home_cortex/agents/steward` owns its prompt, identity, settings, and tool
+`LLM_PROVIDER` selects `ollama` (the current Compose default), `openrouter`, or
+the candidate `llamacpp` adapter. The steward definition under
+`home_cortex/agents/steward` owns its prompt, identity, settings, and tool
 allowlist. A named agent receives only the capabilities declared there.
 
 The ordinary model loop can use bounded calculation and read-only calendar tools.
@@ -192,6 +195,11 @@ OLLAMA_MODEL=qwen3.5:9b
 
 For OpenRouter, set `LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, and
 `OPENROUTER_MODEL` instead.
+
+The experimental llama.cpp stack is in `docker-compose.llamacpp.yml`; see
+[`docker/LLAMA_SERVER.md`](../docker/LLAMA_SERVER.md) for its GGUF setup,
+image provenance, and benchmark commands. It has not passed the multi-intent
+safety gate for production.
 
 ```sh
 docker compose --env-file .env -f docker/docker-compose.yml up -d --build

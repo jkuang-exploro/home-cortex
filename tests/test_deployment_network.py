@@ -27,6 +27,8 @@ def test_nginx_is_the_only_lan_facing_web_entrypoint() -> None:
         "/opt/data/home-media-cache:/data",
     ]
     assert services["cortex-api"]["ports"] == ["127.0.0.1:8001:8000"]
+    assert "ollama" in services
+    assert "llama-server" not in services
 
 
 def test_nginx_routes_gui_and_api_over_the_compose_network() -> None:
@@ -57,6 +59,14 @@ def test_nginx_routes_gui_and_api_over_the_compose_network() -> None:
     assert "proxy_pass http://home-media/;" in config
     assert "proxy_pass http://cortex_api/session;" in config
     assert "proxy_method GET;" in config
+
+
+def test_llamacpp_candidate_is_internal_and_waits_for_model_readiness() -> None:
+    candidate = yaml.safe_load((ROOT / "docker" / "docker-compose.llamacpp.yml").read_text())["services"]
+    assert "ollama" not in candidate
+    assert "ports" not in candidate["llama-server"]
+    assert "/opt/models:/models:ro" in candidate["llama-server"]["volumes"]
+    assert candidate["cortex-api"]["depends_on"]["llama-server"]["condition"] == "service_healthy"
 
 
 def test_production_gui_container_listens_on_internal_port_3000() -> None:

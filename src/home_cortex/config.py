@@ -52,7 +52,9 @@ class Settings(BaseSettings):
     surreal_database: str = "home_cortex"
     ollama_url: str = "http://ollama:11434"
     ollama_model: str | None = None
-    llm_provider: Literal["ollama", "openrouter"] = "ollama"
+    llm_provider: Literal["ollama", "openrouter", "llamacpp"] = "ollama"
+    local_llm_base_url: str = "http://llama-server:8080/v1"
+    local_llm_model: str | None = None
     openrouter_api_key: SecretStr | None = None
     openrouter_model: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -75,6 +77,7 @@ class Settings(BaseSettings):
         "openrouter_http_referer",
         "openrouter_model",
         "ollama_model",
+        "local_llm_model",
         mode="before",
     )
     @classmethod
@@ -143,6 +146,8 @@ class Settings(BaseSettings):
             )
         if self.llm_provider == "ollama" and not self.ollama_model:
             raise ValueError("OLLAMA_MODEL is required when LLM_PROVIDER=ollama")
+        if self.llm_provider == "llamacpp" and not self.local_llm_model:
+            raise ValueError("LOCAL_LLM_MODEL is required when LLM_PROVIDER=llamacpp")
         if self.llm_provider == "openrouter":
             if self.openrouter_api_key is None:
                 raise ValueError(

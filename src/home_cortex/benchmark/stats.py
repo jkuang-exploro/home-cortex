@@ -33,10 +33,10 @@ def latency_summary(samples: Sequence[float]) -> dict[str, Any]:
     }
 
 
-def token_totals(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Sum Ollama-reported token counts. Missing counts stay unavailable.
+def token_totals(rows: Sequence[Mapping[str, Any]], *, source: str = "ollama") -> dict[str, Any]:
+    """Sum runtime-reported token counts. Missing counts stay unavailable.
 
-    Zero is treated as "the runtime did not report a count", because the Ollama
+    Zero is treated as "the runtime did not report a count", because the
     adapter stores ``0`` when the response omits the field. Nothing is estimated.
     """
 
@@ -44,9 +44,9 @@ def token_totals(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     outputs: list[int] = []
     for row in rows:
         diagnostics = row.get("planner_diagnostics")
-        source = diagnostics if isinstance(diagnostics, Mapping) else row
-        prompt = source.get("prompt_eval_count", row.get("prompt_eval_count"))
-        output = source.get("eval_count", row.get("eval_count"))
+        counts_from = diagnostics if isinstance(diagnostics, Mapping) else row
+        prompt = counts_from.get("prompt_eval_count", row.get("prompt_eval_count"))
+        output = counts_from.get("eval_count", row.get("eval_count"))
         if isinstance(prompt, (int, float)) and not isinstance(prompt, bool) and prompt > 0:
             prompts.append(int(prompt))
         if isinstance(output, (int, float)) and not isinstance(output, bool) and output > 0:
@@ -65,7 +65,7 @@ def token_totals(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "prompt": prompt_total,
         "output": output_total,
         "total": prompt_total + output_total,
-        "source": "ollama",
+        "source": source,
         "estimated": False,
         "observed_calls": max(len(prompts), len(outputs)),
     }

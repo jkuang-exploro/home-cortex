@@ -1,0 +1,241 @@
+{
+  "case_totals": {
+    "cases": 148,
+    "passed": 117
+  },
+  "metrics": [
+    {
+      "id": "plan_correctness",
+      "label": "Plan correctness",
+      "kind": "ratio",
+      "correct": 95,
+      "scored": 119,
+      "value": null,
+      "lower_is_better": false,
+      "suite": "planner"
+    },
+    {
+      "id": "answer_correctness",
+      "label": "Answer correctness",
+      "kind": "ratio",
+      "correct": 0,
+      "scored": 0,
+      "value": null,
+      "lower_is_better": false,
+      "suite": "planner"
+    },
+    {
+      "id": "mutation_classification",
+      "label": "Mutation classify",
+      "kind": "ratio",
+      "correct": 16,
+      "scored": 21,
+      "value": null,
+      "lower_is_better": false,
+      "suite": "mutation"
+    },
+    {
+      "id": "mutation_payload",
+      "label": "Mutation payload",
+      "kind": "ratio",
+      "correct": 11,
+      "scored": 14,
+      "value": null,
+      "lower_is_better": false,
+      "suite": "mutation"
+    },
+    {
+      "id": "preview_correctness",
+      "label": "Preview correctness",
+      "kind": "ratio",
+      "correct": 3,
+      "scored": 5,
+      "value": null,
+      "lower_is_better": false,
+      "suite": "mutation"
+    },
+    {
+      "id": "commit_correctness",
+      "label": "Commit correctness",
+      "kind": "ratio",
+      "correct": 8,
+      "scored": 9,
+      "value": null,
+      "lower_is_better": false,
+      "suite": "mutation"
+    },
+    {
+      "id": "rejection_correctness",
+      "label": "Rejection correctness",
+      "kind": "ratio",
+      "correct": 8,
+      "scored": 8,
+      "value": null,
+      "lower_is_better": false,
+      "suite": "mutation"
+    },
+    {
+      "id": "multi_intent_correctness",
+      "label": "Multi-intent handling",
+      "kind": "ratio",
+      "correct": 3,
+      "scored": 7,
+      "value": null,
+      "lower_is_better": false,
+      "suite": "mutation"
+    },
+    {
+      "id": "preview_as_commit",
+      "label": "Preview compiled as commit",
+      "kind": "count",
+      "correct": null,
+      "scored": null,
+      "value": 0,
+      "lower_is_better": true,
+      "suite": "mutation"
+    },
+    {
+      "id": "mixed_partial_plans",
+      "label": "Multi-intent partial plans",
+      "kind": "count",
+      "correct": null,
+      "scored": null,
+      "value": 4,
+      "lower_is_better": true,
+      "suite": "mutation"
+    },
+    {
+      "id": "validation_failures",
+      "label": "Validation failures",
+      "kind": "count",
+      "correct": null,
+      "scored": null,
+      "value": 8,
+      "lower_is_better": true,
+      "suite": "standard"
+    }
+  ],
+  "failure_counts": {
+    "semantic_mismatch": 23,
+    "validation_failure": 8,
+    "malformed_structured_output": 0,
+    "timeout": 0,
+    "context_overflow": 0,
+    "ollama_runtime_error": 0,
+    "provider_error": 0,
+    "tool_failure": 0,
+    "benchmark_harness_failure": 0
+  },
+  "latency_ms": {
+    "count": 177,
+    "min": 541.442,
+    "p50": 1079.019,
+    "p95": 2314.211,
+    "max": 4236.385
+  },
+  "latency_by_suite": {
+    "mutation": {
+      "count": 58,
+      "min": 541.442,
+      "p50": 1168.775,
+      "p95": 3295.836,
+      "max": 4236.385
+    },
+    "planner": {
+      "count": 119,
+      "min": 831.029,
+      "p50": 1077.633,
+      "p95": 2238.027,
+      "max": 2679.325
+    }
+  },
+  "tokens": "[redacted]",
+  "gates": [
+    {
+      "id": "preview_as_commit",
+      "label": "Preview was compiled as commit",
+      "status": "pass",
+      "detail": "0"
+    },
+    {
+      "id": "mixed_partial_plans",
+      "label": "Multi-intent turn produced a partial plan",
+      "status": "fail",
+      "detail": "4"
+    }
+  ],
+  "timing_policy": "planner: One scoring pass over benchmarks/semantic_planner_eval.yaml. Latency percentiles describe that pass and can include the first request. Warmup and repetitions are not applied.\nmutation: One scoring pass of the unified planner experiment. Two warmup calls per route are discarded by that runner before scoring. Writes are compiled and never dispatched. Safety gates use the unified route. Token totals sum that route's Ollama-reported counts and are not estimated.",
+  "cache_state": "unknown",
+  "cache_policy": "The harness records cache_state and does not flush Ollama, GPU, or OS caches. Compare latency only across runs that record the same state and the same warmup policy.",
+  "repetition": {
+    "planner": {
+      "warmup": 0,
+      "repetitions": 1
+    },
+    "mutation": {
+      "warmup": 0,
+      "repetitions": 1
+    }
+  },
+  "cold_load_ms": null,
+  "routes": {
+    "mutation": {
+      "intents": {
+        "existing": {
+          "requests": 29,
+          "llm_calls": {
+            "n": 29,
+            "p50": 1.0,
+            "p95": 3.0
+          },
+          "input_tokens": "[redacted]",
+          "output_tokens": "[redacted]",
+          "latency_ms": {
+            "n": 29,
+            "p50": 1065.562,
+            "p95": 3478.809
+          },
+          "validation_failures": 3,
+          "length_stops": 0,
+          "plan_correct": 0,
+          "answer_correct": 0,
+          "classification_correct": 12,
+          "payload_correct": 8,
+          "mutation_as_nonmutation": 1,
+          "read_as_mutation": 0,
+          "multi_intent_correct": 0,
+          "mixed_partial_plans": 6,
+          "explicit_preview_as_commit": 2
+        },
+        "unified": {
+          "requests": 29,
+          "llm_calls": {
+            "n": 29,
+            "p50": 1.0,
+            "p95": 1.0
+          },
+          "input_tokens": "[redacted]",
+          "output_tokens": "[redacted]",
+          "latency_ms": {
+            "n": 29,
+            "p50": 1170.318,
+            "p95": 1591.53
+          },
+          "validation_failures": 0,
+          "length_stops": 0,
+          "plan_correct": 0,
+          "answer_correct": 0,
+          "classification_correct": 16,
+          "payload_correct": 11,
+          "mutation_as_nonmutation": 5,
+          "read_as_mutation": 0,
+          "multi_intent_correct": 3,
+          "mixed_partial_plans": 4,
+          "explicit_preview_as_commit": 0
+        }
+      }
+    }
+  },
+  "notes": [],
+  "scoring_note": "Plan and answer ratios are copied from the existing runners. Harness failures are counted separately and are not semantic mismatches. There is no single aggregate score."
+}

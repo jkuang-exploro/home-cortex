@@ -4,6 +4,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any, Protocol
 
+from .ir import ChatResponse, ModelProviderError
+
 
 class ModelMessage(Protocol):
     """Response message shape used by the bounded model loop."""
@@ -71,7 +73,15 @@ def model_provider_from_settings(
     model_name: str | None = None,
 ) -> ModelProvider:
     """Construct the configured provider without coupling either adapter."""
-    if getattr(settings, "llm_provider", "ollama") == "openrouter":
+    provider = getattr(settings, "llm_provider", "ollama")
+    if provider == "llamacpp":
+        from .llamacpp import LlamaCppService
+
+        name = model_name or settings.local_llm_model
+        if not name:
+            raise ValueError("LOCAL_LLM_MODEL is required when LLM_PROVIDER=llamacpp")
+        return LlamaCppService(settings.local_llm_base_url, name)
+    if provider == "openrouter":
         from .openrouter import OpenRouterService
 
         name = model_name or settings.openrouter_model

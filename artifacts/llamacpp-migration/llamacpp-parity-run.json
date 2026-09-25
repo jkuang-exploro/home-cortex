@@ -1,0 +1,75 @@
+{
+  "run_id": "20260925-051856-6cda",
+  "label": "llamacpp-parity",
+  "started_at": "2026-09-25T05:18:56+00:00",
+  "finished_at": "2026-09-25T05:22:58+00:00",
+  "home_cortex": {
+    "git_commit": "66e33d1d7a5696c2482639bac35fb02497bbcbe1",
+    "git_branch": "master",
+    "git_dirty": true,
+    "planner_mode": "semantic_interpreter"
+  },
+  "runtime": {
+    "type": "llama.cpp",
+    "base_url": "http://172.21.0.2:8080/v1",
+    "version": "b11151\n",
+    "commit": "bd4f514db14d87fded667787a7a963bfbaa98e89\n",
+    "image": "ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:014f721265464f38ccb247c1338d07d852c4bae7509a4b4734d07a2bbadc765c",
+    "image_id": "sha256:014f721265464f38ccb247c1338d07d852c4bae7509a4b4734d07a2bbadc765c\n",
+    "model": {
+      "name": "qwen35-abliterated-9b-q4km",
+      "path_or_id": "/models/Huihui-Qwen3.5-9B-abliterated-Q4_K_M.gguf",
+      "filename": "Huihui-Qwen3.5-9B-abliterated-Q4_K_M.gguf",
+      "size_bytes": 5627044800,
+      "sha256": "bb30f918bfeb0b3141187f588baaca7faf554cb8565fc6c2869ec032d8f54134",
+      "quantization": "Q4_K_M"
+    },
+    "context_length": "16384",
+    "gpu_layers": "99",
+    "parallel": "1"
+  },
+  "environment": {
+    "hostname": "home-cortex-0",
+    "os": "Linux-6.8.0-139-generic-x86_64-with-glibc2.39",
+    "cpu": "x86_64",
+    "ram_bytes": 16703447040,
+    "gpu": "NVIDIA GeForce RTX 2060 SUPER",
+    "gpu_vram": "8192 MiB",
+    "driver": "595.84"
+  },
+  "suites": [
+    "standard"
+  ],
+  "components": [
+    "planner",
+    "mutation"
+  ],
+  "requirements": {
+    "requires_real_model": true,
+    "requires_gpu_host": true
+  },
+  "fingerprints": {
+    "prompt": "7f7250bd72b90bcd507d01e64f726f4cf2a5f1ca79df9741600df3e8123bc0b1",
+    "corpus": "2b11f4eb479947006eb957410fd7c9d195a03fbd4f9fc04d7ed73e71a00bbeff",
+    "config": "6cccfed7a522cadb05079c6bf900073f0f521b2017e9bebc62fac9c7650d1d9c",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "prompt_by_suite": {
+      "planner": "c68f2c3d51d516b74c29e5582e588903ec75db69d74665ab56929383533e2870",
+      "mutation": "c68f2c3d51d516b74c29e5582e588903ec75db69d74665ab56929383533e2870"
+    },
+    "corpus_by_suite": {
+      "planner": "ebfbfff7f7391294f842b33a2d0a1f8f83e824c73d0b58425892109aad7a7352",
+      "mutation": "79224f81978ddc307d92505e37a87684efa070202444977a9461157a5d55e7e1"
+    }
+  },
+  "nonstandard_environment": false,
+  "cache_state": "unknown",
+  "requested_repetitions": {
+    "warmup": null,
+    "repetitions": null,
+    "verified_cold": false,
+    "limit": null
+  },
+  "results_path": "/home/jkuang/Workspace/home-cortex/benchmarks/results/20260925-051856-6cda",
+  "timing_policy": "planner: One scoring pass over benchmarks/semantic_planner_eval.yaml. Latency percentiles describe that pass and can include the first request. Warmup and repetitions are not applied.\nmutation: One scoring pass of the unified planner experiment. Two warmup calls per route are discarded by that runner before scoring. Writes are compiled and never dispatched. Safety gates use the unified route. Token totals sum that route's Ollama-reported counts and are not estimated."
+}

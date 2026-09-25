@@ -9,10 +9,16 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import JSONResponse
 
+from ..providers.ir import ModelProviderError
 from .schemas import REQUEST_ID_HEADER
 
 
 logger = logging.getLogger("uvicorn.error.home_cortex.api")
+
+
+async def model_provider_error_handler(request: Request, error: ModelProviderError) -> JSONResponse:
+    logger.warning("model_provider_error request_id=%s status=%d", request_id(request), error.status_code)
+    return error_response(request, error.status_code, "model_provider_error", str(error))
 
 
 class APIError(HTTPException):
@@ -119,4 +125,3 @@ async def unexpected_error_handler(
         "internal_server_error",
         "An unexpected server error occurred",
     )
-

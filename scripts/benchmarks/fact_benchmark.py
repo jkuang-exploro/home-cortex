@@ -155,9 +155,10 @@ async def benchmark_json(
     *,
     ollama_url: str | None = None,
     model: str | None = None,
+    runtime: str = "ollama",
     on_progress: Any | None = None,
 ) -> dict[str, Any]:
-    """JSON-graph fact benchmark. ``model`` selects Ollama; the default path is unchanged.
+    """JSON-graph fact benchmark. ``model`` selects a runtime; the default path is unchanged.
 
     This never opens the household database. ``benchmark_runtime`` is the separate
     SurrealDB path and is not used by ``hc-bench``.
@@ -171,7 +172,11 @@ async def benchmark_json(
     if model is not None:
         if not ollama_url:
             raise ValueError("ollama_url is required when model is set")
-        llm = OllamaService(ollama_url, model)
+        if runtime == "llamacpp":
+            from home_cortex.providers.llamacpp import LlamaCppService
+            llm = LlamaCppService(ollama_url, model)
+        else:
+            llm = OllamaService(ollama_url, model)
     else:
         settings = get_settings()
         llm = model_provider_from_settings(settings)

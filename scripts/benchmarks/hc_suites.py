@@ -45,12 +45,12 @@ _MUTATION_POLICY = (
     "One scoring pass of the unified planner experiment. Two warmup calls per route "
     "are discarded by that runner before scoring. Writes are compiled and never "
     "dispatched. Safety gates use the unified route. Token totals sum that route's "
-    "Ollama-reported counts and are not estimated."
+    "runtime-reported counts and are not estimated."
 )
 _LATENCY_POLICY = (
     "Warmup requests are excluded from percentiles. Measured repetitions are "
     "steady-state. The harness does not unload the model or flush caches. "
-    "cold_load_ms is Ollama's load_duration_ms on the first request when reported. "
+    "cold_load_ms is the runtime's load duration on the first request when reported. "
     "--verified-cold only labels that request; unload the model yourself first."
 )
 _BILINGUAL_POLICY = (
@@ -233,7 +233,9 @@ def planner_cases(
                     "executor_status": row.get("executor_status"),
                     "sample_index": sample,
                     "prompt_eval_count": diagnostics.get("prompt_eval_count"),
+                    "prompt_eval_duration_ms": diagnostics.get("prompt_eval_duration_ms"),
                     "eval_count": diagnostics.get("eval_count"),
+                    "eval_duration_ms": diagnostics.get("eval_duration_ms"),
                     "load_duration_ms": diagnostics.get("load_duration_ms"),
                 },
             )
@@ -354,7 +356,6 @@ def mutation_cases(rows: Sequence[Mapping[str, Any]], *, suite: str) -> list[Cas
 
 
 async def _run_planner(context: RunContext) -> SuiteResult:
-    from home_cortex.providers.ollama import OllamaService
     from scripts.benchmarks.semantic_planner_benchmark import (
         SCORING_REVISION,
         build_json_fact_service,
@@ -366,7 +367,7 @@ async def _run_planner(context: RunContext) -> SuiteResult:
     cases = load_semantic_eval_cases(eval_path)
     if context.limit is not None:
         cases = cases[: context.limit]
-    client = OllamaService(context.ollama_url, context.model)
+    client = _model_client(context)
     try:
         service, request_context = build_json_fact_service(
             context.data_dir, context.schema_dir, client
@@ -385,7 +386,7 @@ async def _run_planner(context: RunContext) -> SuiteResult:
         cases,
         planner_metrics(report, suite="planner"),
         _fingerprint(context, prompt, {"eval": eval_path}, scoring=SCORING_REVISION, warmup=0, repetitions=1),
-        _tokens(rows),
+        _tokens(rows, runtime=context.runtime),
         {"warmup": 0, "repetitions": 1},
         _PLANNER_POLICY,
         cold=_reported_cold_load(rows, warmup=0),
@@ -406,6 +407,7 @@ async def _run_fact(context: RunContext) -> SuiteResult:
         questions,
         ollama_url=context.ollama_url,
         model=context.model,
+        runtime=context.runtime,
         on_progress=_on_progress(context, "fact"),
     )
     prompt = _prompt_for(context)
@@ -466,7 +468,6 @@ async def _run_fact(context: RunContext) -> SuiteResult:
 async def _run_latency(context: RunContext) -> SuiteResult:
     from dataclasses import replace
 
-    from home_cortex.providers.ollama import OllamaService
     from scripts.benchmarks.semantic_planner_benchmark import (
         SCORING_REVISION,
         build_json_fact_service,
@@ -480,7 +481,7 @@ async def _run_latency(context: RunContext) -> SuiteResult:
     dataset = load_probe_dataset(eval_path)
     if context.limit is not None:
         dataset = replace(dataset, cases=dataset.cases[: context.limit])
-    client = OllamaService(context.ollama_url, context.model)
+    client = _model_client(context)
     try:
         service, request_context = build_json_fact_service(
             context.data_dir, context.schema_dir, client
@@ -519,7 +520,7 @@ async def _run_latency(context: RunContext) -> SuiteResult:
             warmup=warmup,
             repetitions=repetitions,
         ),
-        _tokens(rows),
+        _tokens(rows, runtime=context.runtime),
         {"warmup": warmup, "repetitions": repetitions},
         _LATENCY_POLICY,
         cold=_reported_cold_load(rows, warmup=warmup),
@@ -532,6 +533,7 @@ async def _run_bilingual(context: RunContext) -> SuiteResult:
     args = argparse.Namespace(
         ollama_url=context.ollama_url,
         model=context.model,
+        runtime=context.runtime,
         warmup=0,
         repeat=1,
         limit=context.limit,
@@ -581,7 +583,7 @@ async def _run_bilingual(context: RunContext) -> SuiteResult:
             warmup=0,
             repetitions=1,
         ),
-        _tokens(rows),
+        _tokens(rows, runtime=context.runtime),
         {"warmup": 0, "repetitions": 1},
         _BILINGUAL_POLICY,
         notes=_ignored_repeat_note(context),
@@ -619,7 +621,7 @@ async def _run_unified(suite: UnifiedSuite, context: RunContext) -> SuiteResult:
         cases,
         metrics,
         _fingerprint(context, prompt, files, warmup=0, repetitions=1),
-        _tokens(token_rows),
+        _tokens(token_rows, runtime=context.runtime),
         {"warmup": 0, "repetitions": 1},
         policy,
         routes=routes,
@@ -640,6 +642,7 @@ async def _experiment_group(
             schema_dir=context.schema_dir,
             ollama_url=context.ollama_url,
             model=context.model,
+            runtime=context.runtime,
             repeat=1,
             utterance=utterances,
             output=output,
@@ -648,6 +651,14 @@ async def _experiment_group(
         with contextlib.redirect_stdout(io.StringIO()):
             await run(args)
         return json.loads(output.read_text(encoding="utf-8"))
+
+
+def _model_client(context: RunContext):
+    if context.runtime == "llamacpp":
+        from home_cortex.providers.llamacpp import LlamaCppService
+        return LlamaCppService(context.ollama_url, context.model)
+    from home_cortex.providers.ollama import OllamaService
+    return OllamaService(context.ollama_url, context.model)
 
 
 def _limited_utterances(context: RunContext, group: str) -> list[str]:
@@ -782,14 +793,14 @@ def _prompt_for(
     return semantic_prompt_fingerprint(SemanticSchemaRegistry(catalog))
 
 
-def _tokens(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def _tokens(rows: Sequence[Mapping[str, Any]], *, runtime: str = "ollama") -> dict[str, Any]:
     normalized = []
     for row in rows:
         diagnostics = row.get("planner_diagnostics") if isinstance(row.get("planner_diagnostics"), Mapping) else {}
         prompt = diagnostics.get("prompt_eval_count", row.get("prompt_eval_count", row.get("input_tokens")))
         output = diagnostics.get("eval_count", row.get("eval_count", row.get("output_tokens")))
         normalized.append({"prompt_eval_count": prompt, "eval_count": output})
-    return token_totals(normalized)
+    return token_totals(normalized, source="llama.cpp" if runtime == "llamacpp" else "ollama")
 
 
 def _on_progress(context: RunContext, suite: str):
@@ -822,9 +833,9 @@ def _refuse_total_outage(cases: list[CaseRecord], url: str) -> None:
     """A dead endpoint is not a model score of zero."""
 
     scoring = [case for case in cases if case.metrics.get("counts_toward_score", True)]
-    if scoring and all(case.failure_type == "ollama_runtime_error" for case in scoring):
+    if scoring and all(case.failure_type in {"ollama_runtime_error", "provider_error"} for case in scoring):
         raise RuntimeError(
-            f"Every scored case failed to reach Ollama at {url}. "
+            f"Every scored case failed to reach the model server at {url}. "
             "This run was not scored as a model result."
         )
 

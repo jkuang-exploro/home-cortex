@@ -20,6 +20,9 @@ async def list_bare_models(request: Request) -> list[dict[str, str]]:
     if provider == "openrouter":
         name = getattr(settings, "openrouter_model", None)
         return [{"id": name, "owned_by": "openrouter"}] if name else []
+    if provider == "llamacpp":
+        name = getattr(settings, "local_llm_model", None)
+        return [{"id": name, "owned_by": "llamacpp"}] if name else []
     configured = getattr(settings, "ollama_model", None)
     url = getattr(settings, "ollama_url", None)
     models: list[dict[str, str]] = []

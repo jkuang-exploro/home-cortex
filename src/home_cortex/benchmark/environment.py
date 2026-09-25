@@ -1,4 +1,4 @@
-"""Provenance for a benchmark run: git, hardware, and Ollama identity.
+"""Provenance for a benchmark run: git, hardware, and model runtime identity.
 
 Values that the runtime does not report stay null or ``unavailable``. This module
 does not guess quantization, context length, or token counts.
@@ -23,6 +23,8 @@ CACHE_STATES = ("warm", "cold", "unchanged", "unknown")
 # resolve it, because the Ollama port is not published.
 DEFAULT_OLLAMA_URL = "http://ollama:11434"
 LOCAL_OLLAMA_URL = "http://127.0.0.1:11434"
+DEFAULT_LLAMA_URL = "http://llama-server:8080/v1"
+DEFAULT_LLAMA_IMAGE = "ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:014f721265464f38ccb247c1338d07d852c4bae7509a4b4734d07a2bbadc765c"
 
 Opener = Callable[..., Any]
 
@@ -273,6 +275,74 @@ def configured_ollama_url() -> str:
     return configured or DEFAULT_OLLAMA_URL
 
 
+def deployment_value(name: str) -> str | None:
+    """Read non-secret model settings shared with the Compose deployment."""
+    if name in os.environ:
+        return os.environ[name].strip()
+    env_file = repo_root() / "docker" / ".env"
+    try:
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.partition("=")
+            if separator and key.strip() == name:
+                return value.strip().strip("\"'")
+    except OSError:
+        pass
+    return None
+
+
+def configured_runtime() -> str:
+    return "llamacpp" if deployment_value("LLM_PROVIDER") == "llamacpp" else "ollama"
+
+
+def resolve_llamacpp_url(url: str | None, *, explicit: bool) -> tuple[str, str | None]:
+    """Find the internal llama-server API without publishing it on the host."""
+    chosen = (url or deployment_value("LOCAL_LLM_BASE_URL") or DEFAULT_LLAMA_URL).rstrip("/")
+    candidates = [(chosen, None)]
+    if not explicit:
+        candidates.append(("http://127.0.0.1:8080/v1", "localhost"))
+        try:
+            names = _docker_output(["docker", "ps", "--filter", "name=llama-server", "--format", "{{.Names}}"])
+            for name in names.splitlines():
+                addresses = _docker_output([
+                    "docker", "inspect", "-f",
+                    "{{range .NetworkSettings.Networks}}{{.IPAddress}}\n{{end}}", name,
+                ])
+                candidates.extend((f"http://{ip}:8080/v1", f"Docker container {name}") for ip in addresses.split() if ":" not in ip)
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            pass
+    for candidate, why in candidates:
+        health = _get_json(candidate.removesuffix("/v1") + "/health", opener=urllib.request.urlopen, timeout=3)
+        if isinstance(health, Mapping) and health.get("status") == "ok":
+            return candidate, (f"Using {candidate} ({why})." if why else None)
+    raise OllamaUnreachable("llama-server is not ready; no benchmark scores were recorded")
+
+
+def llamacpp_metadata(base_url: str, model: str) -> dict[str, Any]:
+    """Capture immutable image and GGUF identity from deployment configuration."""
+    filename = deployment_value("LLAMA_MODEL_FILE")
+    path = Path("/opt/models") / filename if filename else None
+    image = deployment_value("LLAMA_SERVER_IMAGE") or DEFAULT_LLAMA_IMAGE
+    image_id = revision = version = "unavailable"
+    try:
+        image_id = _docker_output(["docker", "image", "inspect", image, "--format", "{{.Id}}"])
+        revision = _docker_output(["docker", "image", "inspect", image, "--format", "{{index .Config.Labels \"org.opencontainers.image.revision\"}}"])
+        version = _docker_output(["docker", "image", "inspect", image, "--format", "{{index .Config.Labels \"org.opencontainers.image.version\"}}"])
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        pass
+    return {
+        "type": "llama.cpp", "base_url": base_url, "version": version,
+        "commit": revision if revision != "<no value>" else None,
+        "image": image, "image_id": image_id,
+        "model": {"name": model, "path_or_id": f"/models/{filename}" if filename else None,
+                  "filename": filename, "size_bytes": path.stat().st_size if path and path.is_file() else None,
+                  "sha256": sha256_file(path) if path and path.is_file() else None,
+                  "quantization": deployment_value("LLAMA_MODEL_QUANTIZATION")},
+        "context_length": deployment_value("LLAMA_CTX_SIZE"),
+        "gpu_layers": deployment_value("LLAMA_GPU_LAYERS"),
+        "parallel": deployment_value("LLAMA_PARALLEL"),
+    }
+
+
 def ollama_reachable(url: str, *, timeout: float = 2.0, opener: Opener = urllib.request.urlopen) -> bool:
     version = _get_json(f"{url.rstrip('/')}/api/version", opener=opener, timeout=timeout)
     return isinstance(version, Mapping) and bool(version.get("version"))
@@ -369,7 +439,7 @@ def _unreachable_message(tried: list[str]) -> str:
 def _docker_output(args: list[str]) -> str:
     return subprocess.check_output(
         args, text=True, stderr=subprocess.DEVNULL, timeout=3,
-    )
+    ).strip()
 
 
 def collect_environment(

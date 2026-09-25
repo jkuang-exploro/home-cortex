@@ -256,7 +256,7 @@ def percentile(values: list[float], q: float) -> float | None:
     return round(ordered[index], 3)
 
 
-async def measure_prompt_components(ollama_url: str, model: str, service) -> dict[str, Any]:
+async def measure_prompt_components(ollama_url: str, model: str, service, *, runtime: str = "ollama") -> dict[str, Any]:
     from ollama import AsyncClient
 
     parts = {
@@ -264,27 +264,24 @@ async def measure_prompt_components(ollama_url: str, model: str, service) -> dic
         "examples": "".join(message["content"] for message in _semantic_planner_examples()),
         "capabilities": compact(service.engine.schema.planner_capability_payload()),
     }
-    client = AsyncClient(host=ollama_url)
+    client = AsyncClient(host=ollama_url) if runtime == "ollama" else None
     rows = []
     try:
         for name, text in parts.items():
             response = await client.generate(
-                model=model,
-                prompt=text,
-                raw=True,
-                stream=False,
-                think=False,
+                model=model, prompt=text, raw=True, stream=False, think=False,
                 keep_alive=PLANNER_KEEP_ALIVE,
                 options={"num_predict": 1, "num_ctx": PLANNER_NUM_CTX, "temperature": 0, "seed": 0},
-            )
+            ) if client is not None else None
             rows.append({
                 "component": name,
                 "utf8_bytes": len(text.encode()),
                 "text_sha256": hashlib.sha256(text.encode()).hexdigest(),
-                "raw_prompt_tokens": response.prompt_eval_count,
+                "raw_prompt_tokens": response.prompt_eval_count if response is not None else None,
             })
     finally:
-        await client.close()
+        if client is not None:
+            await client.close()
     built = planner_chat_messages(
         [{"role": "user", "content": "Who am I?"}],
         service.engine.schema.planner_capability_payload(),
@@ -300,7 +297,12 @@ async def measure_prompt_components(ollama_url: str, model: str, service) -> dic
 
 
 async def run(args: argparse.Namespace) -> dict[str, Any]:
-    ollama = OllamaService(args.ollama_url, args.model)
+    runtime = getattr(args, "runtime", "ollama")
+    if runtime == "llamacpp":
+        from home_cortex.providers.llamacpp import LlamaCppService
+        ollama = LlamaCppService(args.ollama_url, args.model)
+    else:
+        ollama = OllamaService(args.ollama_url, args.model)
     service, context = build_json_fact_service(FIXTURE, SCHEMA, ollama)
     schema = service.engine.schema
     dataset = load_bilingual_dataset(DATASET)
@@ -320,7 +322,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             progress({"index": step, "total": planned, "case_id": label, "state": state, **extra})
 
     _notify("prompt components", "start")
-    prompt = await measure_prompt_components(args.ollama_url, args.model, service)
+    prompt = await measure_prompt_components(args.ollama_url, args.model, service, runtime=runtime)
     _notify("prompt components", "done", passed=True)
     rows: list[dict[str, Any]] = []
     try:
@@ -493,6 +495,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             verified_cold=False,
             data_dir=FIXTURE,
             schema_dir=SCHEMA,
+            runtime=runtime,
         ),
         "queries": rows,
     }

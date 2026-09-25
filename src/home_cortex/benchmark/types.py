@@ -85,6 +85,7 @@ class RunContext:
     limit: int | None
     verified_cold: bool
     allow_nonstandard_host: bool
+    runtime: str = "ollama"
     digest_cache: dict[str, str] = field(default_factory=dict)
     progress: Any = None
 
@@ -108,3 +109,5 @@ class RunRequest:
     limit: int | None = None
     verified_cold: bool = False
     allow_nonstandard_host: bool = False
+    runtime: str | None = None
+    base_url: str | None = None

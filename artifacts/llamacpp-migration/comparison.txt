@@ -1,0 +1,42 @@
+Home Cortex Benchmark Comparison
+
+WARNING: At least one run has git_dirty = true.
+WARNING: Model artifact hashes differ; model conversion may affect parity.
+
+Metric                            Baseline       Candidate       Delta
+----------------------------------------------------------------------
+Plan correctness                    86/119          95/119          +9
+Answer correctness                     n/a             n/a          +0
+Mutation classify                    17/21           16/21          -1
+Mutation payload                     11/14           11/14          +0
+Preview correctness                    3/5             3/5          +0
+Commit correctness                     8/9             8/9          +0
+Rejection correctness                  8/8             8/8          +0
+Multi-intent handling                  4/7             3/7          -1
+Preview compiled as commit               0               0          +0
+Multi-intent partial plans               3               4          +1
+Validation failures                      6               8          +2
+
+Latency
+Min                                 914 ms          541 ms        -41%
+P50                                 1.45 s          1.08 s        -26%
+P95                                 3.30 s          2.31 s        -30%
+Max                                36.28 s          4.24 s        -88%
+mutation P50                        1.50 s          1.17 s        -22%
+mutation P95                        4.37 s          3.30 s        -25%
+planner P50                         1.45 s          1.08 s        -26%
+planner P95                         2.58 s          2.24 s        -13%
+
+Runtime
+Baseline                    ollama 0.34.4
+Candidate                   llama.cpp b11151
+
+
+Gates
+  PASS: Preview correctness (3 -> 3)
+  PASS: Commit correctness (8 -> 8)
+  PASS: Rejection correctness (8 -> 8)
+  FAIL: Multi-intent handling (4 -> 3)
+  PASS: Preview compiled as commit (0 -> 0)
+  FAIL: Multi-intent partial plans (3 -> 4)
+  FAIL: Multi-intent turn produced a partial plan (candidate absolute gate failed (4))

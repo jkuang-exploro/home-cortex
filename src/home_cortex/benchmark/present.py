@@ -13,18 +13,22 @@ def format_run_report(run: Mapping[str, Any], summary: Mapping[str, Any]) -> str
     ollama = run.get("ollama") if isinstance(run.get("ollama"), Mapping) else {}
     git = run.get("home_cortex") if isinstance(run.get("home_cortex"), Mapping) else {}
     fingerprints = run.get("fingerprints") if isinstance(run.get("fingerprints"), Mapping) else {}
+    runtime = run.get("runtime") if isinstance(run.get("runtime"), Mapping) else {}
+    local_model = runtime.get("model") if isinstance(runtime.get("model"), Mapping) else {}
     lines = [
         "Home Cortex Benchmark",
         f"Run ID: {run.get('run_id')}",
         f"Label: {run.get('label') or '-'}",
         f"Suite: {', '.join(run.get('suites') or [])}",
-        f"Model: {ollama.get('model')}",
-        f"Ollama URL: {ollama.get('base_url') or 'unknown'}",
-        f"Ollama version: {ollama.get('version') or 'unavailable'}",
+        f"Model: {local_model.get('name') or ollama.get('model')}",
+        f"Runtime: {runtime.get('type') or 'ollama'}",
+        f"Runtime URL: {runtime.get('base_url') or ollama.get('base_url') or 'unknown'}",
+        f"Runtime version: {runtime.get('version') or ollama.get('version') or 'unavailable'}",
+        f"Runtime commit: {runtime.get('commit') or '-'}",
         f"Model tag: {ollama.get('tag') or '-'}",
-        f"Model digest: {ollama.get('digest') or 'unavailable'}",
-        f"Quantization: {ollama.get('quantization') or 'unavailable'}",
-        f"Context length: {ollama.get('context_length') if ollama.get('context_length') is not None else 'unavailable'}",
+        f"Model digest: {local_model.get('sha256') or ollama.get('digest') or 'unavailable'}",
+        f"Quantization: {local_model.get('quantization') or ollama.get('quantization') or 'unavailable'}",
+        f"Context length: {runtime.get('context_length') or ollama.get('context_length') or 'unavailable'}",
         f"Requested num_ctx: {ollama.get('requested_num_ctx')}",
         f"Home Cortex commit: {git.get('git_commit')}",
         f"Branch: {git.get('git_branch')}",
@@ -69,7 +73,7 @@ def format_run_report(run: Mapping[str, Any], summary: Mapping[str, Any]) -> str
             lines.append(f"  {name}: {count}")
     tokens = summary.get("tokens") if isinstance(summary.get("tokens"), Mapping) else {}
     lines.extend(["", "Tokens"])
-    if tokens.get("source") == "ollama":
+    if tokens.get("source") in {"ollama", "llama.cpp"}:
         lines.append(f"  prompt: {tokens.get('prompt')}")
         lines.append(f"  output: {tokens.get('output')}")
         lines.append(f"  total: {tokens.get('total')}")
@@ -138,14 +142,14 @@ def format_comparison(comparison: Comparison, baseline_run: Mapping[str, Any], c
     for row in comparison.rows:
         if row.section == "latency":
             lines.append(f"{row.label:<28}{row.baseline:>14}{row.candidate:>16}{row.delta:>12}")
-    base_ollama = baseline_run.get("ollama") if isinstance(baseline_run.get("ollama"), Mapping) else {}
-    cand_ollama = candidate_run.get("ollama") if isinstance(candidate_run.get("ollama"), Mapping) else {}
+    base_ollama = baseline_run.get("runtime") or baseline_run.get("ollama") or {}
+    cand_ollama = candidate_run.get("runtime") or candidate_run.get("ollama") or {}
     lines.extend(
         [
             "",
-            "Ollama",
-            f"Baseline                    {base_ollama.get('version') or 'unavailable'}",
-            f"Candidate                   {cand_ollama.get('version') or 'unavailable'}",
+            "Runtime",
+            f"Baseline                    {base_ollama.get('type') or 'ollama'} {base_ollama.get('version') or 'unavailable'}",
+            f"Candidate                   {cand_ollama.get('type') or 'ollama'} {cand_ollama.get('version') or 'unavailable'}",
         ]
     )
     if comparison.gates:

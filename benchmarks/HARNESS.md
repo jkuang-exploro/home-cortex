@@ -23,6 +23,18 @@ hc-bench show <run-id>
 hc-bench show <run-id> --failures
 ```
 
+For the local llama.cpp deployment, use the configured logical model name:
+
+```bash
+hc-bench run --suite standard --runtime llamacpp --model local-qwen --label llamacpp-parity
+hc-bench compare <ollama-baseline-run-id> <llamacpp-run-id>
+```
+
+The runtime defaults to `LLM_PROVIDER` from `docker/.env`. `--runtime` makes
+the choice explicit. `--base-url` selects an explicit API endpoint; normally
+the harness discovers the internal `llama-server` container address. The run
+records its pinned image revision and the configured GGUF's size and SHA-256.
+
 Narrower suites:
 
 ```bash
@@ -49,7 +61,7 @@ across machines. See `benchmarks/matrix.example.yaml`.
 hc-bench matrix benchmarks/matrix.example.yaml
 ```
 
-Change Ollama or pull a model yourself. The harness does not upgrade runtimes
+Change the configured model yourself. The harness does not upgrade runtimes
 or download weights.
 
 ## Where results go
@@ -71,13 +83,16 @@ second scoring pass and no single aggregate score. Plan correctness, answer
 correctness, mutation payload, preview, commit, rejection, and multi-intent
 stay separate. A faster model that breaks preview or commit exits 3.
 
-## Ollama address
+## Runtime address
 
 The project default is `http://ollama:11434`, the Compose service. That name
 resolves inside the API container. On the GPU host the port is not published,
 so `hc-bench` checks localhost and then the running Ollama container's bridge
 address. It prints the address it actually used. `--ollama-url` is never
 replaced. If nothing answers, the command exits without recording model scores.
+For llama.cpp, the harness checks `/health` and discovers the internal
+`llama-server` address without publishing port 8080. Use `--base-url` for an
+explicit endpoint.
 
 ## Host policy
 
@@ -95,7 +110,7 @@ from percentiles. The harness does not unload the model or flush caches.
 action. `--verified-cold` only labels the first latency request; unload the
 model yourself before using it. `cold_load_ms` is Ollama's reported
 `load_duration_ms` when the runtime provides it. Token counts are recorded
-only when Ollama reports them. They are never estimated.
+only when the runtime reports them. They are never estimated.
 
 Comparisons warn when the corpus, prompt, configuration, commit, hostname, GPU,
 cache state, or a dirty tree differ. Warnings still print the table.

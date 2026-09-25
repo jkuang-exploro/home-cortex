@@ -1,0 +1,124 @@
+services:
+  llama-server:
+    image: ${LLAMA_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:014f721265464f38ccb247c1338d07d852c4bae7509a4b4734d07a2bbadc765c}
+    restart: unless-stopped
+    volumes:
+      - /opt/models:/models:ro
+    command:
+      - --model
+      - /models/${LLAMA_MODEL_FILE:-model.gguf}
+      - --alias
+      - ${LOCAL_LLM_MODEL:-local-model}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --ctx-size
+      - ${LLAMA_CTX_SIZE:-16384}
+      - --n-gpu-layers
+      - ${LLAMA_GPU_LAYERS:-99}
+      - --parallel
+      - ${LLAMA_PARALLEL:-1}
+      - --reasoning-budget
+      - "0"
+      - --chat-template
+      - ${LLAMA_CHAT_TEMPLATE:-chatml}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 120s
+
+  proxy:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - home-gui
+      - cortex-api
+      - home-media
+
+  home-gui:
+    build:
+      context: ../src/home_gui
+      dockerfile: Dockerfile
+    image: home-cortex/gui:0.1.0
+    restart: unless-stopped
+    expose:
+      - "3000"
+
+  home-media:
+    build:
+      context: ../src/home_media
+      dockerfile: Dockerfile
+    image: home-cortex/media:0.1.0
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      HOME_MEDIA_PHOTO_ROOT: /media/photo
+      HOME_MEDIA_VIDEO_ROOT: /media/video
+      HOME_MEDIA_DATA_ROOT: /data
+      HOME_MEDIA_THUMBNAIL_SIZE: ${HOME_MEDIA_THUMBNAIL_SIZE:-500}
+      HOME_MEDIA_PAGE_SIZE: ${HOME_MEDIA_PAGE_SIZE:-100}
+    volumes:
+      - /opt/data/photo:/media/photo:ro
+      - /opt/data/video:/media/video:ro
+      - /opt/data/home-media-cache:/data
+
+  surrealdb:
+    image: surrealdb/surrealdb:v3.0.5
+    restart: unless-stopped
+    command: start rocksdb:/home/nonroot/home-cortex.db
+    environment:
+      SURREAL_USER: ${SURREAL_USER}
+      SURREAL_PASS: ${SURREAL_PASS}
+    volumes:
+      - surrealdb-data:/home/nonroot
+
+  cortex-api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8001:8000"
+    environment:
+      SURREAL_URL: ws://surrealdb:8000
+      SURREAL_USER: ${SURREAL_USER}
+      SURREAL_PASS: ${SURREAL_PASS}
+      SURREAL_NAMESPACE: home_cortex
+      SURREAL_DATABASE: home_cortex
+      LOCAL_LLM_BASE_URL: http://llama-server:8080/v1
+      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-local-model}
+      LLM_PROVIDER: ${LLM_PROVIDER:-llamacpp}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_HTTP_REFERER: ${OPENROUTER_HTTP_REFERER:-}
+      OPENROUTER_APP_TITLE: ${OPENROUTER_APP_TITLE:-home-cortex}
+      DATA_DIR: /app/data
+      EDGE_SCHEMA_DIR: /app/schemas/edge
+      HOME_CORTEX_DISABLE_TIER0: ${HOME_CORTEX_DISABLE_TIER0:-false}
+      CORTEX_API_KEY: ${CORTEX_API_KEY:-}
+      CORTEX_IDENTITY_MAP: '${CORTEX_IDENTITY_MAP:-{}}'
+      GOOGLE_CALENDAR_CLIENT_ID: ${GOOGLE_CALENDAR_CLIENT_ID:-}
+      GOOGLE_CALENDAR_CLIENT_SECRET: ${GOOGLE_CALENDAR_CLIENT_SECRET:-}
+      GOOGLE_CALENDAR_REFRESH_TOKEN: ${GOOGLE_CALENDAR_REFRESH_TOKEN:-}
+      CALENDAR_TIMEZONE: ${CALENDAR_TIMEZONE:-America/Los_Angeles}
+      CALENDAR_BINDINGS: '${CALENDAR_BINDINGS:-[]}'
+    volumes:
+      - ../data:/app/data:ro
+      - ../tmp/db-export:/app/export
+    depends_on:
+      surrealdb:
+        condition: service_started
+      llama-server:
+        condition: service_healthy
+
+volumes:
+  surrealdb-data:

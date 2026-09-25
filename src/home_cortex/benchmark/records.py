@@ -344,11 +344,12 @@ def merge_tokens(parts: Sequence[SuiteResult]) -> dict[str, Any]:
         }
     prompt = sum(prompts) if prompts else 0
     output = sum(outputs) if outputs else 0
+    sources = {str(part.tokens.get("source")) for part in parts if part.tokens.get("source") != "unavailable"}
     return {
         "prompt": prompt,
         "output": output,
         "total": prompt + output,
-        "source": "ollama",
+        "source": next(iter(sources)) if len(sources) == 1 else "mixed",
         "estimated": False,
         "partial": len(prompts) != len(parts) or len(outputs) != len(parts),
     }

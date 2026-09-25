@@ -122,6 +122,10 @@ The implementation findings and local-model measurements are recorded in
 docker compose -p cortex --env-file .env -f docker/docker-compose.yml up -d --build
 ```
 
+The [llama.cpp migration candidate](docker/LLAMA_SERVER.md) uses a GGUF under
+`/opt/models`. The default production stack remains on Ollama pending its
+multi-intent safety gate.
+
 After signing in, open `http://home-cortex-0/media` and use **Refresh library**
 to build or update the media index. Compose mounts `/opt/data/photo` and
 `/opt/data/video` read-only; the rebuildable SQLite index and derivative cache
