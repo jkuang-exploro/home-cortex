@@ -407,7 +407,6 @@ def composition_fingerprint_payload() -> dict[str, Any]:
     files = {
         "annotation-guide.md": sha256_file(COMPOSITION_ROOT / "annotation-guide.md"),
         "coverage-matrix.md": sha256_file(COMPOSITION_ROOT / "coverage-matrix.md"),
-        "codex-approval.md": sha256_file(COMPOSITION_ROOT / "codex-approval.md"),
         "README.md": sha256_file(COMPOSITION_ROOT / "README.md"),
         "ontology.yaml": sha256_file(ONTOLOGY_PATH),
     }

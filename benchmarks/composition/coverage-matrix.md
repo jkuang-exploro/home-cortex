@@ -22,7 +22,7 @@ is an adult).
 | Distinct composition cells | 28 | Rows in §4 |
 | Expression families | 2 | Canonical vs held-out; **not** a random split |
 
-Codex review (`codex-approval.md`): **APPROVE WITH CONDITIONS**. Size is
+The approved coverage review set the size at
 **42 / 36 / 8 / 8**. E3 is merged into E8-1. Do not pad with `dev-beta-F7-1`.
 This is the complete Ticket 4 set. No paraphrase generator, no extra rows
 after approval without a new coverage review.
@@ -411,7 +411,7 @@ E4 vs E5; G1, G2, G3 sequences; E8 speaker pair.
 
 ## 10. Codex answers (locked)
 
-See `codex-approval.md`. Locked before generation:
+The following decisions were locked before generation:
 
 1. Size **42 / 36 / 8 / 8**. No F7 padding.
 2. Households approved with entity-id discipline on count collisions.

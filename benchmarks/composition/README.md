@@ -8,7 +8,6 @@ than memorizing known questions. It does not replace
 |---|---|
 | `annotation-guide.md` | Plan identity, splits, households, checks |
 | `coverage-matrix.md` | Approved size **42 / 36 / 8 / 8** and case inventory |
-| `codex-approval.md` | Coverage review (approve with conditions, now applied) |
 | `households/{alpha,beta,gamma}/` | Invented graphs; not `data/` |
 | `development/` | Canonical wording; may overlap existing eval strings |
 | `frozen/` | Held-out wording; never prompt examples |

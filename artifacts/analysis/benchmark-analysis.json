@@ -1,15 +1,15 @@
 {
   "schema": "home-cortex-derived-benchmark-analysis-v1",
   "source_scope": "artifacts/ excluding analysis/",
-  "working_tree_source_file_count": 152,
+  "working_tree_source_file_count": 153,
   "archived_source_file_count": 1,
-  "source_file_count": 153,
+  "source_file_count": 154,
   "source_types_working_tree": {
     ".md": 30,
     ".json": 105,
     ".gz": 5,
     ".py": 5,
-    ".yaml": 6,
+    ".yaml": 7,
     ".txt": 1
   },
   "source_catalog": [
@@ -1275,6 +1275,11 @@
       "sha256": "b62893f3eff54c5c90086feed1fcf524636c347802c599230f264e35956ae08d"
     },
     {
+      "path": "qwen3.5-abliterated-9b.yaml",
+      "bytes": 3438,
+      "sha256": "a89d7aa8db42c71385ccb15efa888104a9beecbda592783ef0ec93595d9675ed"
+    },
+    {
       "path": "qwen3.8-27b.yaml",
       "bytes": 3313,
       "sha256": "398add09101d356e717a83a7239679be4a62460acb40e8c56712233b9c242037"
@@ -2094,15 +2099,15 @@
       ]
     },
     {
-      "path": "git:HEAD:artifacts/Ministral.yaml (deleted from working tree)",
+      "path": "git:c88a85c:artifacts/Ministral.yaml (absent from working tree)",
       "bytes": 2060,
       "sha256": "aae5590a7713e2de945f4776c7ca86f40071e4572be57abe9099c468d9db40e6",
-      "availability": "git HEAD only; deleted in working tree"
+      "availability": "git commit c88a85c only; absent from working tree"
     }
   ],
   "runs_discovered": [
     {
-      "source": "git:HEAD:artifacts/Ministral.yaml (deleted from working tree)",
+      "source": "git:c88a85c:artifacts/Ministral.yaml (absent from working tree)",
       "source_sha256": "aae5590a7713e2de945f4776c7ca86f40071e4572be57abe9099c468d9db40e6",
       "run_id": "20260923-054939-c75d",
       "label": "-",
@@ -3134,6 +3139,156 @@
         "(home-cortex) jkuang@home-cortex-0:~/Workspace/home-corte"
       ],
       "raw_finished_line": "05:25:28 [hc-bench] finished 20260924-050048-3420"
+    },
+    {
+      "source": "qwen3.5-abliterated-9b.yaml",
+      "source_sha256": "a89d7aa8db42c71385ccb15efa888104a9beecbda592783ef0ec93595d9675ed",
+      "run_id": "20260924-065027-6e58",
+      "label": "-",
+      "suite": "full",
+      "model": "huihui_ai/qwen3.5-abliterated:9b",
+      "model_tag": "9b",
+      "model_digest": "92a443adb124f5e805bbdee23fdb38fcd22a7bf00a1016b53f764e741369c600",
+      "ollama_url": "http://172.21.0.2:11434",
+      "ollama_version": "0.34.2",
+      "quantization": "Q4_K_M",
+      "model_context_length": 262144,
+      "requested_num_ctx": 16384,
+      "home_cortex_commit": "66e33d1d7a5696c2482639bac35fb02497bbcbe1",
+      "branch": "master",
+      "git_dirty": true,
+      "nonstandard_environment": false,
+      "prompt_fingerprint": "673683aa7f7da599868c02c72c0613e95637491c158825e8bf5e750d2268e966",
+      "corpus_fingerprint": "9c507ba8de0af559bde72cd588c0be2ecd529bd25eb67dc59191d73a5e9bb88a",
+      "config_fingerprint": "716da25ac3655d1c7ad376b110a38b9ba9c7625ef771da18e26126db1f5d0eec",
+      "cache_state": "unknown",
+      "original_results_path": "/home/jkuang/Workspace/home-cortex/benchmarks/results/20260924-065027-6e58",
+      "original_progress_path": "/home/jkuang/Workspace/home-cortex/benchmarks/results/20260924-065027-6e58/progress.log",
+      "hardware": null,
+      "start_clock_from_run_id_timezone_unrecorded": "20260924T065027",
+      "metrics": {
+        "Plan correctness": {
+          "correct": 87,
+          "scored": 119
+        },
+        "Answer correctness": null,
+        "Mutation classify": {
+          "correct": 17,
+          "scored": 21
+        },
+        "Mutation payload": {
+          "correct": 11,
+          "scored": 14
+        },
+        "Preview correctness": {
+          "correct": 3,
+          "scored": 5
+        },
+        "Commit correctness": {
+          "correct": 8,
+          "scored": 9
+        },
+        "Rejection correctness": {
+          "correct": 8,
+          "scored": 8
+        },
+        "Multi-intent handling": {
+          "correct": 4,
+          "scored": 7
+        },
+        "Fact pipeline completed": {
+          "correct": 38,
+          "scored": 38
+        },
+        "Latency-sample plan correctness": {
+          "correct": 11,
+          "scored": 20
+        },
+        "Latency-sample answer correctness": {
+          "correct": 12,
+          "scored": 20
+        },
+        "Bilingual plan match": {
+          "correct": 44,
+          "scored": 59
+        },
+        "Bilingual parity": {
+          "correct": 8,
+          "scored": 10
+        },
+        "Cases passed": {
+          "correct": 202,
+          "scored": 265
+        }
+      },
+      "latency_ms": {
+        "count": 334.0,
+        "min": 876.661,
+        "p50": 1416.62,
+        "p95": 2910.7,
+        "max": 15348.843,
+        "bilingual p50/p95": {
+          "p50_ms": 1423.877,
+          "p95_ms": 2026.314
+        },
+        "fact p50/p95": {
+          "p50_ms": 1357.276,
+          "p95_ms": 1544.83
+        },
+        "latency p50/p95": {
+          "p50_ms": 1395.978,
+          "p95_ms": 1891.678
+        },
+        "mutation p50/p95": {
+          "p50_ms": 1429.2,
+          "p95_ms": 4524.641
+        },
+        "planner p50/p95": {
+          "p50_ms": 1422.22,
+          "p95_ms": 2555.799
+        },
+        "cold model load": 8054.097505
+      },
+      "failures": {
+        "semantic_mismatch": 56,
+        "validation_failure": 7,
+        "malformed_structured_output": 0,
+        "timeout": 0,
+        "context_overflow": 0,
+        "ollama_runtime_error": 0,
+        "provider_error": 0,
+        "tool_failure": 0,
+        "benchmark_harness_failure": 0
+      },
+      "tokens": {
+        "prompt": 2319120,
+        "output": 13386,
+        "total": 2332506,
+        "estimated": false
+      },
+      "gates": {
+        "Preview was compiled as commit": {
+          "status": "pass",
+          "count": 0
+        },
+        "Multi-intent turn produced a partial plan": {
+          "status": "fail",
+          "count": 3
+        }
+      },
+      "timing_policy": [
+        "planner: One scoring pass over benchmarks/semantic_planner_eval.yaml. Latency percentiles describe that pass and can include the first request. Warmup and repetitions are not applied.",
+        "mutation: One scoring pass of the unified planner experiment. Two warmup calls per route are discarded by that runner before scoring. Writes are compiled and never dispatched. Safety gates use the unified route. Token totals sum that route's Ollama-reported counts and are not estimated.",
+        "fact: One pass of the JSON-graph fact benchmark. It records completion and latency, not gold plan or answer scores. The household database is not opened.",
+        "latency: Warmup requests are excluded from percentiles. Measured repetitions are steady-state. The harness does not unload the model or flush caches. cold_load_ms is Ollama's load_duration_ms on the first request when reported. --verified-cold only labels that request; unload the model yourself first.",
+        "bilingual: One measured pass of the bilingual planner probe, including its prompt-component measurement. The probe's semantic-contract fixture is the graph, not --data-dir. A --limit smoke cap skips discourse and negative turns."
+      ],
+      "notes": [
+        "cold_load_ms_by_suite={'planner': 8054.097505, 'latency': 2.048957}",
+        "06:59:50 [hc-bench] finished 20260924-065027-6e58",
+        "(home-cortex) jkuang@home-cortex-0:~/Workspace/home-cortex/docker$"
+      ],
+      "raw_finished_line": "06:59:50 [hc-bench] finished 20260924-065027-6e58"
     }
   ],
   "historical_studies": [
@@ -6694,7 +6849,8 @@
         "20260924-025024-38af",
         "20260924-033219-7a8f",
         "20260924-043534-f998",
-        "20260924-050048-3420"
+        "20260924-050048-3420",
+        "20260924-065027-6e58"
       ],
       "baseline": "20260924-022915-4063",
       "class_vs_baseline": "COMPARABLE WITH CAVEAT",
@@ -6716,7 +6872,99 @@
     "current_default": "qwen3.5:9b retains the stronger measured mutation rejection and far lower latency in this cohort",
     "capability_exploration_candidate": "qwen3.8:27b leads this cohort on planner correctness, latency-probe answer correctness, mutation payload, and preview correctness despite Home Cortex development primarily using qwen3.5:9b",
     "capability_caveat": "One full pass per model, absent per-case overlap and 27B rejection 4/8 versus 9B 8/8 prevent a general accuracy or production-safety claim",
-    "hardware_question": "27B p50 and p95 are much slower in the recorded setup; no GPU residency or offload telemetry was retained, so the effect of better hardware is unmeasured"
+    "hardware_question": "27B p50 and p95 are much slower in the recorded setup; no GPU residency or offload telemetry was retained, so the effect of better hardware is unmeasured",
+    "abliterated_9b": "The huihui-ai variant is much less accurate on this matched benchmark; changed weights and published model-package defaults/template are confounded, so the exported run cannot isolate abliteration itself as the cause"
+  },
+  "abliterated_9b_review": {
+    "run_id": "20260924-065027-6e58",
+    "baseline_run_id": "20260924-022915-4063",
+    "deltas": {
+      "correctness": {
+        "Plan correctness": -21,
+        "Mutation classify": -4,
+        "Mutation payload": -1,
+        "Preview correctness": 0,
+        "Commit correctness": -1,
+        "Rejection correctness": 0,
+        "Multi-intent handling": -3,
+        "Fact pipeline completed": 0,
+        "Latency-sample plan correctness": -6,
+        "Latency-sample answer correctness": -5,
+        "Bilingual plan match": -13,
+        "Bilingual parity": -2,
+        "Cases passed": -45
+      },
+      "latency": {
+        "min": {
+          "ms": 133.915,
+          "percent": 18.0
+        },
+        "p50": {
+          "ms": -45.797,
+          "percent": -3.1
+        },
+        "p95": {
+          "ms": 560.648,
+          "percent": 23.9
+        },
+        "max": {
+          "ms": 7667.957,
+          "percent": 99.8
+        }
+      },
+      "failures": {
+        "semantic_mismatch": 40,
+        "validation_failure": 5,
+        "malformed_structured_output": 0,
+        "timeout": 0,
+        "context_overflow": 0,
+        "ollama_runtime_error": 0,
+        "provider_error": 0,
+        "tool_failure": 0,
+        "benchmark_harness_failure": 0
+      },
+      "reliability": {
+        "failure_count_deltas": {
+          "semantic_mismatch": 40,
+          "validation_failure": 5,
+          "malformed_structured_output": 0,
+          "timeout": 0,
+          "context_overflow": 0,
+          "ollama_runtime_error": 0,
+          "provider_error": 0,
+          "tool_failure": 0,
+          "benchmark_harness_failure": 0
+        },
+        "gate_count_deltas": {
+          "Preview was compiled as commit": 0,
+          "Multi-intent turn produced a partial plan": 3
+        }
+      },
+      "tokens": {
+        "prompt": 22911,
+        "output": 619,
+        "total": 23530
+      }
+    },
+    "observed_pattern": "Broad semantic losses across planner, bilingual, latency-probe, and multi-intent metrics; zero malformed output, timeout, runtime, and harness errors",
+    "published_package_observations": {
+      "source": "https://ollama.com/huihui_ai/qwen3.5-abliterated:9b",
+      "digest_matches_run": true,
+      "go_template": "{{ .Prompt }}",
+      "params": {
+        "temperature": 1,
+        "top_k": 20,
+        "top_p": 0.95
+      },
+      "baseline_model_params_source": "https://ollama.com/library/qwen3.5:9b",
+      "baseline_model_params": {
+        "presence_penalty": 1.5,
+        "temperature": 1,
+        "top_k": 20,
+        "top_p": 0.95
+      },
+      "interpretation_limit": "Benchmark exports do not record Ollama's selected renderer or the final effective options. Home Cortex overrides temperature to 0 for planners; model package differences remain potential confounders."
+    }
   },
   "candidate_metrics": {
     "20260923-054939-c75d": {
@@ -7439,6 +7687,109 @@
         "total": 2472517,
         "estimated": false
       }
+    },
+    "20260924-065027-6e58": {
+      "model": "huihui_ai/qwen3.5-abliterated:9b",
+      "metrics": {
+        "Plan correctness": {
+          "correct": 87,
+          "scored": 119
+        },
+        "Answer correctness": null,
+        "Mutation classify": {
+          "correct": 17,
+          "scored": 21
+        },
+        "Mutation payload": {
+          "correct": 11,
+          "scored": 14
+        },
+        "Preview correctness": {
+          "correct": 3,
+          "scored": 5
+        },
+        "Commit correctness": {
+          "correct": 8,
+          "scored": 9
+        },
+        "Rejection correctness": {
+          "correct": 8,
+          "scored": 8
+        },
+        "Multi-intent handling": {
+          "correct": 4,
+          "scored": 7
+        },
+        "Fact pipeline completed": {
+          "correct": 38,
+          "scored": 38
+        },
+        "Latency-sample plan correctness": {
+          "correct": 11,
+          "scored": 20
+        },
+        "Latency-sample answer correctness": {
+          "correct": 12,
+          "scored": 20
+        },
+        "Bilingual plan match": {
+          "correct": 44,
+          "scored": 59
+        },
+        "Bilingual parity": {
+          "correct": 8,
+          "scored": 10
+        },
+        "Cases passed": {
+          "correct": 202,
+          "scored": 265
+        }
+      },
+      "latency_ms": {
+        "count": 334.0,
+        "min": 876.661,
+        "p50": 1416.62,
+        "p95": 2910.7,
+        "max": 15348.843,
+        "bilingual p50/p95": {
+          "p50_ms": 1423.877,
+          "p95_ms": 2026.314
+        },
+        "fact p50/p95": {
+          "p50_ms": 1357.276,
+          "p95_ms": 1544.83
+        },
+        "latency p50/p95": {
+          "p50_ms": 1395.978,
+          "p95_ms": 1891.678
+        },
+        "mutation p50/p95": {
+          "p50_ms": 1429.2,
+          "p95_ms": 4524.641
+        },
+        "planner p50/p95": {
+          "p50_ms": 1422.22,
+          "p95_ms": 2555.799
+        },
+        "cold model load": 8054.097505
+      },
+      "failures": {
+        "semantic_mismatch": 56,
+        "validation_failure": 7,
+        "malformed_structured_output": 0,
+        "timeout": 0,
+        "context_overflow": 0,
+        "ollama_runtime_error": 0,
+        "provider_error": 0,
+        "tool_failure": 0,
+        "benchmark_harness_failure": 0
+      },
+      "tokens": {
+        "prompt": 2319120,
+        "output": 13386,
+        "total": 2332506,
+        "estimated": false
+      }
     }
   },
   "comparisons": [
@@ -7921,6 +8272,86 @@
           "total": 163541
         }
       }
+    },
+    {
+      "baseline_run_id": "20260924-022915-4063",
+      "candidate_run_id": "20260924-065027-6e58",
+      "classification": "COMPARABLE WITH CAVEAT",
+      "recorded_core_differences": {},
+      "caveats": [
+        "git_dirty=true for both; unrecorded dirty diff",
+        "cache_state=unknown",
+        "hardware telemetry absent in these exports",
+        "single sequential scoring pass for semantic suites"
+      ],
+      "deltas": {
+        "correctness": {
+          "Plan correctness": -21,
+          "Mutation classify": -4,
+          "Mutation payload": -1,
+          "Preview correctness": 0,
+          "Commit correctness": -1,
+          "Rejection correctness": 0,
+          "Multi-intent handling": -3,
+          "Fact pipeline completed": 0,
+          "Latency-sample plan correctness": -6,
+          "Latency-sample answer correctness": -5,
+          "Bilingual plan match": -13,
+          "Bilingual parity": -2,
+          "Cases passed": -45
+        },
+        "latency": {
+          "min": {
+            "ms": 133.915,
+            "percent": 18.0
+          },
+          "p50": {
+            "ms": -45.797,
+            "percent": -3.1
+          },
+          "p95": {
+            "ms": 560.648,
+            "percent": 23.9
+          },
+          "max": {
+            "ms": 7667.957,
+            "percent": 99.8
+          }
+        },
+        "failures": {
+          "semantic_mismatch": 40,
+          "validation_failure": 5,
+          "malformed_structured_output": 0,
+          "timeout": 0,
+          "context_overflow": 0,
+          "ollama_runtime_error": 0,
+          "provider_error": 0,
+          "tool_failure": 0,
+          "benchmark_harness_failure": 0
+        },
+        "reliability": {
+          "failure_count_deltas": {
+            "semantic_mismatch": 40,
+            "validation_failure": 5,
+            "malformed_structured_output": 0,
+            "timeout": 0,
+            "context_overflow": 0,
+            "ollama_runtime_error": 0,
+            "provider_error": 0,
+            "tool_failure": 0,
+            "benchmark_harness_failure": 0
+          },
+          "gate_count_deltas": {
+            "Preview was compiled as commit": 0,
+            "Multi-intent turn produced a partial plan": 3
+          }
+        },
+        "tokens": {
+          "prompt": 22911,
+          "output": 619,
+          "total": 23530
+        }
+      }
     }
   ],
   "notable_regressions": [
@@ -8067,6 +8498,30 @@
           "count": 4
         }
       }
+    },
+    {
+      "run_id": "20260924-065027-6e58",
+      "model": "huihui_ai/qwen3.5-abliterated:9b",
+      "mutation_safety": {
+        "Rejection correctness": {
+          "correct": 8,
+          "scored": 8
+        },
+        "Multi-intent handling": {
+          "correct": 4,
+          "scored": 7
+        }
+      },
+      "gates": {
+        "Preview was compiled as commit": {
+          "status": "pass",
+          "count": 0
+        },
+        "Multi-intent turn produced a partial plan": {
+          "status": "fail",
+          "count": 3
+        }
+      }
     }
   ],
   "notable_improvements": [
@@ -8117,13 +8572,14 @@
     }
   },
   "missing_data": [
-    "Seven original run.json, summary.json, cases.jsonl and progress.log files are referenced by absolute paths outside artifacts and are not present here",
-    "Per-case overlap and per-language accuracy for seven full runs",
+    "Eight original run.json, summary.json, cases.jsonl and progress.log files are referenced by absolute paths outside artifacts and are not present here",
+    "Per-case overlap and per-language accuracy for eight full runs",
     "Within-run latency samples and variance",
-    "Time to first token and generation time for seven full runs",
-    "GPU/CPU/RAM/VRAM/offload telemetry for seven full runs",
+    "Time to first token and generation time for eight full runs",
+    "GPU/CPU/RAM/VRAM/offload telemetry for eight full runs",
     "Verified cold-start condition",
     "Repeated full runs for other model/config combinations",
-    "Git dirty diff and exact host identity for seven full runs"
+    "Git dirty diff and exact host identity for eight full runs",
+    "Ollama selected renderer and final effective model options for the abliterated/base pair"
   ]
 }
