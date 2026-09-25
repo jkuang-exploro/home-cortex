@@ -1,0 +1,66 @@
+{
+  "run_id": "20260925-162253-2e15",
+  "label": "llama-prod-exact-valid-provenance",
+  "started_at": "2026-09-25T16:22:53+00:00",
+  "finished_at": "2026-09-25T16:24:45+00:00",
+  "home_cortex": {
+    "git_commit": "e689819af658344b6a2b9724cb9cbcab1bc677a7",
+    "git_branch": "HEAD",
+    "git_dirty": true,
+    "planner_mode": "semantic_interpreter"
+  },
+  "runtime": {
+    "type": "llama.cpp",
+    "base_url": "http://172.21.0.7:8080/v1",
+    "version": "qwen35-ollama-loader-e4ee2d2",
+    "commit": "e4ee2d21a8ceae24aecdc7c3a229a48ad3b34ee5",
+    "image": "local/llama.cpp:server-cuda-qwen35-e4ee2d2",
+    "image_id": "sha256:ce56116c1150900ef8378e81c7a30300a0aed29a6ffc8abb9b7a5784d3833ba3",
+    "model": {
+      "name": "parity-prod-exact",
+      "path_or_id": "/models/qwen35-abliterated-9b-q4_k_m.gguf",
+      "filename": "qwen35-abliterated-9b-q4_k_m.gguf",
+      "size_bytes": 6594462816,
+      "sha256": "afb54ad43a39f947407f5cabc59856348d70e072baa5c62d436332157c151bcd",
+      "quantization": "Q4_K_M"
+    },
+    "context_length": "16384",
+    "gpu_layers": "99",
+    "parallel": "1"
+  },
+  "environment": {
+    "hostname": "home-cortex-0",
+    "os": "Linux-6.8.0-139-generic-x86_64-with-glibc2.39",
+    "cpu": "x86_64",
+    "ram_bytes": 16703447040,
+    "gpu": "NVIDIA GeForce RTX 2060 SUPER",
+    "gpu_vram": "8192 MiB",
+    "driver": "595.84"
+  },
+  "suites": [
+    "mutation"
+  ],
+  "components": [
+    "mutation"
+  ],
+  "requirements": {
+    "requires_real_model": true,
+    "requires_gpu_host": true
+  },
+  "fingerprints": {
+    "prompt": "c68f2c3d51d516b74c29e5582e588903ec75db69d74665ab56929383533e2870",
+    "corpus": "79224f81978ddc307d92505e37a87684efa070202444977a9461157a5d55e7e1",
+    "config": "8b0b85ef63bb438e516e8dd613e42fcf580f5192b14406f9571e516eaa9781b4",
+    "scoring_revision": null
+  },
+  "nonstandard_environment": false,
+  "cache_state": "unknown",
+  "requested_repetitions": {
+    "warmup": null,
+    "repetitions": null,
+    "verified_cold": false,
+    "limit": null
+  },
+  "results_path": "/home/jkuang/runtime-staging/home-cortex-eval/benchmarks/results/20260925-162253-2e15",
+  "timing_policy": "One scoring pass of the unified planner experiment. Two warmup calls per route are discarded by that runner before scoring. Writes are compiled and never dispatched. Safety gates use the unified route. Token totals sum that route's runtime-reported counts and are not estimated."
+}

@@ -16,6 +16,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Mapping
+from urllib.parse import urlsplit
 
 DESIGNATED_GPU_HOSTS = frozenset({"home-cortex-0"})
 CACHE_STATES = ("warm", "cold", "unchanged", "unknown")
@@ -24,7 +25,6 @@ CACHE_STATES = ("warm", "cold", "unchanged", "unknown")
 DEFAULT_OLLAMA_URL = "http://ollama:11434"
 LOCAL_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_LLAMA_URL = "http://llama-server:8080/v1"
-DEFAULT_LLAMA_IMAGE = "ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:014f721265464f38ccb247c1338d07d852c4bae7509a4b4734d07a2bbadc765c"
 
 Opener = Callable[..., Any]
 
@@ -318,29 +318,81 @@ def resolve_llamacpp_url(url: str | None, *, explicit: bool) -> tuple[str, str |
 
 
 def llamacpp_metadata(base_url: str, model: str) -> dict[str, Any]:
-    """Capture immutable image and GGUF identity from deployment configuration."""
-    filename = deployment_value("LLAMA_MODEL_FILE")
-    path = Path("/opt/models") / filename if filename else None
-    image = deployment_value("LLAMA_SERVER_IMAGE") or DEFAULT_LLAMA_IMAGE
+    """Capture the serving container and GGUF identity, then fall back to config."""
+    active = _active_llamacpp_container(base_url)
+    command = active.get("Config", {}).get("Cmd", []) if active else []
+    model_arg = _command_value(command, "--model")
+    path = _mounted_model_path(active, model_arg) if active else None
+    filename = path.name if path else deployment_value("LLAMA_MODEL_FILE")
+    if path is None and filename:
+        path = Path("/opt/models") / filename
+    image = (
+        active.get("Config", {}).get("Image") if active else None
+    ) or deployment_value("LLAMA_SERVER_IMAGE") or "unavailable"
     image_id = revision = version = "unavailable"
     try:
-        image_id = _docker_output(["docker", "image", "inspect", image, "--format", "{{.Id}}"])
-        revision = _docker_output(["docker", "image", "inspect", image, "--format", "{{index .Config.Labels \"org.opencontainers.image.revision\"}}"])
-        version = _docker_output(["docker", "image", "inspect", image, "--format", "{{index .Config.Labels \"org.opencontainers.image.version\"}}"])
+        image_id = (active or {}).get("Image") or "unavailable"
+        if image != "unavailable":
+            if image_id == "unavailable":
+                image_id = _docker_output(["docker", "image", "inspect", image, "--format", "{{.Id}}"])
+            revision = _docker_output(["docker", "image", "inspect", image, "--format", "{{index .Config.Labels \"org.opencontainers.image.revision\"}}"])
+            version = _docker_output(["docker", "image", "inspect", image, "--format", "{{index .Config.Labels \"org.opencontainers.image.version\"}}"])
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         pass
     return {
         "type": "llama.cpp", "base_url": base_url, "version": version,
         "commit": revision if revision != "<no value>" else None,
         "image": image, "image_id": image_id,
-        "model": {"name": model, "path_or_id": f"/models/{filename}" if filename else None,
+        "model": {"name": model, "path_or_id": model_arg or (f"/models/{filename}" if filename else None),
                   "filename": filename, "size_bytes": path.stat().st_size if path and path.is_file() else None,
                   "sha256": sha256_file(path) if path and path.is_file() else None,
                   "quantization": deployment_value("LLAMA_MODEL_QUANTIZATION")},
-        "context_length": deployment_value("LLAMA_CTX_SIZE"),
-        "gpu_layers": deployment_value("LLAMA_GPU_LAYERS"),
-        "parallel": deployment_value("LLAMA_PARALLEL"),
+        "context_length": _command_value(command, "--ctx-size") or deployment_value("LLAMA_CTX_SIZE"),
+        "gpu_layers": _command_value(command, "--n-gpu-layers") or deployment_value("LLAMA_GPU_LAYERS"),
+        "parallel": _command_value(command, "--parallel") or deployment_value("LLAMA_PARALLEL"),
     }
+
+
+def _active_llamacpp_container(base_url: str) -> Mapping[str, Any] | None:
+    """Find the container behind the benchmark URL, not an inactive Compose file."""
+    host = urlsplit(base_url).hostname
+    try:
+        names = _docker_output(["docker", "ps", "--filter", "name=llama-server", "--format", "{{.Names}}"])
+        for name in names.splitlines():
+            details = json.loads(_docker_output(["docker", "inspect", name]))[0]
+            addresses = {
+                network.get("IPAddress")
+                for network in details.get("NetworkSettings", {}).get("Networks", {}).values()
+            }
+            if host in addresses or (host == "llama-server" and name.endswith("llama-server-1")):
+                return details
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, IndexError, TypeError):
+        pass
+    return None
+
+
+def _command_value(command: Any, flag: str) -> str | None:
+    if not isinstance(command, list):
+        return None
+    try:
+        index = command.index(flag)
+    except ValueError:
+        return None
+    return str(command[index + 1]) if index + 1 < len(command) else None
+
+
+def _mounted_model_path(container: Mapping[str, Any] | None, model_arg: str | None) -> Path | None:
+    if not container or not model_arg:
+        return None
+    for mount in container.get("Mounts", []):
+        destination = mount.get("Destination")
+        source = mount.get("Source")
+        if not isinstance(destination, str) or not isinstance(source, str):
+            continue
+        relative = Path(model_arg).relative_to(destination) if model_arg.startswith(destination.rstrip("/") + "/") else None
+        if relative is not None and ".." not in relative.parts:
+            return Path(source) / relative
+    return None
 
 
 def ollama_reachable(url: str, *, timeout: float = 2.0, opener: Opener = urllib.request.urlopen) -> bool:

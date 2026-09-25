@@ -1,5 +1,6 @@
 """Local OpenAI-compatible provider contract without a live model server."""
 
+import hashlib
 import json
 
 import httpx
@@ -9,6 +10,7 @@ from home_cortex.config import Settings
 from home_cortex.providers.base import model_provider_from_settings
 from home_cortex.providers.base import ModelProviderError
 from home_cortex.providers.llamacpp import LlamaCppService
+from home_cortex.benchmark import environment
 
 
 def _client(handler):
@@ -95,3 +97,52 @@ async def test_llamacpp_timeout_and_malformed_response():
     with pytest.raises(ValueError, match="choice"):
         await provider.chat([{"role": "user", "content": "hello"}])
     await provider.close()
+
+
+def test_benchmark_uses_active_llamacpp_container_identity(monkeypatch, tmp_path):
+    model_path = tmp_path / "actual.gguf"
+    model_path.write_bytes(b"model bytes")
+    active = {
+        "Config": {
+            "Image": "local/llama.cpp:pinned",
+            "Cmd": ["--model", "/models/actual.gguf", "--ctx-size", "16384",
+                    "--n-gpu-layers", "99", "--parallel", "1"],
+        },
+        "Image": "sha256:active-image",
+        "Mounts": [{"Source": str(tmp_path), "Destination": "/models"}],
+        "NetworkSettings": {"Networks": {"cortex_default": {"IPAddress": "172.21.0.7"}}},
+    }
+
+    def docker_output(args):
+        if args[1] == "ps":
+            return "cortex-llama-server-1"
+        if args[1] == "inspect":
+            return json.dumps([active])
+        if "org.opencontainers.image.revision" in args[-1]:
+            return "pinned-commit"
+        if "org.opencontainers.image.version" in args[-1]:
+            return "pinned-version"
+        raise AssertionError(args)
+
+    monkeypatch.setattr(environment, "_docker_output", docker_output)
+    monkeypatch.setattr(environment, "deployment_value", lambda _name: "stale-config")
+    metadata = environment.llamacpp_metadata("http://172.21.0.7:8080/v1", "logical")
+
+    assert metadata["image"] == "local/llama.cpp:pinned"
+    assert metadata["image_id"] == "sha256:active-image"
+    assert metadata["commit"] == "pinned-commit"
+    assert metadata["model"]["sha256"] == hashlib.sha256(b"model bytes").hexdigest()
+    assert metadata["model"]["filename"] == "actual.gguf"
+    assert metadata["context_length"] == "16384"
+    assert metadata["gpu_layers"] == "99"
+
+
+def test_benchmark_does_not_invent_llamacpp_identity(monkeypatch):
+    monkeypatch.setattr(environment, "_docker_output", lambda _args: "")
+    monkeypatch.setattr(environment, "deployment_value", lambda _name: None)
+
+    metadata = environment.llamacpp_metadata("http://127.0.0.1:8080/v1", "logical")
+
+    assert metadata["image"] == "unavailable"
+    assert metadata["image_id"] == "unavailable"
+    assert metadata["model"]["sha256"] is None
