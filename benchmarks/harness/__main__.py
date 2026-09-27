@@ -1,11 +1,11 @@
-"""``python -m home_cortex.benchmark``"""
+"""``python -m benchmarks.harness``"""
 
 from __future__ import annotations
 
 import sys
 
-from home_cortex.benchmark.cli import main
-from home_cortex.benchmark.plugins import load_builtin_suites
+from benchmarks.harness.cli import main
+from benchmarks.harness.plugins import load_builtin_suites
 
 
 def _main() -> None:

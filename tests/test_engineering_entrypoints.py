@@ -16,7 +16,10 @@ def test_runtime_has_no_engineering_dependencies():
         for node in ast.walk(ast.parse(path.read_text())):
             names = ([node.module or ""] if isinstance(node, ast.ImportFrom) else
                      [item.name for item in node.names] if isinstance(node, ast.Import) else [])
-            assert not any(name == "scripts" or name.startswith("scripts.") for name in names), path
+            assert not any(
+                name == package or name.startswith(package + ".")
+                for name in names for package in ("scripts", "benchmarks")
+            ), path
 
 
 @pytest.mark.slow

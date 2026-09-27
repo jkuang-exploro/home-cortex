@@ -37,7 +37,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/home_cortex", "scripts"]
+packages = ["src/home_cortex", "scripts", "benchmarks"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]

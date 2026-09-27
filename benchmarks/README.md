@@ -1,7 +1,8 @@
 # benchmarks/
 
-**Dataset inputs for the semantic-planner and fact benchmarks. These are data,
-not active source code.**
+This directory contains the benchmark harness in `harness/` and the fixed
+dataset inputs for semantic-planner and fact benchmarks. The datasets are data,
+not active serving source code.
 
 Model runs go through `hc-bench`, documented in `benchmarks/HARNESS.md`.
 The YAML files here stay the scoring inputs. `hc-bench` does not replace them.

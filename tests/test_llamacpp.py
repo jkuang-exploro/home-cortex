@@ -10,7 +10,7 @@ from home_cortex.config import Settings
 from home_cortex.providers.base import model_provider_from_settings
 from home_cortex.providers.base import ModelProviderError
 from home_cortex.providers.llamacpp import LlamaCppService
-from home_cortex.benchmark import environment
+from benchmarks.harness import environment
 
 
 def _client(handler):

@@ -759,7 +759,7 @@ def collect_provenance(
     ollama = _ollama_provenance(ollama_url, ollama_model) if runtime == "ollama" else {}
     local_runtime = None
     if runtime == "llamacpp":
-        from home_cortex.benchmark.environment import llamacpp_metadata
+        from benchmarks.harness.environment import llamacpp_metadata
         local_runtime = llamacpp_metadata(ollama_url, ollama_model)
     package_path = Path(home_cortex.__file__).resolve()
     return {

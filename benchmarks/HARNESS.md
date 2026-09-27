@@ -2,11 +2,13 @@
 
 `hc-bench` records comparable model runs. It does not score on its own.
 Each suite calls the existing runner, then stores that runner's metrics.
+The CLI implementation lives in `benchmarks/harness/`; scoring adapters and
+older standalone runners remain in `scripts/benchmarks/`.
 
 ```bash
-python -m home_cortex.benchmark --help
-python -m home_cortex.benchmark run --help
-python -m home_cortex.benchmark compare --help
+python -m benchmarks.harness --help
+python -m benchmarks.harness run --help
+python -m benchmarks.harness compare --help
 ```
 
 After `pip install -e .` the same commands are available as `hc-bench`.

@@ -11,28 +11,28 @@ from pathlib import Path
 
 import pytest
 
-from home_cortex.benchmark.cli import build_parser, main
-from home_cortex.benchmark.compare import build_comparison
-from home_cortex.benchmark.environment import (
+from benchmarks.harness.cli import build_parser, main
+from benchmarks.harness.compare import build_comparison
+from benchmarks.harness.environment import (
     OllamaUnreachable,
     ollama_metadata,
     resolve_ollama_url,
     split_model_ref,
     stable_digest,
 )
-from home_cortex.benchmark.present import format_comparison, format_run_report
-from home_cortex.benchmark.records import (
+from benchmarks.harness.present import format_comparison, format_run_report
+from benchmarks.harness.records import (
     allocate_run_dir,
     build_summary,
     load_run,
     make_run_id,
     write_run,
 )
-from home_cortex.benchmark.registry import registry, reset_registry
-from home_cortex.benchmark.runner import CompositeSuite, execute, plan_matrix
-from home_cortex.benchmark.stats import percentile
-from home_cortex.benchmark.taxonomy import classify_planner_failure
-from home_cortex.benchmark.types import CaseRecord, Metric, RunContext, RunRequest, SuiteResult
+from benchmarks.harness.registry import registry, reset_registry
+from benchmarks.harness.runner import CompositeSuite, execute, plan_matrix
+from benchmarks.harness.stats import percentile
+from benchmarks.harness.taxonomy import classify_planner_failure
+from benchmarks.harness.types import CaseRecord, Metric, RunContext, RunRequest, SuiteResult
 from scripts.benchmarks.fact_benchmark import _percentile
 from scripts.benchmarks.hc_suites import mutation_metrics, planner_metrics, register
 
@@ -167,7 +167,7 @@ def isolated_registry():
 def test_mutation_progress_callback_is_bound(tmp_path: Path) -> None:
     import asyncio
 
-    from home_cortex.benchmark.progress import ProgressLog
+    from benchmarks.harness.progress import ProgressLog
     from scripts.benchmarks.hc_suites import _experiment_group
 
     async def fake_run(args: object) -> None:
@@ -199,7 +199,7 @@ def test_mutation_progress_callback_is_bound(tmp_path: Path) -> None:
 
 
 def test_progress_lines_show_a_case_start_and_its_result() -> None:
-    from home_cortex.benchmark.progress import format_case_done, format_case_start
+    from benchmarks.harness.progress import format_case_done, format_case_start
 
     assert format_case_start("planner", 2, 119, "self_identity::我是谁") == (
         "[planner] 2/119 self_identity::我是谁 ..."
@@ -401,7 +401,7 @@ def test_run_writes_immutable_records_and_marks_a_dirty_tree(
 def test_wrong_host_refuses_without_creating_a_run(
     isolated_registry, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr("home_cortex.benchmark.runner.is_designated_gpu_host", lambda: False)
+    monkeypatch.setattr("benchmarks.harness.runner.is_designated_gpu_host", lambda: False)
     isolated_registry.register(Widget(_result(), gpu=True))
     code = _execute(_request(tmp_path))
     assert code == 2
@@ -412,7 +412,7 @@ def test_wrong_host_refuses_without_creating_a_run(
 def test_host_override_records_nonstandard_environment(
     isolated_registry, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("home_cortex.benchmark.runner.is_designated_gpu_host", lambda: False)
+    monkeypatch.setattr("benchmarks.harness.runner.is_designated_gpu_host", lambda: False)
     isolated_registry.register(Widget(_result(), gpu=True))
     code = _execute(
         _request(tmp_path, allow_nonstandard_host=True),
@@ -687,7 +687,7 @@ def test_config_fingerprint_changes_when_the_limit_changes(tmp_path: Path) -> No
 def test_module_help_and_list_from_another_directory(tmp_path: Path) -> None:
     env = {**os.environ, "PYTHONPATH": os.pathsep.join((str(ROOT), str(ROOT / "src")))}
     listed = subprocess.run(
-        [sys.executable, "-m", "home_cortex.benchmark", "list"],
+        [sys.executable, "-m", "benchmarks.harness", "list"],
         cwd=tmp_path,
         env=env,
         capture_output=True,
@@ -701,7 +701,7 @@ def test_module_help_and_list_from_another_directory(tmp_path: Path) -> None:
         ["-m", "scripts.benchmarks.hc_bench", "--help"],
         ["-m", "scripts.benchmarks.hc_bench", "run", "--help"],
         ["-m", "scripts.benchmarks.hc_bench", "compare", "--help"],
-        ["-m", "home_cortex.benchmark", "--help"],
+        ["-m", "benchmarks.harness", "--help"],
     ):
         result = subprocess.run(
             [sys.executable, *args],

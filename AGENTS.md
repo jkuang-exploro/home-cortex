@@ -34,7 +34,10 @@ reasoning*, not a catalog of expected questions.
   (`edge/*.yaml`). Reusable domain concepts belong here, not in prompts.
 - `scripts/` — importable engineering utilities grouped as `benchmarks/`,
   `profiling/`, `probes/`, and `maintenance/`; see `scripts/README.md`. Runtime
-  modules must not import scripts. Benchmark inputs remain in `benchmarks/`.
+  modules must not import scripts.
+- `benchmarks/harness/` — engineering-only run registry, provenance, and
+  comparison CLI. Runtime modules must not import it. Benchmark inputs remain
+  in `benchmarks/` at their fixed paths.
 - `tests/` — pytest suite. Run with `python -m pytest -q`.
 - `pyproject.toml` — package metadata and dependencies.
 
@@ -63,9 +66,10 @@ and its executor integration. Do not restore the old cross-module re-export faca
   (gitignored and removed), and should **not** be read in full. If you need one,
   restore it from git history: `git log --all -- <path>` to find a commit, then
   `git show <commit>:<path>` (e.g. `git show 45b8761:artifacts/tier1-baseline/probe.json`).
-- `benchmarks/` — **benchmark dataset inputs** (YAML + fixtures). Data consumed at
-  fixed paths by the benchmark harness and tests; keep those paths stable. Never
-  copy benchmark wording into the interpreter examples.
+- `benchmarks/` (except `harness/`) — **benchmark dataset inputs** (YAML +
+  fixtures). Data consumed at fixed paths by the benchmark harness and tests;
+  keep those paths stable. Never copy benchmark wording into the interpreter
+  examples.
 - `data/` — **runtime household graph JSON** (nodes/edges are gitignored; only
   `Readme.md` is tracked). Not source; do not treat as a fixture for new tests.
 - `docs/` — historical / long-form reports. Not the active architecture; see

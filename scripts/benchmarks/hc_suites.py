@@ -18,18 +18,18 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
-from home_cortex.benchmark.progress import format_case_done, format_case_start
-from home_cortex.benchmark.environment import (
+from benchmarks.harness.progress import format_case_done, format_case_start
+from benchmarks.harness.environment import (
     cached_tree_hash,
     semantic_prompt_fingerprint,
     sha256_file,
     stable_digest,
 )
-from home_cortex.benchmark.registry import registry
-from home_cortex.benchmark.runner import CompositeSuite
-from home_cortex.benchmark.stats import token_totals
-from home_cortex.benchmark.taxonomy import classify_planner_failure
-from home_cortex.benchmark.types import CaseRecord, Metric, RunContext, SuiteResult
+from benchmarks.harness.registry import registry
+from benchmarks.harness.runner import CompositeSuite
+from benchmarks.harness.stats import token_totals
+from benchmarks.harness.taxonomy import classify_planner_failure
+from benchmarks.harness.types import CaseRecord, Metric, RunContext, SuiteResult
 from scripts import PROJECT_ROOT
 
 _PLANNER_POLICY = (

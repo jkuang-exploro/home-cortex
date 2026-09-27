@@ -73,7 +73,6 @@ FFmpeg relay, or Tapo integration. See
 home_cortex/
   api/             HTTP application, schemas, SSE, dependencies, and routes
   agents/          named agent definitions and registration
-  benchmark/       CLI-only run registry, provenance, and comparison
   capabilities/    model-facing calculation/calendar schemas and dispatch
   common/          identity, display, text, and tracing primitives
   conversation/    transcript persistence, GUI sessions, and greetings
@@ -92,9 +91,9 @@ Package initializers are intentionally small. Import concrete owners directly;
 the two deliberate public surfaces are `home_cortex.api` for deployment/client
 integration and `home_cortex.agents` for the named-agent registry.
 
-`benchmark/` is not imported by the serving application. Its CLI plugin loader
-imports `scripts.benchmarks.hc_suites` dynamically to reuse engineering runners;
-this is the benchmark-only exception to the runtime-to-scripts boundary.
+The engineering-only CLI lives at `benchmarks/harness/` outside this package.
+Its plugin loader imports `scripts.benchmarks.hc_suites` dynamically to reuse
+engineering runners; serving modules import neither package.
 
 ## Where does new code go?
 
@@ -184,6 +183,8 @@ derived inverse names do not require duplicate edge files. Spatial pose on
 Generated benchmark output lives under `artifacts/`. Read summary JSON and reports,
 not large per-case output. Benchmark inputs under `benchmarks/` have stable paths
 and must not be copied into model prompt examples.
+The engineering-only `hc-bench` harness lives in `benchmarks/harness/`, outside
+the serving `home_cortex` package.
 
 ## Model providers and agents
 
