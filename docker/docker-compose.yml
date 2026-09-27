@@ -2,6 +2,8 @@ services:
   ollama:
     image: ollama/ollama:0.34.4
     restart: unless-stopped
+    ports:
+      - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
     environment:
