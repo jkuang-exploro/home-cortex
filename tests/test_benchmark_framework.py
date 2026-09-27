@@ -37,6 +37,7 @@ from scripts.benchmarks.fact_benchmark import _percentile
 from scripts.benchmarks.hc_suites import mutation_metrics, planner_metrics, register
 
 ROOT = Path(__file__).resolve().parents[1]
+pytestmark = pytest.mark.benchmark
 
 
 class _Body:

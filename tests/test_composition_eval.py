@@ -32,6 +32,7 @@ from scripts.benchmarks.semantic_planner_benchmark import (
 )
 
 ROOT = Path(__file__).parents[1]
+pytestmark = pytest.mark.benchmark
 FROZEN_UTTERANCE_SOURCES = (
     ROOT / "benchmarks" / "semantic_planner_eval.yaml",
     ROOT / "benchmarks" / "semantic_planner_heldout.yaml",
@@ -410,7 +411,31 @@ def test_fingerprints_match_current_tree() -> None:
     assert manifest["size"]["frozen_standalone"] == 36
     assert manifest["size"]["development_standalone"] == 42
     assert len(manifest["cases"]) == 36
-    assert sha256_file(COMPOSITION_ROOT / "frozen" / "MANIFEST.yaml")
+    manifest_path = COMPOSITION_ROOT / "frozen" / "MANIFEST.yaml"
+    assert recorded["files"]["benchmarks/composition/frozen/MANIFEST.yaml"] == sha256_file(
+        manifest_path
+    )
+    frozen_cases = {case.case_id: case for case in load_standalone_cases() if case.split == "frozen"}
+    frozen_sequences = {
+        sequence.sequence_id: sequence
+        for sequence in load_sequences()
+        if sequence.last.split == "frozen"
+    }
+    assert {item["id"] for item in manifest["cases"]} == set(frozen_cases)
+    assert {item["id"] for item in manifest["sequences"]} == set(frozen_sequences)
+    for item in manifest["cases"]:
+        case = frozen_cases[item["id"]]
+        assert item["split"] == case.split
+        assert item["household"] == case.household
+        assert item["cell"] == case.cell
+        assert item["utterance"] == case.utterance
+        assert item["speaker_id"] == case.speaker_id
+        assert item["plan"] == case.plan_id
+    for item in manifest["sequences"]:
+        sequence = frozen_sequences[item["id"]]
+        assert item["household"] == sequence.household
+        assert item["cell"] == sequence.last.cell
+        assert item["utterances"] == list(sequence.utterances)
 
 
 def test_count_collision_cells_record_entity_ids() -> None:

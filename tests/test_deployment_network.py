@@ -69,6 +69,17 @@ def test_llamacpp_candidate_is_internal_and_waits_for_model_readiness() -> None:
     assert candidate["cortex-api"]["depends_on"]["llama-server"]["condition"] == "service_healthy"
 
 
+def test_both_stacks_require_auth_key_and_confine_export_to_mounted_root() -> None:
+    for name in ("docker-compose.yml", "docker-compose.llamacpp.yml"):
+        compose = yaml.safe_load((ROOT / "docker" / name).read_text())["services"]
+        api = compose["cortex-api"]
+        assert api["environment"]["CORTEX_API_KEY"].startswith(
+            "${CORTEX_API_KEY:?"
+        )
+        assert api["environment"]["CORTEX_EXPORT_ROOT"] == "/app/export"
+        assert "../tmp/db-export:/app/export" in api["volumes"]
+
+
 def test_production_gui_container_listens_on_internal_port_3000() -> None:
     dockerfile = GUI_DOCKERFILE.read_text()
 

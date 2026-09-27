@@ -40,6 +40,8 @@ from .schemas import DEFAULT_AGENT_ID, REQUEST_ID_HEADER
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    if settings.cortex_api_key is None:
+        raise RuntimeError("CORTEX_API_KEY is required to serve the API")
     app.state.settings = settings
     database = Database(settings)
     await database.connect()

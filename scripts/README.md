@@ -5,9 +5,9 @@ engineering commands and their shared support; runtime modules never import them
 
 - `benchmarks/`: repeatable fact/planner/latency suites, composition evaluation,
   and the shared `json_graph.py` fixture adapter used by tests and probes.
-- `profiling/`: token, latency, transport, and HTTP measurement runners.
+- `profiling/`: token, latency, and transport measurement runners.
 - `probes/`: focused model/semantic diagnostics and failure tracing.
-- `maintenance/`: package freezing, graph export, context auditing, container
+- `maintenance/`: package freezing, graph export, container
   copying, and explicit composition-dataset regeneration (`emit_composition.py`).
 
 Install with `pip install -e '.[dev]'`, then run from the repository root.

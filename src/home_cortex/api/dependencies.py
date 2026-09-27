@@ -42,7 +42,11 @@ def request_settings(request: Request) -> Settings:
 def authenticate_bearer(request: Request) -> None:
     expected_key = request_settings(request).cortex_api_key
     if expected_key is None:
-        return
+        raise APIError(
+            503,
+            "authentication_not_configured",
+            "Cortex API authentication is not configured",
+        )
     authorization = request.headers.get("Authorization", "")
     scheme, _, supplied_key = authorization.partition(" ")
     if scheme.casefold() != "bearer" or not secrets.compare_digest(
@@ -59,7 +63,11 @@ def authenticate_bearer(request: Request) -> None:
 def authenticate_request(request: Request) -> None:
     expected_key = request_settings(request).cortex_api_key
     if expected_key is None:
-        return
+        raise APIError(
+            503,
+            "authentication_not_configured",
+            "Cortex API authentication is not configured",
+        )
     if valid_gui_session(request.cookies.get(GUI_COOKIE_NAME, ""), expected_key):
         return
     authenticate_bearer(request)
@@ -72,6 +80,7 @@ def mapped_person_id(request: Request) -> str | None:
         return None
     session_user_id = None
     session_email = None
+    parsed = None
     if settings.cortex_api_key:
         parsed = parse_session(
             request.cookies.get(GUI_COOKIE_NAME, ""),
@@ -83,8 +92,11 @@ def mapped_person_id(request: Request) -> str | None:
                 session_user_id = value
             elif kind == "email":
                 session_email = value
+    # A signed GUI session fixes the person for its lifetime. A bearer client
+    # holding the household key may still supply mapped OpenWebUI headers.
+    identity_headers = {} if parsed is not None else request.headers
     entity_id = resolve_user_entity_id(
-        request.headers,
+        identity_headers,
         settings.cortex_identity_map,
         user_id=session_user_id,
         email=session_email,

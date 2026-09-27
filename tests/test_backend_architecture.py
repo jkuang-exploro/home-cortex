@@ -8,8 +8,11 @@ import subprocess
 import sys
 import tomllib
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
+pytestmark = pytest.mark.architecture
 PACKAGE = ROOT / "src" / "home_cortex"
 
 

@@ -409,6 +409,9 @@ def composition_fingerprint_payload() -> dict[str, Any]:
         "coverage-matrix.md": sha256_file(COMPOSITION_ROOT / "coverage-matrix.md"),
         "README.md": sha256_file(COMPOSITION_ROOT / "README.md"),
         "ontology.yaml": sha256_file(ONTOLOGY_PATH),
+        "benchmarks/composition/frozen/MANIFEST.yaml": sha256_file(
+            COMPOSITION_ROOT / "frozen" / "MANIFEST.yaml"
+        ),
     }
     test_path = ROOT / "tests" / "test_composition_eval.py"
     if test_path.is_file():

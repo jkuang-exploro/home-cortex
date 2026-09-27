@@ -1,7 +1,32 @@
+import re
+from pathlib import Path
+
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from home_cortex.config import Settings
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_compose_api_environment_is_declared_in_settings() -> None:
+    settings_keys = {field.upper() for field in Settings.model_fields}
+    for name in ("docker-compose.yml", "docker-compose.llamacpp.yml"):
+        compose = yaml.safe_load((ROOT / "docker" / name).read_text())
+        api_keys = set(compose["services"]["cortex-api"]["environment"])
+        assert api_keys <= settings_keys, name
+
+
+def test_environment_example_covers_compose_interpolation() -> None:
+    template = (ROOT / ".env.example").read_text()
+    documented = set(re.findall(r"^([A-Z][A-Z0-9_]*)=", template, re.MULTILINE))
+    referenced: set[str] = set()
+    for name in ("docker-compose.yml", "docker-compose.llamacpp.yml"):
+        compose = (ROOT / "docker" / name).read_text()
+        referenced.update(re.findall(r"\$\{([A-Z][A-Z0-9_]*)", compose))
+    assert referenced <= documented
 
 
 def test_identity_map_normalizes_email() -> None:

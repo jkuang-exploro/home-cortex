@@ -24,6 +24,8 @@ from home_cortex.semantic.ir import (
 from home_cortex.facts.renderer import FactRenderer
 from test_semantic_contract import household, ref, step
 
+pytestmark = pytest.mark.semantic
+
 
 def members():
     return SemanticReference(kind='current_household', path=(SemanticRelationStep(relation='member'),))
@@ -475,7 +477,7 @@ def test_http_named_then_pronoun_and_session_ownership(household, api_client, ro
     agent,model_client=agent_for(household,first,anniversary(),anniversary(),anniversary())
     app.state.agents={'steward':agent}
     app.state.retrieval.records=[{'id':'person:a','name':'Synthetic A'}, {'id':'person:b','name':'Synthetic B'}]
-    app.state.settings=SimpleNamespace(cortex_api_key=None,cortex_identity_map={'id:a':'person:a','id:b':'person:b'})
+    app.state.settings=SimpleNamespace(cortex_api_key='test-cortex-key',cortex_identity_map={'id:a':'person:a','id:b':'person:b'})
     headers={'X-OpenWebUI-User-Id':'a'}
     created=client.post('/agent/steward/conversations',json={'language':'en'},headers=headers)
     assert created.status_code==201

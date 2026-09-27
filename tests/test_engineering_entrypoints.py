@@ -8,6 +8,7 @@ import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+pytestmark = pytest.mark.architecture
 
 
 def test_runtime_has_no_engineering_dependencies():
@@ -18,16 +19,16 @@ def test_runtime_has_no_engineering_dependencies():
             assert not any(name == "scripts" or name.startswith("scripts.") for name in names), path
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("module", [
     "benchmarks.fact_benchmark", "benchmarks.semantic_planner_benchmark",
     "benchmarks.hc_bench",
     "benchmarks.tier1_latency_bench", "profiling.token_latency_audit",
-    "profiling.token_component_probe", "profiling.http_latency_audit",
     "profiling.profile_semantic_transport", "probes.ollama_prefix_reuse_probe",
     "probes.ollama_warm_load_probe", "probes.kinship_context_probe",
-    "probes.item_location_probe", "probes.bilingual_planner_probe",
+    "probes.bilingual_planner_probe",
     "probes.layer_failure_trace", "maintenance.freeze_contract_candidate",
-    "maintenance.context_surface_audit", "maintenance.export_graph",
+    "maintenance.export_graph",
 ])
 def test_command_help_from_another_directory(module, tmp_path):
     result = subprocess.run(

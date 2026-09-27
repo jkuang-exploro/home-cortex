@@ -9,7 +9,6 @@ from ..mutation.ir import MutationDecision, mutation_messages, read_plan_schema,
 from ..semantic.prompt import (
     PLANNER_NUM_PREDICT,
     PLANNER_SEED,
-    _PLANNER_HISTORY_BOUNDARY,
     _PLANNER_INSTRUCTIONS,
     _semantic_planner_examples,
     planner_chat_messages,

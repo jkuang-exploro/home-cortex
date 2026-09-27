@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import json
 import logging
 import re
@@ -19,6 +20,7 @@ from home_cortex.api import (
     app,
 )
 from home_cortex.conversation.greetings import GreetingService
+from home_cortex.conversation.session import COOKIE_NAME, session_token
 from home_cortex.persistence.export import ExportResult
 from home_cortex.persistence.ingestion import IngestionResult
 
@@ -154,15 +156,20 @@ def api_client() -> Iterator[tuple[TestClient, FakeAgent]]:
     app.state.agent = agent
     app.state.agents = {"steward": agent}
     app.state.settings = SimpleNamespace(
-        cortex_api_key=None,
+        cortex_api_key="test-cortex-key",
         cortex_identity_map={},
+        cortex_export_root=Path("/app/export"),
     )
     retrieval = FakeIdentityRetrieval()
     app.state.retrieval = retrieval
     app.state.greetings = GreetingService(retrieval)
     app.state.conversations = ConversationStore()
     app.state.database = FakeHealthDatabase()
-    client = TestClient(app, raise_server_exceptions=True)
+    client = TestClient(
+        app,
+        raise_server_exceptions=True,
+        headers={"Authorization": "Bearer test-cortex-key"},
+    )
     try:
         yield client, agent
     finally:
@@ -501,6 +508,7 @@ def test_chat_completions_rejects_untrusted_or_unmapped_identity(
             "id:webui-user-123": "person:jian_kuang",
         },
     )
+    client.headers.pop("Authorization", None)
 
     response = client.post(
         "/v1/chat/completions",
@@ -708,10 +716,14 @@ def test_unexpected_error_is_json_and_does_not_log_private_message(
     app.state.agent = exploding_agent
     app.state.agents = {"steward": exploding_agent}
     app.state.settings = SimpleNamespace(
-        cortex_api_key=None,
+        cortex_api_key="test-cortex-key",
         cortex_identity_map={},
     )
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(
+        app,
+        raise_server_exceptions=False,
+        headers={"Authorization": "Bearer test-cortex-key"},
+    )
     try:
         with caplog.at_level(logging.INFO):
             response = client.post(
@@ -901,6 +913,7 @@ def test_protected_routes_reject_missing_or_invalid_credentials(
 ) -> None:
     client, agent = api_client
     _protect_api()
+    client.headers.pop("Authorization", None)
 
     response = client.request(method, path, headers=headers, json=json_body)
 
@@ -945,6 +958,7 @@ def test_admin_export_requires_explicit_target_and_accepts_household_api_key(
 ) -> None:
     client, _ = api_client
     _protect_api()
+    app.state.settings.cortex_export_root = tmp_path
     exported = ExportResult(
         node_files=2,
         edge_files=5,
@@ -982,6 +996,123 @@ def test_admin_export_requires_explicit_target_and_accepts_household_api_key(
     assert relative.status_code == 400
     assert relative.json()["error"]["code"] == "export_failed"
     assert "absolute path" in relative.json()["error"]["message"]
+
+
+def test_unconfigured_auth_denies_requests_but_health_remains_public(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+    app.state.settings.cortex_api_key = None
+    for method, path, body in (
+        ("GET", "/session", None),
+        ("POST", "/v1/chat", {"message": "Who am I?"}),
+        ("POST", "/admin/export", {"target_dir": "/app/export"}),
+    ):
+        response = client.request(method, path, json=body)
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "authentication_not_configured"
+    assert client.get("/health").status_code == 200
+    assert agent.calls == []
+
+
+@pytest.mark.asyncio
+async def test_api_startup_rejects_missing_shared_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_module = importlib.import_module("home_cortex.api.app")
+    monkeypatch.setattr(
+        app_module,
+        "get_settings",
+        lambda: SimpleNamespace(cortex_api_key=None),
+    )
+    with pytest.raises(RuntimeError, match="CORTEX_API_KEY is required"):
+        async with app_module.lifespan(app):
+            pass
+
+
+def test_gui_session_identity_ignores_spoofed_user_headers(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+    _protect_api()
+    _seed_people()
+    created = client.post("/session", json={"user_id": "webui-user-a"})
+    assert created.status_code == 200
+    client.headers.pop("Authorization", None)
+
+    response = client.post(
+        "/v1/chat",
+        headers={"X-OpenWebUI-User-Id": "webui-user-b"},
+        json={"message": "Who am I?"},
+    )
+
+    assert response.status_code == 200
+    assert agent.user_entities == [
+        {"id": "person:user_a", "name": ["User A"], "address_as": {"en": "A"}}
+    ]
+    assert app.state.retrieval.entity_calls == ["person:user_a"]
+
+
+def test_anonymous_gui_session_cannot_take_identity_from_headers(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+    _protect_api()
+    _seed_people()
+    client.cookies.set(COOKIE_NAME, session_token("test-cortex-key", "none"))
+    client.headers.pop("Authorization", None)
+
+    response = client.post(
+        "/v1/chat",
+        headers={"X-OpenWebUI-User-Id": "webui-user-b"},
+        json={"message": "Who am I?"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "identity_not_mapped"
+    assert agent.calls == []
+
+
+def test_admin_routes_reject_gui_cookie_without_bearer(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, _ = api_client
+    _protect_api()
+    assert client.post("/session", json={"user_id": "webui-user-a"}).status_code == 200
+    client.headers.pop("Authorization", None)
+
+    with patch("home_cortex.api.routes.system.run_ingest", new_callable=AsyncMock) as ingest:
+        with patch("home_cortex.api.routes.system.run_export", new_callable=AsyncMock) as export:
+            denied_ingest = client.post("/admin/ingest")
+            denied_export = client.post(
+                "/admin/export", json={"target_dir": "/app/export"}
+            )
+
+    assert denied_ingest.status_code == denied_export.status_code == 401
+    ingest.assert_not_awaited()
+    export.assert_not_awaited()
+
+
+def test_admin_export_rejects_paths_outside_root_and_symlink_escape(
+    api_client: tuple[TestClient, FakeAgent],
+    tmp_path: Path,
+) -> None:
+    client, _ = api_client
+    export_root = tmp_path / "approved"
+    export_root.mkdir()
+    app.state.settings.cortex_export_root = export_root
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (export_root / "escape").symlink_to(outside, target_is_directory=True)
+
+    with patch("home_cortex.api.routes.system.run_export", new_callable=AsyncMock) as export:
+        for target in (outside, export_root / "escape" / "snapshot"):
+            response = client.post(
+                "/admin/export", json={"target_dir": str(target)}
+            )
+            assert response.status_code == 403
+            assert response.json()["error"]["code"] == "export_path_forbidden"
+    export.assert_not_awaited()
 
 
 def test_chat_accepts_mapped_identity(
@@ -1112,6 +1243,7 @@ def test_conversation_access_is_isolated_by_owner(
         f"/agent/steward/conversations/{conversation_id}",
         headers=_auth_headers("webui-user-b"),
     )
+    client.headers.pop("Authorization", None)
     anonymous = client.get(f"/agent/steward/conversations/{conversation_id}")
     missing = client.get(
         "/agent/steward/conversations/does-not-exist",

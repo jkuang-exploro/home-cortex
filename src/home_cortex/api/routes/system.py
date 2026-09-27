@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from ...config import get_settings
-from ..dependencies import authenticate_request
+from ..dependencies import authenticate_bearer, request_settings
 from ..errors import APIError, request_id
 from ..schemas import ExportRequest
 
@@ -51,7 +51,7 @@ async def run_export(database: Any, target_dir: Path, edge_registry: Any):
 
 @router.post("/admin/ingest")
 async def ingest(request: Request) -> dict[str, Any]:
-    authenticate_request(request)
+    authenticate_bearer(request)
     settings = get_settings()
     try:
         result = await run_ingest(
@@ -66,7 +66,7 @@ async def ingest(request: Request) -> dict[str, Any]:
 
 @router.post("/admin/export")
 async def export(body: ExportRequest, request: Request) -> dict[str, Any]:
-    authenticate_request(request)
+    authenticate_bearer(request)
     if not body.target_dir.is_absolute():
         raise APIError(
             400,
@@ -74,10 +74,18 @@ async def export(body: ExportRequest, request: Request) -> dict[str, Any]:
             "target_dir must be an absolute path on the API server. "
             "From Docker Compose use /app/export (host directory tmp/db-export).",
         )
+    export_root = request_settings(request).cortex_export_root.resolve()
+    target = body.target_dir.resolve()
+    if not target.is_relative_to(export_root):
+        raise APIError(
+            403,
+            "export_path_forbidden",
+            "target_dir must be within the configured export root",
+        )
     try:
         result = await run_export(
             request.app.state.database,
-            body.target_dir,
+            target,
             getattr(request.app.state, "edge_registry", None),
         )
         return {"status": "ok", **asdict(result)}

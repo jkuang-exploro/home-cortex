@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     retrieval_limit: int = Field(default=100, ge=1, le=1000)
     cortex_api_key: str | None = None
     cortex_identity_map: dict[str, str] = Field(default_factory=dict)
+    cortex_export_root: Path = Path("/app/export")
     google_calendar_client_id: str | None = None
     google_calendar_client_secret: SecretStr | None = None
     google_calendar_refresh_token: SecretStr | None = None

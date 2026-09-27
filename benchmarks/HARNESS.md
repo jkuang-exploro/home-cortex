@@ -119,9 +119,9 @@ cache state, or a dirty tree differ. Warnings still print the table.
 
 | Asset | Location | What it measures | How the harness uses it |
 | --- | --- | --- | --- |
-| Fact benchmark | `scripts/benchmarks/fact_benchmark.py` | JSON-graph fact path, latency, pipeline completion | `fact` calls `benchmark_json`. No gold score. Not the household database. |
+| Fact benchmark | `scripts/benchmarks/fact_benchmark.py` and `benchmarks/fact_questions.yaml` | JSON-graph fact path, latency, pipeline completion | `fact` calls `benchmark_json` with the fixed YAML corpus. No gold score. Not the household database. |
 | Semantic planner benchmark | `scripts/benchmarks/semantic_planner_benchmark.py` and `benchmarks/semantic_planner_eval.yaml` | Plan correctness, answer correctness, validation | `planner` and the latency probe call the existing runner and copy `summarize_scores`. |
-| Tier-1 latency probe | `scripts/benchmarks/tier1_latency_bench.py` (`run_tier1_probe`) | Warmup versus steady-state latency on the probe split | `latency` calls that function. |
+| Tier-1 latency probe | `scripts/benchmarks/semantic_planner_benchmark.py` (`run_tier1_probe`) and the standalone `tier1_latency_bench.py` CLI | Warmup versus steady-state latency on the probe split | `latency` calls the shared probe function. The standalone CLI has its own report contract. |
 | Unified planner experiment | `scripts/benchmarks/unified_planner_experiment.py` and `benchmarks/mutation_routing.yaml` | Classification, payload, preview, commit, multi-intent, paired reads | `mutation` runs the intents group. `unified-planner` runs intents and reads. Writes are not dispatched. |
 | Bilingual probe | `scripts/probes/bilingual_planner_probe.py` and `benchmarks/semantic_planner_bilingual.yaml` | Cross-language plan match and parity | `bilingual` calls that probe. |
 | Planner prompt experiment | `scripts/benchmarks/planner_prompt_experiment.py` | Prompt-budget regression on a frozen package | Not wrapped. Still the authority for prompt-drop experiments. |

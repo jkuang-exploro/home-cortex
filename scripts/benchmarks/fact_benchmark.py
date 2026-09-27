@@ -14,6 +14,8 @@ from scripts import PROJECT_ROOT
 from typing import Any, Literal, Sequence
 from zoneinfo import ZoneInfo
 
+import yaml
+
 from home_cortex.agents import get_agent
 from home_cortex.config import get_settings
 from home_cortex.persistence.db import Database
@@ -32,42 +34,6 @@ from home_cortex.semantic.schema import SemanticSchemaRegistry
 from home_cortex.capabilities.dispatcher import ToolDispatcher
 from scripts.benchmarks.json_graph import JsonGraphDispatcher
 
-QUESTIONS = (
-    "我是谁",
-    "你是谁",
-    "家里都有谁",
-    "家里都有哪些人",
-    "家里有多少人",
-    "家里有几个人",
-    "我家住哪里",
-    "请问我的具体住址是什么？",
-    "我老婆是谁",
-    "我生日是哪天",
-    "我有几个孩子",
-    "我儿子是谁",
-    "我儿子几岁",
-    "家里谁最年长",
-    "谁最年长",
-    "谁最年幼",
-    "谁年纪最小",
-    "有几个成年人",
-    "有几个孩子",
-    "我和我老婆谁年龄大",
-    "匡德伦的生日是哪天",
-    "匡德伦哪天出生",
-    "匡德伦是谁",
-    "Dylan是谁",
-    "德伦是谁",
-    "Dylan Kuang是谁",
-    "巴璞的儿子是谁",
-    "巴璞哪天过生日",
-    "我儿子哪天过生日",
-    "我儿子的生日还有多少天",
-    "我岳父是谁",
-    "我岳母是谁",
-    "我们什么时候结婚的",
-)
-
 TEMPORAL_OPERATIONS = frozenset(
     {"date_difference", "annual_occurrence"}
 )
@@ -81,13 +47,36 @@ class BenchmarkCase:
     utterance: str
 
 
-SPEAKER_CASES = (
-    BenchmarkCase("person:jian_kuang", "我儿子是谁"),
-    BenchmarkCase("person:pu_ba", "我儿子是谁"),
-    BenchmarkCase("person:guiqiu_wang", "我孙子是谁"),
-    BenchmarkCase("person:zhigang_ba", "我外孙是谁"),
-    BenchmarkCase("person:evelyn_kuang", "我哥哥是谁"),
-)
+FACT_CASES_PATH = PROJECT_ROOT / "benchmarks" / "fact_questions.yaml"
+
+
+def load_fact_cases(path: Path = FACT_CASES_PATH) -> tuple[tuple[str, ...], tuple[BenchmarkCase, ...]]:
+    """Load the fixed fact corpus used by the CLI and benchmark registry."""
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or raw.get("version") != 1:
+        raise ValueError(f"Unsupported fact corpus in {path}")
+    questions = raw.get("questions")
+    speaker_cases = raw.get("speaker_cases")
+    if not isinstance(questions, list) or not questions or not all(
+        isinstance(item, str) and item.strip() for item in questions
+    ):
+        raise ValueError(f"Invalid fact questions in {path}")
+    if not isinstance(speaker_cases, list) or not speaker_cases or not all(
+        isinstance(item, dict)
+        and isinstance(item.get("speaker_id"), str)
+        and isinstance(item.get("utterance"), str)
+        and item["speaker_id"].strip()
+        and item["utterance"].strip()
+        for item in speaker_cases
+    ):
+        raise ValueError(f"Invalid fact speaker cases in {path}")
+    return tuple(questions), tuple(
+        BenchmarkCase(item["speaker_id"], item["utterance"])
+        for item in speaker_cases
+    )
+
+
+QUESTIONS, SPEAKER_CASES = load_fact_cases()
 
 
 async def benchmark_runtime(

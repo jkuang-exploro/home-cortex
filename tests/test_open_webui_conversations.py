@@ -25,12 +25,16 @@ def test_first_turn_is_scoped_to_the_created_conversation() -> None:
     retrieval = FakeIdentityRetrieval()
     app.state.agent = agent
     app.state.agents = {"steward": agent}
-    app.state.settings = SimpleNamespace(cortex_api_key=None, cortex_identity_map={})
+    app.state.settings = SimpleNamespace(cortex_api_key="test-cortex-key", cortex_identity_map={})
     app.state.retrieval = retrieval
     app.state.greetings = GreetingService(retrieval)
     app.state.conversations = ConversationStore()
     app.state.database = FakeHealthDatabase()
-    client = TestClient(app, raise_server_exceptions=True)
+    client = TestClient(
+        app,
+        raise_server_exceptions=True,
+        headers={"Authorization": "Bearer test-cortex-key"},
+    )
     try:
         created = client.post(
             "/conversations",

@@ -58,9 +58,6 @@ async def read_session(request: Request) -> dict[str, Any]:
     parsed = parse_session(request.cookies.get(GUI_COOKIE_NAME, ""), key) if key else None
     payload: dict[str, Any] = {"object": "session"}
     if parsed is None:
-        if key is None:
-            payload["anonymous"] = True
-            return payload
         user_id = request.headers.get(OPENWEBUI_USER_ID_HEADER)
         email = request.headers.get(OPENWEBUI_USER_EMAIL_HEADER)
         if user_id:

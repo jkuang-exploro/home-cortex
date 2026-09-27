@@ -1,10 +1,18 @@
+import hashlib
+import json
 from pathlib import Path
 from datetime import datetime
 from typing import Any
 
 import pytest
 
-from scripts.benchmarks.fact_benchmark import _run_suite, benchmark_json
+from scripts.benchmarks.fact_benchmark import (
+    QUESTIONS,
+    SPEAKER_CASES,
+    _run_suite,
+    benchmark_json,
+    load_fact_cases,
+)
 from home_cortex.semantic.ir import (
     AgentRequestContext,
     FactAnswer,
@@ -17,6 +25,24 @@ from home_cortex.semantic.ir import (
 
 
 ROOT = Path(__file__).parents[1]
+pytestmark = pytest.mark.benchmark
+
+
+def test_fact_corpus_preserves_approved_cases_and_fingerprints() -> None:
+    questions, speaker_cases = load_fact_cases()
+    assert questions == QUESTIONS
+    assert speaker_cases == SPEAKER_CASES
+    assert len(questions) == 33
+    assert len(speaker_cases) == 5
+    assert hashlib.sha256("\n".join(questions).encode()).hexdigest() == (
+        "e0d1101c0a13dd477ef23d0dc95842b13b794ef0448cfa05a7d9038d818345ee"
+    )
+    assert hashlib.sha256(
+        json.dumps(
+            [(case.speaker_id, case.utterance) for case in speaker_cases],
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest() == "6fd19da5ab57b708db20f79d211699ef752d17b95182fd17bbf6e32af6712bb2"
 
 
 @pytest.mark.asyncio
@@ -60,7 +86,7 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
                 "subject": members,
                 "filters": [{"predicate": "minor"}],
             }
-        else:
+        elif text == "我们什么时候结婚的":
             request = {
                 "operation": "select",
                 "subject": {
@@ -71,6 +97,8 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
                 "property": "start_date",
                 "property_source": "relationship",
             }
+        else:
+            raise AssertionError(f"Test planner has no expected plan for {text!r}")
         return {"requires_fact": True, "request": request}
 
     from home_cortex.providers.ollama import OllamaService
@@ -88,6 +116,7 @@ async def test_benchmark_reports_mode_speaker_path_and_canonical_ids() -> None:
         "有几个孩子",
         "我们什么时候结婚的",
     )
+    assert set(questions) <= set(QUESTIONS)
     try:
         result = await benchmark_json(
             "person:jian_kuang",

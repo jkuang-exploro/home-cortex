@@ -42,3 +42,10 @@ packages = ["src/home_cortex", "scripts"]
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
 testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "architecture: import and package boundary checks",
+    "semantic: deterministic semantic composition checks",
+    "benchmark: benchmark harness and fixed-corpus checks",
+    "slow: subprocess-heavy or larger deterministic checks",
+]

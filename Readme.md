@@ -122,6 +122,12 @@ The implementation findings and local-model measurements are recorded in
 docker compose -p cortex --env-file .env -f docker/docker-compose.yml up -d --build
 ```
 
+Run both independent Python suites from the repository root with `make test`
+after installing the root and `src/home_media` development environments.
+The full suite is the release gate. For a shorter local cycle, use
+`.venv/bin/python -m pytest -q -m 'not slow'` from the root; pytest markers also
+select `architecture`, `semantic`, and `benchmark` checks.
+
 The [llama.cpp migration candidate](docker/LLAMA_SERVER.md) uses a GGUF under
 `/opt/models`. The default production stack remains on Ollama pending its
 multi-intent safety gate.

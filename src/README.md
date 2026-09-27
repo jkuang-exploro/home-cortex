@@ -48,7 +48,10 @@ The important ownership rules are:
 
 The semantic layers must not inspect utterance text after planning to repair a
 request. Property ownership, predicates, pairwise operands, relationship paths,
-and contextual scope stay explicit through execution.
+and contextual scope stay explicit through execution. The existing planner has
+three bounded, text-matched retry hints for first/second-person identity and
+named-object location. They are a documented exception at the planner boundary,
+not executor behavior; changing them requires real-model evaluation.
 
 ## Spatial and Vision boundaries
 
@@ -70,6 +73,7 @@ FFmpeg relay, or Tapo integration. See
 home_cortex/
   api/             HTTP application, schemas, SSE, dependencies, and routes
   agents/          named agent definitions and registration
+  benchmark/       CLI-only run registry, provenance, and comparison
   capabilities/    model-facing calculation/calendar schemas and dispatch
   common/          identity, display, text, and tracing primitives
   conversation/    transcript persistence, GUI sessions, and greetings
@@ -88,6 +92,10 @@ Package initializers are intentionally small. Import concrete owners directly;
 the two deliberate public surfaces are `home_cortex.api` for deployment/client
 integration and `home_cortex.agents` for the named-agent registry.
 
+`benchmark/` is not imported by the serving application. Its CLI plugin loader
+imports `scripts.benchmarks.hc_suites` dynamically to reuse engineering runners;
+this is the benchmark-only exception to the runtime-to-scripts boundary.
+
 ## Where does new code go?
 
 - New HTTP routes and transport policy go in `api/` and `api/routes/`.
@@ -103,6 +111,10 @@ integration and `home_cortex.agents` for the named-agent registry.
 - Camera capture, media, device polling, robot control, and other edge runtime
   belong in `home_cortex_client`, not this backend.
 
+The selected agent controls which tools the ordinary model loop may offer.
+Spatial and Vision packages provide contracts and deterministic helpers but do
+not add chat tools or routes by being present in the package tree.
+
 ## HTTP surface
 
 - `GET /health` checks SurrealDB and is public.
@@ -117,8 +129,8 @@ integration and `home_cortex.agents` for the named-agent registry.
 - `POST /conversations/{id}/messages` executes and persists one turn; streaming
   and non-stream responses consume the same answer stream.
 - `POST /admin/ingest` validates and synchronizes canonical graph files.
-- `POST /admin/export` writes a canonical graph snapshot to an absolute server
-  path.
+- `POST /admin/export` writes a canonical graph snapshot beneath the configured
+  `CORTEX_EXPORT_ROOT` (`/app/export` in Compose).
 
 Ingestion and export are imported lazily by their maintenance routes. Importing
 the chat application does not load maintenance, Vision, or robotics-localization
@@ -139,10 +151,18 @@ use a stable error envelope:
 
 ## Authentication and identity
 
-When `CORTEX_API_KEY` is configured, all routes except `/health` require
-`Authorization: Bearer <key>`. The key authenticates a client; it does not identify
-a person. Trusted `X-OpenWebUI-User-Id` or `X-OpenWebUI-User-Email` values are
-mapped through `CORTEX_IDENTITY_MAP`, or captured in the GUI session cookie.
+`CORTEX_API_KEY` is required when serving the API. Data and session-creation
+routes require `Authorization: Bearer <key>` or a signed GUI session; creating
+a session requires the bearer key. `/health` and API schema docs are public,
+and deleting `/session` only clears the caller's cookie. The household
+bearer key authenticates a trusted client; that client may select a mapped person
+with `X-OpenWebUI-User-Id` or `X-OpenWebUI-User-Email`. Only give the key to
+clients trusted to act for mapped household members. A GUI session fixes its
+mapped identity when issued; later request headers cannot change it.
+
+`/admin/ingest` and `/admin/export` require the bearer key directly. A GUI
+session alone cannot use them. In Compose, export is restricted to `/app/export`
+and its descendants; that directory is mounted from `tmp/db-export` on the host.
 
 The server never accepts a caller-supplied `person:` record as proof of identity.
 Mapped people and the configured household are loaded by exact record ID and fail
@@ -183,7 +203,8 @@ person. Credentials and provider tokens never enter prompts or tool results.
 
 ## First run
 
-At the repository root, create `.env` and set at least:
+At the repository root, copy [`.env.example`](../.env.example) to `.env`, replace
+the placeholders, and set at least:
 
 ```dotenv
 SURREAL_PASS=replace-me
