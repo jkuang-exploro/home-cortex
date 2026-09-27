@@ -1,0 +1,99 @@
+{
+  "run_id": "20260927-200916-b0f2",
+  "label": "age-filter-candidate",
+  "started_at": "2026-09-27T20:09:16+00:00",
+  "finished_at": "2026-09-27T20:14:14+00:00",
+  "home_cortex": {
+    "git_commit": "unavailable",
+    "git_branch": "unavailable",
+    "git_dirty": null,
+    "planner_mode": "semantic_interpreter"
+  },
+  "ollama": {
+    "available": true,
+    "version": "0.34.4",
+    "model": "qwen3.5:9b",
+    "model_name": "qwen3.5",
+    "tag": "9b",
+    "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "quantization": "Q4_K_M",
+    "parameter_size": "9.7B",
+    "context_length": 262144,
+    "processor": "100% GPU",
+    "options": {
+      "temperature": 0,
+      "num_ctx": 16384,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h"
+    },
+    "requested_num_ctx": 16384,
+    "base_url": "http://ollama:11434"
+  },
+  "runtime": {
+    "type": "ollama",
+    "available": true,
+    "version": "0.34.4",
+    "model": "qwen3.5:9b",
+    "model_name": "qwen3.5",
+    "tag": "9b",
+    "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "quantization": "Q4_K_M",
+    "parameter_size": "9.7B",
+    "context_length": 262144,
+    "processor": "100% GPU",
+    "options": {
+      "temperature": 0,
+      "num_ctx": 16384,
+      "num_predict": 384,
+      "seed": 0,
+      "keep_alive": "24h"
+    },
+    "requested_num_ctx": 16384,
+    "base_url": "http://ollama:11434"
+  },
+  "environment": {
+    "hostname": "09da95da82bc",
+    "os": "Linux-6.8.0-142-generic-x86_64-with-glibc2.41",
+    "cpu": "x86_64",
+    "ram_bytes": 16703447040,
+    "gpu": "unavailable",
+    "gpu_vram": "unavailable",
+    "driver": "unavailable"
+  },
+  "suites": [
+    "standard"
+  ],
+  "components": [
+    "planner",
+    "mutation"
+  ],
+  "requirements": {
+    "requires_real_model": true,
+    "requires_gpu_host": true
+  },
+  "fingerprints": {
+    "prompt": "a7fefaface8501e3a6874158175d3eaa3d580dfc36c182eb451b4aa2189c952a",
+    "corpus": "35363de2ca5835bd8f80fe359e894aef78be395958684ca7b1e4c8eef1710720",
+    "config": "4e9d4eb5705d514d28d7c9b46a3397424add891e6e438dd03b238f6df786a958",
+    "scoring_revision": "2026-09-07.2-composition-shapes",
+    "prompt_by_suite": {
+      "planner": "f07bc55b0f9b1ae68fbc5265ae5c598f33dfe2f6cf098e09925ba350429a0d2a",
+      "mutation": "f07bc55b0f9b1ae68fbc5265ae5c598f33dfe2f6cf098e09925ba350429a0d2a"
+    },
+    "corpus_by_suite": {
+      "planner": "ddf4b698934aeba92c2ff0725342155cdedeb416bf4a71235753970a029b599b",
+      "mutation": "1903efbb459bafb7a93ba3032effea27d997fac9d18726f17beaf5164ca0c08a"
+    }
+  },
+  "nonstandard_environment": true,
+  "cache_state": "warm",
+  "requested_repetitions": {
+    "warmup": null,
+    "repetitions": null,
+    "verified_cold": false,
+    "limit": null
+  },
+  "results_path": "/tmp/hc-candidate-bench-results/20260927-200916-b0f2",
+  "timing_policy": "planner: One scoring pass over benchmarks/semantic_planner_eval.yaml. Latency percentiles describe that pass and can include the first request. Warmup and repetitions are not applied.\nmutation: One scoring pass of the unified planner experiment. Two warmup calls per route are discarded by that runner before scoring. Writes are compiled and never dispatched. Safety gates use the unified route. Token totals sum that route's runtime-reported counts and are not estimated."
+}

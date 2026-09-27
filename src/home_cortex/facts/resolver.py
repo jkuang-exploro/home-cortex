@@ -447,6 +447,21 @@ class EntityResolver:
             predicates: list[bool] = []
             for item, physical in mapped:
                 self.schema.validate_filter_value(item.property, record.get(physical))
+                computed = self.schema.ontology.computed_filters.get(item.property)
+                if computed is not None:
+                    predicates.append(
+                        _derived_date_matches(
+                            record.get(physical),
+                            context.current_time,
+                            transform=computed.transform,
+                            mode=computed.mode,
+                            operator=item.operator,
+                            compare_value=item.value,
+                            require_past=computed.require_past,
+                            missing=(item.property,),
+                        )
+                    )
+                    continue
                 if item.transform:
                     predicates.append(
                         _derived_date_matches(

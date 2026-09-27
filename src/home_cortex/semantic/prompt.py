@@ -63,7 +63,7 @@ Filters:
 - Matching set: select, property=null, all conditions in request.filters. The filtered property is not the output property. Sets may be empty, singleton, or many; do not substitute resolve_reference. Counting the same set: count.
 - Dates follow filter_requirements. date_range value=[inclusive start, exclusive end] as ISO dates. A year is that year's Jan 1 to the next year's Jan 1, not equality with a year number. Do not drop a date bound or project birth_date instead.
 - 男/男性/男的/male → {"property":"gender","value":"male"}; 女/女性/女的/female → {"property":"gender","value":"female"}. Gender is not adult, not minor, and not their conjunction. predicate_disjointness forbids adult and minor on the same set.
-- Age ≥ N / at least N / 满 N 岁 / N 岁以上: operator=gte, value=N. Age < N / under N / 未满 N 岁 / N 岁以下: operator=lt. 以上 is not 以下; never invert. Shape: {"property":"birth_date","transform":"date_difference","mode":"years","operator":"gte","value":N}. The executor uses Household now. Do not rewrite as birth_date date_range, invent ISO cutoffs, or replace arbitrary ages with adult/minor.
+- Compare declared computed_filters properties as numeric results, not as their source dates. age_years is completed, nonnegative calendar years from birth_date to Household now; it is filter-only. Age ≥ N / at least N / 满 N 岁 / N 岁以上: {"property":"age_years","operator":"gte","value":N}. Age < N / under N / 未满 N 岁 / N 岁以下 uses lt. Never reverse an age comparison because older people have earlier birth dates. For any explicit numeric age, including the adulthood threshold, keep the numeric comparison; adult/minor are separate declared predicates. Do not emit a date_difference transform or birth_date date_range for an age filter or invent an ISO cutoff.
 - Predicates: only {"predicate":declared name} in request.filters. definition_only explains meaning and is not emitted. date_difference and other operations are not predicates.
 - Use only declared operations, properties, relations, concepts, and predicates. Do not drop unsupported qualifiers, invent vocabulary, guess identity, or patch answers. Return strict structured output only.
 """
@@ -100,8 +100,8 @@ def _example_text() -> tuple[tuple[str, str], ...]:
         ("本户男性成员人数是多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "gender", "operator": "eq", "value": "male"}]}),
         ("How many female members here?", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "gender", "operator": "eq", "value": "female"}]}),
         ("本户出生于1991年的成员有几位？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "operator": "date_range", "value": ["1991-01-01", "1992-01-01"]}]}),
-        ("List members aged 40 or older.", "select", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "transform": "date_difference", "mode": "years", "operator": "gte", "value": 40}]}),
-        ("本户未满三十周岁的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "birth_date", "transform": "date_difference", "mode": "years", "operator": "lt", "value": 30}]}),
+        ("List members aged 40 or older.", "select", reference("current_household", "member"), None, "entity", {"filters": [{"property": "age_years", "operator": "gte", "value": 40}]}),
+        ("本户未满三十周岁的成员有多少？", "count", reference("current_household", "member"), None, "entity", {"filters": [{"property": "age_years", "operator": "lt", "value": 30}]}),
         ("请列出本户的房间。", "select", reference("current_household", "room"), None, "entity", {}),
         ("我的男孩后代是哪一位？", "resolve_reference", reference("self", "son"), None, "entity", {}),
         ("List my female descendants.", "select", reference("self", "daughter"), None, "entity", {}),

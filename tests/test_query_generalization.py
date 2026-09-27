@@ -553,3 +553,58 @@ async def test_derived_age_threshold_is_computed_not_a_guessed_date_range(househ
     )
     hop_result, *_ = await engine.execute(hop, context)
     assert {item["id"] for item in hop_result.value} == ids
+
+
+@pytest.mark.asyncio
+async def test_computed_age_filter_keeps_numeric_comparison_direction(household):
+    engine, context, _ = household
+    members = SemanticReference(
+        kind="current_household",
+        path=(SemanticRelationStep(relation="member"),),
+    )
+    older = SemanticFactRequest(
+        operation="select", subject=members,
+        filters=(SemanticFilter(property="age_years", operator="gte", value=55),),
+    )
+    younger = SemanticFactRequest(
+        operation="count", subject=members,
+        filters=(SemanticFilter(property="age_years", operator="lt", value=55),),
+    )
+    assert engine.schema.validates(older)
+    assert engine.schema.validates(younger)
+    older_result, *_ = await engine.execute(older, context)
+    younger_result, *_ = await engine.execute(younger, context)
+    assert {item["id"] for item in older_result.value} == {"person:father", "person:mother"}
+    assert younger_result.value == 6
+    for threshold, expected_ids in (
+        (46, {"person:a", "person:father", "person:mother"}),
+        (18, {"person:a", "person:b", "person:son1", "person:father", "person:mother"}),
+        (70, {"person:father"}),
+    ):
+        request = older.model_copy(update={
+            "filters": (SemanticFilter(property="age_years", operator="gte", value=threshold),)
+        })
+        result, *_ = await engine.execute(request, context)
+        assert {item["id"] for item in result.value} == expected_ids
+    assert "年龄 ≥ 55岁" in FactRenderer(engine.schema.ontology).render(
+        older, older_result, replace(context, locale="zh")
+    )
+    hop = SemanticFactRequest(
+        operation="select",
+        subject=SemanticReference(
+            kind="current_household",
+            path=(SemanticRelationStep(
+                relation="member",
+                filters=(SemanticFilter(property="age_years", operator="gte", value=55),),
+            ),),
+        ),
+    )
+    assert engine.schema.validates(hop)
+    hop_result, *_ = await engine.execute(hop, context)
+    assert {item["id"] for item in hop_result.value} == {"person:father", "person:mother"}
+    for invalid in (
+        SemanticFilter(property="age_years", operator="gte", value=-55),
+        SemanticFilter(property="age_years", operator="gte", value=121),
+        SemanticFilter(property="age_years", operator="ne", value=55),
+    ):
+        assert not engine.schema.validates(older.model_copy(update={"filters": (invalid,)}))

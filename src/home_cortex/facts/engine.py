@@ -633,6 +633,18 @@ class HouseholdFactEngine:
         if physical not in record or record.get(physical) is None:
             raise _FactFailure("filter_input_missing", missing=(item.property,))
         self.schema.validate_filter_value(item.property, record.get(physical))
+        computed = self.schema.ontology.computed_filters.get(item.property)
+        if computed is not None:
+            return _derived_date_matches(
+                record.get(physical),
+                context.current_time,
+                transform=computed.transform,
+                mode=computed.mode,
+                operator=item.operator,
+                compare_value=item.value,
+                require_past=computed.require_past,
+                missing=(item.property,),
+            )
         if item.transform:
             return _derived_date_matches(
                 record.get(physical),

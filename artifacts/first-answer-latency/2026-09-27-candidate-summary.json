@@ -1,0 +1,255 @@
+{
+  "date": "2026-09-27 PDT",
+  "scope": "loopback streamed HTTP, synthetic graph; excludes proxy/browser paint",
+  "execution": "Production-host API container isolated package /tmp/hc-candidate-20260927 (src and scripts imported from that path), synthetic in-memory HTTP service; no live household database.",
+  "raw_sha256": "e7d1c581e579cee98744f4c6bde40a58fc918408dfe595db766473d42e818f1f",
+  "runtime": "ollama",
+  "model": "qwen3.5:9b",
+  "warmup": {
+    "status": "warm",
+    "models": [
+      {
+        "model": "qwen3.5:9b",
+        "status": "warm",
+        "attempts": 0,
+        "ready_ms": 14.602075010770932,
+        "last_error_type": null
+      }
+    ]
+  },
+  "metrics": {
+    "fact": {
+      "n": 9,
+      "answer_n": 9,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.315,
+      "first_byte_p95_ms": 42.61879999999999,
+      "first_content_p50_ms": 1531.508,
+      "first_content_p95_ms": 1655.4242,
+      "complete_p50_ms": 1532.054,
+      "complete_p95_ms": 1656.2714
+    },
+    "age_threshold": {
+      "n": 6,
+      "answer_n": 6,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.591499999999996,
+      "first_byte_p95_ms": 43.521,
+      "first_content_p50_ms": 2052.5785,
+      "first_content_p95_ms": 2064.28975,
+      "complete_p50_ms": 2053.1305,
+      "complete_p95_ms": 2064.98125
+    },
+    "mutation_preview": {
+      "n": 3,
+      "answer_n": 3,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 41.996,
+      "first_byte_p95_ms": 43.073299999999996,
+      "first_content_p50_ms": 1820.438,
+      "first_content_p95_ms": 1824.0451999999998,
+      "complete_p50_ms": 1821.05,
+      "complete_p95_ms": 1824.6464
+    },
+    "multi_intent": {
+      "n": 3,
+      "answer_n": 3,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.318,
+      "first_byte_p95_ms": 42.685199999999995,
+      "first_content_p50_ms": 993.878,
+      "first_content_p95_ms": 997.5176,
+      "complete_p50_ms": 994.418,
+      "complete_p95_ms": 998.0549
+    },
+    "ordinary_chat": {
+      "n": 3,
+      "answer_n": 3,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.303,
+      "first_byte_p95_ms": 42.5433,
+      "first_content_p50_ms": 1961.212,
+      "first_content_p95_ms": 1989.9220000000003,
+      "complete_p50_ms": 2156.441,
+      "complete_p95_ms": 2201.2574
+    },
+    "bare_chat": {
+      "n": 3,
+      "answer_n": 3,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.462,
+      "first_byte_p95_ms": 42.536699999999996,
+      "first_content_p50_ms": 189.149,
+      "first_content_p95_ms": 189.31640000000002,
+      "complete_p50_ms": 360.439,
+      "complete_p95_ms": 362.38300000000004
+    },
+    "discourse_followup": {
+      "n": 6,
+      "answer_n": 6,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.333,
+      "first_byte_p95_ms": 43.07925,
+      "first_content_p50_ms": 1540.8835,
+      "first_content_p95_ms": 1793.75225,
+      "complete_p50_ms": 1541.4335,
+      "complete_p95_ms": 1794.29925
+    },
+    "fact_concurrent": {
+      "n": 6,
+      "answer_n": 6,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 40.5895,
+      "first_byte_p95_ms": 54.3025,
+      "first_content_p50_ms": 1838.9445,
+      "first_content_p95_ms": 2452.764,
+      "complete_p50_ms": 1839.5800000000002,
+      "complete_p95_ms": 2453.35475
+    }
+  },
+  "stage_medians": {
+    "fact": {
+      "planner_p50_ms": 1529.4,
+      "llm_wall_sum_p50_ms": 1494.8,
+      "prefill_sum_p50_ms": 490.5,
+      "generation_sum_p50_ms": 895.2,
+      "input_tokens_sum_p50": 11124,
+      "output_tokens_sum_p50": 47,
+      "llm_call_count_p50": 1,
+      "executor_p50_ms": 0.1,
+      "renderer_p50_ms": 0.0,
+      "retry_request_n": 0
+    },
+    "age_threshold": {
+      "planner_p50_ms": 2049.4,
+      "llm_wall_sum_p50_ms": 2018.2,
+      "prefill_sum_p50_ms": 460.0,
+      "generation_sum_p50_ms": 1418.2,
+      "input_tokens_sum_p50": 11098.0,
+      "output_tokens_sum_p50": 74.0,
+      "llm_call_count_p50": 1.0,
+      "executor_p50_ms": 0.4,
+      "renderer_p50_ms": 0.1,
+      "retry_request_n": 0
+    },
+    "mutation_preview": {
+      "planner_p50_ms": 1818.4,
+      "llm_wall_sum_p50_ms": 1790.6,
+      "prefill_sum_p50_ms": 456.9,
+      "generation_sum_p50_ms": 1206.2,
+      "input_tokens_sum_p50": 11102,
+      "output_tokens_sum_p50": 63,
+      "llm_call_count_p50": 1,
+      "executor_p50_ms": null,
+      "renderer_p50_ms": null,
+      "retry_request_n": 0
+    },
+    "multi_intent": {
+      "planner_p50_ms": 991.9,
+      "llm_wall_sum_p50_ms": 963.1,
+      "prefill_sum_p50_ms": 494.0,
+      "generation_sum_p50_ms": 372.2,
+      "input_tokens_sum_p50": 11131,
+      "output_tokens_sum_p50": 20,
+      "llm_call_count_p50": 1,
+      "executor_p50_ms": null,
+      "renderer_p50_ms": 0.0,
+      "retry_request_n": 0
+    },
+    "ordinary_chat": {
+      "planner_p50_ms": 997.8,
+      "llm_wall_sum_p50_ms": 2130.7,
+      "prefill_sum_p50_ms": 921.4,
+      "generation_sum_p50_ms": 585.9,
+      "input_tokens_sum_p50": 13078,
+      "output_tokens_sum_p50": 32,
+      "llm_call_count_p50": 2,
+      "executor_p50_ms": null,
+      "renderer_p50_ms": null,
+      "retry_request_n": 3
+    },
+    "bare_chat": {
+      "planner_p50_ms": null,
+      "llm_wall_sum_p50_ms": 357.8,
+      "prefill_sum_p50_ms": 50.7,
+      "generation_sum_p50_ms": 171.8,
+      "input_tokens_sum_p50": 18,
+      "output_tokens_sum_p50": 10,
+      "llm_call_count_p50": 1,
+      "executor_p50_ms": null,
+      "renderer_p50_ms": null,
+      "retry_request_n": 0
+    },
+    "discourse_followup": {
+      "planner_p50_ms": 1538.7,
+      "llm_wall_sum_p50_ms": 1514.7,
+      "prefill_sum_p50_ms": 294.3,
+      "generation_sum_p50_ms": 1031.5,
+      "input_tokens_sum_p50": 11120.5,
+      "output_tokens_sum_p50": 54.0,
+      "llm_call_count_p50": 1.0,
+      "executor_p50_ms": 0.1,
+      "renderer_p50_ms": 0.0,
+      "retry_request_n": 0
+    },
+    "fact_concurrent": {
+      "planner_p50_ms": 1826.6,
+      "llm_wall_sum_p50_ms": 1796.9,
+      "prefill_sum_p50_ms": 71.9,
+      "generation_sum_p50_ms": 897.0,
+      "input_tokens_sum_p50": 11125.0,
+      "output_tokens_sum_p50": 47.0,
+      "llm_call_count_p50": 1.0,
+      "executor_p50_ms": 0.1,
+      "renderer_p50_ms": 0.0,
+      "retry_request_n": 0
+    }
+  },
+  "provenance": {
+    "git": {
+      "git_commit": "unavailable",
+      "git_branch": "unavailable",
+      "git_dirty": null
+    },
+    "package_sha256": "87d4fc6f9cd58e4d17f3b3b9f503b0aeb0a47dbe43ccbf2a9ad3db1a77d1de29",
+    "scripts_sha256": "db751e9910aba874dbd60e0643ee78ab235ce0a73d22a9556feed8648641fffc",
+    "schema_sha256": "4658709b7d330209cf93e8d2723d09d2860feca1618ee2644de1c9ebfc755e2f",
+    "fixture_sha256": "98659360011eb4c48aefd3eb3bc42d4ee7462dbb70655748eddabd3ab0bafc5d",
+    "dataset_sha256": "79c724877f5f6b65a5eca1b61fb1823a558ad0f5d83f4b51f20bdb7339ed7f15",
+    "prompt_sha256": "7ca87ebcb7f579a2b687a13188bf0c501f589ccbb2c917b3b0c54e17e97fec59",
+    "model_runtime": {
+      "available": true,
+      "version": "0.34.4",
+      "model": "qwen3.5:9b",
+      "model_name": "qwen3.5",
+      "tag": "9b",
+      "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+      "quantization": "Q4_K_M",
+      "parameter_size": "9.7B",
+      "context_length": 262144,
+      "processor": "100% GPU",
+      "options": {
+        "temperature": 0,
+        "num_ctx": 16384,
+        "num_predict": 384,
+        "seed": 0,
+        "keep_alive": "24h"
+      },
+      "requested_num_ctx": 16384
+    }
+  },
+  "notes": [
+    "First byte includes SSE comment/role, not answer text.",
+    "One warmup iteration per case excluded.",
+    "No answer correctness scoring in streamed probe.",
+    "Median stage durations are computed independently and need not sum to median end-to-end latency."
+  ]
+}

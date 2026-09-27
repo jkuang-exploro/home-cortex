@@ -495,10 +495,20 @@ class SemanticSchemaRegistry:
                     "required": ["kind"],
                 },
             ]}
-            definitions['SemanticFilter'] = self.contracts.filters_schema(traversal=True, predicates=())
-            definitions['SemanticCollectionFilter'] = self.contracts.filters_schema(
+            traversal_filters = self.contracts.filters_schema(traversal=True, predicates=())
+            collection_filters = self.contracts.filters_schema(
                 traversal=False, predicates=tuple(sorted(self._available_predicates))
             )
+            definitions['SemanticFilter'] = {
+                'anyOf': [*traversal_filters['anyOf'], *computed_branches]
+            }
+            definitions['SemanticCollectionFilter'] = {
+                'anyOf': [
+                    *(branch for branch in collection_filters['anyOf']
+                      if 'transform' not in branch.get('properties', {})),
+                    *computed_branches,
+                ]
+            }
             self._planner_schema_cache = _prefer_null_union(schema)
         return deepcopy(self._planner_schema_cache)
 

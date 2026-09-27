@@ -32,7 +32,7 @@ class SemanticDisplay:
         return _text(fallback)
 
     def property(self, name: str) -> str:
-        definition = self.ontology.properties.get(name)
+        definition = self.ontology.properties.get(name) or self.ontology.computed_filters.get(name)
         return self.label(definition.label if definition else (), name)
 
     def concept_phrase(self, name: str) -> str:
@@ -144,6 +144,13 @@ class SemanticDisplay:
             if self.zh:
                 return f"年龄 {operator} {item.value}岁"
             return f"age {operator} {item.value} years"
+        computed = self.ontology.computed_filters.get(item.property)
+        if computed is not None:
+            operator = {"eq": "=", "ne": "≠", "gt": ">", "gte": "≥", "lt": "<", "lte": "≤"}[item.operator]
+            label = self.label(computed.label, computed.name)
+            unit = self.label(computed.unit, "")
+            space = "" if self.zh else " "
+            return f"{label} {operator} {item.value}{space}{unit}".rstrip()
         name = item.property or ""
         owner = "实体" if self.zh else "entity"
         if item.source == "relation":

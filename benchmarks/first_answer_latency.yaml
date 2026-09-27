@@ -12,6 +12,12 @@ cases:
   - id: fact_household
     cohort: fact
     turns: ["How many people live in this household?"]
+  - id: age_threshold_count
+    cohort: age_threshold
+    turns: ["家里有几个55岁以上的"]
+  - id: age_threshold_list
+    cohort: age_threshold
+    turns: ["家里有哪些55岁以上的"]
   - id: preview
     cohort: mutation_preview
     turns: ["Preview recording a notebook in the desk drawer."]

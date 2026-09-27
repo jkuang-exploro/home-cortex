@@ -19,7 +19,7 @@ from ..semantic.prompt import (
 # Keep the same resident runner configuration across ordinary chat and planning.
 # Different context sizes cause Ollama to restart the runner between paths.
 # The planner prompt is the largest input: few-shot grammar, the capability
-# payload, and up to MAX_DISCOURSE_TURNS prior turns already reach ~8.6K tokens
+# payload, and up to MAX_DISCOURSE_TURNS prior turns exceed 8K tokens
 # before the plan is generated. At 8192 Ollama truncated the prompt and stopped
 # generation mid-JSON (`done_reason=length`), so every plan that needed more than
 # a handful of tokens came back unterminated.

@@ -1,0 +1,247 @@
+{
+  "date": "2026-09-27 PDT",
+  "scope": "loopback streamed HTTP, synthetic graph; excludes proxy/browser paint",
+  "execution": "Production-host API container installed package (/usr/local/lib/python3.12/site-packages/home_cortex), synthetic in-memory HTTP service; source/provenance fingerprinted by harness from /app. No live household database.",
+  "raw_sha256": "bfcc0747ef86ed95275bed7ff0768c7bb070ad41838ae1f3d432685ca9adfb49",
+  "runtime": "ollama",
+  "model": "qwen3.5:9b",
+  "warmup": {
+    "status": "warm",
+    "models": [
+      {
+        "model": "qwen3.5:9b",
+        "status": "warm",
+        "attempts": 0,
+        "ready_ms": 14.245278987800702,
+        "last_error_type": null
+      }
+    ]
+  },
+  "metrics": {
+    "fact": {
+      "n": 9,
+      "answer_n": 9,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.34,
+      "first_byte_p95_ms": 43.2194,
+      "first_content_p50_ms": 1592.581,
+      "first_content_p95_ms": 1714.2884000000001,
+      "complete_p50_ms": 1593.172,
+      "complete_p95_ms": 1715.1486
+    },
+    "age_threshold": {
+      "n": 6,
+      "answer_n": 6,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.471,
+      "first_byte_p95_ms": 42.991,
+      "first_content_p50_ms": 2120.435,
+      "first_content_p95_ms": 2129.8005000000003,
+      "complete_p50_ms": 2121.567,
+      "complete_p95_ms": 2130.797
+    },
+    "mutation_preview": {
+      "n": 3,
+      "answer_n": 3,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 43.568,
+      "first_byte_p95_ms": 43.589600000000004,
+      "first_content_p50_ms": 1910.534,
+      "first_content_p95_ms": 1915.4408,
+      "complete_p50_ms": 1911.136,
+      "complete_p95_ms": 1916.0446
+    },
+    "multi_intent": {
+      "n": 3,
+      "answer_n": 3,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.451,
+      "first_byte_p95_ms": 44.280699999999996,
+      "first_content_p50_ms": 1023.094,
+      "first_content_p95_ms": 1025.9821000000002,
+      "complete_p50_ms": 1023.638,
+      "complete_p95_ms": 1026.9851
+    },
+    "ordinary_chat": {
+      "n": 3,
+      "answer_n": 3,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 41.857,
+      "first_byte_p95_ms": 42.8254,
+      "first_content_p50_ms": 2005.234,
+      "first_content_p95_ms": 2045.5153,
+      "complete_p50_ms": 2329.158,
+      "complete_p95_ms": 2388.8622
+    },
+    "bare_chat": {
+      "n": 3,
+      "answer_n": 3,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 43.537,
+      "first_byte_p95_ms": 43.6549,
+      "first_content_p50_ms": 205.468,
+      "first_content_p95_ms": 207.9808,
+      "complete_p50_ms": 374.142,
+      "complete_p95_ms": 379.97040000000004
+    },
+    "discourse_followup": {
+      "n": 6,
+      "answer_n": 6,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.5305,
+      "first_byte_p95_ms": 43.683499999999995,
+      "first_content_p50_ms": 2303.284,
+      "first_content_p95_ms": 2737.301,
+      "complete_p50_ms": 2304.679,
+      "complete_p95_ms": 2737.842
+    },
+    "fact_concurrent": {
+      "n": 6,
+      "answer_n": 6,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 39.838499999999996,
+      "first_byte_p95_ms": 58.61525,
+      "first_content_p50_ms": 1876.96,
+      "first_content_p95_ms": 2512.5179999999996,
+      "complete_p50_ms": 1877.5645,
+      "complete_p95_ms": 2513.1295
+    }
+  },
+  "stage_medians": {
+    "fact": {
+      "planner_p50_ms": 1590.3,
+      "llm_wall_sum_p50_ms": 1562.0,
+      "prefill_sum_p50_ms": 519.9,
+      "generation_sum_p50_ms": 887.4,
+      "input_tokens_sum_p50": 11109,
+      "output_tokens_sum_p50": 47,
+      "llm_call_count_p50": 1,
+      "executor_p50_ms": 0.1,
+      "renderer_p50_ms": 0.0
+    },
+    "age_threshold": {
+      "planner_p50_ms": 2116.4,
+      "llm_wall_sum_p50_ms": 2070.1,
+      "prefill_sum_p50_ms": 519.0,
+      "generation_sum_p50_ms": 1404.6,
+      "input_tokens_sum_p50": 11083.0,
+      "output_tokens_sum_p50": 74.0,
+      "llm_call_count_p50": 1.0,
+      "executor_p50_ms": 0.7,
+      "renderer_p50_ms": 0.1
+    },
+    "mutation_preview": {
+      "planner_p50_ms": 1906.8,
+      "llm_wall_sum_p50_ms": 1870.2,
+      "prefill_sum_p50_ms": 516.1,
+      "generation_sum_p50_ms": 1193.2,
+      "input_tokens_sum_p50": 11087,
+      "output_tokens_sum_p50": 63,
+      "llm_call_count_p50": 1,
+      "executor_p50_ms": null,
+      "renderer_p50_ms": null
+    },
+    "multi_intent": {
+      "planner_p50_ms": 1020.9,
+      "llm_wall_sum_p50_ms": 987.2,
+      "prefill_sum_p50_ms": 521.8,
+      "generation_sum_p50_ms": 368.1,
+      "input_tokens_sum_p50": 11116,
+      "output_tokens_sum_p50": 20,
+      "llm_call_count_p50": 1,
+      "executor_p50_ms": null,
+      "renderer_p50_ms": 0.0
+    },
+    "ordinary_chat": {
+      "planner_p50_ms": 1049.8,
+      "llm_wall_sum_p50_ms": 2292.3,
+      "prefill_sum_p50_ms": 990.1,
+      "generation_sum_p50_ms": 710.4,
+      "input_tokens_sum_p50": 13063,
+      "output_tokens_sum_p50": 39,
+      "llm_call_count_p50": 2,
+      "executor_p50_ms": null,
+      "renderer_p50_ms": null
+    },
+    "bare_chat": {
+      "planner_p50_ms": null,
+      "llm_wall_sum_p50_ms": 370.7,
+      "prefill_sum_p50_ms": 68.1,
+      "generation_sum_p50_ms": 169.4,
+      "input_tokens_sum_p50": 18,
+      "output_tokens_sum_p50": 10,
+      "llm_call_count_p50": 1,
+      "executor_p50_ms": null,
+      "renderer_p50_ms": null
+    },
+    "discourse_followup": {
+      "planner_p50_ms": 2299.8,
+      "llm_wall_sum_p50_ms": 2241.9,
+      "prefill_sum_p50_ms": 416.8,
+      "generation_sum_p50_ms": 1539.9,
+      "input_tokens_sum_p50": 16706.0,
+      "output_tokens_sum_p50": 81.5,
+      "llm_call_count_p50": 1.5,
+      "executor_p50_ms": 0.1,
+      "renderer_p50_ms": 0.0
+    },
+    "fact_concurrent": {
+      "planner_p50_ms": 1873.4,
+      "llm_wall_sum_p50_ms": 1831.6,
+      "prefill_sum_p50_ms": 70.3,
+      "generation_sum_p50_ms": 891.1,
+      "input_tokens_sum_p50": 11110.0,
+      "output_tokens_sum_p50": 47.0,
+      "llm_call_count_p50": 1.0,
+      "executor_p50_ms": 0.1,
+      "renderer_p50_ms": 0.0
+    }
+  },
+  "provenance": {
+    "git": {
+      "git_commit": "unavailable",
+      "git_branch": "unavailable",
+      "git_dirty": null
+    },
+    "package_sha256": "044687af8ca8abdf09de1def54982caf7f4447955479faffa42f81b5be9c9e72",
+    "scripts_sha256": "db751e9910aba874dbd60e0643ee78ab235ce0a73d22a9556feed8648641fffc",
+    "schema_sha256": "4658709b7d330209cf93e8d2723d09d2860feca1618ee2644de1c9ebfc755e2f",
+    "fixture_sha256": "98659360011eb4c48aefd3eb3bc42d4ee7462dbb70655748eddabd3ab0bafc5d",
+    "dataset_sha256": "79c724877f5f6b65a5eca1b61fb1823a558ad0f5d83f4b51f20bdb7339ed7f15",
+    "prompt_sha256": "6eace635dc85486b915523839713eb1b7276450ed220a3e87a5de8f2ebd48f30",
+    "model_runtime": {
+      "available": true,
+      "version": "0.34.4",
+      "model": "qwen3.5:9b",
+      "model_name": "qwen3.5",
+      "tag": "9b",
+      "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+      "quantization": "Q4_K_M",
+      "parameter_size": "9.7B",
+      "context_length": 262144,
+      "processor": "100% GPU",
+      "options": {
+        "temperature": 0,
+        "num_ctx": 16384,
+        "num_predict": 384,
+        "seed": 0,
+        "keep_alive": "24h"
+      },
+      "requested_num_ctx": 16384
+    }
+  },
+  "notes": [
+    "First byte includes SSE comment/role, not answer text.",
+    "One warmup iteration per case excluded.",
+    "No answer correctness scoring in streamed probe.",
+    "Median stage durations are computed independently and need not sum to median end-to-end latency."
+  ]
+}
