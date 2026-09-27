@@ -35,6 +35,11 @@ def test_allowlisted_functions_and_constants_are_numeric() -> None:
         "[x for x in [1, 2]]",
         "True",
         "'2' + '2'",
+        "1 < 2",
+        "1 and 0",
+        "(1).real",
+        "sqrt",
+        "1; 2",
     ],
 )
 def test_rejects_arbitrary_code_and_non_numeric_syntax(expression: str) -> None:
@@ -50,6 +55,11 @@ def test_division_by_zero_is_a_calculation_error() -> None:
 def test_out_of_range_exponent_is_rejected() -> None:
     with pytest.raises(CalculationError, match="out of range"):
         evaluate_expression("10 ** 20")
+
+
+def test_intermediate_overflow_is_rejected_before_later_division() -> None:
+    with pytest.raises(CalculationError, match="out of range"):
+        evaluate_expression("(10 ** 12) * (10 ** 12) / (10 ** 12)")
 
 
 def test_unknown_function_is_rejected() -> None:

@@ -1,4 +1,4 @@
-"""Allowlisted local arithmetic. Never uses eval() or exec()."""
+"""Allowlisted local arithmetic evaluated by simpleeval. Never uses eval() or exec()."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ import operator
 from collections.abc import Callable
 from typing import Any
 
+import simpleeval
+
 MAX_EXPRESSION_LENGTH = 256
 MAX_AST_NODES = 80
 MAX_ABS_INT = 10**18
@@ -15,45 +17,7 @@ MAX_ABS_FLOAT = 1e15
 MAX_POWER_ABS_EXPONENT = 12
 MAX_FACTORIAL_ARGUMENT = 20
 
-_ALLOWED_NODES = (
-    ast.Add,
-    ast.BinOp,
-    ast.Call,
-    ast.Constant,
-    ast.Div,
-    ast.Expression,
-    ast.FloorDiv,
-    ast.Load,
-    ast.Mod,
-    ast.Mult,
-    ast.Name,
-    ast.Pow,
-    ast.Sub,
-    ast.UAdd,
-    ast.USub,
-    ast.UnaryOp,
-)
-
-_BIN_OPS: dict[type[ast.operator], Callable[[Any, Any], Any]] = {
-    ast.Add: operator.add,
-    ast.Sub: operator.sub,
-    ast.Mult: operator.mul,
-    ast.Div: operator.truediv,
-    ast.FloorDiv: operator.floordiv,
-    ast.Mod: operator.mod,
-    ast.Pow: operator.pow,
-}
-
-_UNARY_OPS: dict[type[ast.unaryop], Callable[[Any], Any]] = {
-    ast.UAdd: operator.pos,
-    ast.USub: operator.neg,
-}
-
-_CONSTANTS: dict[str, float] = {
-    "pi": math.pi,
-    "e": math.e,
-    "tau": math.tau,
-}
+_EVAL_NODES = {ast.BinOp, ast.Call, ast.Constant, ast.Name, ast.UnaryOp}
 
 
 class CalculationError(ValueError):
@@ -72,11 +36,12 @@ def _finite_number(value: Any) -> int | float:
     return value
 
 
-def _checked_pow(base: int | float, exponent: int | float) -> int | float:
+def _checked_pow(base: int | float, exponent: int | float) -> Any:
+    # Reject before the power is computed so a huge exponent cannot allocate.
     if abs(exponent) > MAX_POWER_ABS_EXPONENT:
         raise CalculationError("Exponent is out of range")
     try:
-        return _finite_number(operator.pow(base, exponent))
+        return operator.pow(base, exponent)
     except OverflowError as error:
         raise CalculationError("Numeric result is out of range") from error
 
@@ -89,37 +54,111 @@ def _checked_factorial(value: int | float) -> int:
     return math.factorial(value)
 
 
-_FUNCTIONS: dict[str, Callable[..., Any]] = {
-    "abs": abs,
-    "acos": math.acos,
-    "asin": math.asin,
-    "atan": math.atan,
-    "atan2": math.atan2,
-    "ceil": math.ceil,
-    "cos": math.cos,
-    "cosh": math.cosh,
-    "degrees": math.degrees,
-    "exp": math.exp,
-    "fabs": math.fabs,
-    "factorial": _checked_factorial,
-    "floor": math.floor,
-    "hypot": math.hypot,
-    "log": math.log,
-    "log10": math.log10,
-    "log2": math.log2,
-    "max": max,
-    "min": min,
-    "pow": _checked_pow,
-    "radians": math.radians,
-    "round": round,
-    "sin": math.sin,
-    "sinh": math.sinh,
-    "sqrt": math.sqrt,
-    "sum": lambda *values: sum(values),
-    "tan": math.tan,
-    "tanh": math.tanh,
-    "trunc": math.trunc,
+def _limit(function: Callable[..., Any]) -> Callable[..., int | float]:
+    def wrapped(*args: Any) -> int | float:
+        try:
+            return _finite_number(function(*args))
+        except ZeroDivisionError as error:
+            raise CalculationError("Division by zero") from error
+        except OverflowError as error:
+            raise CalculationError("Numeric result is out of range") from error
+
+    return wrapped
+
+
+def _call(name: str, function: Callable[..., Any]) -> Callable[..., int | float]:
+    def wrapped(*args: Any, **kwargs: Any) -> int | float:
+        if kwargs:
+            raise ValueError("Expression contains disallowed syntax")
+        try:
+            result = function(*args)
+        except CalculationError:
+            raise
+        except TypeError as error:
+            raise ValueError(f"Invalid arguments for {name}") from error
+        except (ValueError, OverflowError, ZeroDivisionError) as error:
+            raise CalculationError("Mathematical evaluation failed") from error
+        return _finite_number(result)
+
+    return wrapped
+
+
+_OPERATORS = {
+    ast.Add: _limit(operator.add),
+    ast.Sub: _limit(operator.sub),
+    ast.Mult: _limit(operator.mul),
+    ast.Div: _limit(operator.truediv),
+    ast.FloorDiv: _limit(operator.floordiv),
+    ast.Mod: _limit(operator.mod),
+    ast.Pow: _limit(_checked_pow),
+    ast.UAdd: _limit(operator.pos),
+    ast.USub: _limit(operator.neg),
 }
+_FUNCTIONS = {
+    name: _call(name, function)
+    for name, function in {
+        **{
+            name: getattr(math, name)
+            for name in (
+                "acos asin atan atan2 ceil cos cosh degrees exp fabs floor hypot "
+                "log log10 log2 radians sin sinh sqrt tan tanh trunc"
+            ).split()
+        },
+        "abs": abs,
+        "factorial": _checked_factorial,
+        "max": max,
+        "min": min,
+        "pow": _checked_pow,
+        "round": round,
+        "sum": lambda *values: sum(values),
+    }.items()
+}
+_NAMES = {"pi": math.pi, "e": math.e, "tau": math.tau}
+_ALLOWED_NODES = (
+    ast.Expression,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.Call,
+    ast.Constant,
+    ast.Name,
+    ast.Load,
+    *_OPERATORS,
+)
+
+
+class _ArithmeticEval(simpleeval.SimpleEval):
+    def __init__(self) -> None:
+        super().__init__(
+            operators=_OPERATORS,
+            functions=_FUNCTIONS,
+            names=_NAMES,
+            allowed_attrs={},
+        )
+        self.nodes = {
+            kind: handler for kind, handler in self.nodes.items() if kind in _EVAL_NODES
+        }
+
+    @staticmethod
+    def _eval_constant(node: ast.Constant) -> int | float:
+        return _finite_number(node.value)
+
+    def _eval_name(self, node: ast.Name) -> int | float:
+        try:
+            return self.names[node.id]
+        except KeyError:
+            raise ValueError(f"Unknown name {node.id!r}") from None
+
+
+def _reject_disallowed(tree: ast.AST) -> None:
+    if sum(1 for _ in ast.walk(tree)) > MAX_AST_NODES:
+        raise ValueError("Expression is too complex")
+    for node in ast.walk(tree):
+        if not isinstance(node, _ALLOWED_NODES):
+            raise ValueError("Expression contains disallowed syntax")
+        if isinstance(node, ast.Constant) and (
+            isinstance(node.value, bool) or not isinstance(node.value, (int, float))
+        ):
+            raise ValueError("Only numeric literals are allowed")
 
 
 def evaluate_expression(expression: str) -> int | float:
@@ -129,80 +168,15 @@ def evaluate_expression(expression: str) -> int | float:
     source = expression.strip()
     if len(source) > MAX_EXPRESSION_LENGTH:
         raise ValueError("Expression exceeds the maximum allowed length")
-
     try:
         tree = ast.parse(source, filename="<calculate>", mode="eval")
     except SyntaxError as error:
         raise ValueError("Expression is not valid arithmetic") from error
-
-    if sum(1 for _ in ast.walk(tree)) > MAX_AST_NODES:
-        raise ValueError("Expression is too complex")
-    for node in ast.walk(tree):
-        if not isinstance(node, _ALLOWED_NODES):
-            raise ValueError("Expression contains disallowed syntax")
-        if isinstance(node, ast.Constant) and (
-            isinstance(node.value, bool)
-            or not isinstance(node.value, (int, float))
-        ):
-            raise ValueError("Only numeric literals are allowed")
-
-    return _finite_number(_eval_node(tree))
-
-
-def _eval_node(node: ast.AST) -> int | float:
-    if isinstance(node, ast.Expression):
-        return _eval_node(node.body)
-    if isinstance(node, ast.Constant):
-        return _literal_number(node.value)
-    if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
-        return _finite_number(_UNARY_OPS[type(node.op)](_eval_node(node.operand)))
-    if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
-        left = _eval_node(node.left)
-        right = _eval_node(node.right)
-        try:
-            if isinstance(node.op, ast.Pow):
-                return _checked_pow(left, right)
-            return _finite_number(_BIN_OPS[type(node.op)](left, right))
-        except ZeroDivisionError as error:
-            raise CalculationError("Division by zero") from error
-        except OverflowError as error:
-            raise CalculationError("Numeric result is out of range") from error
-    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-        if node.id in _CONSTANTS:
-            return _CONSTANTS[node.id]
-        raise ValueError(f"Unknown name {node.id!r}")
-    if isinstance(node, ast.Call):
-        return _eval_call(node)
-    raise ValueError("Expression contains disallowed syntax")
-
-
-def _literal_number(value: Any) -> int | float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError("Only numeric literals are allowed")
-    return _finite_number(value)
-
-
-def _eval_call(node: ast.Call) -> int | float:
-    if not isinstance(node.func, ast.Name) or not isinstance(node.func.ctx, ast.Load):
-        raise ValueError("Expression contains disallowed syntax")
-    if node.keywords or getattr(node, "starargs", None) or getattr(node, "kwargs", None):
-        raise ValueError("Keyword and starred arguments are not allowed")
-    function = _FUNCTIONS.get(node.func.id)
-    if function is None:
-        raise ValueError(f"Function {node.func.id!r} is not allowed")
-    arguments = [_eval_node(argument) for argument in node.args]
+    _reject_disallowed(tree)
     try:
-        result = function(*arguments)
-    except CalculationError:
-        raise
-    except TypeError as error:
-        raise ValueError(f"Invalid arguments for {node.func.id}") from error
-    except (ValueError, OverflowError, ZeroDivisionError) as error:
-        raise CalculationError("Mathematical evaluation failed") from error
-    if isinstance(result, bool):
-        raise CalculationError("Expression did not produce a number")
-    if isinstance(result, int):
-        return _finite_number(result)
-    if isinstance(result, float):
-        return _finite_number(result)
-    raise CalculationError("Expression did not produce a number")
+        value = _ArithmeticEval().eval(source, previously_parsed=tree.body)
+    except simpleeval.FunctionNotDefined as error:
+        raise ValueError(f"Function {error.func_name!r} is not allowed") from error
+    except simpleeval.InvalidExpression as error:
+        raise ValueError("Expression contains disallowed syntax") from error
+    return _finite_number(value)
