@@ -37,6 +37,14 @@ async def health(request: Request) -> dict[str, Any]:
         ) from error
 
 
+@router.get("/model-readiness")
+async def model_readiness(request: Request) -> dict[str, Any]:
+    """Authenticated status; database liveness remains on /health."""
+    authenticate_bearer(request)
+    warmup = getattr(request.app.state, "model_warmup", None)
+    return warmup.snapshot() if warmup is not None else {"status": "disabled", "models": []}
+
+
 async def run_ingest(database: Any, data_dir: Path, edge_registry: Any):
     from ...persistence.ingestion import ingest_directory
 

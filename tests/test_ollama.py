@@ -2,6 +2,7 @@ from home_cortex.mutation.ir import read_plan_schema
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -31,6 +32,24 @@ class FakeOllamaClient:
 
     async def close(self) -> None:
         self.closed = True
+
+
+@pytest.mark.asyncio
+async def test_warmup_uses_serving_context_and_requires_residency() -> None:
+    client = FakeOllamaClient([_chat_response({"role": "assistant", "content": "OK"})])
+
+    async def ps():
+        return SimpleNamespace(models=[SimpleNamespace(
+            model="qwen3:8b", name="qwen3:8b", context_length=8192,
+        )])
+
+    client.ps = ps  # type: ignore[attr-defined]
+    service = OllamaService("http://ollama:11434", "qwen3:8b", client=client)  # type: ignore[arg-type]
+    assert await service.is_resident() is False
+    await service.warmup()
+    assert client.calls[0]["messages"] == [{"role": "user", "content": "OK"}]
+    assert client.calls[0]["options"] == {"num_ctx": OLLAMA_NUM_CTX, "num_predict": 1}
+    assert client.calls[0]["keep_alive"] == "24h"
 
 
 class FakeResponseStream:

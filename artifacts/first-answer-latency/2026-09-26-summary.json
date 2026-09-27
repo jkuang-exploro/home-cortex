@@ -1,0 +1,214 @@
+{
+  "scope": "loopback streamed HTTP, synthetic graph; excludes proxy/browser paint",
+  "runtime": "ollama",
+  "model": "qwen3.5:9b",
+  "warmup": {
+    "status": "warm",
+    "models": [
+      {
+        "model": "qwen3.5:9b",
+        "status": "warm",
+        "attempts": 0,
+        "ready_ms": 13.898142002290115,
+        "last_error_type": null
+      }
+    ]
+  },
+  "metrics": {
+    "fact": {
+      "n": 9,
+      "answer_n": 9,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.031,
+      "first_byte_p95_ms": 42.8818,
+      "first_content_p50_ms": 1570.571,
+      "first_content_p95_ms": 1690.1968,
+      "complete_p50_ms": 1571.177,
+      "complete_p95_ms": 1691.0272
+    },
+    "mutation_preview": {
+      "n": 3,
+      "answer_n": 3,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.514,
+      "first_byte_p95_ms": 42.9991,
+      "first_content_p50_ms": 1887.578,
+      "first_content_p95_ms": 1891.3705999999997,
+      "complete_p50_ms": 1888.123,
+      "complete_p95_ms": 1891.9155999999998
+    },
+    "multi_intent": {
+      "n": 3,
+      "answer_n": 3,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.326,
+      "first_byte_p95_ms": 42.5897,
+      "first_content_p50_ms": 1005.72,
+      "first_content_p95_ms": 1026.1878,
+      "complete_p50_ms": 1006.267,
+      "complete_p95_ms": 1026.7249
+    },
+    "ordinary_chat": {
+      "n": 3,
+      "answer_n": 3,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.084,
+      "first_byte_p95_ms": 42.0858,
+      "first_content_p50_ms": 1888.752,
+      "first_content_p95_ms": 1927.0883999999999,
+      "complete_p50_ms": 2174.089,
+      "complete_p95_ms": 2201.4904
+    },
+    "bare_chat": {
+      "n": 3,
+      "answer_n": 3,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.54,
+      "first_byte_p95_ms": 43.245599999999996,
+      "first_content_p50_ms": 204.32,
+      "first_content_p95_ms": 204.5279,
+      "complete_p50_ms": 373.332,
+      "complete_p95_ms": 375.03299999999996
+    },
+    "discourse_followup": {
+      "n": 6,
+      "answer_n": 6,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 42.349999999999994,
+      "first_byte_p95_ms": 43.6195,
+      "first_content_p50_ms": 2263.351,
+      "first_content_p95_ms": 2698.9165000000003,
+      "complete_p50_ms": 2264.1535,
+      "complete_p95_ms": 2699.84575
+    },
+    "fact_concurrent": {
+      "n": 6,
+      "answer_n": 6,
+      "http_error_n": 0,
+      "stream_error_n": 0,
+      "first_byte_p50_ms": 46.7575,
+      "first_byte_p95_ms": 58.3715,
+      "first_content_p50_ms": 1855.518,
+      "first_content_p95_ms": 2494.6710000000003,
+      "complete_p50_ms": 1856.1464999999998,
+      "complete_p95_ms": 2495.264
+    }
+  },
+  "provenance": {
+    "git": {
+      "git_commit": "unavailable",
+      "git_branch": "unavailable",
+      "git_dirty": null
+    },
+    "package_sha256": "9fe6eec62320c689a8013ddc7f65152989578b128451292bbd48199ecf507f4f",
+    "scripts_sha256": "db751e9910aba874dbd60e0643ee78ab235ce0a73d22a9556feed8648641fffc",
+    "schema_sha256": "56c8c05373d8a1cbba778079ca3a39f77414f62ef092e01983ddb173fbecbd87",
+    "fixture_sha256": "98659360011eb4c48aefd3eb3bc42d4ee7462dbb70655748eddabd3ab0bafc5d",
+    "dataset_sha256": "0c2f85ba193ea305a2ac007ad3b0ffb2473567980aacfb3746e3e52abc47f81d",
+    "prompt_sha256": "a1bf4c261a7ca80506f1cbb7e90d8078b2e2176c61107bfb8e15a0c7f60c4642",
+    "model_runtime": {
+      "available": true,
+      "version": "0.34.4",
+      "model": "qwen3.5:9b",
+      "model_name": "qwen3.5",
+      "tag": "9b",
+      "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+      "quantization": "Q4_K_M",
+      "parameter_size": "9.7B",
+      "context_length": 262144,
+      "processor": "100% GPU",
+      "options": {
+        "temperature": 0,
+        "num_ctx": 16384,
+        "num_predict": 384,
+        "seed": 0,
+        "keep_alive": "24h"
+      },
+      "requested_num_ctx": 16384
+    },
+    "ollama_container_image": "ollama/ollama:0.34.4",
+    "ollama_container_image_id": "sha256:8262851b2846b87c649eddf3e76beb270c52f4d1bc94559f47efde16b0841551",
+    "gpu": "NVIDIA GeForce RTX 2060 SUPER, 8192 MiB"
+  },
+  "waterfall": {
+    "fact": {
+      "first_byte_ms_p50": 42.0,
+      "planner_ms_p50": 1568.5,
+      "model_call_ms_p50": 1540.6,
+      "model_prefill_ms_p50": 515.8,
+      "model_generation_ms_p50": 883.7,
+      "semantic_retries_n": 0,
+      "second_chat_calls_n": 0,
+      "missing_trace_n": 0
+    },
+    "mutation_preview": {
+      "first_byte_ms_p50": 42.5,
+      "planner_ms_p50": 1885.7,
+      "model_call_ms_p50": 1854.0,
+      "model_prefill_ms_p50": 511.4,
+      "model_generation_ms_p50": 1184.7,
+      "semantic_retries_n": 0,
+      "second_chat_calls_n": 0,
+      "missing_trace_n": 0
+    },
+    "multi_intent": {
+      "first_byte_ms_p50": 42.3,
+      "planner_ms_p50": 1003.7,
+      "model_call_ms_p50": 981.0,
+      "model_prefill_ms_p50": 518.1,
+      "model_generation_ms_p50": 366.0,
+      "semantic_retries_n": 0,
+      "second_chat_calls_n": 0,
+      "missing_trace_n": 0
+    },
+    "ordinary_chat": {
+      "first_byte_ms_p50": 42.1,
+      "planner_ms_p50": 1057.0,
+      "model_call_ms_p50": 2137.9,
+      "model_prefill_ms_p50": 982.2,
+      "model_generation_ms_p50": 669.9,
+      "semantic_retries_n": 0,
+      "second_chat_calls_n": 3,
+      "missing_trace_n": 0
+    },
+    "bare_chat": {
+      "first_byte_ms_p50": 42.5,
+      "planner_ms_p50": 0,
+      "model_call_ms_p50": 370.5,
+      "model_prefill_ms_p50": 67.3,
+      "model_generation_ms_p50": 168.6,
+      "semantic_retries_n": 0,
+      "second_chat_calls_n": 0,
+      "missing_trace_n": 0
+    },
+    "discourse_followup": {
+      "first_byte_ms_p50": 42.3,
+      "planner_ms_p50": 2260.5,
+      "model_call_ms_p50": 2220.9,
+      "model_prefill_ms_p50": 415.2,
+      "model_generation_ms_p50": 1533.1,
+      "semantic_retries_n": 3,
+      "second_chat_calls_n": 0,
+      "missing_trace_n": 0
+    },
+    "fact_concurrent": {
+      "first_byte_ms_p50": 46.8,
+      "planner_ms_p50": 1843.5,
+      "model_call_ms_p50": 1812.0,
+      "model_prefill_ms_p50": 69.7,
+      "model_generation_ms_p50": 887.7,
+      "semantic_retries_n": 0,
+      "second_chat_calls_n": 0,
+      "missing_trace_n": 0
+    }
+  },
+  "sequential_warmup_iterations_excluded": 1,
+  "concurrency": 2,
+  "run_date": "2026-09-26 PDT"
+}

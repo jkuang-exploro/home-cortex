@@ -28,6 +28,7 @@ from ..common.identity import (
     OPENWEBUI_USER_ID_HEADER,
     resolve_user_entity_id,
 )
+from ..common.tracing import stage
 from .errors import APIError, request_id
 from .schemas import DEFAULT_AGENT_ID
 
@@ -110,6 +111,7 @@ def mapped_person_id(request: Request) -> str | None:
     return entity_id
 
 
+@stage("identity.resolve")
 async def resolve_identity(request: Request) -> dict[str, Any] | None:
     entity_id = mapped_person_id(request)
     if entity_id is None:

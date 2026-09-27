@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Request
 from starlette.responses import StreamingResponse
+from ...common.tracing import mark, timed_stage
 
 from ..dependencies import (
     agent_definition,
@@ -153,12 +154,13 @@ async def post_conversation_message(
     first_user = not any(
         item.get("role") == "user" for item in conversation.get("messages", [])
     )
-    user_message = await store.append_message(
-        conversation_id,
-        role="user",
-        content=content,
-        first_user=first_user,
-    )
+    with timed_stage("conversation.append_user"):
+        user_message = await store.append_message(
+            conversation_id,
+            role="user",
+            content=content,
+            first_user=first_user,
+        )
     if user_message is None:
         raise APIError(404, "conversation_not_found", "Conversation was not found")
     conversation_messages = conversation.setdefault("messages", [])
@@ -181,6 +183,7 @@ async def post_conversation_message(
 
     agent = agent_for_model(model_id) if conversation.get("agent_id") else None
     if agent is not None:
+        mark("answer.agent")
         user_entity = await resolve_identity(request)
         source = agent_runtime(request, agent).stream_answer_messages(
             messages,
@@ -190,6 +193,7 @@ async def post_conversation_message(
         )
         response_model = agent.display_name
     else:
+        mark("answer.bare_model")
         source = bare_model_provider(request, model_id).stream_chat(messages)
         response_model = model_id
 

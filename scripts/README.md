@@ -35,6 +35,7 @@ python -m scripts.benchmarks.hc_bench run --help
 python -m scripts.benchmarks.fact_benchmark --help
 python -m scripts.benchmarks.semantic_planner_benchmark --help
 python -m scripts.profiling.token_latency_audit --mode replay --output /tmp/replay.json
+python -m scripts.profiling.first_answer_http --base-url http://ollama:11434 --model qwen3.5:9b --repetitions 3 --concurrency 2 --output /tmp/first-answer.json
 python -m scripts.probes.ollama_prefix_reuse_probe --help
 python -m scripts.maintenance.freeze_contract_candidate --output /tmp/candidate
 ```
@@ -73,6 +74,12 @@ The override exists only within the benchmark process and restores on failure.
 Do not run competing model experiments concurrently. Each output path must be
 new; its adjacent JSONL contains per-case plans, answers, timings and model calls.
 Keep raw results on the evaluation host; commit concise `*-summary.json` files.
+
+The first-answer HTTP probe starts a loopback API with the fixed synthetic graph,
+in-memory conversations, and the real model provider. It records first SSE byte,
+first nonempty answer content, completion, and request traces by route cohort.
+`--concurrency 2` adds simultaneous fact requests. It does not use the live DB,
+proxy, or browser; cold-boot and browser-paint timing require separate runs.
 
 The fixed set has 12 requests; `--regression` adds the existing 20-case probe,
 119 generalization utterances, and 20 bilingual utterances. Gold plans expand

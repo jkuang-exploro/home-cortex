@@ -132,11 +132,32 @@ async def test_http_trace_includes_stream_completion_and_omits_request_data(capl
         await RequestTraceMiddleware(application, enabled=True)(
             {'type':'http','state':{},'path':'/private-path'}, receive, send)
     payload = json.loads(caplog.records[-1].message.removeprefix('request_profile '))
-    outer, inner = payload['events']
+    outer, *children = payload['events']
+    inner = next(item for item in children if item['stage'] == 'stream.work')
     assert outer['stage'] == 'http.total'
     assert outer['duration_ms'] >= inner['start_ms'] + inner['duration_ms'] - outer['start_ms']
+    assert {'http.response_start', 'http.first_body_byte'} <= {
+        item['stage'] for item in children
+    }
     assert sent[-1]['more_body'] is False
     assert 'private' not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_sse_marks_first_answer_content_after_role_frame():
+    from home_cortex.api.sse import stream_chat_completion
+
+    async def answer():
+        yield 'private answer'
+        yield ' continued'
+
+    with trace_request() as trace:
+        chunks = [part async for part in stream_chat_completion('id', 0, answer())]
+    events = [item['stage'] for item in trace.events]
+    assert events == ['http.first_answer_content']
+    assert chunks[0].startswith(':')
+    assert len([part for part in chunks if '"content": "private answer"' in part]) == 1
+    assert 'private' not in json.dumps(trace.events)
 
 
 @pytest.mark.asyncio

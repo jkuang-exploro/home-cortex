@@ -194,6 +194,21 @@
   }
 
   async function send(text: string) {
+    let profile = false;
+    try {
+      profile = localStorage.getItem('cortex:profile-first-answer') === '1';
+    } catch {
+      // Storage can be unavailable in a restricted browser context.
+    }
+    const started = performance.now();
+    const timing: Record<string, number> = {};
+    let requestId: string | undefined;
+    const record = (event: string, id?: string) => {
+      if (!profile) return;
+      timing[event] ??= Math.round((performance.now() - started) * 10) / 10;
+      if (id) requestId = id;
+    };
+    record('send');
     sendError = '';
     messages = [
       ...messages,
@@ -201,31 +216,53 @@
       { id: newId(), role: 'assistant', content: '' },
     ];
     pending = true;
+    if (profile) requestAnimationFrame(() => requestAnimationFrame(() => record('pending_paint')));
+    let firstPaintScheduled = false;
     try {
       const conversationId = activeId ?? (await ensureConversation());
       if (!activeId) activeId = conversationId;
+      record('conversation_ready');
       let reply = '';
       let paintFrame = 0;
       const paint = () => {
         paintFrame = 0;
         setLastAssistant(reply);
+        if (profile && !firstPaintScheduled) {
+          firstPaintScheduled = true;
+          requestAnimationFrame(() => requestAnimationFrame(() =>
+            record('first_content_paint')
+          ));
+        }
       };
-      for await (const delta of streamMessage(conversationId, text)) {
+      for await (const delta of streamMessage(conversationId, text, record)) {
         reply += delta;
         if (!paintFrame) paintFrame = requestAnimationFrame(paint);
       }
       if (paintFrame) cancelAnimationFrame(paintFrame);
       setLastAssistant(reply);
+      if (profile && reply) requestAnimationFrame(() => requestAnimationFrame(() =>
+        record('answer_complete_paint')
+      ));
+      if (profile && reply && !firstPaintScheduled) {
+        firstPaintScheduled = true;
+        requestAnimationFrame(() => requestAnimationFrame(() =>
+          record('first_content_paint')
+        ));
+      }
       const latest = await getConversation(conversationId);
       if (latest.messages?.length) messages = latest.messages;
       else if (!reply) setLastAssistant(sendError || 'No reply');
       promoteConversation(latest);
     } catch (error) {
+      record('error');
       const message = error instanceof Error ? error.message : String(error);
       sendError = message;
       setLastAssistant(message);
     } finally {
       pending = false;
+      if (profile) requestAnimationFrame(() => requestAnimationFrame(() => {
+        console.info('first_answer_profile', { request_id: requestId, timing });
+      }));
     }
   }
 

@@ -1,0 +1,30 @@
+version: 1
+fixture: fixtures/semantic-contract
+speaker_id: person:a
+household_id: address:fictional
+cases:
+  - id: fact_self_en
+    cohort: fact
+    turns: ["Who am I?"]
+  - id: fact_self_zh
+    cohort: fact
+    turns: ["我是谁？"]
+  - id: fact_household
+    cohort: fact
+    turns: ["How many people live in this household?"]
+  - id: preview
+    cohort: mutation_preview
+    turns: ["Preview recording a notebook in the desk drawer."]
+  - id: multi_intent
+    cohort: multi_intent
+    turns: ["Who am I? Then remove the notebook record."]
+  - id: ordinary
+    cohort: ordinary_chat
+    turns: ["Say hello in one sentence."]
+  - id: bare
+    cohort: bare_chat
+    bare: true
+    turns: ["Say hello in one sentence."]
+  - id: discourse
+    cohort: discourse_followup
+    turns: ["Who is my daughter?", "What is her name?"]

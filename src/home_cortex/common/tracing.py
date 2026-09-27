@@ -49,6 +49,25 @@ def trace_request(limit: int = 512):
         _active.reset(token)
 
 
+def mark(name: str) -> None:
+    """Record a content-free instant in the active request trace."""
+    trace = _active.get()
+    if trace is not None:
+        trace.end(trace.begin(name))
+
+
+@contextmanager
+def timed_stage(name: str):
+    """Time a small inline block without recording its inputs or result."""
+    trace = _active.get()
+    event = trace.begin(name) if trace is not None else None
+    try:
+        yield
+    finally:
+        if trace is not None and event is not None:
+            trace.end(event)
+
+
 def stage(name: str):
     """Time sync/async stages only inside an explicit trace_request scope."""
     def decorate(function):
@@ -210,8 +229,19 @@ class RequestTraceMiddleware:
             return await self.app(scope, receive, send)
         with trace_request() as trace:
             event = trace.begin('http.total')
+            first_body = False
+
+            async def timed_send(message):
+                nonlocal first_body
+                if message['type'] == 'http.response.start':
+                    mark('http.response_start')
+                elif message['type'] == 'http.response.body' and message.get('body') and not first_body:
+                    first_body = True
+                    mark('http.first_body_byte')
+                await send(message)
+
             try:
-                await self.app(scope, receive, send)
+                await self.app(scope, receive, timed_send)
             except BaseException as error:
                 event['error'] = type(error).__name__
                 raise

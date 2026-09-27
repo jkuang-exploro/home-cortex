@@ -65,6 +65,7 @@ export function deleteConversation(id: string): Promise<void> {
 export async function* streamMessage(
   conversationId: string,
   content: string,
+  onTiming?: (event: string, requestId?: string) => void,
 ): AsyncGenerator<string> {
   const response = await fetch(`/conversations/${conversationId}/messages`, {
     method: 'POST',
@@ -75,6 +76,8 @@ export async function* streamMessage(
     },
     body: JSON.stringify({ content, stream: true }),
   });
+  const requestId = response.headers.get('X-Request-ID') || undefined;
+  onTiming?.('fetch_response', requestId);
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     const error = payload.error ?? {};
@@ -90,8 +93,14 @@ export async function* streamMessage(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let firstByte = true;
+  let firstContent = true;
   while (true) {
     const { done, value } = await reader.read();
+    if (firstByte && value?.length) {
+      firstByte = false;
+      onTiming?.('first_response_byte', requestId);
+    }
     buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
     const parts = buffer.split('\n\n');
     buffer = done ? '' : (parts.pop() ?? '');
@@ -100,7 +109,10 @@ export async function* streamMessage(
       if (!line) continue;
       const data = line.slice(6).trim();
       if (!data || data === '[DONE]') {
-        if (data === '[DONE]') return;
+        if (data === '[DONE]') {
+          onTiming?.('stream_complete', requestId);
+          return;
+        }
         continue;
       }
       let event: { error?: { code?: string; message?: string }; choices?: { delta?: { content?: string } }[] };
@@ -113,8 +125,15 @@ export async function* streamMessage(
         throw new ApiError(502, event.error.code || 'stream_error', event.error.message || 'Stream failed');
       }
       const delta = event.choices?.[0]?.delta?.content;
-      if (delta) yield delta;
+      if (delta) {
+        if (firstContent) {
+          firstContent = false;
+          onTiming?.('first_content_delta', requestId);
+        }
+        yield delta;
+      }
     }
     if (done) break;
   }
+  onTiming?.('stream_complete', requestId);
 }

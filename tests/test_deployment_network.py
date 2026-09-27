@@ -48,6 +48,7 @@ def test_nginx_routes_gui_and_api_over_the_compose_network() -> None:
         "/agent/",
         "/v1/",
         "/health",
+        "/model-readiness",
         "/admin/",
         "/docs",
         "/redoc",

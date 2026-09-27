@@ -117,6 +117,8 @@ not add chat tools or routes by being present in the package tree.
 ## HTTP surface
 
 - `GET /health` checks SurrealDB and is public.
+- `GET /model-readiness` requires the bearer API key and reports local model
+  warmup state without waiting for a model call. It is separate from DB health.
 - `POST /session` exchanges the household API key and mapped identity for an
   HttpOnly GUI session.
 - `POST /v1/chat` invokes the default steward.
@@ -213,6 +215,7 @@ CORTEX_API_KEY=replace-with-a-long-random-secret
 CORTEX_IDENTITY_MAP={"email:your-login@example.com":"person:jian_kuang"}
 LLM_PROVIDER=ollama
 OLLAMA_MODEL=qwen3.5:9b
+CORTEX_MODEL_WARMUP=true
 ```
 
 For OpenRouter, set `LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, and
@@ -222,6 +225,13 @@ The experimental llama.cpp stack is in `docker-compose.llamacpp.yml`; see
 [`docker/LLAMA_SERVER.md`](../docker/LLAMA_SERVER.md) for its GGUF setup,
 image provenance, and benchmark commands. It has not passed the multi-intent
 safety gate for production.
+
+Local model warmup starts in the background when the API starts and rechecks
+residency after startup. It uses a synthetic one-token request with the serving
+context for Ollama; a healthy llama-server already has its model loaded. Set
+`CORTEX_MODEL_WARMUP=false` to compare cold and warm behavior. A failed warmup
+does not prevent `/health` or user requests from running. Query
+`/model-readiness` with the bearer key to see status and time to readiness.
 
 ```sh
 docker compose --env-file .env -f docker/docker-compose.yml up -d --build

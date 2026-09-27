@@ -12,6 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .. import __version__
 from ..runtime.agent import AgentService
+from ..runtime.model_warmup import ModelWarmup
 from ..agents import list_agents
 from ..capabilities.calendar import calendar_service_from_settings
 from ..config import get_settings
@@ -43,58 +44,73 @@ async def lifespan(app: FastAPI):
     if settings.cortex_api_key is None:
         raise RuntimeError("CORTEX_API_KEY is required to serve the API")
     app.state.settings = settings
-    database = Database(settings)
-    await database.connect()
-    app.state.database = database
-    edge_registry = EdgeSchemaRegistry.from_directory(settings.edge_schema_dir)
-    app.state.edge_registry = edge_registry
-    retrieval = RetrievalService(
-        database,
-        settings.retrieval_limit,
-        settings.data_dir,
-        edge_registry,
-    )
-    app.state.retrieval = retrieval
-    schema_catalog = RuntimeSchemaCatalog.from_data_dir(
-        settings.data_dir,
-        edge_registry,
-    )
-    writing = ItemWritingService(database, schema_catalog, edge_registry)
-    app.state.greetings = GreetingService(retrieval)
-    app.state.conversations = SurrealConversationStore(database)
-    calendar = calendar_service_from_settings(settings)
-    runtimes: dict[str, AgentService] = {}
-    providers = []
-    for definition in list_agents():
-        provider = model_provider_from_settings(settings, definition.model.name)
-        providers.append(provider)
-        runtimes[definition.id] = AgentService(
-            provider,
-            ToolDispatcher(
-                retrieval,
-                definition.allowed_tools,
-                calendar=calendar,
-                writing=writing,
-                household_id=definition.settings.get("home_entity_id"),
-            ),
-            system_prompt=definition.prompt,
-            tools=definition.tool_definitions,
-            localized_identity=definition.settings.get("localized_identity"),
-            assistant_id=definition.id,
-            assistant_display_name=definition.display_name,
-            home_entity_id=definition.settings.get("home_entity_id"),
-            household_timezone=settings.calendar_timezone,
-            schema_catalog=schema_catalog,
-        )
-    app.state.agents = runtimes
-    app.state.agent = runtimes[DEFAULT_AGENT_ID]
+    definitions = list_agents()
+    providers = [
+        model_provider_from_settings(settings, definition.model.name)
+        for definition in definitions
+    ]
+    local_providers = [
+        provider for provider in providers
+        if callable(getattr(provider, "is_resident", None))
+        and callable(getattr(provider, "warmup", None))
+    ]
+    warmup = ModelWarmup(local_providers if settings.cortex_model_warmup else ())
+    app.state.model_warmup = warmup
+    warmup.start()
+    database = None
+    connected = False
     try:
+        database = Database(settings)
+        await database.connect()
+        connected = True
+        app.state.database = database
+        edge_registry = EdgeSchemaRegistry.from_directory(settings.edge_schema_dir)
+        app.state.edge_registry = edge_registry
+        retrieval = RetrievalService(
+            database,
+            settings.retrieval_limit,
+            settings.data_dir,
+            edge_registry,
+        )
+        app.state.retrieval = retrieval
+        schema_catalog = RuntimeSchemaCatalog.from_data_dir(
+            settings.data_dir,
+            edge_registry,
+        )
+        writing = ItemWritingService(database, schema_catalog, edge_registry)
+        app.state.greetings = GreetingService(retrieval)
+        app.state.conversations = SurrealConversationStore(database)
+        calendar = calendar_service_from_settings(settings)
+        runtimes: dict[str, AgentService] = {}
+        for definition, provider in zip(definitions, providers):
+            runtimes[definition.id] = AgentService(
+                provider,
+                ToolDispatcher(
+                    retrieval,
+                    definition.allowed_tools,
+                    calendar=calendar,
+                    writing=writing,
+                    household_id=definition.settings.get("home_entity_id"),
+                ),
+                system_prompt=definition.prompt,
+                tools=definition.tool_definitions,
+                localized_identity=definition.settings.get("localized_identity"),
+                assistant_id=definition.id,
+                assistant_display_name=definition.display_name,
+                home_entity_id=definition.settings.get("home_entity_id"),
+                household_timezone=settings.calendar_timezone,
+                schema_catalog=schema_catalog,
+            )
+        app.state.agents = runtimes
+        app.state.agent = runtimes[DEFAULT_AGENT_ID]
         yield
     finally:
+        await warmup.close()
         bare = getattr(app.state, "bare_language_models", {})
         for provider in [*providers, *bare.values()]:
             await provider.close()
-        await database.close()
+        if connected and database is not None:
+            await database.close()
 
 
 def create_app() -> FastAPI:

@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from ..common.tracing import stage
+from ..common.tracing import mark, stage
 from ..common.display import (
     conversation_language,
     internal_ids_requested,
@@ -187,11 +187,14 @@ class AgentService:
             conversation_id=conversation_id,
         )
         if prepared.mutation_text is not None:
+            mark("answer.mutation")
             yield prepared.mutation_text
             return
         if prepared.fact_answer is not None:
+            mark("answer.fact")
             yield prepared.fact_answer.text
             return
+        mark("answer.ordinary_chat")
         async for token in self.model_loop.stream(
             prepared.trusted,
             request_id=request_id,

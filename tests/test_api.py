@@ -862,6 +862,20 @@ def test_health_is_public(
     _assert_request_id(response)
 
 
+def test_model_readiness_requires_bearer_and_does_not_change_health(
+    api_client: tuple[TestClient, FakeAgent], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = api_client
+    monkeypatch.setattr(
+        app.state, "model_warmup",
+        SimpleNamespace(snapshot=lambda: {"status": "warming", "models": []}),
+        raising=False,
+    )
+    assert client.get("/health").json()["status"] == "ok"
+    assert client.get("/model-readiness").json()["status"] == "warming"
+    assert client.get("/model-readiness", headers={"Authorization": ""}).status_code == 401
+
+
 def test_health_maps_database_failure_to_503(
     api_client: tuple[TestClient, FakeAgent],
 ) -> None:

@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     cortex_api_key: str | None = None
     cortex_identity_map: dict[str, str] = Field(default_factory=dict)
     cortex_export_root: Path = Path("/app/export")
+    cortex_model_warmup: bool = True
     google_calendar_client_id: str | None = None
     google_calendar_client_secret: SecretStr | None = None
     google_calendar_refresh_token: SecretStr | None = None

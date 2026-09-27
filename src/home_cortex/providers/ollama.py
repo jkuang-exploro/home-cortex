@@ -47,6 +47,26 @@ class OllamaService:
     async def _chat(self, **kwargs):
         return await self.client.chat(**kwargs)
 
+    async def is_resident(self) -> bool:
+        """Whether this model is loaded with the context used by serving calls."""
+        running = await self.client.ps()
+        return any(
+            (item.model == self.model or item.name == self.model)
+            and item.context_length == OLLAMA_NUM_CTX
+            for item in running.models
+        )
+
+    async def warmup(self) -> None:
+        """Load the serving runner with one bounded, synthetic model call."""
+        await self._chat(
+            model=self.model,
+            messages=[{"role": "user", "content": "OK"}],
+            stream=False,
+            think=False,
+            keep_alive=OLLAMA_KEEP_ALIVE,
+            options={"num_ctx": OLLAMA_NUM_CTX, "num_predict": 1},
+        )
+
     async def chat(
         self,
         messages: Sequence[Mapping[str, Any]],

@@ -14,6 +14,7 @@ export default defineConfig({
       '/agent': api,
       '/v1': api,
       '/health': api,
+      '/model-readiness': api,
       '/media-api': {
         target: mediaApi,
         rewrite: (path) => path.replace(/^\/media-api/, ''),

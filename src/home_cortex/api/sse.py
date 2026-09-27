@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import Request
 
 from ..runtime.agent import AgentLimitError, AgentStreamingError
+from ..common.tracing import mark
 from .errors import request_id
 from .schemas import VIRTUAL_MODEL
 
@@ -48,6 +49,7 @@ async def stream_chat_completion(
     model: str = VIRTUAL_MODEL,
 ) -> AsyncIterator[str]:
     try:
+        first_content = True
         yield f":{' ' * 2048}\n\n" + sse_data(
             chat_completion_chunk(
                 completion_id,
@@ -58,6 +60,9 @@ async def stream_chat_completion(
         )
         async for content in answer_stream:
             if content:
+                if first_content:
+                    first_content = False
+                    mark('http.first_answer_content')
                 yield sse_data(
                     chat_completion_chunk(
                         completion_id,
