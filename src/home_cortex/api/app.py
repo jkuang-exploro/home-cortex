@@ -4,7 +4,9 @@ from __future__ import annotations
 import os
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -13,6 +15,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .. import __version__
 from ..runtime.agent import AgentService
 from ..runtime.model_warmup import ModelWarmup
+from ..semantic.prompt import planner_chat_messages
+from ..semantic.schema import SemanticSchemaRegistry
+from ..semantic.unified_planner import unified_chat_messages, unified_output_schema
+from ..mutation.ir import read_plan_schema
 from ..agents import list_agents
 from ..capabilities.calendar import calendar_service_from_settings
 from ..config import get_settings
@@ -56,16 +62,40 @@ async def lifespan(app: FastAPI):
     ]
     warmup = ModelWarmup(local_providers if settings.cortex_model_warmup else ())
     app.state.model_warmup = warmup
-    warmup.start()
     database = None
     connected = False
     try:
+        edge_registry = EdgeSchemaRegistry.from_directory(settings.edge_schema_dir)
+        schema_catalog = RuntimeSchemaCatalog.from_data_dir(
+            settings.data_dir, edge_registry,
+        )
+        app.state.edge_registry = edge_registry
+        if settings.cortex_model_warmup:
+            semantic_schema = SemanticSchemaRegistry(schema_catalog)
+            synthetic_turn = [{"role": "user", "content": "How many members live in this household?"}]
+            household_now = datetime.now(ZoneInfo(settings.calendar_timezone)).isoformat()
+            for definition, provider in zip(definitions, providers):
+                configure = getattr(provider, "configure_planner_warmup", None)
+                if not callable(configure):
+                    continue
+                if "write_item" in definition.allowed_tools:
+                    messages = unified_chat_messages(
+                        synthetic_turn, semantic_schema, household_now=household_now,
+                    )
+                    output_schema = unified_output_schema(semantic_schema)
+                else:
+                    messages = planner_chat_messages(
+                        synthetic_turn,
+                        semantic_schema.planner_capability_payload(),
+                        household_now=household_now,
+                    )
+                    output_schema = read_plan_schema(semantic_schema.planner_output_schema())
+                configure(messages, output_schema)
+        warmup.start()
         database = Database(settings)
         await database.connect()
         connected = True
         app.state.database = database
-        edge_registry = EdgeSchemaRegistry.from_directory(settings.edge_schema_dir)
-        app.state.edge_registry = edge_registry
         retrieval = RetrievalService(
             database,
             settings.retrieval_limit,
@@ -73,10 +103,6 @@ async def lifespan(app: FastAPI):
             edge_registry,
         )
         app.state.retrieval = retrieval
-        schema_catalog = RuntimeSchemaCatalog.from_data_dir(
-            settings.data_dir,
-            edge_registry,
-        )
         writing = ItemWritingService(database, schema_catalog, edge_registry)
         app.state.greetings = GreetingService(retrieval)
         app.state.conversations = SurrealConversationStore(database)

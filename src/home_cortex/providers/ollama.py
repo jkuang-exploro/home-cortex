@@ -1,5 +1,6 @@
 import json
 from collections.abc import AsyncIterator, Mapping, Sequence
+from copy import deepcopy
 from typing import Any, cast
 
 from ollama import AsyncClient, ChatResponse
@@ -42,6 +43,15 @@ class OllamaService:
         self._owns_client = client is None
         self.client = client or AsyncClient(host=self.base_url)
         self.last_planner_runtime: dict[str, Any] = {}
+        self._warmup_plan: tuple[list[dict[str, Any]], dict[str, Any]] | None = None
+
+    def configure_planner_warmup(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        output_schema: Mapping[str, Any],
+    ) -> None:
+        """Prime the serving planner prefix after its runtime catalog is known."""
+        self._warmup_plan = (deepcopy(list(messages)), deepcopy(dict(output_schema)))
 
     @model_call("ollama")
     async def _chat(self, **kwargs):
@@ -57,7 +67,24 @@ class OllamaService:
         )
 
     async def warmup(self) -> None:
-        """Load the serving runner with one bounded, synthetic model call."""
+        """Load the runner and, when configured, prefill its real planner prefix."""
+        if self._warmup_plan is not None:
+            messages, output_schema = self._warmup_plan
+            await self._chat(
+                model=self.model,
+                messages=messages,
+                stream=False,
+                think=False,
+                keep_alive=OLLAMA_KEEP_ALIVE,
+                format=output_schema,
+                options={
+                    "temperature": 0,
+                    "num_ctx": OLLAMA_NUM_CTX,
+                    "num_predict": 1,
+                    "seed": PLANNER_SEED,
+                },
+            )
+            return
         await self._chat(
             model=self.model,
             messages=[{"role": "user", "content": "OK"}],

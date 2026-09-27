@@ -52,6 +52,28 @@ async def test_warmup_uses_serving_context_and_requires_residency() -> None:
     assert client.calls[0]["keep_alive"] == "24h"
 
 
+@pytest.mark.asyncio
+async def test_configured_warmup_prefills_planner_with_one_output_token() -> None:
+    client = FakeOllamaClient([_chat_response({"role": "assistant", "content": "{"})])
+    service = OllamaService("http://ollama:11434", "qwen3.5:9b", client=client)  # type: ignore[arg-type]
+    messages = [{"role": "system", "content": "synthetic planner contract"}]
+    output_schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
+    service.configure_planner_warmup(messages, output_schema)
+    messages[0]["content"] = "changed"
+    output_schema["properties"]["answer"]["type"] = "number"
+
+    await service.warmup()
+
+    request = client.calls[0]
+    assert request["messages"] == [{"role": "system", "content": "synthetic planner contract"}]
+    assert request["format"]["properties"]["answer"]["type"] == "string"
+    assert request["options"] == {
+        "temperature": 0, "num_ctx": OLLAMA_NUM_CTX, "num_predict": 1, "seed": 0,
+    }
+    assert request["think"] is False
+    assert request["keep_alive"] == "24h"
+
+
 class FakeResponseStream:
     def __init__(self, chunks: list[ChatResponse]) -> None:
         self._chunks = iter(chunks)
