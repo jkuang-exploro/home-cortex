@@ -3,6 +3,7 @@ tmp/
 .env
 *.secret
 .venv/
+.llm/
 __pycache__/
 .pytest_cache/
 # Experiment snapshots used only on the production GPU host; reproduce from the
