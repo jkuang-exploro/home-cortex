@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import re
 import socket
 import sys
+import tomllib
 import traceback
 from datetime import datetime
+from importlib import metadata
+from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .environment import (
@@ -39,6 +43,22 @@ from .registry import registry
 from .types import RunContext, RunRequest, SuiteResult
 
 EnvironmentCollector = Callable[..., dict[str, Any]]
+
+
+def missing_runtime_dependencies(root: Path) -> list[str]:
+    """Check this checkout's declared runtime dependencies before model traffic."""
+    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    missing: list[str] = []
+    for requirement in project["project"]["dependencies"]:
+        match = re.match(r"[A-Za-z0-9][A-Za-z0-9._-]*", requirement)
+        if match is None:
+            raise ValueError(f"Invalid project dependency: {requirement!r}")
+        name = match.group()
+        try:
+            metadata.version(name)
+        except metadata.PackageNotFoundError:
+            missing.append(name)
+    return missing
 
 
 class CompositeSuite:
@@ -109,6 +129,20 @@ def execute(
     if runtime == "llamacpp" and request.num_ctx is not None:
         print("llama.cpp context length is set by LLAMA_CTX_SIZE when the server starts", file=sys.stderr)
         return 2
+    root = repo_root()
+    try:
+        missing = missing_runtime_dependencies(root)
+    except (OSError, KeyError, ValueError, tomllib.TOMLDecodeError) as error:
+        print(f"Cannot check benchmark dependencies: {type(error).__name__}: {error}", file=sys.stderr)
+        return 1
+    if missing:
+        print(
+            f"Benchmark Python {sys.executable} is missing project dependencies: "
+            f"{', '.join(missing)}.\n"
+            f"Run `uv sync --frozen` in {root}, then run its .venv/bin/hc-bench.",
+            file=sys.stderr,
+        )
+        return 1
     try:
         if runtime == "llamacpp":
             ollama_url, endpoint_note = resolve_llamacpp_url(
@@ -125,7 +159,6 @@ def execute(
     if endpoint_note:
         print(endpoint_note)
     request.ollama_url = ollama_url
-    root = repo_root()
     started = datetime.now().astimezone()
     run_id, directory = allocate_run_dir(results_root(request.results_dir))
     progress = ProgressLog(directory / "progress.log")

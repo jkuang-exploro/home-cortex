@@ -12,6 +12,11 @@ python -m benchmarks.harness compare --help
 ```
 
 After `pip install -e .` the same commands are available as `hc-bench`.
+For a checkout managed by uv, run `uv sync --frozen` before benchmarking and
+use `.venv/bin/hc-bench`. The run command checks the dependencies declared in
+`pyproject.toml` before contacting the model. If that environment is stale, it
+reports the missing packages and the Python executable without creating an
+empty result directory.
 
 ## Workflows
 

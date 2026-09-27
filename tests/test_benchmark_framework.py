@@ -29,7 +29,7 @@ from benchmarks.harness.records import (
     write_run,
 )
 from benchmarks.harness.registry import registry, reset_registry
-from benchmarks.harness.runner import CompositeSuite, execute, plan_matrix
+from benchmarks.harness.runner import CompositeSuite, execute, missing_runtime_dependencies, plan_matrix
 from benchmarks.harness.stats import percentile
 from benchmarks.harness.taxonomy import classify_planner_failure
 from benchmarks.harness.types import CaseRecord, Metric, RunContext, RunRequest, SuiteResult
@@ -407,6 +407,46 @@ def test_wrong_host_refuses_without_creating_a_run(
     assert code == 2
     assert "Refusing" in capsys.readouterr().err
     assert list(tmp_path.iterdir()) == []
+
+
+def test_missing_project_dependency_refuses_before_model_traffic_or_run_allocation(
+    isolated_registry, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    isolated_registry.register(Widget(_result()))
+    monkeypatch.setattr(
+        "benchmarks.harness.runner.missing_runtime_dependencies",
+        lambda _root: ["simpleeval"],
+    )
+
+    def unexpected_endpoint(*_args: object, **_kwargs: object) -> tuple[str, None]:
+        raise AssertionError("Model endpoint must not be contacted")
+
+    code = execute(_request(tmp_path), endpoint_resolver=unexpected_endpoint)
+    assert code == 1
+    error = capsys.readouterr().err
+    assert "simpleeval" in error
+    assert sys.executable in error
+    assert "uv sync --frozen" in error
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_dependency_check_reads_this_checkout_runtime_requirements(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\ndependencies = ["present>=1", "missing[feature]>=2"]\n',
+        encoding="utf-8",
+    )
+
+    def version(name: str) -> str:
+        if name == "missing":
+            from importlib.metadata import PackageNotFoundError
+            raise PackageNotFoundError(name)
+        return "1.0"
+
+    monkeypatch.setattr("benchmarks.harness.runner.metadata.version", version)
+    assert missing_runtime_dependencies(tmp_path) == ["missing"]
 
 
 def test_host_override_records_nonstandard_environment(
