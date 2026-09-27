@@ -54,6 +54,22 @@ class OntologyProperty:
 
 
 @dataclass(frozen=True)
+class OntologyComputedFilter:
+    name: str
+    source_property: str
+    transform: str
+    mode: str
+    reference: str
+    require_past: bool
+    minimum: int
+    maximum: int
+    contract: PropertyContract
+    aliases: tuple[str, ...] = ()
+    label: tuple[tuple[str, str], ...] = ()
+    unit: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
 class OntologyPredicateFallback:
     property: str
     transform: str
@@ -85,12 +101,14 @@ class SemanticOntology:
         self,
         *,
         properties: Mapping[str, OntologyProperty],
+        computed_filters: Mapping[str, OntologyComputedFilter],
         base_relations: Mapping[str, str],
         reference_concepts: Mapping[str, OntologyReferenceConcept],
         policy_values: Mapping[str, int | float],
         collection_predicates: Mapping[str, OntologyCollectionPredicate],
     ) -> None:
         self.properties = MappingProxyType(dict(properties))
+        self.computed_filters = MappingProxyType(dict(computed_filters))
         self.base_relations = MappingProxyType(dict(base_relations))
         self.reference_concepts = MappingProxyType(dict(reference_concepts))
         self.policy_values = MappingProxyType(dict(policy_values))
@@ -131,6 +149,7 @@ class SemanticOntology:
         allowed = {
             "version",
             "properties",
+            "computed_filters",
             "base_relations",
             "reference_concepts",
             "policy_values",
@@ -144,6 +163,9 @@ class SemanticOntology:
             raise ValueError("Semantic ontology version must be 2")
 
         properties = _parse_properties(raw.get("properties"), path)
+        computed_filters = _parse_computed_filters(
+            raw.get("computed_filters", {}), properties, path
+        )
         base_relations = _parse_base_relations(raw.get("base_relations"), path)
         concepts = _parse_reference_concepts(
             raw.get("reference_concepts"),
@@ -213,6 +235,7 @@ class SemanticOntology:
                     raise ValueError(f"Disjoint predicates have identical fallbacks: {name}")
         return cls(
             properties=properties,
+            computed_filters=computed_filters,
             base_relations=base_relations,
             reference_concepts=concepts,
             policy_values=policy_values,
@@ -248,6 +271,18 @@ class SemanticOntology:
                     if definition.ordering else list(definition.aliases)
                 )
                 for name, definition in self.properties.items()
+            },
+            "computed_filters": {
+                name: {
+                    "aliases": list(definition.aliases),
+                    "type": definition.contract.type.payload(),
+                    "source_property": definition.source_property,
+                    "transform": definition.transform,
+                    "mode": definition.mode,
+                    "reference": definition.reference,
+                    "filter_operators": list(definition.contract.operators),
+                }
+                for name, definition in self.computed_filters.items()
             },
             "base_relations": sorted(self.base_relations),
             "reference_concepts": {
@@ -430,6 +465,63 @@ def _parse_collection_predicates(
                 item.get("modifier", {}), f"{label}.modifier", path
             ),
             disjoint_with=strings(item.get('disjoint_with', []), 'disjoint_with'),
+        )
+    return result
+
+
+def _parse_computed_filters(
+    raw: Any,
+    properties: Mapping[str, OntologyProperty],
+    path: Path,
+) -> dict[str, OntologyComputedFilter]:
+    values = _mapping(raw, "computed_filters", path)
+    result: dict[str, OntologyComputedFilter] = {}
+    for name, definition in values.items():
+        item = _mapping(definition, f"computed_filters.{name}", path)
+        allowed = {
+            "aliases", "label", "unit", "source_property", "transform", "mode",
+            "reference", "require_past", "minimum", "maximum", "type",
+            "applies_to", "filter_operators",
+        }
+        if set(item) - allowed or name in properties:
+            raise ValueError(f"Invalid computed filter declaration: {name}")
+        source = item.get("source_property")
+        transform = item.get("transform")
+        mode = item.get("mode")
+        reference = item.get("reference")
+        minimum = item.get("minimum")
+        maximum = item.get("maximum")
+        require_past = item.get("require_past", False)
+        contract = PropertyContract.parse(item)
+        if (
+            source not in properties
+            or transform != "date_difference"
+            or mode not in {"years", "months", "days"}
+            or reference != "household_now"
+            or type(require_past) is not bool
+            or type(minimum) is not int
+            or type(maximum) is not int
+            or minimum < 0
+            or maximum < minimum
+            or contract.type.execution_kind != "integer"
+            or contract.relationships
+            or not set(contract.entities).issubset(properties[source].contract.entities)
+            or not properties[source].contract.type.kinds.issubset({"date", "datetime"})
+        ):
+            raise ValueError(f"Invalid computed filter contract: {name}")
+        result[name] = OntologyComputedFilter(
+            name=name,
+            source_property=source,
+            transform=transform,
+            mode=mode,
+            reference=reference,
+            require_past=require_past,
+            minimum=minimum,
+            maximum=maximum,
+            contract=contract,
+            aliases=_strings(item.get("aliases", []), f"computed_filters.{name}.aliases", path),
+            label=_parse_labels(item.get("label", {}), f"computed_filters.{name}.label", path),
+            unit=_parse_labels(item.get("unit", {}), f"computed_filters.{name}.unit", path),
         )
     return result
 

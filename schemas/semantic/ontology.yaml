@@ -39,6 +39,7 @@ properties:
     type: {kind: date}
     applies_to: {entity: [person], relationship: []}
     filter_operators: &ordered_filters [eq, ne, gt, gte, lt, lte, in, exists, date_range]
+
   full_address:
     label: {en: street address, zh: 具体住址}
     fields: [full_address, address, street_address]
@@ -166,6 +167,24 @@ properties:
     type: {kind: string}
     applies_to: {entity: [space], relationship: []}
     filter_operators: [eq, ne, in, exists]
+
+# Filter-only semantic values computed by the deterministic executor from a
+# declared source property. They are not physical graph fields or projections.
+computed_filters:
+  age_years:
+    aliases: [age, years old, 年龄, 岁数]
+    label: {en: age, zh: 年龄}
+    unit: {en: years, zh: 岁}
+    source_property: birth_date
+    transform: date_difference
+    mode: years
+    reference: household_now
+    require_past: true
+    minimum: 0
+    maximum: 120
+    type: {kind: integer}
+    applies_to: {entity: [person], relationship: []}
+    filter_operators: [eq, gt, gte, lt, lte]
 
 policy_values:
   adulthood_years: 18

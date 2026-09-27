@@ -41,6 +41,13 @@ class SemanticSchemaRegistry:
         self._planner_capability_cache: dict[str, Any] | None = None
         self._planner_schema_cache: dict[str, Any] | None = None
         self.contracts = ResolvedSemanticContract(self)
+        self._available_computed_filters = frozenset(
+            name for name, definition in self.ontology.computed_filters.items()
+            if all(
+                (owner, definition.source_property) in self.contracts.entity_bindings
+                for owner in definition.contract.entities
+            )
+        )
         self._available_predicates = frozenset(
             name for name, definition in self.ontology.collection_predicates.items()
             if all(
@@ -59,6 +66,10 @@ class SemanticSchemaRegistry:
         payload['collection_predicates'] = {
             name: value for name, value in payload['collection_predicates'].items()
             if name in self._available_predicates
+        }
+        payload['computed_filters'] = {
+            name: value for name, value in payload['computed_filters'].items()
+            if name in self._available_computed_filters
         }
         available = self.contracts.payload()
         payload['properties'] = {name: value for name, value in payload['properties'].items() if name in available}
@@ -122,6 +133,21 @@ class SemanticSchemaRegistry:
         return None
 
     def _contract_filter_error(self, item, types, relation, anchor_types) -> str | None:
+        computed = self.ontology.computed_filters.get(item.property)
+        if computed is not None:
+            if (
+                computed.name not in self._available_computed_filters
+                or item.source != "entity"
+                or item.transform is not None
+                or item.value_from is not None
+                or item.value_property is not None
+                or not types
+                or not types.issubset(computed.contract.entities)
+            ):
+                return "PROPERTY_NOT_APPLICABLE"
+            if type(item.value) is not int or not computed.minimum <= item.value <= computed.maximum:
+                return "INVALID_LITERAL_TYPE"
+            return computed.contract.literal_error(item.operator, item.value)
         if item.transform == "date_difference":
             contract = self.contracts.properties.get(item.property)
             if contract is None:
@@ -157,12 +183,23 @@ class SemanticSchemaRegistry:
         return semantic in self.contracts.properties and self.contracts.properties[semantic].accepts(value)
 
     def validate_filter_value(self, semantic: str, value: Any) -> None:
+        computed = self.ontology.computed_filters.get(semantic)
+        if computed is not None:
+            semantic = computed.source_property
         if value is None:
             raise _FactFailure('filter_input_missing', missing=(semantic,))
         if not self.value_valid(semantic, value):
             raise _FactFailure('filter_unsupported', missing=(semantic,))
 
     def physical_property(self, entity_type: str, semantic: str) -> str | None:
+        computed = self.ontology.computed_filters.get(semantic)
+        if computed is not None:
+            return (
+                self.physical_property(entity_type, computed.source_property)
+                if semantic in self._available_computed_filters
+                and entity_type in computed.contract.entities
+                else None
+            )
         definition = self.ontology.properties.get(semantic)
         if definition is None or entity_type not in definition.contract.entities:
             return None
@@ -270,7 +307,7 @@ class SemanticSchemaRegistry:
                 "filter_requirements": {
                     "composition": "request.filters restricts the resolved collection before select/count/aggregation; all conditions are AND. The outer property selects the output, not the field used by a filter.",
                     "date_range": "date/datetime property with value=[inclusive_start, exclusive_end]; use ISO dates. A calendar year Y is [Y-01-01, (Y+1)-01-01).",
-                    "derived_age": "满N岁/N岁以上 is {property:birth_date, transform:date_difference, mode:years, operator:gte, value:N}. N岁以下 uses lt/lte. The executor computes completed units from Household now. Do not invent an ISO cutoff or a birth-year date_range.",
+                    "computed": "For a declared computed_filters property, compare its computed numeric value directly. Use its property name and operator/value, with no transform or source date in the filter. The executor computes it from the declared source and Household now.",
                 },
                 "property_ownership": {
                     "entity": full["semantic_properties"],
@@ -286,6 +323,7 @@ class SemanticSchemaRegistry:
                     for relation in full["semantic_relations"]
                 },
                 "property_aliases": ontology["properties"],
+                "computed_filters": ontology["computed_filters"],
                 "reference_concepts": ontology["reference_concepts"],
                 "collection_predicates": ontology["collection_predicates"],
             }
@@ -345,28 +383,21 @@ class SemanticSchemaRegistry:
                     "required": ["predicate"],
                 },
             ]}
-            # Anchor-relative comparisons belong to a traversal step. Collection
-            # filters have no anchor operand in their executor contract.
-            date_properties = [
-                name for name in properties
-                if name in {"birth_date", "start_date", "end_date"}
-            ]
-            derived_age = {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "property": {"type": "string", "enum": date_properties or properties},
-                    "transform": {"type": "string", "const": "date_difference"},
-                    "mode": {"type": "string", "enum": ["years", "months", "days"]},
-                    "operator": {"type": "string", "enum": ["gt", "gte", "lt", "lte", "eq"]},
-                    "value": {"type": "integer", "minimum": 0, "maximum": 120},
-                    "source": {"type": "string", "enum": ["entity"]},
-                },
-                "required": ["property", "transform", "mode", "operator", "value"],
-            }
+            # Computed values are filter-only semantic properties. The model
+            # compares their result; the executor owns source-date arithmetic.
+            computed_branches = []
+            for name in sorted(self._available_computed_filters):
+                definition = self.ontology.computed_filters[name]
+                for branch in definition.contract.filter_branches(
+                    name, traversal=False, sources=("entity",)
+                ):
+                    branch["properties"]["value"].update(
+                        minimum=definition.minimum, maximum=definition.maximum
+                    )
+                    computed_branches.append(branch)
             definitions["SemanticFilter"] = {"anyOf": [
                 *definitions["SemanticFilter"]["anyOf"],
-                derived_age,
+                *computed_branches,
             ]}
             definitions["SemanticCollectionFilter"] = {"anyOf": [
                 {
@@ -378,7 +409,7 @@ class SemanticSchemaRegistry:
                     "required": ["property", "operator", "value"],
                 },
                 definitions["SemanticFilter"]["anyOf"][1],
-                derived_age,
+                *computed_branches,
             ]}
             request = definitions["SemanticFactRequest"]
             request["properties"]["operation"]["enum"] = self.planner_capability_payload()["operations"]
@@ -865,11 +896,23 @@ class SemanticSchemaRegistry:
     ) -> str | None:
         if semantic_property is None:
             return None
+        computed = self.ontology.computed_filters.get(semantic_property)
+        if computed is not None:
+            return (
+                computed.contract.type.execution_kind
+                if semantic_property in self._available_computed_filters
+                and entity_types
+                and entity_types.issubset(computed.contract.entities)
+                else None
+            )
         if not entity_types or any((owner, semantic_property) not in self.contracts.entity_bindings for owner in entity_types):
             return None
         return self.contracts.properties[semantic_property].type.execution_kind
 
     def _valid_predicate(self, item: SemanticFilter, field_kind: str) -> bool:
+        computed = self.ontology.computed_filters.get(item.property)
+        if computed is not None:
+            return self._contract_filter_error(item, frozenset(computed.contract.entities), None, frozenset()) is None
         if item.transform == "date_difference":
             return field_kind in {"date", "datetime"}
         contract = self.contracts.properties.get(item.property)
