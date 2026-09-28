@@ -29,6 +29,12 @@ from ..conversation.greetings import GreetingService
 from ..providers.base import model_provider_from_settings
 from ..providers.ir import ModelProviderError
 from ..common.tracing import RequestTraceMiddleware
+from ..spatial.presence import (
+    DEFAULT_OBSERVER_STALE_AFTER_S,
+    EmbodimentPresence,
+    embodiment_ids_from_node_file,
+    record_ids_from_node_file,
+)
 from ..persistence.retrieval import RetrievalService
 from ..persistence.schema_catalog import RuntimeSchemaCatalog
 from ..capabilities.dispatcher import ToolDispatcher
@@ -40,7 +46,7 @@ from .errors import (
     unexpected_error_handler,
     validation_error_handler,
 )
-from .routes import chat, conversations, models, sessions, system
+from .routes import chat, conversations, models, sessions, system, telemetry
 from .schemas import DEFAULT_AGENT_ID, REQUEST_ID_HEADER
 
 
@@ -70,6 +76,15 @@ async def lifespan(app: FastAPI):
             settings.data_dir, edge_registry,
         )
         app.state.edge_registry = edge_registry
+        app.state.embodiment_presence = EmbodimentPresence(
+            embodiment_ids=embodiment_ids_from_node_file(
+                settings.data_dir / "nodes" / "embodiment.json"
+            ),
+            space_ids=record_ids_from_node_file(
+                settings.data_dir / "nodes" / "space.json", "space"
+            ),
+            stale_after_s=DEFAULT_OBSERVER_STALE_AFTER_S,
+        )
         if settings.cortex_model_warmup:
             semantic_schema = SemanticSchemaRegistry(schema_catalog)
             synthetic_turn = [{"role": "user", "content": "How many members live in this household?"}]
@@ -192,6 +207,7 @@ def create_app() -> FastAPI:
         conversations.router,
         chat.router,
         models.router,
+        telemetry.router,
     ):
         application.include_router(router)
     return application

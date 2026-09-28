@@ -912,6 +912,12 @@ def test_legacy_retrieve_route_is_removed(
                 "messages": [{"role": "user", "content": "Who lives here?"}],
             },
         ),
+        (
+            "POST",
+            "/v1/embodiments/embodiment:microduck-01/telemetry",
+            {"embodiment_id": "embodiment:microduck-01"},
+        ),
+        ("GET", "/v1/embodiments/embodiment:microduck-01/telemetry", None),
     ],
 )
 @pytest.mark.parametrize(

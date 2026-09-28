@@ -93,5 +93,39 @@ Example valid telemetry:
 
 Hardware evidence is still needed to select the body origin, axis labels, actual
 box dimensions, how the client computes per-axis p95, and how its clock is
-synchronized. This ticket supplies the domain and wire contracts only; it does
-not connect a device, ingest a stream, or store telemetry.
+synchronized. The sections above are the domain and wire contracts. They do not
+connect a device.
+
+## Runtime presence
+
+`EmbodimentPresence` keeps one current `PhysicalTelemetry` sample per registered
+embodiment. The sample stays in process memory. A restart drops it; the client
+publishes the next estimate, and until then lookup is unavailable. High-frequency
+history is not written. There is no existing requirement for a pose log, and a
+telemetry row is not a household fact.
+
+Durable registration is separate from the sample. Embodiment records remain the
+Ticket 1 documents. When `nodes/embodiment.json` is present, startup validates
+those records and registers their IDs. Space IDs are read from `nodes/space.json`
+when that file is present. A missing file registers nothing. Telemetry for an
+unregistered embodiment or space is rejected. This does not create embodiment
+records and does not write samples back to the graph.
+
+Admission is ordered by `measured_at`, never by arrival time:
+
+- a newer sample, including a newer `no_estimate`, becomes current;
+- the same sample submitted again does not change current state;
+- an older sample is ignored;
+- a different sample with the same `measured_at` is rejected.
+
+`derive_telemetry_status` reports `valid`, `unavailable`, `fresh`, and `stale`.
+`valid` means the current sample is a pose. `unavailable` means there is no
+current sample or the current sample is `no_estimate`. `fresh` and `stale`
+compare measurement age with the observer window (`stale_after_s`, default 2
+seconds). That window is not a `GOOD` / `DEGRADED` / `LOST` label. Position and
+orientation `p95` limits remain on `estimate_within_limits`.
+
+Clients submit and read the current sample at
+`POST` and `GET /v1/embodiments/{embodiment_id}/telemetry`. The path ID must
+match the sample. The body is the Ticket 1 telemetry object, including all six
+transform degrees. Home Cortex does not accept raw sensors or a shortened pose.

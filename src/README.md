@@ -58,8 +58,9 @@ not executor behavior; changing them requires real-model evaluation.
 `home_cortex.spatial` retains graph-level spatial contracts and pure math:
 coordinate bases, units, poses, transforms, observation parsing, and deterministic
 localization solving. Its package initializer is intentionally empty so chat
-startup does not load optional localization modules. Live camera, SLAM, pose
-acquisition, fiducial loops, and robot control belong in `home_cortex_client`.
+startup does not load optional localization modules. Live camera, SLAM,
+sensor fusion, fiducial loops, and robot control belong in `home_cortex_client`.
+Home Cortex keeps the latest client-fused embodiment telemetry in memory.
 
 Vision execution is paused pending MicroDuck hardware. The backend keeps only
 transport-neutral visual evidence contracts, ingestion ports, enrollment
