@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -12,6 +13,7 @@ from .transforms import Position
 _AXES = {"+x": (1.0, 0.0, 0.0), "-x": (-1.0, 0.0, 0.0),
          "+y": (0.0, 1.0, 0.0), "-y": (0.0, -1.0, 0.0),
          "+z": (0.0, 0.0, 1.0), "-z": (0.0, 0.0, -1.0)}
+_CAPABILITY_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 
 
 def _object(value: Any, field: str, required: set[str], optional: set[str] = set()) -> Mapping[str, Any]:
@@ -121,6 +123,7 @@ class Embodiment:
     geometry: BodyGeometry
     local_frame: LocalFrame
     agent_id: str | None = None
+    capabilities: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _typed_id(self.id, "embodiment", "embodiment.id")
@@ -130,12 +133,25 @@ class Embodiment:
             raise SpatialContractError("embodiment requires geometry and local_frame")
         if self.agent_id is not None:
             _typed_id(self.agent_id, "agent", "embodiment.agent_id")
+        if not isinstance(self.capabilities, tuple) or any(
+            not isinstance(name, str) or _CAPABILITY_NAME.fullmatch(name) is None
+            for name in self.capabilities
+        ):
+            raise SpatialContractError("embodiment capabilities must be namespaced strings")
+        if len(set(self.capabilities)) != len(self.capabilities):
+            raise SpatialContractError("embodiment capabilities must be unique")
+        object.__setattr__(self, "capabilities", tuple(sorted(self.capabilities)))
 
 
 def embodiment_from_mapping(value: Any) -> Embodiment:
-    item = _object(value, "embodiment", {"id", "name", "geometry", "local_frame"}, {"agent_id"})
+    item = _object(value, "embodiment", {"id", "name", "geometry", "local_frame"},
+                   {"agent_id", "capabilities"})
+    capabilities = item.get("capabilities", [])
+    if not isinstance(capabilities, list):
+        raise SpatialContractError("embodiment capabilities must be a list")
     return Embodiment(item["id"], item["name"], body_geometry_from_mapping(item["geometry"]),
-                      local_frame_from_mapping(item["local_frame"]), item.get("agent_id"))
+                      local_frame_from_mapping(item["local_frame"]), item.get("agent_id"),
+                      tuple(capabilities))
 
 
 def embodiment_as_mapping(value: Embodiment) -> dict[str, Any]:
@@ -143,4 +159,5 @@ def embodiment_as_mapping(value: Embodiment) -> dict[str, Any]:
               "local_frame": local_frame_as_mapping(value.local_frame)}
     if value.agent_id is not None:
         result["agent_id"] = value.agent_id
+    result["capabilities"] = list(value.capabilities)
     return result

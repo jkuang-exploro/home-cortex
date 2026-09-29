@@ -1,4 +1,5 @@
 id: steward
+entity_id: agent:butler
 display_name: 老管家
 description: >
   Dedicated household butler for address:fort_cerritos, responsible for

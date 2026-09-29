@@ -20,6 +20,7 @@ from ..semantic.schema import SemanticSchemaRegistry
 from ..semantic.unified_planner import unified_chat_messages, unified_output_schema
 from ..mutation.ir import read_plan_schema
 from ..agents import list_agents
+from ..agents.embodiments import EmbodimentCatalog, EmbodimentConnections
 from ..capabilities.calendar import calendar_service_from_settings
 from ..config import get_settings
 from ..conversation.store import SurrealConversationStore
@@ -32,7 +33,6 @@ from ..common.tracing import RequestTraceMiddleware
 from ..spatial.presence import (
     DEFAULT_OBSERVER_STALE_AFTER_S,
     EmbodimentPresence,
-    embodiment_ids_from_node_file,
     record_ids_from_node_file,
 )
 from ..persistence.retrieval import RetrievalService
@@ -76,10 +76,13 @@ async def lifespan(app: FastAPI):
             settings.data_dir, edge_registry,
         )
         app.state.edge_registry = edge_registry
+        embodiment_catalog = EmbodimentCatalog.from_node_file(
+            settings.data_dir / "nodes" / "embodiment.json"
+        )
+        app.state.embodiment_catalog = embodiment_catalog
+        app.state.embodiment_connections = EmbodimentConnections(embodiment_catalog)
         app.state.embodiment_presence = EmbodimentPresence(
-            embodiment_ids=embodiment_ids_from_node_file(
-                settings.data_dir / "nodes" / "embodiment.json"
-            ),
+            embodiment_ids=embodiment_catalog.embodiment_ids,
             space_ids=record_ids_from_node_file(
                 settings.data_dir / "nodes" / "space.json", "space"
             ),

@@ -3,8 +3,9 @@
 `Embodiment` is a durable `embodiment:` identity. Its serialized record contains a
 name, one box, an intrinsic `LocalFrame`, and optionally one `agent:` association.
 The record ID survives client disconnects and reconnects. This contract does not
-create records or infer an agent from a device connection. Presence, capabilities,
-and control handoff belong to later integration work.
+infer an agent from a device connection. Configured capabilities and the
+association are persistent; active connection and temporarily available
+capabilities are runtime state.
 
 The box stores **full** length, width, and height in meters, plus a **required**
 center offset `{x,y,z}` in the embodiment frame. The embodiment origin is a
@@ -21,6 +22,7 @@ Example persistent body record:
   "id": "embodiment:microduck-01",
   "name": "MicroDuck",
   "agent_id": "agent:butler",
+  "capabilities": ["mobility.move", "vision.observe"],
   "local_frame": {"forward": "+x", "left": "+y", "up": "+z"},
   "geometry": {"box": {
     "length_m": 0.32,
@@ -95,6 +97,40 @@ Hardware evidence is still needed to select the body origin, axis labels, actual
 box dimensions, how the client computes per-axis p95, and how its clock is
 synchronized. The sections above are the domain and wire contracts. They do not
 connect a device.
+
+## Agent association and capabilities
+
+The existing conversational agent registry keeps the runtime key `steward` and
+display name `老管家`. Its configured durable entity ID is `agent:butler`. These
+identify one agent; neither is a robot ID. The canonical persistent relation is
+the embodiment's singular `agent_id` field, read as **embodiment controlled by
+agent**. One agent may be named by any number of embodiments; each embodiment
+names at most one agent. There is no reciprocal edge or second ownership fact.
+Moving a body to another agent requires unassigning it first.
+
+`capabilities` is a sorted, unique list of open-vocabulary, lowercase,
+namespaced identifiers such as `mobility.move`, `vision.observe`, and
+`audio.speak`. They describe configured physical channels, not model-facing
+tools or permission to invoke an actuator. `AgentDefinition.allowed_tools`
+continues to govern the model's software tools independently. Adding a physical
+capability does not grant the agent a tool.
+
+`EmbodimentCatalog` reads the durable `nodes/embodiment.json` source, validates
+association against the registered agents, and provides deterministic lookups
+by agent, name, and capability. Its `associate` and `unassign` operations return
+new snapshots. `save_node_file` atomically writes a snapshot to the durable
+source; normal graph ingestion remains a separate operation. Source records are
+validated by ingestion and retain the same `embodiment:` IDs across reconnects.
+
+`EmbodimentConnections` is process-local, explicit connection state. Connecting
+may report a temporary subset of configured capabilities; disconnecting drops
+that runtime state without changing `agent_id`, geometry, or configured
+capabilities. `is_currently_embodied` means an associated body has an active
+connection in this state, regardless of whether its latest pose is valid.
+Telemetry freshness is separately reported by `EmbodimentPresence`. A transport
+must call `connect` and `disconnect` before these connection-based queries
+reflect live hardware. No device adapter or body-selection planner is part of
+this contract.
 
 ## Runtime presence
 

@@ -6,6 +6,7 @@ from typing import Any, Mapping
 import yaml
 
 from ..capabilities.catalog import get_tool_definitions
+from ..persistence.record_ids import split_record_id
 
 
 class UnknownAgentError(LookupError):
@@ -30,6 +31,7 @@ class AgentDefinition:
     settings: Mapping[str, Any] = field(
         default_factory=lambda: MappingProxyType({})
     )
+    entity_id: str | None = None
 
 
 def _load_agent(agent_id: str) -> AgentDefinition:
@@ -46,6 +48,13 @@ def _load_agent(agent_id: str) -> AgentDefinition:
         )
     display_name = _required_string(raw, "display_name", agent_id)
     description = _required_string(raw, "description", agent_id)
+    entity_id = _required_string(raw, "entity_id", agent_id)
+    try:
+        table, _ = split_record_id(entity_id)
+    except ValueError as error:
+        raise ValueError(f"Agent {agent_id!r} entity_id must be an agent: record ID") from error
+    if table != "agent":
+        raise ValueError(f"Agent {agent_id!r} entity_id must be an agent: record ID")
 
     model = raw.get("model")
     if not isinstance(model, dict):
@@ -82,6 +91,7 @@ def _load_agent(agent_id: str) -> AgentDefinition:
         allowed_tools=allowed_tools,
         tool_definitions=tool_definitions,
         settings=MappingProxyType(dict(settings)),
+        entity_id=entity_id,
     )
 
 
@@ -96,6 +106,9 @@ _AGENTS = {definition.id: definition for definition in (_load_agent("steward"),)
 _DISPLAY_NAMES = {
     definition.display_name: definition for definition in _AGENTS.values()
 }
+_ENTITY_IDS = {definition.entity_id: definition for definition in _AGENTS.values()}
+if len(_ENTITY_IDS) != len(_AGENTS):
+    raise ValueError("Registered agents require distinct entity IDs")
 
 
 def get_agent(agent_id: str) -> AgentDefinition:
@@ -110,6 +123,13 @@ def get_agent_by_display_name(display_name: str) -> AgentDefinition:
         return _DISPLAY_NAMES[display_name]
     except KeyError as error:
         raise UnknownAgentError(f"Unknown agent model {display_name!r}") from error
+
+
+def get_agent_by_entity_id(entity_id: str) -> AgentDefinition:
+    try:
+        return _ENTITY_IDS[entity_id]
+    except KeyError as error:
+        raise UnknownAgentError(f"Unknown agent entity {entity_id!r}") from error
 
 
 def list_agents() -> tuple[AgentDefinition, ...]:

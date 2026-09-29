@@ -16,7 +16,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from .embodiment import _typed_id, embodiment_from_mapping
+from .embodiment import Embodiment, _typed_id, embodiment_from_mapping
 from .primitives import SpatialContractError
 from .telemetry import (
     PhysicalTelemetry, _finite, _measured_at, physical_telemetry_as_mapping,
@@ -124,11 +124,14 @@ def record_ids_from_node_file(path: Path, table: str) -> frozenset[str]:
     return frozenset(_typed_id(item["id"], table, "id") for item in _node_records(path, table))
 
 
+def embodiments_from_node_file(path: Path) -> tuple[Embodiment, ...]:
+    """Load durable embodiment records; a missing file means no bodies."""
+    return tuple(embodiment_from_mapping(item) for item in _node_records(path, "embodiment"))
+
+
 def embodiment_ids_from_node_file(path: Path) -> frozenset[str]:
-    """Validate Ticket 1 embodiment records and return their IDs."""
-    return frozenset(
-        embodiment_from_mapping(item).id for item in _node_records(path, "embodiment")
-    )
+    """Validate durable embodiment records and return their IDs."""
+    return frozenset(item.id for item in embodiments_from_node_file(path))
 
 
 def _node_records(path: Path, table: str) -> list[Any]:

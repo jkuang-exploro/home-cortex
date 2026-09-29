@@ -66,6 +66,14 @@ Shard filenames are organization only; every record ID in that directory must
 still use the parent table (`item:fridge_01`, not `appliance:fridge_01`). Do
 not keep both `item.json` and `item/`.
 
+An embodiment is a persistent physical body, separate from a conversational
+agent. Store it in `nodes/embodiment.json` with a stable `embodiment:` ID,
+explicit box geometry and local frame, an optional singular `agent_id` such as
+`agent:butler`, and configured namespaced `capabilities`. Reconnecting a device
+does not create another embodiment record. See
+`src/home_cortex/spatial/EMBODIMENT.md` for the full contract. Current
+connection state and telemetry do not belong in this node file.
+
 Relationship files under `edges/` are named for a registered relationship in
 `schemas/edge/`. Schema files define endpoint types, direction, symmetry, and
 whether temporal fields are allowed. Data files contain facts only.

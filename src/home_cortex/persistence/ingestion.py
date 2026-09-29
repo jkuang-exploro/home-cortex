@@ -22,6 +22,7 @@ from ..spatial.contracts import (
     located_in_endpoints_allowed,
     reject_non_space_spatial_fields,
 )
+from ..spatial.embodiment import embodiment_as_mapping, embodiment_from_mapping
 
 TABLE_PATTERN = TABLE_NAME_RE
 _RETIRED_EDGE_TABLES = ("contained_in", "resides_in")
@@ -207,7 +208,10 @@ async def ingest_directory(
             for record in _records_from_file(path):
                 if "collapse" in record and not isinstance(record["collapse"], bool):
                     raise ValueError(f"Node in {path} must use collapse as a boolean")
-                _validate_node_name(record, path)
+                if table == "embodiment":
+                    record = embodiment_as_mapping(embodiment_from_mapping(record))
+                else:
+                    _validate_node_name(record, path)
                 raw_id = record.get("id")
                 if not isinstance(raw_id, str):
                     raise ValueError(f"Node in {path} is missing a string 'id'")
@@ -228,7 +232,7 @@ async def ingest_directory(
                 )
                 if record_id.table_name == "space":
                     apply_space_spatial_fields(record, source=path)
-                else:
+                elif record_id.table_name != "embodiment":
                     reject_non_space_spatial_fields(
                         record, record_id.table_name, source=path
                     )

@@ -103,6 +103,31 @@ async def test_repeated_ingestion_does_not_duplicate_relationships() -> None:
 
 
 @pytest.mark.asyncio
+async def test_embodiment_node_ingests_persistent_association_and_capabilities(tmp_path: Path) -> None:
+    data_dir = tmp_path / "static_test_data"
+    copytree(STATIC_TEST_DATA, data_dir)
+    body = {
+        "id": "embodiment:duck", "name": "Duck", "agent_id": "agent:butler",
+        "local_frame": {"forward": "+x", "left": "+y", "up": "+z"},
+        "geometry": {"box": {"length_m": 0.3, "width_m": 0.2, "height_m": 0.1,
+                             "center": {"x": 0, "y": 0, "z": 0.05}}},
+        "capabilities": ["vision.observe", "mobility.move"],
+    }
+    (data_dir / "nodes" / "embodiment.json").write_text(json.dumps([body]), encoding="utf-8")
+    database = MemoryDatabase()
+    await database.connect()
+    try:
+        await ingest_directory(database, data_dir)  # type: ignore[arg-type]
+        rows = await database.query("SELECT * FROM embodiment;")
+    finally:
+        await database.close()
+    assert len(rows) == 1
+    assert str(rows[0]["id"]) == "embodiment:duck"
+    assert rows[0]["agent_id"] == "agent:butler"
+    assert rows[0]["capabilities"] == ["mobility.move", "vision.observe"]
+
+
+@pytest.mark.asyncio
 async def test_explicit_relationship_id_is_stable() -> None:
     database = MemoryDatabase()
     await database.connect()
