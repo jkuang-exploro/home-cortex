@@ -122,15 +122,41 @@ new snapshots. `save_node_file` atomically writes a snapshot to the durable
 source; normal graph ingestion remains a separate operation. Source records are
 validated by ingestion and retain the same `embodiment:` IDs across reconnects.
 
-`EmbodimentConnections` is process-local, explicit connection state. Connecting
-may report a temporary subset of configured capabilities; disconnecting drops
-that runtime state without changing `agent_id`, geometry, or configured
-capabilities. `is_currently_embodied` means an associated body has an active
-connection in this state, regardless of whether its latest pose is valid.
-Telemetry freshness is separately reported by `EmbodimentPresence`. A transport
-must call `connect` and `disconnect` before these connection-based queries
-reflect live hardware. No device adapter or body-selection planner is part of
-this contract.
+`EmbodimentConnections` keeps one process-local runtime session per embodiment.
+The session has its own id, `online`, `connected_at`, `last_seen`, and the
+capabilities advertised as available. It is not an embodiment record. A connect
+for a known body opens that session. Connecting again while it is still online
+replaces the session id and timestamps. Disconnect marks the same session
+offline and clears advertised availability. A later connect opens a new session
+for the same embodiment id. Session IDs include a process-random component so
+an old token cannot match the first session after a server restart.
+`last_seen` advances on heartbeat, capability
+refresh, and accepted telemetry. Offline is an explicit disconnect; age alone
+does not close a session.
+
+Advertised availability must be a subset of the record's configured
+`capabilities`. Omitting a configured name means it is unavailable for this
+session. Refreshing availability keeps the session id. An unknown embodiment
+id is rejected and does not allocate a new body. The session path does not
+change `agent_id`, so a reconnect still resolves `embodiment:microduck-01` to
+the existing `agent:butler` association.
+
+`is_currently_embodied` means an associated body has an online session,
+regardless of whether its latest pose is valid. Telemetry submitted through
+the client protocol requires that online session and its current session ID.
+For HTTP writes after registration, send the returned ID in
+`X-Embodiment-Session-ID`. A replaced client's old ID cannot submit telemetry,
+refresh capabilities, heartbeat, or disconnect the new session.
+`EmbodimentPresence` still stores the latest admitted sample. The engineering
+simulated client exercises only this protocol:
+
+```sh
+python -m scripts.maintenance.embodiment_client demo
+```
+
+`register` with `--base-url`, `--api-key`, and `--embodiment` opens a session
+on a running API. The client does not read sensors or create embodiment
+records.
 
 ## Runtime presence
 
@@ -165,3 +191,53 @@ Clients submit and read the current sample at
 `POST` and `GET /v1/embodiments/{embodiment_id}/telemetry`. The path ID must
 match the sample. The body is the Ticket 1 telemetry object, including all six
 transform degrees. Home Cortex does not accept raw sensors or a shortened pose.
+
+## Deterministic occupancy and pre-hardware replay
+
+`spatial.occupancy` derives the axis-aligned envelope of the eight nominal
+oriented box vertices in a single space. `translation_p95_envelope` enlarges
+that envelope by x/y/z p95 values in space coordinates. It keeps body geometry
+and localization uncertainty separate. It does **not** incorporate orientation
+p95 or claim a joint 95% occupied volume; applications needing a conservative
+orientation-aware bound must add and validate that calculation later.
+
+The engineering-only `scripts.probes.embodiment_replay` constructs known
+ground-truth trajectories, adds seeded error to already-fused estimates, and
+replays canonical messages through `EmbodimentSession` and `EmbodimentPresence`.
+It measures position/orientation error and observed per-axis p95 coverage,
+then exercises stale, no-estimate, recovery, disconnect, and reconnect states.
+Its JSON inspector includes space axes, nominal body corners, both envelopes,
+the body origin, a body-local camera pose mapped into the space, and recent
+poses. No physical client implementation imports the simulator. The current
+`home_gui` has no spatial view; a 2D inspector is a follow-up after the JSON
+contract and live data lifecycle are settled.
+
+## Presence and conversation selection
+
+`GET /api/embodiments` lists persistent bodies in ID order. An optional
+`agent_id=steward` filter returns bodies linked to that registered agent.
+`GET /api/embodiments/{id}` adds box geometry, local frame, and the full latest
+canonical telemetry sample. Both routes require the usual API or GUI session
+authentication. The read projection reports `unlinked`, `linked_offline`, or
+`linked_online` from the persistent association and runtime session. It does
+not infer online state from telemetry. A linked online body with no estimate is
+normal. The telemetry `available` flag requires an online session and a fresh,
+valid sample; `valid` and `fresh` are reported separately. Runtime session IDs
+are omitted from this browser-facing read API because they fence client writes.
+
+`PATCH /conversations/{id}/active-embodiment` accepts exactly
+`{"active_embodiment_id": "embodiment:..."}` or `null`. The owned conversation
+must belong to a registered agent, and a selected body must already be linked
+to that agent. The selected ID is stored once on the conversation and appears
+in transcript and list responses; it does not change agent identity, open a
+device session, or imply localization. Transcript responses also identify the
+agent's persistent `agent_entity_id`; the existing `agent_id` remains the
+runtime registry key. Offline selection remains valid and
+ordinary chat continues. The same context is passed through the existing
+agent execution flow for browser, OpenAI-compatible, and later voice callers.
+
+`EmbodimentDirectory.action_availability(agent_id, embodiment_id, capability)`
+is the deterministic pre-dispatch gate for future physical action executors.
+It returns an `ActionAvailability` with `available` and a structured code after
+checking existence, association, online session, configured capability, and
+current capability advertisement in that order. It performs no physical action.

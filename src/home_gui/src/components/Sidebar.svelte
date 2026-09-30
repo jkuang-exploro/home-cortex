@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '../lib/i18n';
   import type { ConversationSummary, Language } from '../lib/types';
+  import type { Page } from '../lib/navigation';
 
   let {
     language,
@@ -10,6 +11,7 @@
     onnew,
     onchat,
     onmedia,
+    onembodiments,
     onselect,
     ondelete,
     onsignout,
@@ -17,10 +19,11 @@
     language: Language;
     conversations: ConversationSummary[];
     activeId: string | null;
-    page: 'chat' | 'media';
+    page: Page;
     onnew: () => void;
     onchat: () => void;
     onmedia: () => void;
+    onembodiments: () => void;
     onselect: (id: string) => void;
     ondelete: (id: string) => void;
     onsignout: () => void;
@@ -37,9 +40,10 @@
   <div class="sidebar-actions">
     <button class="primary" type="button" onclick={onnew}>{copy.newChat}</button>
     <button class="ghost" class:active={page === 'chat'} type="button" onclick={onchat}>Chat</button>
+    <button class="ghost" class:active={page === 'embodiments'} type="button" onclick={onembodiments}>{copy.embodiments}</button>
     <button class="ghost" class:active={page === 'media'} type="button" onclick={onmedia}>Media</button>
   </div>
-  <div class="chat-list" class:hidden={page === 'media'} aria-label={copy.chats}>
+  <div class="chat-list" class:hidden={page !== 'chat'} aria-label={copy.chats}>
     {#each conversations as chat (chat.id)}
       <div class="chat-item" class:active={chat.id === activeId}>
         <button type="button" onclick={() => onselect(chat.id)}>

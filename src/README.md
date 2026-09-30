@@ -61,6 +61,14 @@ localization solving. Its package initializer is intentionally empty so chat
 startup does not load optional localization modules. Live camera, SLAM,
 sensor fusion, fiducial loops, and robot control belong in `home_cortex_client`.
 Home Cortex keeps the latest client-fused embodiment telemetry in memory.
+A registered embodiment accepts that telemetry only while its in-memory
+runtime session is online.
+`GET /api/embodiments` and `GET /api/embodiments/{id}` expose its independent
+association, session, capabilities, and pose status. Conversations can retain
+an optional selected body through `PATCH /conversations/{id}/active-embodiment`;
+selection does not make an offline body available for physical actions.
+The [pre-hardware Epic 1 replay report](../artifacts/epic1-readiness/REPORT.md)
+documents the deterministic geometry, uncertainty, and session validation.
 
 Vision execution is paused pending MicroDuck hardware. The backend keeps only
 transport-neutral visual evidence contracts, ingestion ports, enrollment
@@ -255,6 +263,10 @@ port 80. The GUI container is not published directly. The API's port 8001 bindin
 is restricted to host loopback for local maintenance and development. For local
 frontend development, run `npm install && npm run dev` in `src/home_gui`; Vite
 proxies API paths to that loopback-only development endpoint.
+The GUI's `/embodiments` and `/embodiments/{id}` routes read the authenticated
+embodiment directory. They poll for runtime changes and leave agent association
+and conversation selection untouched. The chat selector shows linked bodies;
+an offline selection stays selected and ordinary chat remains available.
 
 ## Development
 

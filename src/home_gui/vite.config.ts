@@ -13,6 +13,7 @@ export default defineConfig({
       '/conversations': api,
       '/agent': api,
       '/v1': api,
+      '/api': api,
       '/health': api,
       '/model-readiness': api,
       '/media-api': {

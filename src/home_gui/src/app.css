@@ -174,6 +174,36 @@ a { color: var(--teal); }
   flex-shrink: 0;
 }
 
+.embodiment-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 28px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+.embodiment-bar label { display: flex; align-items: center; gap: 8px; }
+.embodiment-bar select { max-width: 220px; }
+.chat-agent-context { font-size: 0.92rem; white-space: nowrap; }
+.chat-agent-context span { color: var(--muted); font-weight: 500; }
+.body-state { color: var(--muted); font-weight: 600; }
+.body-state.online { color: var(--teal); }
+.body-detail { color: var(--muted); }
+.body-capability {
+  color: var(--muted);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 7px;
+}
+.body-capability.available { color: var(--teal); border-color: var(--teal-soft); background: var(--teal-soft); }
+.body-refresh { margin-left: auto; border: 0; background: transparent; color: var(--teal); }
+.body-detail-link { border: 0; background: transparent; color: var(--teal); text-decoration: underline; }
+.embodiment-error { margin: 4px 28px; }
+
 select {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -265,6 +295,71 @@ textarea {
 .error { color: var(--danger); }
 
 .hidden { display: none !important; }
+
+.embodiments-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: #f7f6f1;
+}
+.embodiments-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 30px 16px;
+  background: rgba(255, 254, 250, 0.9);
+  border-bottom: 1px solid var(--line);
+}
+.embodiments-heading h2 { margin: 2px 0 0; font: 600 1.75rem/1.1 "Iowan Old Style", Georgia, serif; }
+.embodiments-heading p:last-child { margin: 7px 0 0; color: var(--muted); font-size: 0.9rem; }
+.embodiments-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 30px 48px; }
+.embodiment-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+.embodiment-card, .embodiment-detail, .embodiment-empty {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow-soft);
+}
+.embodiment-card { padding: 20px; text-align: left; color: var(--ink); width: 100%; }
+.embodiment-card:hover { border-color: var(--teal); }
+.embodiment-card-head, .embodiment-detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.embodiment-card h3, .embodiment-detail h3 { margin: 0; font: 600 1.4rem/1.2 "Iowan Old Style", Georgia, serif; }
+.presence-pill { white-space: nowrap; border-radius: 999px; padding: 5px 9px; background: #eef1ef; color: var(--muted); font-size: 0.8rem; font-weight: 650; }
+.presence-pill.online { background: var(--teal-soft); color: var(--teal); }
+.presence-pill span { margin-right: 3px; }
+.embodiment-association { margin: 15px 0; font-weight: 600; }
+.embodiment-card-pose { margin: 0 0 10px; color: var(--teal-deep); }
+.quiet { color: var(--muted); font-size: 0.86rem; }
+.embodiment-card .quiet { margin: 0 0 15px; }
+.embodiment-card-caps { display: flex; flex-wrap: wrap; gap: 7px; }
+.embodiment-card-caps span { color: var(--muted); font-size: 0.8rem; padding: 3px 7px; border-radius: 8px; background: var(--paper); }
+.embodiment-card-caps .capability-ready { color: var(--teal); background: var(--teal-soft); }
+.embodiment-empty { max-width: 35rem; margin: 32px auto; padding: 28px; }
+.embodiment-empty h3 { margin: 0 0 8px; }
+.embodiment-empty p { color: var(--muted); }
+.embodiment-back { border: 0; background: transparent; padding: 4px 0 16px; color: var(--teal); }
+.embodiment-detail { padding: 26px; }
+.embodiment-detail code { display: inline-block; margin-top: 6px; color: var(--muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+.embodiment-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 22px; }
+.embodiment-section { min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.embodiment-section h4 { margin: 0 0 14px; font-size: 1rem; }
+.embodiment-section dl { display: grid; grid-template-columns: minmax(90px, auto) 1fr; gap: 9px 15px; margin: 0; font-size: 0.89rem; }
+.embodiment-section dt { color: var(--muted); }
+.embodiment-section dd { margin: 0; overflow-wrap: anywhere; }
+.capability-list { list-style: none; padding: 0; margin: 0; }
+.capability-list li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding: 9px 0; font-size: 0.82rem; }
+.capability-list li:first-child { border-top: 0; }
+.capability-list strong, .capability-list code { display: block; }
+.capability-list code { margin-top: 2px; }
+.capability-ready, .telemetry-ready { color: var(--teal); font-weight: 650; }
+.telemetry-status { margin: 0 0 14px; font-weight: 650; }
+.telemetry-values { margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; }
+.telemetry-values h5 { margin: 0 0 8px; }
+.telemetry-values p { display: flex; justify-content: space-between; gap: 8px; margin: 5px 0; font-size: 0.82rem; }
+.telemetry-values p span:first-child { font-weight: 650; }
 
 .media-main {
   min-width: 0;
@@ -429,6 +524,11 @@ textarea {
   .main-bar, .messages { padding-left: 16px; padding-right: 16px; }
   .composer { padding: 10px 16px 16px; }
   .media-bar { padding: 15px 16px 11px; }
+  .embodiments-heading { padding: 15px 16px 11px; }
+  .embodiments-scroll { padding: 16px 12px 32px; }
+  .embodiment-detail { padding: 16px; }
+  .embodiment-detail-grid { grid-template-columns: 1fr; }
+  .embodiment-bar { padding: 8px 16px; }
   .media-filters { padding: 10px 16px; }
   .media-scroll { padding: 8px 8px 32px; }
   .media-grid { grid-template-columns: repeat(3, 1fr); gap: 3px; }

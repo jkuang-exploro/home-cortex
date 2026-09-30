@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '../lib/i18n';
-  import type { ChatMessage, Language, Model } from '../lib/types';
+  import { spaceLabel } from '../lib/embodiments';
+  import type { ChatMessage, EmbodimentSummary, Language, Model } from '../lib/types';
   import Composer from './Composer.svelte';
   import Message from './Message.svelte';
 
@@ -10,25 +11,43 @@
     model,
     messages,
     pending = false,
+    embodiments,
+    activeEmbodimentId,
+    activeAgentId,
+    activeAgentEntityId,
+    embodimentError = '',
     error = '',
     onmodel,
     onlanguage,
     onsend,
+    onembodiment,
+    onrefresh,
+    onopenbody,
   }: {
     language: Language;
     models: Model[];
     model: string;
     messages: ChatMessage[];
     pending?: boolean;
+    embodiments: EmbodimentSummary[];
+    activeEmbodimentId: string | null;
+    activeAgentId: string | null;
+    activeAgentEntityId: string | null;
+    embodimentError?: string;
     error?: string;
     onmodel: (id: string) => void;
     onlanguage: (language: Language) => void;
     onsend: (text: string) => void;
+    onembodiment: (id: string | null) => void;
+    onrefresh: () => void;
+    onopenbody: (id: string) => void;
   } = $props();
 
   const copy = $derived(t(language));
   const agents = $derived(models.filter((item) => item.kind !== 'model'));
   const bare = $derived(models.filter((item) => item.kind === 'model'));
+  const selectedBody = $derived(embodiments.find((item) => item.id === activeEmbodimentId));
+  const linkedBodies = $derived(embodiments.filter((item) => item.agent?.id === activeAgentEntityId));
 
   let scroller: HTMLDivElement | undefined;
 
@@ -69,6 +88,54 @@
       <option value="en">English</option>
     </select>
   </header>
+  {#if activeAgentId}
+    <div class="embodiment-bar">
+      <strong class="chat-agent-context">
+        {model}
+        {#if activeEmbodimentId}
+          <span>{copy.via} {selectedBody?.name ?? activeEmbodimentId}</span>
+        {:else}
+          <span>· {copy.noBody}</span>
+        {/if}
+      </strong>
+      <label>
+        {copy.body}
+        <select
+          aria-label={copy.body}
+          value={activeEmbodimentId ?? ''}
+          disabled={pending}
+          onchange={(event) => onembodiment((event.currentTarget as HTMLSelectElement).value || null)}
+        >
+          <option value="">{copy.noBody}</option>
+          {#if activeEmbodimentId && (!selectedBody || selectedBody.agent?.id !== activeAgentEntityId)}
+            <option value={activeEmbodimentId} disabled>{activeEmbodimentId} · {copy.bodyUnavailable}</option>
+          {/if}
+          {#each linkedBodies as body (body.id)}
+            <option value={body.id}>
+              {body.name} — {body.connected ? copy.online : copy.offline}
+            </option>
+          {/each}
+        </select>
+      </label>
+      {#if selectedBody && selectedBody.agent?.id === activeAgentEntityId}
+        <span class:online={selectedBody.connected} class="body-state">
+          {selectedBody.connected ? '●' : '○'} {selectedBody.name} {selectedBody.connected ? copy.online : copy.offline}
+        </span>
+        {#if selectedBody.telemetry.available}
+          <span class="body-detail">{spaceLabel(selectedBody.telemetry.space_id)}</span>
+        {/if}
+        <button class="body-detail-link" type="button" onclick={() => onopenbody(selectedBody.id)}>
+          {copy.details}
+        </button>
+      {:else if activeEmbodimentId}
+        <span class="body-state">{copy.bodyUnavailable}</span>
+      {:else if !linkedBodies.length}
+        <span class="body-detail">{copy.noLinkedBodies}</span>
+      {/if}
+      <button class="body-refresh" type="button" onclick={onrefresh} aria-label={copy.refreshBodies}>{copy.refreshBodies}</button>
+    </div>
+    {#if embodimentError}<p class="error embodiment-error">{embodimentError}</p>{/if}
+  {/if}
   <div class="messages" bind:this={scroller}>
     {#if messages.length === 0}
       <p class="empty">{copy.empty}</p>

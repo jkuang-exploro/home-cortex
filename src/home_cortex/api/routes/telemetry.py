@@ -5,23 +5,15 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from ...spatial.presence import (
-    EmbodimentPresence, TelemetryAdmissionError, admission_as_mapping,
-    telemetry_state_as_mapping,
-)
+from ...agents.embodiments import SessionProtocolError
+from ...spatial.presence import telemetry_state_as_mapping
 from ...spatial.primitives import SpatialContractError
 from ..dependencies import authenticate_request
 from ..errors import APIError
+from .session import SESSION_ID_HEADER, _session_error, embodiment_session
 
 
 router = APIRouter()
-
-
-def _presence(request: Request) -> EmbodimentPresence:
-    presence = getattr(request.app.state, "embodiment_presence", None)
-    if not isinstance(presence, EmbodimentPresence):
-        raise APIError(503, "telemetry_unavailable", "Embodiment telemetry is not configured")
-    return presence
 
 
 @router.post("/v1/embodiments/{embodiment_id}/telemetry")
@@ -34,26 +26,24 @@ async def submit_telemetry(
     if body.get("embodiment_id") != embodiment_id:
         raise APIError(422, "invalid_telemetry", "Path embodiment_id must match the sample")
     try:
-        admission = _presence(request).submit(body)
-    except TelemetryAdmissionError as error:
-        raise _admission_error(error) from error
+        return embodiment_session(request).submit_telemetry(
+            body, session_id=request.headers.get(SESSION_ID_HEADER)
+        )
+    except SessionProtocolError as error:
+        raise _session_error(error) from error
     except SpatialContractError as error:
         raise APIError(422, "invalid_telemetry", str(error)) from error
-    return admission_as_mapping(admission)
 
 
 @router.get("/v1/embodiments/{embodiment_id}/telemetry")
 async def latest_telemetry(embodiment_id: str, request: Request) -> dict[str, Any]:
     authenticate_request(request)
     try:
-        state = _presence(request).latest(embodiment_id)
-    except TelemetryAdmissionError as error:
-        raise _admission_error(error) from error
+        session = embodiment_session(request)
+        session.view(embodiment_id)
+        state = session.presence.latest(embodiment_id)
+    except SessionProtocolError as error:
+        raise _session_error(error) from error
     except SpatialContractError as error:
         raise APIError(422, "invalid_telemetry", str(error)) from error
     return telemetry_state_as_mapping(state)
-
-
-def _admission_error(error: TelemetryAdmissionError) -> APIError:
-    status = {"unknown_embodiment": 404, "conflicting_sample": 409}.get(error.code, 422)
-    return APIError(status, error.code, str(error))

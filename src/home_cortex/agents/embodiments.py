@@ -8,17 +8,20 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import tempfile
-from dataclasses import replace
+from collections.abc import Collection
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Collection
 
 from ..spatial.embodiment import (
     Embodiment, _typed_id, embodiment_as_mapping,
 )
 from ..spatial.presence import embodiments_from_node_file
 from ..spatial.primitives import SpatialContractError
+from ..spatial.telemetry import _measured_at
 from .registry import list_agents
 
 
@@ -124,45 +127,170 @@ class EmbodimentCatalog:
         return EmbodimentCatalog(records.values(), known_agent_ids=self.known_agent_ids)
 
 
+class SessionProtocolError(SpatialContractError):
+    """A session transition that must not create or rewrite an embodiment."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+@dataclass(frozen=True)
+class RuntimeSession:
+    """One temporary connection. The embodiment ID lives on the durable record."""
+
+    embodiment_id: str
+    session_id: str
+    online: bool
+    connected_at: datetime
+    last_seen: datetime
+    available_capabilities: frozenset[str]
+
+
+@dataclass(frozen=True)
+class SessionChange:
+    disposition: str
+    session: RuntimeSession
+
+
 class EmbodimentConnections:
-    """Ephemeral connection and available-capability state, independent of facts."""
+    """One in-memory runtime session per embodiment. Facts stay in the catalog."""
 
     def __init__(self, catalog: EmbodimentCatalog) -> None:
         self.catalog = catalog
-        self._available: dict[str, frozenset[str]] = {}
+        self._sessions: dict[str, RuntimeSession] = {}
+        self._sequence = 0
+        self._instance_id = secrets.token_hex(16)
         self._lock = Lock()
 
     def connect(
-        self, embodiment_id: str, *, available_capabilities: Collection[str] | None = None,
-    ) -> None:
+        self,
+        embodiment_id: str,
+        *,
+        available_capabilities: Collection[str] | None = None,
+        now: datetime | None = None,
+    ) -> SessionChange:
+        """Open a session. A second connect while online replaces that session."""
         body = self.catalog.get(embodiment_id)
-        active = frozenset(
-            body.capabilities if available_capabilities is None else available_capabilities
-        )
-        if not active.issubset(body.capabilities):
-            raise SpatialContractError("runtime capabilities must be configured on the embodiment")
+        active = self._subset(body, available_capabilities)
+        observed = _observed(now)
         with self._lock:
-            self._available[embodiment_id] = active
+            previous = self._sessions.get(embodiment_id)
+            disposition = "replaced" if previous is not None and previous.online else "connected"
+            self._sequence += 1
+            session = RuntimeSession(
+                embodiment_id, f"runtime-session:{self._instance_id}:{self._sequence}",
+                True, observed, observed, active,
+            )
+            self._sessions[embodiment_id] = session
+            return SessionChange(disposition, session)
 
-    def disconnect(self, embodiment_id: str) -> None:
+    def update_capabilities(
+        self,
+        embodiment_id: str,
+        available_capabilities: Collection[str],
+        *,
+        now: datetime | None = None,
+    ) -> SessionChange:
+        body = self.catalog.get(embodiment_id)
+        active = self._subset(body, available_capabilities)
+        return self._touch(
+            embodiment_id, now, "capabilities",
+            available_capabilities=active,
+        )
+
+    def heartbeat(self, embodiment_id: str, *, now: datetime | None = None) -> SessionChange:
+        self.catalog.get(embodiment_id)
+        return self._touch(embodiment_id, now, "heartbeat")
+
+    def disconnect(self, embodiment_id: str, *, now: datetime | None = None) -> SessionChange:
+        self.catalog.get(embodiment_id)
+        observed = _observed(now)
+        with self._lock:
+            previous = self._require_online(embodiment_id)
+            if not previous.online:
+                return SessionChange("disconnected", previous)
+            session = replace(
+                previous, online=False, last_seen=observed, available_capabilities=frozenset(),
+            )
+            self._sessions[embodiment_id] = session
+            return SessionChange("disconnected", session)
+
+    def current(self, embodiment_id: str) -> RuntimeSession | None:
         self.catalog.get(embodiment_id)
         with self._lock:
-            self._available.pop(embodiment_id, None)
+            return self._sessions.get(embodiment_id)
 
     def is_connected(self, embodiment_id: str) -> bool:
-        self.catalog.get(embodiment_id)
-        with self._lock:
-            return embodiment_id in self._available
+        session = self.current(embodiment_id)
+        return session is not None and session.online
 
     def active_capabilities(self, embodiment_id: str) -> frozenset[str]:
-        self.catalog.get(embodiment_id)
-        with self._lock:
-            return self._available.get(embodiment_id, frozenset())
+        session = self.current(embodiment_id)
+        if session is None or not session.online:
+            return frozenset()
+        return session.available_capabilities
 
     def active_bodies_for_agent(self, agent_id: str) -> tuple[Embodiment, ...]:
         bodies = self.catalog.bodies_for_agent(agent_id)
         with self._lock:
-            return tuple(body for body in bodies if body.id in self._available)
+            return tuple(
+                body for body in bodies
+                if (session := self._sessions.get(body.id)) is not None and session.online
+            )
 
     def is_currently_embodied(self, agent_id: str) -> bool:
         return bool(self.active_bodies_for_agent(agent_id))
+
+    def _subset(self, body: Embodiment, available: Collection[str] | None) -> frozenset[str]:
+        if available is None:
+            return frozenset(body.capabilities)
+        if isinstance(available, str) or not isinstance(available, Collection):
+            raise SessionProtocolError(
+                "invalid_capabilities", "available capabilities must be a list of names",
+            )
+        active = frozenset(available)
+        if any(not isinstance(name, str) for name in active):
+            raise SessionProtocolError(
+                "invalid_capabilities", "available capabilities must be a list of names",
+            )
+        if not active.issubset(body.capabilities):
+            raise SessionProtocolError(
+                "capability_not_configured",
+                "runtime capabilities must be configured on the embodiment",
+            )
+        return active
+
+    def _touch(
+        self,
+        embodiment_id: str,
+        now: datetime | None,
+        disposition: str,
+        *,
+        available_capabilities: frozenset[str] | None = None,
+    ) -> SessionChange:
+        observed = _observed(now)
+        with self._lock:
+            previous = self._require_online(embodiment_id)
+            if not previous.online:
+                raise SessionProtocolError("session_offline", "runtime session is offline")
+            session = replace(
+                previous,
+                last_seen=observed,
+                available_capabilities=(
+                    previous.available_capabilities
+                    if available_capabilities is None else available_capabilities
+                ),
+            )
+            self._sessions[embodiment_id] = session
+            return SessionChange(disposition, session)
+
+    def _require_online(self, embodiment_id: str) -> RuntimeSession:
+        previous = self._sessions.get(embodiment_id)
+        if previous is None:
+            raise SessionProtocolError("session_offline", "runtime session is offline")
+        return previous
+
+
+def _observed(now: datetime | None) -> datetime:
+    return _measured_at(now if now is not None else datetime.now(timezone.utc))

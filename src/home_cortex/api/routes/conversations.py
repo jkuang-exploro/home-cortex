@@ -18,6 +18,7 @@ from ..dependencies import (
     greeting_service,
     owned_conversation,
     resolve_identity,
+    validate_active_embodiment,
 )
 from ..errors import APIError, request_id
 from ..execution import AnswerExecution
@@ -25,6 +26,7 @@ from ..providers import bare_model_provider, require_bare_model
 from ..schemas import (
     ConversationCreateRequest,
     ConversationMessageRequest,
+    ConversationActiveEmbodimentRequest,
     VIRTUAL_MODEL,
 )
 from ..sse import chat_completion_response, stream_chat_completion
@@ -140,6 +142,22 @@ async def delete_conversation(
     return {"status": "ok", "id": conversation_id}
 
 
+@router.patch("/conversations/{conversation_id}/active-embodiment")
+async def set_active_embodiment(conversation_id: str,
+                               body: ConversationActiveEmbodimentRequest,
+                               request: Request) -> dict[str, Any]:
+    conversation = await owned_conversation(request, conversation_id)
+    selected = validate_active_embodiment(
+        request, conversation, body.active_embodiment_id,
+    )
+    updated = await conversation_store(request).set_active_embodiment(
+        conversation_id, selected,
+    )
+    if updated is None:
+        raise APIError(404, "conversation_not_found", "Conversation was not found")
+    return transcript_response(updated, messages=updated.get("messages", []))
+
+
 @router.post("/conversations/{conversation_id}/messages")
 async def post_conversation_message(
     conversation_id: str,
@@ -147,6 +165,9 @@ async def post_conversation_message(
     request: Request,
 ):
     conversation = await owned_conversation(request, conversation_id)
+    active_embodiment_id = validate_active_embodiment(
+        request, conversation, conversation.get("active_embodiment_id"),
+    )
     store = conversation_store(request)
     content = body.content.strip()
     if not content:
@@ -190,6 +211,8 @@ async def post_conversation_message(
             request_id=request_id(request),
             user_entity=user_entity,
             conversation_id=conversation_id,
+            **({"active_embodiment_id": active_embodiment_id}
+               if active_embodiment_id else {}),
         )
         response_model = agent.display_name
     else:
@@ -224,8 +247,10 @@ def conversation_response(conversation: dict[str, Any], definition: Any) -> dict
         "id": conversation["id"],
         "object": "agent.conversation",
         "agent": {"id": definition.id, "display_name": definition.display_name},
+        "agent_entity_id": definition.entity_id,
         "language": conversation["language"],
         "greeting": conversation["greeting"],
+        "active_embodiment_id": conversation.get("active_embodiment_id"),
     }
 
 
@@ -234,11 +259,15 @@ def transcript_response(
     *,
     messages: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    runtime_agent_id = conversation.get("agent_id")
     return {
         "id": conversation["id"],
         "object": "conversation",
         "model": conversation.get("model"),
         "agent_id": conversation.get("agent_id"),
+        "agent_entity_id": (agent_definition(runtime_agent_id).entity_id
+                            if isinstance(runtime_agent_id, str) else None),
+        "active_embodiment_id": conversation.get("active_embodiment_id"),
         "language": conversation.get("language"),
         "greeting": conversation.get("greeting"),
         "title": conversation.get("title") or "",

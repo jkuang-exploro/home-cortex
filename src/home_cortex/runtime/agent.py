@@ -118,6 +118,7 @@ class AgentService:
         user_entity_id: str | None = None,
         user_entity: Mapping[str, Any] | None = None,
         conversation_id: str | None = None,
+        active_embodiment_id: str | None = None,
     ) -> AgentResult:
         question = question.strip()
         if not question:
@@ -128,6 +129,7 @@ class AgentService:
             user_entity_id=user_entity_id,
             user_entity=user_entity,
             conversation_id=conversation_id,
+            active_embodiment_id=active_embodiment_id,
         )
 
     @stage("agent.total")
@@ -139,6 +141,7 @@ class AgentService:
         user_entity_id: str | None = None,
         user_entity: Mapping[str, Any] | None = None,
         conversation_id: str | None = None,
+        active_embodiment_id: str | None = None,
     ) -> AgentResult:
         prepared = await self._prepare_request(
             messages,
@@ -146,6 +149,7 @@ class AgentService:
             user_entity_id=user_entity_id,
             user_entity=user_entity,
             conversation_id=conversation_id,
+            active_embodiment_id=active_embodiment_id,
         )
         if prepared.mutation_text is not None:
             return AgentResult(answer=prepared.mutation_text, steps=1, tool_calls=1,
@@ -178,6 +182,7 @@ class AgentService:
         user_entity_id: str | None = None,
         user_entity: Mapping[str, Any] | None = None,
         conversation_id: str | None = None,
+        active_embodiment_id: str | None = None,
     ) -> AsyncIterator[str]:
         prepared = await self._prepare_request(
             messages,
@@ -185,6 +190,7 @@ class AgentService:
             user_entity_id=user_entity_id,
             user_entity=user_entity,
             conversation_id=conversation_id,
+            active_embodiment_id=active_embodiment_id,
         )
         if prepared.mutation_text is not None:
             mark("answer.mutation")
@@ -216,6 +222,7 @@ class AgentService:
         user_entity_id: str | None,
         user_entity: Mapping[str, Any] | None,
         conversation_id: str | None,
+        active_embodiment_id: str | None,
     ) -> _PreparedRequest:
         safe_messages = _conversation_messages(messages)
         language = conversation_language(safe_messages)
@@ -235,6 +242,7 @@ class AgentService:
             current_time=household_now,
             locale=language,
             conversation_id=conversation_id,
+            active_embodiment_id=active_embodiment_id,
         )
         semantic_answer = await self.semantic_conversations.try_answer(
             safe_messages,
@@ -257,6 +265,7 @@ class AgentService:
             safe_messages,
             identity,
             now=now,
+            active_embodiment_id=active_embodiment_id,
         )
         return _PreparedRequest(
             language=language,
@@ -274,11 +283,18 @@ class AgentService:
         identity: Mapping[str, Any] | None,
         *,
         now: datetime,
+        active_embodiment_id: str | None = None,
     ) -> list[dict[str, Any]]:
         return [
             {"role": "system", "content": self.model_loop.system_prompt},
             *_clock_context(self.household_timezone, now),
             *(_identity_context(identity) if identity else []),
+            *([{"role": "system", "content": (
+                "Trusted conversation context: the agent's selected physical embodiment "
+                f"is {active_embodiment_id}. Selection does not imply that the body is "
+                "online, localized, or able to act. Do not claim a physical action "
+                "was performed without a dispatched tool result."
+            )}] if active_embodiment_id else []),
             *(dict(message) for message in messages),
         ]
 

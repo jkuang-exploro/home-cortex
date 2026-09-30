@@ -60,6 +60,7 @@ class ConversationStore:
         conversation = {
             "id": uuid4().hex,
             "agent_id": agent_id,
+            "active_embodiment_id": None,
             "model": model,
             "person_id": person_id,
             "language": language,
@@ -89,6 +90,16 @@ class ConversationStore:
 
     async def delete(self, conversation_id: str) -> bool:
         return self._items.pop(conversation_id, None) is not None
+
+    async def set_active_embodiment(self, conversation_id: str,
+                                   embodiment_id: str | None) -> dict[str, Any] | None:
+        conversation = self._items.get(conversation_id)
+        if conversation is None:
+            return None
+        conversation["active_embodiment_id"] = embodiment_id
+        conversation["updated_at"] = utc_now()
+        self._items.move_to_end(conversation_id)
+        return self._public(conversation)
 
     async def append_message(
         self,
@@ -122,6 +133,7 @@ class ConversationStore:
             "id": conversation["id"],
             "object": "conversation",
             "agent_id": conversation["agent_id"],
+            "active_embodiment_id": conversation["active_embodiment_id"],
             "model": conversation["model"],
             "language": conversation["language"],
             "greeting": conversation["greeting"],
@@ -152,6 +164,7 @@ class SurrealConversationStore:
         conversation = {
             "id": conversation_id,
             "agent_id": agent_id,
+            "active_embodiment_id": None,
             "model": model,
             "person_id": person_id,
             "language": language,
@@ -201,6 +214,21 @@ class SurrealConversationStore:
         )
         return True
 
+    async def set_active_embodiment(self, conversation_id: str,
+                                   embodiment_id: str | None) -> dict[str, Any] | None:
+        conversation = await self._load(conversation_id)
+        if conversation is None:
+            return None
+        await self.database.upsert(
+            as_record_id(f"{CONVERSATION_TABLE}:{conversation_id}"),
+            {key: value for key, value in {
+                **conversation,
+                "active_embodiment_id": embodiment_id,
+                "updated_at": utc_now(),
+            }.items() if key != "id"},
+        )
+        return await self.get(conversation_id)
+
     async def append_message(
         self,
         conversation_id: str,
@@ -226,6 +254,7 @@ class SurrealConversationStore:
             as_record_id(f"{CONVERSATION_TABLE}:{conversation_id}"),
             {
                 "agent_id": conversation["agent_id"],
+                "active_embodiment_id": conversation["active_embodiment_id"],
                 "model": conversation["model"],
                 "person_id": conversation["person_id"],
                 "language": conversation["language"],
@@ -292,6 +321,7 @@ class SurrealConversationStore:
         return {
             "id": conversation_id,
             "agent_id": record.get("agent_id"),
+            "active_embodiment_id": record.get("active_embodiment_id"),
             "model": record.get("model"),
             "person_id": record.get("person_id"),
             "language": record.get("language"),

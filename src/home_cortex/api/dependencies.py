@@ -9,6 +9,8 @@ from typing import Any
 from fastapi import Request
 
 from ..runtime.agent import AgentService
+from ..agents.presence import EmbodimentDirectory
+from ..spatial.primitives import SpatialContractError
 from ..agents import (
     AgentDefinition,
     UnknownAgentError,
@@ -177,6 +179,17 @@ async def chat_conversation_id(
     return value
 
 
+async def chat_active_embodiment(request: Request, conversation_id: str | None) -> str | None:
+    if conversation_id is None:
+        return None
+    conversation = await conversation_store(request).get(conversation_id)
+    if conversation is None:
+        raise APIError(404, "conversation_not_found", "Conversation was not found")
+    return validate_active_embodiment(
+        request, conversation, conversation.get("active_embodiment_id"),
+    )
+
+
 def agent_definition(agent_id: str) -> AgentDefinition:
     try:
         return get_agent(agent_id)
@@ -233,6 +246,28 @@ async def owned_conversation(
     if conversation is None or conversation.get("person_id") != person_id:
         raise APIError(404, "conversation_not_found", "Conversation was not found")
     return conversation
+
+
+def validate_active_embodiment(request: Request, conversation: Mapping[str, Any],
+                               embodiment_id: str | None) -> str | None:
+    if embodiment_id is None:
+        return None
+    runtime_agent_id = conversation.get("agent_id")
+    if not isinstance(runtime_agent_id, str):
+        raise APIError(422, "embodiment_requires_agent", "This conversation has no agent")
+    definition = agent_definition(runtime_agent_id)
+    directory = getattr(request.app.state, "embodiment_directory", None)
+    if not isinstance(directory, EmbodimentDirectory):
+        raise APIError(503, "embodiments_unavailable", "Embodiment directory is not configured")
+    try:
+        directory.catalog.get(embodiment_id)
+    except SpatialContractError as error:
+        raise APIError(404, "embodiment_not_found", "Embodiment was not found") from error
+    try:
+        directory.validate_selection(definition.entity_id, embodiment_id)
+    except SpatialContractError as error:
+        raise APIError(422, "embodiment_not_linked", str(error)) from error
+    return embodiment_id
 
 
 def session_identity(body: Any, settings: Settings) -> tuple[Any, str]:

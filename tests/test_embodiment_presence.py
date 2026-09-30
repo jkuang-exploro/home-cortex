@@ -188,19 +188,38 @@ def test_node_files_register_valid_ids_and_skip_missing_files(tmp_path: Path) ->
 
 
 def test_http_submit_and_lookup() -> None:
+    from home_cortex.agents.embodiments import EmbodimentCatalog, EmbodimentConnections
+    from home_cortex.agents.session import EmbodimentSession
+    from home_cortex.spatial.embodiment import embodiment_from_mapping
+
     previous = getattr(app.state, "embodiment_presence", None)
+    previous_session = getattr(app.state, "embodiment_session", None)
     previous_settings = getattr(app.state, "settings", None)
-    app.state.embodiment_presence = _presence()
+    presence = _presence()
+    catalog = EmbodimentCatalog([embodiment_from_mapping({
+        "id": "embodiment:microduck-01", "name": "MicroDuck", "agent_id": "agent:butler",
+        "capabilities": ["vision.observe"],
+        "local_frame": {"forward": "+x", "left": "+y", "up": "+z"},
+        "geometry": {"box": {"length_m": 0.32, "width_m": 0.24, "height_m": 0.18,
+                             "center": {"x": 0.0, "y": 0.0, "z": 0.09}}},
+    })])
+    protocol = EmbodimentSession(catalog, EmbodimentConnections(catalog), presence)
+    opened = protocol.register("embodiment:microduck-01", ["vision.observe"], now=NOW)
+    app.state.embodiment_presence = presence
+    app.state.embodiment_session = protocol
     app.state.settings = type("Settings", (), {"cortex_api_key": "test-cortex-key"})()
-    client = TestClient(app, headers={"Authorization": "Bearer test-cortex-key"})
+    client = TestClient(app, headers={
+        "Authorization": "Bearer test-cortex-key",
+        "X-Embodiment-Session-ID": opened["session"]["session_id"],
+    })
     path = "/v1/embodiments/embodiment:microduck-01/telemetry"
     try:
         denied = client.post(path, headers={"Authorization": ""}, json=_sample())
         assert denied.status_code == 401
         created = client.post(path, json=_sample())
         assert created.status_code == 200
-        assert created.json()["disposition"] == "accepted"
-        assert created.json()["state"]["status"]["valid"] is True
+        assert created.json()["telemetry"]["disposition"] == "accepted"
+        assert created.json()["telemetry"]["state"]["status"]["valid"] is True
         conflict = client.post(path, json=_sample(x=4))
         assert conflict.status_code == 409
         assert conflict.json()["error"]["code"] == "conflicting_sample"
@@ -209,8 +228,8 @@ def test_http_submit_and_lookup() -> None:
         assert unknown_space.json()["error"]["code"] == "unknown_space"
         older = client.post(path, json=_sample(offset_s=-1, x=8))
         assert older.status_code == 200
-        assert older.json()["disposition"] == "ignored"
-        assert older.json()["state"]["telemetry"]["transform"]["x"]["value"] == 1.372
+        assert older.json()["telemetry"]["disposition"] == "ignored"
+        assert older.json()["telemetry"]["state"]["telemetry"]["transform"]["x"]["value"] == 1.372
         latest = client.get(path)
         assert latest.status_code == 200
         assert latest.json()["telemetry"]["measured_at"] == MEASURED
@@ -228,6 +247,11 @@ def test_http_submit_and_lookup() -> None:
             del app.state.embodiment_presence
         else:
             app.state.embodiment_presence = previous
+        if previous_session is None:
+            if hasattr(app.state, "embodiment_session"):
+                del app.state.embodiment_session
+        else:
+            app.state.embodiment_session = previous_session
         if previous_settings is None:
             if hasattr(app.state, "settings"):
                 del app.state.settings

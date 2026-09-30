@@ -1,4 +1,4 @@
-import { ApiError, type Conversation, type Model, type Session } from './types';
+import { ApiError, type Conversation, type EmbodimentDetail, type EmbodimentSummary, type Model, type Session } from './types';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
@@ -56,6 +56,23 @@ export function createConversation(model: string, language: string): Promise<Con
 
 export function getConversation(id: string): Promise<Conversation> {
   return request(`/conversations/${id}`);
+}
+
+export function listEmbodiments(): Promise<EmbodimentSummary[]> {
+  return request('/api/embodiments');
+}
+
+export function getEmbodiment(id: string): Promise<EmbodimentDetail> {
+  return request(`/api/embodiments/${encodeURIComponent(id)}`);
+}
+
+export function setActiveEmbodiment(
+  conversationId: string, embodimentId: string | null,
+): Promise<Conversation> {
+  return request(`/conversations/${conversationId}/active-embodiment`, {
+    method: 'PATCH',
+    body: JSON.stringify({ active_embodiment_id: embodimentId }),
+  });
 }
 
 export function deleteConversation(id: string): Promise<void> {

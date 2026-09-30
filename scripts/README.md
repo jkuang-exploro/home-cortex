@@ -38,7 +38,20 @@ python -m scripts.profiling.token_latency_audit --mode replay --output /tmp/repl
 python -m scripts.profiling.first_answer_http --base-url http://ollama:11434 --model qwen3.5:9b --repetitions 3 --concurrency 2 --output /tmp/first-answer.json
 python -m scripts.probes.ollama_prefix_reuse_probe --help
 python -m scripts.maintenance.freeze_contract_candidate --output /tmp/candidate
+python -m scripts.maintenance.embodiment_client demo
+python -m scripts.probes.embodiment_replay --scenario square --profile low --output /tmp/epic1-replay.json
+python -m scripts.probes.embodiment_replay --scenario circle --profile biased --record /tmp/epic1-tape.json --output /tmp/epic1-biased.json
+python -m scripts.probes.embodiment_replay --replay /tmp/epic1-tape.json --output /tmp/epic1-replayed.json
 ```
+
+The embodiment replay probe sends already-fused canonical telemetry through
+the same in-memory session and ingestion services used by the API. Its JSON
+report contains ground-truth error, per-axis p95 coverage, session and freshness
+transitions, nominal box corners, a translation-only uncertainty envelope,
+camera-frame composition, and recent poses. Scenario names are `stationary`,
+`straight`, `square`, `circle`, `rotation`, `forward_rotate`, and `random`.
+Profiles include an explicitly underreported negative calibration fixture.
+No GPU, robot, sensors, database, or model are used.
 
 The installed `home-cortex-fact-benchmark`,
 `home-cortex-semantic-planner-benchmark`, and `home-cortex-db-export` commands

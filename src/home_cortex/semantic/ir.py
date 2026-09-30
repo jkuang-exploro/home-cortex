@@ -88,6 +88,7 @@ class AgentRequestContext:
     current_time: datetime
     locale: str | None = None
     conversation_id: str | None = None
+    active_embodiment_id: str | None = None
     discourse: DiscourseContext | None = None
 
 

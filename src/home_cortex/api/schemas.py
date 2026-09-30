@@ -51,6 +51,12 @@ class ConversationMessageRequest(BaseModel):
     stream: bool = True
 
 
+class ConversationActiveEmbodimentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    active_embodiment_id: str | None = Field(min_length=1, max_length=256)
+
+
 class SessionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -62,4 +68,3 @@ class ExportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     target_dir: Path
-

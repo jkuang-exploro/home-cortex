@@ -70,7 +70,8 @@ An embodiment is a persistent physical body, separate from a conversational
 agent. Store it in `nodes/embodiment.json` with a stable `embodiment:` ID,
 explicit box geometry and local frame, an optional singular `agent_id` such as
 `agent:butler`, and configured namespaced `capabilities`. Reconnecting a device
-does not create another embodiment record. See
+reuses that record and opens a new in-memory runtime session; it does not
+create another embodiment record. See
 `src/home_cortex/spatial/EMBODIMENT.md` for the full contract. Current
 connection state and telemetry do not belong in this node file.
 

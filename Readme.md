@@ -138,3 +138,9 @@ to build or update the media index. Compose mounts `/opt/data/photo` and
 live under `/opt/data/home-media-cache`. See
 [`src/home_media/README.md`](src/home_media/README.md) for the API, stable-ID,
 timestamp, and security contracts.
+
+Open `http://home-cortex-0/embodiments` to inspect configured physical bodies,
+their agent association, runtime connection, capabilities, and latest pose
+availability. Select a body to see geometry and per-axis value/p95 telemetry.
+The page refreshes automatically while open. A body must first have a persistent
+record in `data/nodes/embodiment.json`; connecting a client does not create it.

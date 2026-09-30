@@ -29,7 +29,9 @@ def test_gui_has_native_media_route_and_incremental_controls() -> None:
     media = (GUI_SOURCE / "components" / "Media.svelte").read_text()
     media_api = (GUI_SOURCE / "lib" / "media.ts").read_text()
     sidebar = (GUI_SOURCE / "components" / "Sidebar.svelte").read_text()
-    assert "window.location.pathname === '/media'" in app
+    navigation = (GUI_SOURCE / "lib" / "navigation.ts").read_text()
+    assert "routeFromPath(window.location.pathname)" in app
+    assert "pathname === '/media'" in navigation
     assert "<Media" in app
     assert ">Media</button>" in sidebar
     assert "Load more" in media

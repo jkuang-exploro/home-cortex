@@ -23,6 +23,10 @@ from home_cortex.conversation.greetings import GreetingService
 from home_cortex.conversation.session import COOKIE_NAME, session_token
 from home_cortex.persistence.export import ExportResult
 from home_cortex.persistence.ingestion import IngestionResult
+from home_cortex.agents.presence import EmbodimentDirectory
+from home_cortex.agents.embodiments import EmbodimentCatalog, EmbodimentConnections
+from home_cortex.spatial.embodiment import embodiment_from_mapping
+from home_cortex.spatial.presence import EmbodimentPresence
 
 
 class FakeAgent:
@@ -31,6 +35,7 @@ class FakeAgent:
         self.request_ids: list[str] = []
         self.user_entity_ids: list[str | None] = []
         self.user_entities: list[dict[str, Any] | None] = []
+        self.contexts: list[dict[str, Any]] = []
 
     async def answer(
         self,
@@ -62,6 +67,7 @@ class FakeAgent:
         self.request_ids.append(request_id)
         self.user_entity_ids.append(user_entity_id)
         self.user_entities.append(user_entity)
+        self.contexts.append(kwargs)
         return SimpleNamespace(
             answer="Jian and Pu reside at Fort Cerritos.",
             steps=3,
@@ -82,6 +88,7 @@ class FakeAgent:
         self.request_ids.append(request_id)
         self.user_entity_ids.append(user_entity_id)
         self.user_entities.append(user_entity)
+        self.contexts.append(kwargs)
         yield "Jian and Pu "
         yield "reside at Fort Cerritos."
 
@@ -918,6 +925,19 @@ def test_legacy_retrieve_route_is_removed(
             {"embodiment_id": "embodiment:microduck-01"},
         ),
         ("GET", "/v1/embodiments/embodiment:microduck-01/telemetry", None),
+        ("GET", "/v1/embodiments/embodiment:microduck-01/session", None),
+        (
+            "POST",
+            "/v1/embodiments/embodiment:microduck-01/session",
+            {"available_capabilities": []},
+        ),
+        ("DELETE", "/v1/embodiments/embodiment:microduck-01/session", None),
+        (
+            "POST",
+            "/v1/embodiments/embodiment:microduck-01/session/capabilities",
+            {"available_capabilities": []},
+        ),
+        ("POST", "/v1/embodiments/embodiment:microduck-01/session/heartbeat", None),
     ],
 )
 @pytest.mark.parametrize(
@@ -1326,6 +1346,79 @@ def test_transcript_greeting_then_first_message_keeps_conversation(
     assert agent.calls[-1][-1]["content"] == "Where do I live?"
 
 
+def test_embodiment_directory_and_conversation_selection_api(
+    api_client: tuple[TestClient, FakeAgent],
+) -> None:
+    client, agent = api_client
+    body = embodiment_from_mapping({
+        "id": "embodiment:duck", "name": "Duck", "agent_id": "agent:butler",
+        "capabilities": ["mobility.move"],
+        "local_frame": {"forward": "+x", "left": "+y", "up": "+z"},
+        "geometry": {"box": {"length_m": 0.3, "width_m": 0.2, "height_m": 0.1,
+                             "center": {"x": 0, "y": 0, "z": 0}}},
+    })
+    unlinked = embodiment_from_mapping({
+        "id": "embodiment:unlinked", "name": "Unlinked",
+        "capabilities": [],
+        "local_frame": {"forward": "+x", "left": "+y", "up": "+z"},
+        "geometry": {"box": {"length_m": 0.3, "width_m": 0.2, "height_m": 0.1,
+                             "center": {"x": 0, "y": 0, "z": 0}}},
+    })
+    catalog = EmbodimentCatalog([body, unlinked])
+    connections = EmbodimentConnections(catalog)
+    directory = EmbodimentDirectory(
+        catalog, connections,
+        EmbodimentPresence(embodiment_ids=catalog.embodiment_ids),
+    )
+    previous = getattr(app.state, "embodiment_directory", None)
+    app.state.embodiment_directory = directory
+    try:
+        listed = client.get("/api/embodiments")
+        assert listed.status_code == 200
+        assert [item["state"] for item in listed.json()] == ["linked_offline", "unlinked"]
+        filtered = client.get("/api/embodiments?agent_id=steward")
+        assert [item["id"] for item in filtered.json()] == ["embodiment:duck"]
+        assert client.get("/api/embodiments?agent_id=unknown").status_code == 404
+        assert client.get("/api/embodiments", headers={"Authorization": "Bearer wrong"}).status_code == 401
+        assert client.get("/api/embodiments/embodiment:duck").json()["geometry"]
+        missing = client.get("/api/embodiments/embodiment:missing")
+        assert missing.status_code == 404
+        assert missing.json()["error"]["code"] == "embodiment_not_found"
+
+        created = client.post("/conversations", json={"model": VIRTUAL_MODEL})
+        assert created.status_code == 201
+        conversation_id = created.json()["id"]
+        path = f"/conversations/{conversation_id}/active-embodiment"
+        assert created.json()["active_embodiment_id"] is None
+        assert client.patch(path, json={"active_embodiment_id": "embodiment:missing"}).status_code == 404
+        unlinked_result = client.patch(path, json={"active_embodiment_id": "embodiment:unlinked"})
+        assert unlinked_result.status_code == 422
+        assert unlinked_result.json()["error"]["code"] == "embodiment_not_linked"
+        selected = client.patch(path, json={"active_embodiment_id": "embodiment:duck"})
+        assert selected.status_code == 200
+        assert selected.json()["agent_id"] == "steward"
+        assert selected.json()["agent_entity_id"] == "agent:butler"
+        assert selected.json()["active_embodiment_id"] == "embodiment:duck"
+        assert client.get(f"/conversations/{conversation_id}").json()["active_embodiment_id"] == "embodiment:duck"
+        assert client.get("/conversations").json()["data"][0]["active_embodiment_id"] == "embodiment:duck"
+        sent = client.post(f"/conversations/{conversation_id}/messages",
+                           json={"content": "Hello", "stream": False})
+        assert sent.status_code == 200
+        assert agent.calls[-1][-1]["content"] == "Hello"
+        assert agent.contexts[-1]["active_embodiment_id"] == "embodiment:duck"
+        assert client.get(f"/conversations/{conversation_id}").json()["active_embodiment_id"] == "embodiment:duck"
+        connections.connect("embodiment:duck", available_capabilities=["mobility.move"])
+        assert client.get("/api/embodiments/embodiment:duck").json()["state"] == "linked_online"
+        connections.disconnect("embodiment:duck")
+        assert client.get(f"/conversations/{conversation_id}").json()["active_embodiment_id"] == "embodiment:duck"
+        assert client.patch(path, json={"active_embodiment_id": None}).json()["active_embodiment_id"] is None
+    finally:
+        if previous is None:
+            del app.state.embodiment_directory
+        else:
+            app.state.embodiment_directory = previous
+
+
 def test_abandoned_conversation_does_not_receive_later_turns(
     api_client: tuple[TestClient, FakeAgent],
 ) -> None:
@@ -1365,6 +1458,12 @@ def test_bare_model_skips_greeting_and_agent(
     assert created.json()["greeting"] is None
     assert created.json()["messages"] == []
     assert created.json()["agent_id"] is None
+    selection = client.patch(
+        f"/conversations/{created.json()['id']}/active-embodiment",
+        json={"active_embodiment_id": "embodiment:duck"},
+    )
+    assert selection.status_code == 422
+    assert selection.json()["error"]["code"] == "embodiment_requires_agent"
     sent = client.post(
         f"/conversations/{created.json()['id']}/messages",
         json={"content": "ping", "stream": False},

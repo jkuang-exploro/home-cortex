@@ -21,6 +21,8 @@ from ..semantic.unified_planner import unified_chat_messages, unified_output_sch
 from ..mutation.ir import read_plan_schema
 from ..agents import list_agents
 from ..agents.embodiments import EmbodimentCatalog, EmbodimentConnections
+from ..agents.presence import EmbodimentDirectory
+from ..agents.session import EmbodimentSession
 from ..capabilities.calendar import calendar_service_from_settings
 from ..config import get_settings
 from ..conversation.store import SurrealConversationStore
@@ -46,7 +48,7 @@ from .errors import (
     unexpected_error_handler,
     validation_error_handler,
 )
-from .routes import chat, conversations, models, sessions, system, telemetry
+from .routes import chat, conversations, embodiments, models, session, sessions, system, telemetry
 from .schemas import DEFAULT_AGENT_ID, REQUEST_ID_HEADER
 
 
@@ -87,6 +89,15 @@ async def lifespan(app: FastAPI):
                 settings.data_dir / "nodes" / "space.json", "space"
             ),
             stale_after_s=DEFAULT_OBSERVER_STALE_AFTER_S,
+        )
+        app.state.embodiment_session = EmbodimentSession(
+            embodiment_catalog,
+            app.state.embodiment_connections,
+            app.state.embodiment_presence,
+        )
+        app.state.embodiment_directory = EmbodimentDirectory(
+            embodiment_catalog, app.state.embodiment_connections,
+            app.state.embodiment_presence,
         )
         if settings.cortex_model_warmup:
             semantic_schema = SemanticSchemaRegistry(schema_catalog)
@@ -210,6 +221,8 @@ def create_app() -> FastAPI:
         conversations.router,
         chat.router,
         models.router,
+        embodiments.router,
+        session.router,
         telemetry.router,
     ):
         application.include_router(router)

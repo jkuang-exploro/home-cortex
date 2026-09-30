@@ -16,6 +16,7 @@ from ..dependencies import (
     agent_definition,
     agent_runtime,
     chat_conversation_id,
+    chat_active_embodiment,
     greeting_service,
     resolve_identity,
 )
@@ -58,12 +59,15 @@ async def agent_chat_response(
         user_entity,
         body.get("conversation_id"),
     )
+    active_embodiment_id = await chat_active_embodiment(request, conversation_id)
     try:
         result = await agent_runtime(request, definition).answer(
             question,
             request_id=request_id(request),
             user_entity=user_entity,
             **({"conversation_id": conversation_id} if conversation_id else {}),
+            **({"active_embodiment_id": active_embodiment_id}
+               if active_embodiment_id else {}),
         )
     except AgentLimitError as error:
         raise APIError(502, error.stop_reason, str(error)) from error
@@ -93,6 +97,7 @@ async def chat_completions(body: ChatCompletionRequest, request: Request):
         user_entity,
         body.conversation_id,
     )
+    active_embodiment_id = await chat_active_embodiment(request, conversation_id)
     agent = agent_runtime(request, definition)
     completion_id = f"chatcmpl-{uuid4().hex}"
     created = int(time.time())
@@ -136,6 +141,8 @@ async def chat_completions(body: ChatCompletionRequest, request: Request):
             request_id=request_id(request),
             user_entity=user_entity,
             **({"conversation_id": conversation_id} if conversation_id else {}),
+            **({"active_embodiment_id": active_embodiment_id}
+               if active_embodiment_id else {}),
         )
         if greeting is not None:
             source = prepend_answer(greeting.text, source)
