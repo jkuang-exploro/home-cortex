@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from ...agents.embodiments import SessionProtocolError
-from ...agents.session import EmbodimentSession
+from ...agents.registration import EmbodimentRegistration
 from ...spatial.primitives import SpatialContractError
 from ..dependencies import authenticate_request
 from ..errors import APIError
@@ -16,11 +16,11 @@ router = APIRouter()
 SESSION_ID_HEADER = "X-Embodiment-Session-ID"
 
 
-def embodiment_session(request: Request) -> EmbodimentSession:
-    session = getattr(request.app.state, "embodiment_session", None)
-    if not isinstance(session, EmbodimentSession):
-        raise APIError(503, "session_unavailable", "Embodiment sessions are not configured")
-    return session
+def embodiment_registration(request: Request) -> EmbodimentRegistration:
+    registration = getattr(request.app.state, "embodiment_registration", None)
+    if not isinstance(registration, EmbodimentRegistration):
+        raise APIError(503, "session_unavailable", "Embodiment registration is not configured")
+    return registration
 
 
 @router.post("/v1/embodiments/{embodiment_id}/session")
@@ -28,14 +28,14 @@ async def open_session(
     embodiment_id: str, body: dict[str, Any], request: Request,
 ) -> dict[str, Any]:
     authenticate_request(request)
-    return _change(request, embodiment_id, body, connect=True)
+    return await _change(request, embodiment_id, body, connect=True)
 
 
 @router.get("/v1/embodiments/{embodiment_id}/session")
 async def read_session(embodiment_id: str, request: Request) -> dict[str, Any]:
     authenticate_request(request)
     try:
-        return embodiment_session(request).view(embodiment_id)
+        return await embodiment_registration(request).view(embodiment_id)
     except SessionProtocolError as error:
         raise _session_error(error) from error
 
@@ -44,7 +44,7 @@ async def read_session(embodiment_id: str, request: Request) -> dict[str, Any]:
 async def close_session(embodiment_id: str, request: Request) -> dict[str, Any]:
     authenticate_request(request)
     try:
-        return embodiment_session(request).disconnect(
+        return await embodiment_registration(request).disconnect(
             embodiment_id, session_id=request.headers.get(SESSION_ID_HEADER)
         )
     except SessionProtocolError as error:
@@ -56,21 +56,21 @@ async def refresh_capabilities(
     embodiment_id: str, body: dict[str, Any], request: Request,
 ) -> dict[str, Any]:
     authenticate_request(request)
-    return _change(request, embodiment_id, body, connect=False)
+    return await _change(request, embodiment_id, body, connect=False)
 
 
 @router.post("/v1/embodiments/{embodiment_id}/session/heartbeat")
 async def session_heartbeat(embodiment_id: str, request: Request) -> dict[str, Any]:
     authenticate_request(request)
     try:
-        return embodiment_session(request).heartbeat(
+        return await embodiment_registration(request).heartbeat(
             embodiment_id, session_id=request.headers.get(SESSION_ID_HEADER)
         )
     except SessionProtocolError as error:
         raise _session_error(error) from error
 
 
-def _change(
+async def _change(
     request: Request, embodiment_id: str, body: dict[str, Any], *, connect: bool,
 ) -> dict[str, Any]:
     if set(body) != {"available_capabilities"}:
@@ -78,11 +78,11 @@ def _change(
     available = body["available_capabilities"]
     if not isinstance(available, list):
         raise APIError(422, "invalid_session", "available_capabilities must be a list")
-    session = embodiment_session(request)
+    registration = embodiment_registration(request)
     try:
         if connect:
-            return session.register(embodiment_id, available)
-        return session.update_capabilities(
+            return await registration.connect(embodiment_id, available)
+        return await registration.update_capabilities(
             embodiment_id, available,
             session_id=request.headers.get(SESSION_ID_HEADER),
         )

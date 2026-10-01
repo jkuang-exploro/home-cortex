@@ -44,6 +44,7 @@ from .ingestion import (
     implicit_edge_record_id,
 )
 from .record_ids import TABLE_NAME_RE, as_record_id, canonical_record_id, split_record_id
+from ..spatial.embodiment import embodiment_from_mapping
 
 _SURREAL_EDGE_IDENTITY_FIELDS = frozenset({"id", "in", "out"})
 _NODE_LEADING_FIELDS = ("id",)
@@ -219,6 +220,12 @@ def _canonical_nodes(table: str, records: list[dict[str, Any]]) -> list[dict[str
             )
         if record_id in seen:
             raise ValueError(f"Duplicate node ID {record_id!r} in table {table!r}")
+        if table == "embodiment" and "agent_id" in converted:
+            raise ValueError("Embodiment assignment must be an assigned_to edge, not agent_id")
+        if table == "embodiment":
+            if "embodiment_type" not in converted:
+                raise ValueError("Embodiment node must define embodiment_type")
+            embodiment_from_mapping(converted)
         seen.add(record_id)
         exported.append(_ordered_record(converted, _NODE_LEADING_FIELDS))
     exported.sort(key=lambda record: str(record["id"]))

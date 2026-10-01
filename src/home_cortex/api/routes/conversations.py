@@ -147,7 +147,7 @@ async def set_active_embodiment(conversation_id: str,
                                body: ConversationActiveEmbodimentRequest,
                                request: Request) -> dict[str, Any]:
     conversation = await owned_conversation(request, conversation_id)
-    selected = validate_active_embodiment(
+    selected = await validate_active_embodiment(
         request, conversation, body.active_embodiment_id,
     )
     updated = await conversation_store(request).set_active_embodiment(
@@ -165,7 +165,7 @@ async def post_conversation_message(
     request: Request,
 ):
     conversation = await owned_conversation(request, conversation_id)
-    active_embodiment_id = validate_active_embodiment(
+    active_embodiment_id = await validate_active_embodiment(
         request, conversation, conversation.get("active_embodiment_id"),
     )
     store = conversation_store(request)

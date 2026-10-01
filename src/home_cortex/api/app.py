@@ -20,9 +20,7 @@ from ..semantic.schema import SemanticSchemaRegistry
 from ..semantic.unified_planner import unified_chat_messages, unified_output_schema
 from ..mutation.ir import read_plan_schema
 from ..agents import list_agents
-from ..agents.embodiments import EmbodimentCatalog, EmbodimentConnections
-from ..agents.presence import EmbodimentDirectory
-from ..agents.session import EmbodimentSession
+from ..agents.registration import open_embodiment_runtime
 from ..capabilities.calendar import calendar_service_from_settings
 from ..config import get_settings
 from ..conversation.store import SurrealConversationStore
@@ -34,13 +32,13 @@ from ..providers.ir import ModelProviderError
 from ..common.tracing import RequestTraceMiddleware
 from ..spatial.presence import (
     DEFAULT_OBSERVER_STALE_AFTER_S,
-    EmbodimentPresence,
     record_ids_from_node_file,
 )
 from ..persistence.retrieval import RetrievalService
 from ..persistence.schema_catalog import RuntimeSchemaCatalog
 from ..capabilities.dispatcher import ToolDispatcher
 from ..mutation.writing import ItemWritingService
+from ..mutation.embodiments import EmbodimentWritingService
 from .errors import (
     http_error_handler,
     model_provider_error_handler,
@@ -78,27 +76,6 @@ async def lifespan(app: FastAPI):
             settings.data_dir, edge_registry,
         )
         app.state.edge_registry = edge_registry
-        embodiment_catalog = EmbodimentCatalog.from_node_file(
-            settings.data_dir / "nodes" / "embodiment.json"
-        )
-        app.state.embodiment_catalog = embodiment_catalog
-        app.state.embodiment_connections = EmbodimentConnections(embodiment_catalog)
-        app.state.embodiment_presence = EmbodimentPresence(
-            embodiment_ids=embodiment_catalog.embodiment_ids,
-            space_ids=record_ids_from_node_file(
-                settings.data_dir / "nodes" / "space.json", "space"
-            ),
-            stale_after_s=DEFAULT_OBSERVER_STALE_AFTER_S,
-        )
-        app.state.embodiment_session = EmbodimentSession(
-            embodiment_catalog,
-            app.state.embodiment_connections,
-            app.state.embodiment_presence,
-        )
-        app.state.embodiment_directory = EmbodimentDirectory(
-            embodiment_catalog, app.state.embodiment_connections,
-            app.state.embodiment_presence,
-        )
         if settings.cortex_model_warmup:
             semantic_schema = SemanticSchemaRegistry(schema_catalog)
             synthetic_turn = [{"role": "user", "content": "How many members live in this household?"}]
@@ -125,6 +102,20 @@ async def lifespan(app: FastAPI):
         await database.connect()
         connected = True
         app.state.database = database
+        embodiment_runtime = await open_embodiment_runtime(
+            EmbodimentWritingService(database),
+            space_ids=record_ids_from_node_file(
+                settings.data_dir / "nodes" / "space.json", "space"
+            ),
+            stale_after_s=DEFAULT_OBSERVER_STALE_AFTER_S,
+        )
+        app.state.embodiment_writing = embodiment_runtime.writing
+        app.state.embodiment_catalog = embodiment_runtime.catalog
+        app.state.embodiment_connections = embodiment_runtime.connections
+        app.state.embodiment_presence = embodiment_runtime.presence
+        app.state.embodiment_session = embodiment_runtime.session
+        app.state.embodiment_directory = embodiment_runtime.directory
+        app.state.embodiment_registration = embodiment_runtime.registration
         retrieval = RetrievalService(
             database,
             settings.retrieval_limit,

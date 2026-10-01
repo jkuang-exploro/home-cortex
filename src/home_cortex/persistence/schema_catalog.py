@@ -99,6 +99,13 @@ class RuntimeSchemaCatalog:
                     _infer_property_types(records, fields),
                 )
 
+        # An endpoint type remains a queryable graph entity even before this
+        # deployment has written a node JSON snapshot for it.
+        for relation in edge_registry.relationship_names:
+            schema = edge_registry.get(relation)
+            for table in (*schema.from_types, *schema.to_types):
+                entities.setdefault(table, EntityTypeSchema(table, ()))
+
         # Declared item attributes remain available before any record has a value.
         if "item" in entities:
             item = entities["item"]

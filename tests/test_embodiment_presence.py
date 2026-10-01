@@ -189,11 +189,13 @@ def test_node_files_register_valid_ids_and_skip_missing_files(tmp_path: Path) ->
 
 def test_http_submit_and_lookup() -> None:
     from home_cortex.agents.embodiments import EmbodimentCatalog, EmbodimentConnections
+    from home_cortex.agents.registration import CatalogIdentityReader, EmbodimentRegistration
     from home_cortex.agents.session import EmbodimentSession
     from home_cortex.spatial.embodiment import embodiment_from_mapping
 
     previous = getattr(app.state, "embodiment_presence", None)
     previous_session = getattr(app.state, "embodiment_session", None)
+    previous_registration = getattr(app.state, "embodiment_registration", None)
     previous_settings = getattr(app.state, "settings", None)
     presence = _presence()
     catalog = EmbodimentCatalog([embodiment_from_mapping({
@@ -207,6 +209,9 @@ def test_http_submit_and_lookup() -> None:
     opened = protocol.register("embodiment:microduck-01", ["vision.observe"], now=NOW)
     app.state.embodiment_presence = presence
     app.state.embodiment_session = protocol
+    app.state.embodiment_registration = EmbodimentRegistration(
+        CatalogIdentityReader(catalog), protocol,
+    )
     app.state.settings = type("Settings", (), {"cortex_api_key": "test-cortex-key"})()
     client = TestClient(app, headers={
         "Authorization": "Bearer test-cortex-key",
@@ -252,6 +257,11 @@ def test_http_submit_and_lookup() -> None:
                 del app.state.embodiment_session
         else:
             app.state.embodiment_session = previous_session
+        if previous_registration is None:
+            if hasattr(app.state, "embodiment_registration"):
+                del app.state.embodiment_registration
+        else:
+            app.state.embodiment_registration = previous_registration
         if previous_settings is None:
             if hasattr(app.state, "settings"):
                 del app.state.settings

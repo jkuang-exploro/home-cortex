@@ -188,8 +188,12 @@ async def ingest_directory(
     node_files = [path for paths in node_sources.values() for path in paths]
     edge_files = sorted(edges_dir.glob("*.json"))
     source_relationships = {path.stem for path in edge_files}
+    # A relation whose source entity type is absent from this snapshot has no
+    # source data to ingest. Leave its live table untouched instead of making
+    # an older household snapshot erase separately configured embodiments.
     missing_relationships = sorted(
-        set(registry.relationship_names) - source_relationships
+        name for name in set(registry.relationship_names) - source_relationships
+        if any(table in node_sources for table in registry.get(name).from_types)
     )
     if missing_relationships:
         raise ValueError(
@@ -209,6 +213,12 @@ async def ingest_directory(
                 if "collapse" in record and not isinstance(record["collapse"], bool):
                     raise ValueError(f"Node in {path} must use collapse as a boolean")
                 if table == "embodiment":
+                    if "agent_id" in record:
+                        raise ValueError(
+                            f"Embodiment in {path} must express assignment in assigned_to.json, not agent_id"
+                        )
+                    if "embodiment_type" not in record:
+                        raise ValueError(f"Embodiment in {path} requires embodiment_type")
                     record = embodiment_as_mapping(embodiment_from_mapping(record))
                 else:
                     _validate_node_name(record, path)

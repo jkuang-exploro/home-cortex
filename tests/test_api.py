@@ -25,6 +25,7 @@ from home_cortex.persistence.export import ExportResult
 from home_cortex.persistence.ingestion import IngestionResult
 from home_cortex.agents.presence import EmbodimentDirectory
 from home_cortex.agents.embodiments import EmbodimentCatalog, EmbodimentConnections
+from home_cortex.agents.registration import CatalogIdentityReader
 from home_cortex.spatial.embodiment import embodiment_from_mapping
 from home_cortex.spatial.presence import EmbodimentPresence
 
@@ -1367,7 +1368,7 @@ def test_embodiment_directory_and_conversation_selection_api(
     catalog = EmbodimentCatalog([body, unlinked])
     connections = EmbodimentConnections(catalog)
     directory = EmbodimentDirectory(
-        catalog, connections,
+        CatalogIdentityReader(catalog), connections,
         EmbodimentPresence(embodiment_ids=catalog.embodiment_ids),
     )
     previous = getattr(app.state, "embodiment_directory", None)

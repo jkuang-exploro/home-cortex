@@ -86,11 +86,17 @@
               <h4>{copy.bodyGeometry}</h4>
               <dl>
                 <dt>{copy.dimensions}</dt>
-                <dd>{detail.geometry.box.length_m} × {detail.geometry.box.width_m} × {detail.geometry.box.height_m} m</dd>
+                <dd>{detail.geometry
+                  ? `${detail.geometry.box.length_m} × ${detail.geometry.box.width_m} × ${detail.geometry.box.height_m} m`
+                  : copy.notConfigured}</dd>
                 <dt>{copy.centerOffset}</dt>
-                <dd>{detail.geometry.box.center.x}, {detail.geometry.box.center.y}, {detail.geometry.box.center.z} m</dd>
+                <dd>{detail.geometry
+                  ? `${detail.geometry.box.center.x}, ${detail.geometry.box.center.y}, ${detail.geometry.box.center.z} m`
+                  : copy.notConfigured}</dd>
                 <dt>{copy.localFrame}</dt>
-                <dd>{copy.forward} {detail.local_frame.forward} · {copy.left} {detail.local_frame.left} · {copy.up} {detail.local_frame.up}</dd>
+                <dd>{detail.local_frame
+                  ? `${copy.forward} ${detail.local_frame.forward} · ${copy.left} ${detail.local_frame.left} · ${copy.up} ${detail.local_frame.up}`
+                  : copy.notConfigured}</dd>
               </dl>
             </section>
             <section class="embodiment-section">

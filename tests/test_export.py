@@ -18,6 +18,7 @@ from home_cortex.persistence.record_ids import canonical_record_id
 
 STATIC_TEST_DATA = Path(__file__).parent / "static_test_data"
 REGISTERED_EDGES = (
+    "assigned_to",
     "hosted_by",
     "lives_in",
     "located_in",
@@ -167,6 +168,8 @@ async def test_multiple_object_types_write_distinct_files(tmp_path: Path) -> Non
 
     assert {path.name for path in (target / "nodes").glob("*.json")} == {
         "address.json",
+        "agent.json",
+        "embodiment.json",
         "item.json",
         "person.json",
         "space.json",
@@ -174,7 +177,7 @@ async def test_multiple_object_types_write_distinct_files(tmp_path: Path) -> Non
     assert {path.name for path in (target / "edges").glob("*.json")} == {
         f"{name}.json" for name in REGISTERED_EDGES
     }
-    assert result.node_files == 4
+    assert result.node_files == 6
     assert result.edge_files == len(REGISTERED_EDGES)
     people = _load_json(target / "nodes" / "person.json")
     addresses = _load_json(target / "nodes" / "address.json")

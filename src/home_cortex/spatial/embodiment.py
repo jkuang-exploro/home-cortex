@@ -120,17 +120,23 @@ class Embodiment:
 
     id: str
     name: str
-    geometry: BodyGeometry
-    local_frame: LocalFrame
+    geometry: BodyGeometry | None = None
+    local_frame: LocalFrame | None = None
     agent_id: str | None = None
     capabilities: tuple[str, ...] = ()
+    embodiment_type: str = "unspecified"
 
     def __post_init__(self) -> None:
         _typed_id(self.id, "embodiment", "embodiment.id")
         if not isinstance(self.name, str) or not self.name.strip():
             raise SpatialContractError("embodiment.name must be non-empty")
-        if not isinstance(self.geometry, BodyGeometry) or not isinstance(self.local_frame, LocalFrame):
-            raise SpatialContractError("embodiment requires geometry and local_frame")
+        if (not isinstance(self.embodiment_type, str) or
+                re.fullmatch(r"[a-z][a-z0-9_]*", self.embodiment_type) is None):
+            raise SpatialContractError("embodiment.embodiment_type must be a type name")
+        if self.geometry is not None and not isinstance(self.geometry, BodyGeometry):
+            raise SpatialContractError("embodiment.geometry must be a BodyGeometry")
+        if self.local_frame is not None and not isinstance(self.local_frame, LocalFrame):
+            raise SpatialContractError("embodiment.local_frame must be a LocalFrame")
         if self.agent_id is not None:
             _typed_id(self.agent_id, "agent", "embodiment.agent_id")
         if not isinstance(self.capabilities, tuple) or any(
@@ -144,19 +150,24 @@ class Embodiment:
 
 
 def embodiment_from_mapping(value: Any) -> Embodiment:
-    item = _object(value, "embodiment", {"id", "name", "geometry", "local_frame"},
-                   {"agent_id", "capabilities"})
+    item = _object(value, "embodiment", {"id", "name"},
+                   {"geometry", "local_frame", "agent_id", "capabilities", "embodiment_type"})
     capabilities = item.get("capabilities", [])
     if not isinstance(capabilities, list):
         raise SpatialContractError("embodiment capabilities must be a list")
-    return Embodiment(item["id"], item["name"], body_geometry_from_mapping(item["geometry"]),
-                      local_frame_from_mapping(item["local_frame"]), item.get("agent_id"),
-                      tuple(capabilities))
+    return Embodiment(item["id"], item["name"],
+                      body_geometry_from_mapping(item["geometry"]) if "geometry" in item else None,
+                      local_frame_from_mapping(item["local_frame"]) if "local_frame" in item else None,
+                      item.get("agent_id"),
+                      tuple(capabilities), item.get("embodiment_type", "unspecified"))
 
 
 def embodiment_as_mapping(value: Embodiment) -> dict[str, Any]:
-    result = {"id": value.id, "name": value.name, "geometry": body_geometry_as_mapping(value.geometry),
-              "local_frame": local_frame_as_mapping(value.local_frame)}
+    result = {"id": value.id, "name": value.name, "embodiment_type": value.embodiment_type}
+    if value.geometry is not None:
+        result["geometry"] = body_geometry_as_mapping(value.geometry)
+    if value.local_frame is not None:
+        result["local_frame"] = local_frame_as_mapping(value.local_frame)
     if value.agent_id is not None:
         result["agent_id"] = value.agent_id
     result["capabilities"] = list(value.capabilities)

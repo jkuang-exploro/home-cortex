@@ -133,6 +133,20 @@ test('online no-estimate detail remains online and hides position values', () =>
   assert.doesNotMatch(html, /telemetry-values/);
 });
 
+test('MacBook detail leaves unconfigured geometry and frame unknown', () => {
+  const detail = body({
+    id: 'embodiment:macbook-0', name: 'MacBook', embodiment_type: 'computer',
+    geometry: null, local_frame: null,
+    capabilities: [{ name: 'vision.observe', supported: true, available: false }],
+  });
+  const html = page([detail], detail.id, detail);
+  assert.match(html, /MacBook/);
+  assert.match(html, /Linked to: 老管家/);
+  assert.match(html, /Offline/);
+  assert.match(html, /Not configured/);
+  assert.match(html, /vision\.observe/);
+});
+
 test('chat keeps selected offline body and separates it from agent identity', () => {
   assert.match(chat([base]), /老管家/);
   assert.match(chat([base]), /No embodiment/);

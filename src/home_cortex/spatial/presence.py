@@ -219,6 +219,18 @@ class EmbodimentPresence:
             state = self._state(parsed.embodiment_id, stored, observed)
         return TelemetryAdmission(disposition, state)
 
+    def reading(self, embodiment_id: str, *, now: datetime | None = None) -> EmbodimentTelemetryState:
+        """Telemetry for a view. An id this process has not admitted is unavailable.
+
+        This does not register the id and does not write a persistent record.
+        """
+        observed_at = _measured_at(now if now is not None else datetime.now(timezone.utc))
+        parsed = _typed_id(embodiment_id, "embodiment", "embodiment_id")
+        with self._lock:
+            if parsed not in self._embodiments:
+                return self._state(parsed, None, observed_at)
+            return self._state(parsed, self._current.get(parsed), observed_at)
+
     def latest(self, embodiment_id: str, *, now: datetime | None = None) -> EmbodimentTelemetryState:
         observed = _measured_at(now if now is not None else datetime.now(timezone.utc))
         with self._lock:

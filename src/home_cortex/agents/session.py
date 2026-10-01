@@ -1,8 +1,8 @@
-"""Canonical client lifecycle for one registered embodiment.
+"""Canonical client lifecycle for one embodiment SurrealDB already stores.
 
-The client authenticates at the HTTP boundary, then opens a runtime session for
-an embodiment that already exists. Reconnecting reuses that embodiment and its
-``agent_id``. This module does not create bodies, agents, or sensor estimates.
+The client authenticates at the HTTP boundary and presents an embodiment id.
+Registration reads that persistent record; it does not create a body, choose
+an agent, or write ``assigned_to``. This module does not estimate sensors.
 """
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from datetime import datetime
 from threading import RLock
 from typing import Any
 
+from ..spatial.embodiment import Embodiment
 from ..spatial.presence import (
     EmbodimentPresence, TelemetryAdmissionError, admission_as_mapping,
 )
@@ -35,6 +36,12 @@ class EmbodimentSession:
         self.connections = connections
         self.presence = presence
         self._lock = RLock()
+
+    def note_resolved(self, body: Embodiment) -> None:
+        """Cache a persistent read so later session checks see the same record."""
+        with self._lock:
+            self.catalog.cache_resolved(body)
+            self.presence.register_embodiment(body.id)
 
     def register(
         self,

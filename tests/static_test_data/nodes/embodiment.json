@@ -1,0 +1,8 @@
+[
+  {
+    "id": "embodiment:macbook-0",
+    "name": "MacBook",
+    "embodiment_type": "computer",
+    "capabilities": ["vision.observe"]
+  }
+]

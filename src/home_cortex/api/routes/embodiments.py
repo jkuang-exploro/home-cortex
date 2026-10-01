@@ -25,14 +25,15 @@ def embodiment_directory(request: Request) -> EmbodimentDirectory:
 async def list_embodiments(request: Request, agent_id: str | None = None) -> list[dict[str, Any]]:
     authenticate_request(request)
     directory = embodiment_directory(request)
-    return (directory.list_for_agent(agent_definition(agent_id).entity_id)
-            if agent_id else directory.list())
+    if agent_id:
+        return await directory.list_for_agent(agent_definition(agent_id).entity_id)
+    return await directory.list()
 
 
 @router.get("/api/embodiments/{embodiment_id}")
 async def get_embodiment(embodiment_id: str, request: Request) -> dict[str, Any]:
     authenticate_request(request)
     try:
-        return embodiment_directory(request).get(embodiment_id)
+        return await embodiment_directory(request).get(embodiment_id)
     except SpatialContractError as error:
         raise APIError(404, "embodiment_not_found", "Embodiment was not found") from error

@@ -94,8 +94,8 @@ async def test_repeated_ingestion_does_not_duplicate_relationships() -> None:
     finally:
         await database.close()
 
-    assert first.nodes_upserted == second.nodes_upserted == 13
-    assert first.edges_upserted == second.edges_upserted == 13
+    assert first.nodes_upserted == second.nodes_upserted == 15
+    assert first.edges_upserted == second.edges_upserted == 14
     assert sorted(str(edge["id"]) for edge in edges) == [
         "lives_in:blair_primary",
         "lives_in:person_alex_example__address_test_house",
@@ -107,24 +107,35 @@ async def test_embodiment_node_ingests_persistent_association_and_capabilities(t
     data_dir = tmp_path / "static_test_data"
     copytree(STATIC_TEST_DATA, data_dir)
     body = {
-        "id": "embodiment:duck", "name": "Duck", "agent_id": "agent:butler",
+        "id": "embodiment:duck", "name": "Duck", "embodiment_type": "robot",
         "local_frame": {"forward": "+x", "left": "+y", "up": "+z"},
         "geometry": {"box": {"length_m": 0.3, "width_m": 0.2, "height_m": 0.1,
                              "center": {"x": 0, "y": 0, "z": 0.05}}},
         "capabilities": ["vision.observe", "mobility.move"],
     }
     (data_dir / "nodes" / "embodiment.json").write_text(json.dumps([body]), encoding="utf-8")
+    (data_dir / "nodes" / "agent.json").write_text(
+        json.dumps([{"id": "agent:butler", "name": {"en": "Butler"}}]), encoding="utf-8"
+    )
+    (data_dir / "edges" / "assigned_to.json").write_text(
+        json.dumps([{"from": "embodiment:duck", "to": "agent:butler"}]), encoding="utf-8"
+    )
     database = MemoryDatabase()
     await database.connect()
     try:
         await ingest_directory(database, data_dir)  # type: ignore[arg-type]
         rows = await database.query("SELECT * FROM embodiment;")
+        assignments = await database.query("SELECT * FROM assigned_to;")
     finally:
         await database.close()
     assert len(rows) == 1
     assert str(rows[0]["id"]) == "embodiment:duck"
-    assert rows[0]["agent_id"] == "agent:butler"
+    assert "agent_id" not in rows[0]
+    assert rows[0]["embodiment_type"] == "robot"
     assert rows[0]["capabilities"] == ["mobility.move", "vision.observe"]
+    assert len(assignments) == 1
+    assert str(assignments[0]["in"]) == "embodiment:duck"
+    assert str(assignments[0]["out"]) == "agent:butler"
 
 
 @pytest.mark.asyncio

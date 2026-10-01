@@ -1,13 +1,16 @@
 # Embodiment and physical telemetry V1
 
-`Embodiment` is a durable `embodiment:` identity. Its serialized record contains a
-name, one box, an intrinsic `LocalFrame`, and optionally one `agent:` association.
+`Embodiment` is a durable `embodiment:` identity in SurrealDB. Its node contains a
+name, type, configured capabilities, and any calibrated box and intrinsic
+`LocalFrame` that are actually known. Geometry and frame may be absent until
+configuration establishes them; neither is inferred from the device type. Its
+optional `agent:` assignment is a separate `assigned_to` graph edge.
 The record ID survives client disconnects and reconnects. This contract does not
 infer an agent from a device connection. Configured capabilities and the
 association are persistent; active connection and temporarily available
 capabilities are runtime state.
 
-The box stores **full** length, width, and height in meters, plus a **required**
+When configured, the box stores **full** length, width, and height in meters, plus a **required**
 center offset `{x,y,z}` in the embodiment frame. The embodiment origin is a
 calibrated body datum; it is not implicitly the box center. Length follows the
 frame's `forward` axis, width follows `left`, and height follows `up`. Every
@@ -21,7 +24,7 @@ Example persistent body record:
 {
   "id": "embodiment:microduck-01",
   "name": "MicroDuck",
-  "agent_id": "agent:butler",
+  "embodiment_type": "robot",
   "capabilities": ["mobility.move", "vision.observe"],
   "local_frame": {"forward": "+x", "left": "+y", "up": "+z"},
   "geometry": {"box": {
@@ -32,6 +35,24 @@ Example persistent body record:
   }}
 }
 ```
+
+The corresponding persistent assignment is
+`embodiment:microduck-01 → assigned_to → agent:butler`. The inverse query name
+is `embodied_by`; there is no second reciprocal edge. `assigned_to` is unique
+per embodiment, enforced by a SurrealDB unique index on its `in` endpoint;
+ingestion also rejects two targets for one source. Export writes
+`nodes/embodiment.json` and `edges/assigned_to.json`; ingest restores both.
+Neither the node nor edge stores connection, heartbeat, session, or telemetry
+state. `agent_id` on a domain `Embodiment` is a read projection of that edge,
+never a node field. Existing JSON with `agent_id` needs migration to an edge
+before ingest.
+
+The MacBook #0 configuration uses `embodiment:macbook-0`, `name: MacBook`,
+`embodiment_type: computer`, and `capabilities: [vision.observe]`. Its geometry
+and local frame are absent because no physical calibration has been supplied.
+The detail API returns `null` for those fields and the GUI shows “Not
+configured.” Registration and offline identity reads still work; geometry
+calculations require a configured box and frame.
 
 `PhysicalTelemetry` is one client-produced estimate. Its `embodiment_id` names
 the durable body. A valid estimate requires one `space_id` and a complete
@@ -103,9 +124,9 @@ connect a device.
 The existing conversational agent registry keeps the runtime key `steward` and
 display name `老管家`. Its configured durable entity ID is `agent:butler`. These
 identify one agent; neither is a robot ID. The canonical persistent relation is
-the embodiment's singular `agent_id` field, read as **embodiment controlled by
-agent**. One agent may be named by any number of embodiments; each embodiment
-names at most one agent. There is no reciprocal edge or second ownership fact.
+the singular `assigned_to` edge, read as **embodiment assigned to agent**. One
+agent may be named by any number of embodiments; each embodiment names at most
+one agent. There is no reciprocal edge or second ownership fact.
 Moving a body to another agent requires unassigning it first.
 
 `capabilities` is a sorted, unique list of open-vocabulary, lowercase,
@@ -115,12 +136,22 @@ tools or permission to invoke an actuator. `AgentDefinition.allowed_tools`
 continues to govern the model's software tools independently. Adding a physical
 capability does not grant the agent a tool.
 
-`EmbodimentCatalog` reads the durable `nodes/embodiment.json` source, validates
-association against the registered agents, and provides deterministic lookups
-by agent, name, and capability. Its `associate` and `unassign` operations return
-new snapshots. `save_node_file` atomically writes a snapshot to the durable
-source; normal graph ingestion remains a separate operation. Source records are
-validated by ingestion and retain the same `embodiment:` IDs across reconnects.
+`EmbodimentWritingService` owns deterministic create, update, delete, assign,
+and unassign operations. It validates the body contract and writes the existing
+SurrealDB node/edge model. Assignment checks the agent node and uses one stable
+edge identity per embodiment. The service is internal to Home Cortex; the
+device-facing session and telemetry APIs cannot call its assignment methods.
+At API startup, configured agent identities are materialized as `agent:` nodes
+if absent. That step does not create an `assigned_to` edge, and startup does
+not require any embodiment to be online. Existing graph agent records are
+preserved. The startup catalog is a read of SurrealDB, including bodies that
+have never connected in this process. `EmbodimentCatalog` provides lookups by
+agent, name, and capability from those reads. It has no assignment writer.
+Operators change durable assignments through the writing service or canonical
+JSON ingest. The operator CLI is `python -m scripts.maintenance.embodiments`
+with `create`, `update`, `delete`, `assign`, `unassign`, `get`, and `list`
+commands; `create` and `update` take a JSON file containing a body record
+without `agent_id`.
 
 `EmbodimentConnections` keeps one process-local runtime session per embodiment.
 The session has its own id, `online`, `connected_at`, `last_seen`, and the
@@ -134,12 +165,34 @@ an old token cannot match the first session after a server restart.
 refresh, and accepted telemetry. Offline is an explicit disconnect; age alone
 does not close a session.
 
-Advertised availability must be a subset of the record's configured
-`capabilities`. Omitting a configured name means it is unavailable for this
-session. Refreshing availability keeps the session id. An unknown embodiment
-id is rejected and does not allocate a new body. The session path does not
-change `agent_id`, so a reconnect still resolves `embodiment:microduck-01` to
-the existing `agent:butler` association.
+A client presents a persistent embodiment id. Registration reads that body
+and its `assigned_to` edge from SurrealDB, caches the read, and opens the
+runtime session. The client sends only the capabilities available right now.
+Those names must be a subset of the configured capabilities. Omitting a
+configured name, such as `vision.observe`, means that channel is supported
+and currently unavailable. The session does not store the agent assignment.
+An unknown id, such as `embodiment:unknown-device`, is rejected with
+`unknown_embodiment` and does not create a body or an assignment. Disconnect
+leaves the SurrealDB record unchanged. Reconnect reads the same record,
+opens a new runtime session, and the stored assignment is visible again.
+
+## Read model
+
+`GET /api/embodiments` and `GET /api/embodiments/{id}` build one view per
+persistent body. The list is the SurrealDB embodiment table, so a body with
+no session is still listed. The view is not written back.
+
+SurrealDB supplies `id`, `name`, `embodiment_type`, geometry, local frame,
+the assigned agent, and configured capabilities (`supported: true`). `linked`
+is true when an `assigned_to` edge exists. The runtime supplies `connected`,
+`connected_at`, `last_seen`, whether each supported capability is `available`,
+and telemetry. `connected` is true only while a session is online. A missing
+session is offline, not a missing embodiment. An existing body may be
+unlinked and either online or offline. Selecting that body for a conversation
+requires the persistent assignment to the conversation's agent and does not
+require a session. A physical capability is executable only when the body
+exists, is assigned to the current agent, is connected, persistently supports
+the capability, and currently advertises it. Those failures stay distinct.
 
 `is_currently_embodied` means an associated body has an online session,
 regardless of whether its latest pose is valid. Telemetry submitted through
@@ -166,9 +219,9 @@ publishes the next estimate, and until then lookup is unavailable. High-frequenc
 history is not written. There is no existing requirement for a pose log, and a
 telemetry row is not a household fact.
 
-Durable registration is separate from the sample. Embodiment records remain the
-Ticket 1 documents. When `nodes/embodiment.json` is present, startup validates
-those records and registers their IDs. Space IDs are read from `nodes/space.json`
+Durable registration is separate from the sample. At startup the API loads
+embodiment records and assignments from SurrealDB and registers their IDs.
+Space IDs are read from `nodes/space.json`
 when that file is present. A missing file registers nothing. Telemetry for an
 unregistered embodiment or space is rejected. This does not create embodiment
 records and does not write samples back to the graph.

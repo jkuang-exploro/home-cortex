@@ -331,7 +331,9 @@ def test_table_names_come_from_static_test_data() -> None:
         data_dir=STATIC_TEST_DATA,
     )
 
-    assert service.node_tables == ("address", "item", "person", "space")
+    assert service.node_tables == (
+        "address", "agent", "embodiment", "item", "person", "space",
+    )
 
 
 def test_table_names_include_sharded_item_directory() -> None:
@@ -343,6 +345,7 @@ def test_table_names_include_sharded_item_directory() -> None:
     assert "item" in service.node_tables
     assert "appliance" not in service.node_tables
     assert service.edge_tables == (
+        "assigned_to",
         "hosted_by",
         "lives_in",
         "located_in",

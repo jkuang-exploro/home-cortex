@@ -1,0 +1,7 @@
+id: assigned_to
+symmetric: false
+from_types: [embodiment]
+to_types: [agent]
+temporal: false
+inverse_name: embodied_by
+unique_from: true

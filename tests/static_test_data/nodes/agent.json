@@ -1,0 +1,7 @@
+[
+  {
+    "id": "agent:butler",
+    "name": {"en": "Butler", "zh": "老管家"},
+    "agent_type": "steward"
+  }
+]

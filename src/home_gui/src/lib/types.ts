@@ -51,8 +51,8 @@ export interface EmbodimentDetail extends EmbodimentSummary {
     width_m: number;
     height_m: number;
     center: { x: number; y: number; z: number };
-  } };
-  local_frame: { forward: string; left: string; up: string };
+  } } | null;
+  local_frame: { forward: string; left: string; up: string } | null;
   telemetry: EmbodimentSummary['telemetry'] & {
     estimate: null | {
       embodiment_id: string;

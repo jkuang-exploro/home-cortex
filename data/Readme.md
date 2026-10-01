@@ -67,13 +67,23 @@ still use the parent table (`item:fridge_01`, not `appliance:fridge_01`). Do
 not keep both `item.json` and `item/`.
 
 An embodiment is a persistent physical body, separate from a conversational
-agent. Store it in `nodes/embodiment.json` with a stable `embodiment:` ID,
-explicit box geometry and local frame, an optional singular `agent_id` such as
-`agent:butler`, and configured namespaced `capabilities`. Reconnecting a device
-reuses that record and opens a new in-memory runtime session; it does not
-create another embodiment record. See
-`src/home_cortex/spatial/EMBODIMENT.md` for the full contract. Current
-connection state and telemetry do not belong in this node file.
+agent. SurrealDB stores its identity, geometry, type, and configured
+capabilities in the embodiment table. Which agent controls it is the
+`assigned_to` edge, imported from `edges/assigned_to.json`, not an `agent_id`
+field on the body and not a choice made when a client connects. A client
+presents an existing `embodiment:` ID. Registration resolves that record and
+opens an in-memory runtime session; it does not create a body or an
+assignment. Reconnecting reuses the same record. Connection state and
+telemetry do not belong in the node file. See
+`src/home_cortex/spatial/EMBODIMENT.md` for the full contract.
+
+The local MacBook configuration is `embodiment:macbook-0` in
+`nodes/embodiment.json`, assigned to `agent:butler` by
+`edges/assigned_to.json`. It supports `vision.observe`. Its box dimensions and
+local frame are omitted until calibrated; no default geometry is inferred.
+The live API reads this state from SurrealDB, so edit the JSON source and ingest
+it before starting the client. The `data/` directory is local household data
+and is gitignored; `tests/static_test_data/` has the corresponding test record.
 
 Relationship files under `edges/` are named for a registered relationship in
 `schemas/edge/`. Schema files define endpoint types, direction, symmetry, and

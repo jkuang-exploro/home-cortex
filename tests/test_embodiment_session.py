@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from home_cortex.agents import get_agent
 from home_cortex.agents.embodiments import EmbodimentCatalog, EmbodimentConnections, SessionProtocolError
+from home_cortex.agents.registration import CatalogIdentityReader, EmbodimentRegistration
 from home_cortex.agents.session import EmbodimentSession
 from home_cortex.api.app import app
 from home_cortex.spatial.embodiment import embodiment_from_mapping
@@ -207,8 +208,12 @@ def test_demo_command_uses_one_body_and_the_existing_agent(capsys) -> None:
 def test_http_session_gates_telemetry() -> None:
     catalog, session, _ = _stack()
     previous_session = getattr(app.state, "embodiment_session", None)
+    previous_registration = getattr(app.state, "embodiment_registration", None)
     previous_settings = getattr(app.state, "settings", None)
     app.state.embodiment_session = session
+    app.state.embodiment_registration = EmbodimentRegistration(
+        CatalogIdentityReader(catalog), session,
+    )
     app.state.embodiment_catalog = catalog
     app.state.settings = type("Settings", (), {"cortex_api_key": "test-cortex-key"})()
     client = TestClient(app, headers={"Authorization": "Bearer test-cortex-key"})
@@ -217,6 +222,12 @@ def test_http_session_gates_telemetry() -> None:
     try:
         denied = client.post(path, headers={"Authorization": ""}, json={"available_capabilities": []})
         assert denied.status_code == 401
+        chosen = client.post(path, json={
+            "available_capabilities": ["vision.observe"], "agent_id": "agent:butler",
+        })
+        assert chosen.status_code == 422
+        assert chosen.json()["error"]["code"] == "invalid_session"
+        assert catalog.get(BODY).agent_id == "agent:butler"
         early = client.post(telemetry, json={**_pose(), "embodiment_id": BODY})
         assert early.status_code == 409
         assert early.json()["error"]["code"] == "session_offline"
@@ -257,6 +268,11 @@ def test_http_session_gates_telemetry() -> None:
                 del app.state.embodiment_session
         else:
             app.state.embodiment_session = previous_session
+        if previous_registration is None:
+            if hasattr(app.state, "embodiment_registration"):
+                del app.state.embodiment_registration
+        else:
+            app.state.embodiment_registration = previous_registration
         if previous_settings is None:
             if hasattr(app.state, "settings"):
                 del app.state.settings

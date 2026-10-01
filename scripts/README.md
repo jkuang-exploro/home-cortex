@@ -7,7 +7,7 @@ engineering commands and their shared support; runtime modules never import them
   and the shared `json_graph.py` fixture adapter used by tests and probes.
 - `profiling/`: token, latency, and transport measurement runners.
 - `probes/`: focused model/semantic diagnostics and failure tracing.
-- `maintenance/`: package freezing, graph export, container
+- `maintenance/`: package freezing, graph export, embodiment configuration, container
   copying, and explicit composition-dataset regeneration (`emit_composition.py`).
 
 Install with `pip install -e '.[dev]'`, then run from the repository root.
@@ -39,6 +39,7 @@ python -m scripts.profiling.first_answer_http --base-url http://ollama:11434 --m
 python -m scripts.probes.ollama_prefix_reuse_probe --help
 python -m scripts.maintenance.freeze_contract_candidate --output /tmp/candidate
 python -m scripts.maintenance.embodiment_client demo
+python -m scripts.maintenance.embodiments --help
 python -m scripts.probes.embodiment_replay --scenario square --profile low --output /tmp/epic1-replay.json
 python -m scripts.probes.embodiment_replay --scenario circle --profile biased --record /tmp/epic1-tape.json --output /tmp/epic1-biased.json
 python -m scripts.probes.embodiment_replay --replay /tmp/epic1-tape.json --output /tmp/epic1-replayed.json

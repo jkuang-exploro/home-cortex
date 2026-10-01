@@ -61,12 +61,17 @@ localization solving. Its package initializer is intentionally empty so chat
 startup does not load optional localization modules. Live camera, SLAM,
 sensor fusion, fiducial loops, and robot control belong in `home_cortex_client`.
 Home Cortex keeps the latest client-fused embodiment telemetry in memory.
-A registered embodiment accepts that telemetry only while its in-memory
-runtime session is online.
-`GET /api/embodiments` and `GET /api/embodiments/{id}` expose its independent
-association, session, capabilities, and pose status. Conversations can retain
-an optional selected body through `PATCH /conversations/{id}/active-embodiment`;
-selection does not make an offline body available for physical actions.
+A client connects by presenting an embodiment id that SurrealDB already
+stores. Registration reads that body and its agent assignment, then opens
+an in-memory runtime session. It does not create the body or the assignment.
+The embodiment accepts telemetry only while that session is online.
+`GET /api/embodiments` lists every SurrealDB embodiment, including offline
+bodies. Each response joins that record to the optional runtime session:
+`linked` follows `assigned_to`, and `connected` follows the session. The
+joined document is not stored. Conversations can retain an optional selected
+body through `PATCH /conversations/{id}/active-embodiment` when that body is
+persistently assigned to the conversation's agent. Selection does not require
+the body to be online and does not make it available for physical actions.
 The [pre-hardware Epic 1 replay report](../artifacts/epic1-readiness/REPORT.md)
 documents the deterministic geometry, uncertainty, and session validation.
 

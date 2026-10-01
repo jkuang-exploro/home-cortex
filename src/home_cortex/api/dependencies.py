@@ -185,7 +185,7 @@ async def chat_active_embodiment(request: Request, conversation_id: str | None) 
     conversation = await conversation_store(request).get(conversation_id)
     if conversation is None:
         raise APIError(404, "conversation_not_found", "Conversation was not found")
-    return validate_active_embodiment(
+    return await validate_active_embodiment(
         request, conversation, conversation.get("active_embodiment_id"),
     )
 
@@ -248,8 +248,13 @@ async def owned_conversation(
     return conversation
 
 
-def validate_active_embodiment(request: Request, conversation: Mapping[str, Any],
-                               embodiment_id: str | None) -> str | None:
+async def validate_active_embodiment(request: Request, conversation: Mapping[str, Any],
+                                      embodiment_id: str | None) -> str | None:
+    """Resolve conversation context from the persistent assignment.
+
+    An offline body remains selectable. Physical execution uses the action gate,
+    which also requires a connected session and current capability availability.
+    """
     if embodiment_id is None:
         return None
     runtime_agent_id = conversation.get("agent_id")
@@ -260,13 +265,13 @@ def validate_active_embodiment(request: Request, conversation: Mapping[str, Any]
     if not isinstance(directory, EmbodimentDirectory):
         raise APIError(503, "embodiments_unavailable", "Embodiment directory is not configured")
     try:
-        directory.catalog.get(embodiment_id)
+        await directory.validate_selection(definition.entity_id, embodiment_id)
     except SpatialContractError as error:
+        if "not linked" in str(error):
+            raise APIError(
+                422, "embodiment_not_linked", "Embodiment is not linked to this agent",
+            ) from error
         raise APIError(404, "embodiment_not_found", "Embodiment was not found") from error
-    try:
-        directory.validate_selection(definition.entity_id, embodiment_id)
-    except SpatialContractError as error:
-        raise APIError(422, "embodiment_not_linked", str(error)) from error
     return embodiment_id
 
 

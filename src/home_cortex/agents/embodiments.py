@@ -1,32 +1,26 @@
-"""Agent-to-body association and physical capability lookup.
+"""Read projections of persistent bodies, plus ephemeral runtime sessions.
 
-The embodiment record owns the single persistent ``agent_id`` relationship.
-Connection state lives only in ``EmbodimentConnections`` and never changes that
-record. Model-facing tools in ``capabilities.catalog`` are a separate policy.
+The catalog mirrors a SurrealDB read. ``agent_id`` is the ``assigned_to`` edge,
+not a value the session may set. Connection state lives only in
+``EmbodimentConnections``. Model-facing tools in ``capabilities.catalog`` are a
+separate policy.
 """
 from __future__ import annotations
 
-import json
-import os
 import secrets
-import tempfile
 from collections.abc import Collection
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from pathlib import Path
 from threading import Lock
 
-from ..spatial.embodiment import (
-    Embodiment, _typed_id, embodiment_as_mapping,
-)
-from ..spatial.presence import embodiments_from_node_file
+from ..spatial.embodiment import Embodiment, _typed_id
 from ..spatial.primitives import SpatialContractError
 from ..spatial.telemetry import _measured_at
 from .registry import list_agents
 
 
 class EmbodimentCatalog:
-    """Snapshot of durable body records and their singular agent association."""
+    """Cached SurrealDB read of body records and their singular assignment."""
 
     def __init__(
         self,
@@ -49,12 +43,6 @@ class EmbodimentCatalog:
                 raise SpatialContractError(f"unknown controlling agent {embodiment.agent_id!r}")
             records[embodiment.id] = embodiment
         self._records = records
-
-    @classmethod
-    def from_node_file(
-        cls, path: Path, *, known_agent_ids: Collection[str] | None = None,
-    ) -> EmbodimentCatalog:
-        return cls(embodiments_from_node_file(path), known_agent_ids=known_agent_ids)
 
     @property
     def embodiment_ids(self) -> frozenset[str]:
@@ -79,39 +67,15 @@ class EmbodimentCatalog:
     def named(self, name: str) -> tuple[Embodiment, ...]:
         return tuple(record for record in self._ordered() if record.name == name)
 
-    def associate(self, embodiment_id: str, agent_id: str) -> EmbodimentCatalog:
-        """Assign an unclaimed body; transfer requires an explicit unassign first."""
-        self._require_agent(agent_id)
-        current = self.get(embodiment_id)
-        if current.agent_id is not None and current.agent_id != agent_id:
-            raise SpatialContractError(
-                f"embodiment {embodiment_id!r} is already controlled by {current.agent_id!r}"
-            )
-        return self._replaced(replace(current, agent_id=agent_id))
-
-    def unassign(self, embodiment_id: str) -> EmbodimentCatalog:
-        return self._replaced(replace(self.get(embodiment_id), agent_id=None))
-
-    def as_records(self) -> list[dict]:
-        return [embodiment_as_mapping(record) for record in self._ordered()]
-
-    def save_node_file(self, path: Path) -> None:
-        """Atomically replace the durable JSON source; graph ingestion is separate."""
-        payload = json.dumps(self.as_records(), ensure_ascii=False, indent=2) + "\n"
-        temp_path: Path | None = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="w", encoding="utf-8", dir=path.parent,
-                prefix=f".{path.name}.", delete=False,
-            ) as file:
-                temp_path = Path(file.name)
-                file.write(payload)
-                file.flush()
-                os.fsync(file.fileno())
-            os.replace(temp_path, path)
-        finally:
-            if temp_path is not None:
-                temp_path.unlink(missing_ok=True)
+    def cache_resolved(self, body: Embodiment) -> None:
+        """Remember one SurrealDB read. This does not write a body or an assignment."""
+        if not isinstance(body, Embodiment):
+            raise SpatialContractError("catalog entries must be Embodiment records")
+        if body.agent_id is not None:
+            self.known_agent_ids = self.known_agent_ids | {
+                _typed_id(body.agent_id, "agent", "embodiment.agent_id")
+            }
+        self._records[body.id] = body
 
     def _ordered(self) -> tuple[Embodiment, ...]:
         return tuple(self._records[key] for key in sorted(self._records))
@@ -120,11 +84,6 @@ class EmbodimentCatalog:
         _typed_id(agent_id, "agent", "agent_id")
         if agent_id not in self.known_agent_ids:
             raise SpatialContractError(f"unknown controlling agent {agent_id!r}")
-
-    def _replaced(self, embodiment: Embodiment) -> EmbodimentCatalog:
-        records = dict(self._records)
-        records[embodiment.id] = embodiment
-        return EmbodimentCatalog(records.values(), known_agent_ids=self.known_agent_ids)
 
 
 class SessionProtocolError(SpatialContractError):
@@ -217,9 +176,14 @@ class EmbodimentConnections:
             return SessionChange("disconnected", session)
 
     def current(self, embodiment_id: str) -> RuntimeSession | None:
-        self.catalog.get(embodiment_id)
+        """Return the ephemeral session, if this process has one.
+
+        Absence means offline. It does not decide whether the embodiment exists
+        or which agent SurrealDB has assigned.
+        """
+        parsed = _typed_id(embodiment_id, "embodiment", "embodiment_id")
         with self._lock:
-            return self._sessions.get(embodiment_id)
+            return self._sessions.get(parsed)
 
     def is_connected(self, embodiment_id: str) -> bool:
         session = self.current(embodiment_id)

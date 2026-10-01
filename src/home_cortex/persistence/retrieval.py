@@ -44,14 +44,20 @@ class RetrievalService:
     ) -> None:
         self.database = database
         self.limit = limit
-        self.node_tables = self._table_names(data_dir, "nodes") or (
-            "address",
-            "item",
-            "person",
-            "space",
-        )
         self.edge_registry = edge_registry or EdgeSchemaRegistry.load_default(data_dir)
         self.edge_tables = self.edge_registry.relationship_names
+        source_tables = self._table_names(data_dir, "nodes") or (
+            "address", "item", "person", "space",
+        )
+        endpoint_tables = {
+            table
+            for relation in self.edge_tables
+            for table in (
+                *self.edge_registry.get(relation).from_types,
+                *self.edge_registry.get(relation).to_types,
+            )
+        }
+        self.node_tables = tuple(sorted(set(source_tables) | endpoint_tables))
 
     async def get_entity(self, record_id: str) -> dict[str, Any] | None:
         """Return the record for a canonical ID, or None if it does not exist.
